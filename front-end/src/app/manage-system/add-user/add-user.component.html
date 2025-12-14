@@ -1,0 +1,85 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">إضافة مستخدم</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container">
+
+    <div class="w-50 m-auto mt-5">
+      <div *ngIf="errorform" class="alert alert-danger">
+        {{errorMessage}}
+      </div>
+    </div>
+
+    <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
+
+      <div class="row">
+        <div class="col-md-3">
+          <div class="form-group">
+            <input class="form-control"   placeholder="الإسم"
+            [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
+            formControlName='name' type="text" class="form-control">
+            <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="form-group">
+            <select class="form-control" formControlName='department'>
+              <option disabled selected>الادارة</option>
+              <option value="Data Entry">Data Entry</option>
+              <option value="Review Management">Review Management</option>
+              <option value="Shipping Management">Shipping Management</option>
+              <option value="Operation Management">Operation Management</option>
+              <option value="Operation Specialist">Operation Specialist</option>
+              <option value="Customer Service">Customer Service</option>
+              <option value="Account Management">Account Management</option>
+              <option value="Logistics Specialist">Logistics Specialist</option>
+              <option value="Finance and operations management">Finance and operations management</option>
+            </select>
+            <!-- <input class="form-control"   placeholder="الادره"
+            [class.is-valid]="form.get('department')?.errors ==null && form.get('department')?.touched"
+            formControlName='department' type="text" class="form-control"> -->
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="form-group">
+            <input class="form-control"   placeholder="Email"
+            [class.is-valid]="form.get('email')?.errors ==null && form.get('email')?.touched"
+            formControlName='email' type="email" class="form-control">
+            <p *ngIf="form.get('email')?.errors !=null && form.get('email')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="form-group">
+            <input class="form-control"   placeholder="Password"
+            [class.is-valid]="form.get('password')?.errors ==null && form.get('password')?.touched"
+            formControlName='password' type="password" class="form-control">
+            <p *ngIf="form.get('password')?.errors !=null && form.get('password')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+          </div>
+        </div>
+
+      </div>
+
+
+      <div class="text-center my-3">
+        <button [disabled]="form.invalid || form.value.department == 'الادارة'" class="btn submit my-3">اضافة </button>
+      </div>
+    </form>
+
+
+  </div>
+
+
+</div>

@@ -1,0 +1,73 @@
+form{
+  padding: 20px;
+}
+
+.new{
+  color: white;
+  background-color: #82225e;
+}
+
+.header{
+background-color: black;
+color: white;
+text-align: center;
+font-size: 2rem;
+border-radius: 7px;
+}
+
+
+.new{
+background-color: #0074e4
+}
+
+.confirmed{
+background-color: #00a859
+}
+.partshipped{
+background-color: #92832d
+}
+
+.shipped{
+background-color: #ff9900
+}
+.received{
+background-color: #a300cc
+}
+.postponed{
+background-color: #ffd700;
+}
+.canceled{
+background-color: red
+}
+.collected{
+background-color: #82225e
+}
+.fixed{
+background-color: dodgerblue;
+}
+.archived{
+background-color: #d3d7d0;
+}
+.new, .confirmed, .shipped, .received, .postponed, .canceled,.collected,.fixed,.archived,.partshipped{
+color: white;
+}
+
+::ng-deep .mat-mdc-paginator-container{
+justify-content: center !important;
+}
+
+.table-checkbox{
+display: none;
+}
+
+td,th {
+vertical-align: middle !important;
+}
+
+.fa-star{
+cursor: pointer;
+}
+
+label>.fa-check{
+cursor: pointer;
+}

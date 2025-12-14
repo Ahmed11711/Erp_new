@@ -1,0 +1,105 @@
+.custom-angular-editor {
+  .angular-editor-button[title="Undo"]::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f0e2";
+    font-weight: 900;
+  }
+
+  .angular-editor-button[title="Redo"]::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f01e";
+    font-weight: 900;
+  }
+
+  #bold-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f032";
+    font-weight: 900;
+  }
+
+  #italic-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f033";
+    font-weight: 900;
+  }
+
+  #underline-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f0cd";
+    font-weight: 900;
+  }
+
+  #insertUnorderedList-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f0ca";
+    font-weight: 900;
+  }
+
+  #insertOrderedList-:before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f0cb";
+    font-weight: 900;
+  }
+
+  #indent-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f03c";
+    font-weight: 900;
+  }
+
+  #outdent-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f03b";
+    font-weight: 900;
+  }
+
+  .angular-editor-button[title="Text Color"]::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f53f";
+    font-weight: 900;
+  }
+
+  .angular-editor-button[title="Background Color"]::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f5bf";
+    font-weight: 900;
+  }
+
+  #link-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f0c1";
+    font-weight: 900;
+  }
+
+  #unlink-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f127";
+    font-weight: 900;
+  }
+
+  #insertHorizontalRule-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f068";
+    font-weight: 900;
+  }
+
+  .angular-editor-button[title="Clear Formatting"]::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f12d";
+    font-weight: 900;
+  }
+
+  #toggleEditorMode-::before {
+    font-family: "Font Awesome 5 Free";
+    content: "\f121";
+    font-weight: 900;
+  }
+
+  .angular-editor-button:hover {
+    color: #82225e;
+  }
+}
+
+::ng-deep .angular-editor-textarea {
+  text-align: left !important;
+}

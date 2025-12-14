@@ -1,0 +1,181 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5 d-flex justify-content-center align-items-center">
+      <div><p class="title header m-auto px-2">قائمة الدخل</p></div>
+    </div>
+  </div>
+
+  <div class="row m-2">
+    <div class="col-md-3">
+      <label for="">التاريخ</label>
+      <input class="form-control" type="month" [value]="month" (change)="onDateFromChange($event)">
+    </div>
+  </div>
+
+  <div class="container">
+    <table id="capture" class="table table-bordered table-hover text-center">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th>بيان</th>
+          <th>جزئي</th>
+          <th>كلي</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>المبيعات</td>
+          <td (dblclick)="editAmount('sales', data?.sales)">{{ data?.sales }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مردودات المبيعات</td>
+          <td (dblclick)="editAmount('sales_returns', data?.sales_returns)">{{ data?.sales_returns }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>صافي ايراد المبيعات</td>
+          <td></td>
+          <td dir="ltr">{{ incomeSales }}</td>
+        </tr>
+        <tr>
+          <td>تكاليف المبيعات</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مخزون المواد الخام اول المدة</td>
+          <td (dblclick)="editAmount('opening_raw_materials', data?.opening_raw_materials)">{{ data?.opening_raw_materials }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>بضاعة تحت التجهيز</td>
+          <td (dblclick)="editAmount('opening_under_processing', data?.opening_under_processing)">{{ data?.opening_under_processing }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>بضاعة تامة التصنيع</td>
+          <td (dblclick)="editAmount('opening_finished_goods', data?.opening_finished_goods)">{{ data?.opening_finished_goods }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مخزون أول المدة</td>
+          <td (dblclick)="editAmount('opening_storage', data?.opening_storage)">{{ data?.opening_storage }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مشتريات</td>
+          <td (dblclick)="editAmount('purchases', data?.purchases)">{{ data.purchases }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مصروف المشتريات</td>
+          <td (dblclick)="editAmount('purchase_expenses', data?.purchase_expenses)">{{ data.purchase_expenses }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مردود المشتريات</td>
+          <td (dblclick)="editAmount('purchase_returns', data?.purchase_returns)">{{ data.purchase_returns }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مصاريف النشاط</td>
+          <td (dblclick)="editAmount('operating_expenses', data?.operating_expenses)">{{ data.operating_expenses }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مصاريف المبيعات</td>
+          <td (dblclick)="editAmount('sales_expenses', data?.sales_expenses)">{{ data.sales_expenses }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مخزون المواد الخام اخر المده</td>
+          <td (dblclick)="editAmount('closing_raw_materials', data?.closing_raw_materials)">{{ data.closing_raw_materials }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>بضاعة تحت التجهيز اخر المدة</td>
+          <td (dblclick)="editAmount('closing_under_processing', data?.closing_under_processing)">{{ data.closing_under_processing }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>بضاعة تامة الصنع</td>
+          <td (dblclick)="editAmount('closing_finished_goods', data?.closing_finished_goods)">{{ data.closing_finished_goods }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مخزون اخر المدة</td>
+          <td (dblclick)="editAmount('last_storage', data?.last_storage)">{{ data.last_storage }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>اجمالي نكاليف المبيعات</td>
+          <td></td>
+          <td dir="ltr">{{ costSales }}</td>
+        </tr>
+        <tr>
+          <td>مجمل الربح</td>
+          <td></td>
+          <td dir="ltr">{{ totalWin }}</td>
+        </tr>
+        <tr>
+          <td>يضاف الايرادات الاخري</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>ارباح رأس مالية</td>
+          <td (dblclick)="editAmount('capital_gains', data?.capital_gains)">{{ data.capital_gains }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>ايرادات اخري</td>
+          <td (dblclick)="editAmount('other_revenues', data?.other_revenues)">{{ data.other_revenues }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>اجمالي الايرادات الاخري</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>يخصم المصروفات الاخري</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مصروفات التاسيس</td>
+          <td (dblclick)="editAmount('setup_expenses', data?.setup_expenses)">{{ data.setup_expenses }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>م.عمومية وادارية</td>
+          <td (dblclick)="editAmount('admin_expenses', data?.admin_expenses)">{{ data.admin_expenses }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>الاهلاك</td>
+          <td (dblclick)="editAmount('depreciation', data?.depreciation)">{{ data.depreciation }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مخصومات بخلاف الاهلاك</td>
+          <td (dblclick)="editAmount('depreciation_reserves', data?.depreciation_reserves)">{{ data.depreciation_reserves }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>اجمالي المصروفات الاخري</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>صافي الربح قبل الضريبة</td>
+          <td></td>
+          <td dir="ltr">{{ totalWinBeforeVat }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

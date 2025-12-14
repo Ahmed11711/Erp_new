@@ -1,0 +1,251 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-3 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="header m-auto">اضافة صنف</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+</div>
+<div class="container content mt-4">
+  <div
+    class="d-flex justify-content-center align-items-center h-100"
+    style="flex-direction: column"
+  >
+  </div>
+  <div *ngIf="errorMessage">
+    <h3 class="alert alert-danger text-center">{{errorMessage}}</h3>
+  </div>
+  <form #addCat="ngForm" (ngSubmit)="addCategory(addCat)" enctype="multipart/form-data">
+    <div class="form-row">
+      <div class="col-md-6">
+        <label for="type">اسم الصنف</label>
+
+        <ng-autocomplete
+          name="category_name"
+          [(ngModel)]="category_name"
+          [data]="products"
+          [searchKeyword]="catword"
+          required
+          (selected)='productChange($event)'
+          (inputCleared)="resetInp()"
+          [itemTemplate]="itemTemplates"
+          [notFoundTemplate]="notFoundTemplate">
+        </ng-autocomplete>
+
+        <ng-template #itemTemplates let-item>
+          <a [innerHTML]="item.category_name"></a>
+        </ng-template>
+
+        <ng-template #notFoundTemplate let-notFound>
+          <div [innerHTML]="notFound"></div>
+        </ng-template>
+      </div>
+    <!-- <div class="form-group col-md-6">
+      <label for="type">اسم الصنف</label>
+      <input
+        type="text"
+        name="type"
+        ngModel
+        #type="ngModel"
+        class="form-control"
+        aria-describedby="type"
+        id="type"
+        required
+      />
+      <div class="form-text" *ngIf="type.touched && type.invalid">
+        <div *ngIf="type.errors?.['required']" class="form-text text-danger">
+          يجب ادخال اسم الصنف
+        </div>
+      </div>
+    </div> -->
+    <div class="form-group col-md-6">
+      <label for="price">سعر الصنف</label>
+      <input
+        type="number"
+        name="price"
+        ngModel
+        #price="ngModel"
+        class="form-control"
+        aria-describedby="price"
+        id="price"
+        required
+        min="0"
+      />
+      <div class="form-text" *ngIf="price.touched && price.invalid">
+        <div *ngIf="price.errors?.['required']" class="form-text text-danger">
+          يجب ادخال سعر الصنف
+        </div>
+        <div *ngIf="price.errors?.['min']" class="form-text text-danger">
+          يجب ادخال سعر صحيح
+        </div>
+      </div>
+    </div>
+    </div>
+    <div class="form-row">
+    <div class="form-group col-md-6">
+      <label for="inital_price"> الرصيد الافتتاحي</label>
+      <input
+        type="number"
+        name="inital_price"
+        ngModel
+        #inital_price="ngModel"
+        class="form-control"
+        aria-describedby="inital_price"
+        id="inital_price"
+        required
+        min="0"
+      />
+      <div
+        class="form-text"
+        *ngIf="inital_price.touched && inital_price.invalid"
+      >
+        <div
+          *ngIf="inital_price.errors?.['required']"
+          class="form-text text-danger"
+        >
+          يجب ادخال رصيد افتتاحي
+        </div>
+        <div *ngIf="inital_price.errors?.['min']" class="form-text text-danger">
+          يجب ادخال رصيد افتتاحي صحيح
+        </div>
+      </div>
+    </div>
+    <div class="form-group col-md-6">
+      <label for="min_quantity"> الحد الادنى للمخزون</label>
+      <input
+        type="number"
+        name="min_quantity"
+        ngModel
+        #min_quantity="ngModel"
+        class="form-control"
+        aria-describedby="min_quantity"
+        id="min_quantity"
+        required
+        min="0"
+      />
+      <div
+        class="form-text"
+        *ngIf="min_quantity.touched && min_quantity.invalid"
+      >
+        <div
+          *ngIf="min_quantity.errors?.['required']"
+          class="form-text text-danger"
+        >
+          يجب ادخال الحد الادنى للمخزن
+        </div>
+        <div *ngIf="min_quantity.errors?.['min']" class="form-text text-danger">
+          يجب ادخال رقم صحيح
+        </div>
+      </div>
+    </div>
+    </div>
+    <div class="form-row">
+    <div class="form-group col-md-4">
+      <select (change)="onWarehouseChange($event)"
+        class="form-control"
+        name="warehouse"
+        ngModel
+        required
+        #warehouse="ngModel"
+      >
+        <option selected disabled value="">المخزن</option>
+
+        <ng-container *ngFor="let elm of stockData">
+          <option
+            *ngIf="(
+                    ( (user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist')
+                      && (elm.name == 'مخزن مواد خام' || elm.name == 'مخزن منتج تحت التشغيل')
+                    )
+                    ||
+                    ( (user == 'Admin' || user == 'Data Entry')
+                      && elm.name == 'مخزن منتج تام'
+                    )
+                  )"
+            [value]="elm.name"
+          >
+            {{ elm.name }}
+          </option>
+        </ng-container>
+
+        <!-- <option *ngIf="user =='Admin' || user == 'Account Management' || user == 'Logistics Specialist'" value="مخزن مواد خام">مخزن مواد خام</option>
+        <option *ngIf="user =='Admin' || user == 'Account Management' || user == 'Logistics Specialist'" value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
+        <option *ngIf="user =='Admin' || user =='Data Entry'" value="مخزن منتج تام">مخزن منتج تام</option> -->
+      </select>
+      <div
+        *ngIf="warehouse.invalid && (warehouse.dirty || warehouse.touched)"
+        class="form-text text-danger"
+      >
+        <div *ngIf="warehouse.errors?.['required']">
+          من فضلك اختر نوع المخزن
+        </div>
+      </div>
+    </div>
+    <div class="form-group col-md-4">
+      <select class="form-control" name="unit" ngModel required #unit="ngModel">
+        <option selected disabled value="">وحدة القياس</option>
+        <option *ngFor="let unit of unitsData" value="{{ unit.id }}">
+          {{ unit.unit }}
+        </option>
+      </select>
+      <div
+        *ngIf="unit.invalid && (unit.dirty || unit.touched)"
+        class="form-text text-danger"
+      >
+        <div *ngIf="unit.errors?.['required']">من فضلك اختر وحدة القياس</div>
+      </div>
+    </div>
+    <div class="form-group col-md-4">
+      <select
+        class="form-control"
+        name="production"
+        ngModel
+        required
+        #production="ngModel"
+      >
+        <option selected disabled value="">خط الانتاج</option>
+        <option
+          *ngFor="let production of productionData"
+          value="{{ production.id }}"
+        >
+          {{ production.production_line }}
+        </option>
+      </select>
+      <div
+        *ngIf="production.invalid && (production.dirty || production.touched)"
+        class="form-text text-danger"
+      >
+        <div *ngIf="production.errors?.['required']">
+          من فضلك اختر خط الانتاج
+        </div>
+      </div>
+    </div>
+    </div>
+    <div class="form-group">
+        <div class="element">
+            <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
+            <input type="file" (change)="onFileChanged($event)" name="uploadFile"  accept="image/*" id="fileInput" #uploadFile="ngModel" ngModel class="img">
+          </div>
+          <div
+            *ngIf="uploadFile.invalid && fileopend "
+            class="form-text text-danger"
+          >
+            <div *ngIf="uploadFile.errors?.['required']">
+                من فضلك اختر صورة
+            </div>
+          </div>
+      </div>
+
+       <button
+      type="submit"
+        [disabled]="addCat.invalid"
+      class="btn btn-primary"
+    >
+      اضف
+    </button>
+  </form>
+</div>

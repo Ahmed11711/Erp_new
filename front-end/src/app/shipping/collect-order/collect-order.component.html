@@ -1,0 +1,84 @@
+<div class="container-fluid">
+    <div class="row py-3">
+      <div class="col-4 d-flex align-items-center">
+      </div>
+      <div class="col-5">
+        <div><p class="title header w-50 m-auto"> تحصيل الطلب</p></div>
+      </div>
+      <div class="col-3 d-flex align-items-center justify-content-end">
+        <app-time></app-time>
+      </div>
+    </div>
+
+    <app-order-details></app-order-details>
+
+
+  <div class="container py-5">
+    <div class="row">
+        <div class="col-6 d-flex flex-column justify-content-center">
+            <h3>خط التوزيع</h3>
+            <h4> {{line}}</h4>
+        </div>
+        <div class="col-6 d-flex flex-column justify-content-center">
+            <h3>شركة الشحن</h3>
+            <h4>{{company}}</h4>
+        </div>
+    </div>
+  </div>
+
+  <div class="pl-5 mb-5">
+    <form #collect="ngForm" (ngSubmit)="collectOrder(collect)">
+
+    <div class="form-row">
+      <div class="form-group col-md-3">
+        <select class="form-control" name="collectType" [(ngModel)]="collectType">
+          <option selected disabled value=""> نوع التحصيل</option>
+          <option value="تحصيل في الخزينة">تحصيل في الخزينة</option>
+          <option value="تحصيل الكتروني" *ngIf="!(order_type == 'طلب مرتجع' || order_type == 'طلب استبدال')">تحصيل الكتروني</option>
+        </select>
+      </div>
+      <div class="form-group col-md-4" *ngIf=" collectType === 'تحصيل في الخزينة'">
+        <select class="form-control" name="bank" ngModel required #bank="ngModel">
+          <option selected disabled value=""> الخزينة</option>
+          <option *ngFor="let item of banks" value="{{item.id}}">{{item.name}}</option>
+        </select>
+      </div>
+      <div class="form-group col-md-4 d-flex" *ngIf=" collectType === 'تحصيل الكتروني'">
+        <div>
+          <input type="text" class="form-control" name="refernceNumber" placeholder="الرقم المرجعي" [(ngModel)]="referenceNumber">
+        </div>
+        <div class="form-group">
+          <div class="element">
+            <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
+            <input type="file" (change)="onFileChanged($event)" name="uploadFile"  accept="image/*" id="fileInput" #uploadFile="ngModel" ngModel class="img">
+          </div>
+          <div *ngIf="uploadFile.invalid && fileopend "class="form-text text-danger">
+            <div *ngIf="uploadFile.errors?.['required']">
+                من فضلك اختر صورة
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group col-md-4">
+        <input
+        type="text"
+        name="note"
+        ngModel
+        #note="ngModel"
+        class="form-control"
+        placeholder="اضف ملحوظة"
+        />
+      </div>
+      <div class="form-group col-md-4">
+        <button  type="submit" class="btn btn-primary"
+        [disabled]="(collectType == 'تحصيل في الخزينة' && collect.invalid) || (collectType == 'تحصيل الكتروني' && !(referenceNumber || selectedFile))">تحصيل</button>
+
+      </div>
+
+    </div>
+
+
+  </form>
+  </div>
+  </div>

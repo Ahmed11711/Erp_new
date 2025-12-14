@@ -1,0 +1,134 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center"></div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">شحن الطلب</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <app-time></app-time>
+    </div>
+  </div>
+
+  <app-order-details
+    (dataEvent)="getshippedquantity($event)"
+  ></app-order-details>
+
+  <div class="container-fluid" *ngIf="!completedShip">
+    <form #ship="ngForm" (ngSubmit)="shipOrder(ship)">
+      <div class="form-row">
+        <div class="form-group col-md-2" *ngIf="customer_type !== 'شركة'">
+          <div class="form-group">
+            <div class="form-group">
+              <select class="form-control" name="line" ngModel #line="ngModel">
+                <!-- <option  disabled value=""> خط التوزيع</option> -->
+                <option selected value="">{{ lines?.name }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-group col-md-3">
+          <div class="text-center">
+            <mat-form-field class="example-full-width">
+              <mat-label>تاريخ الشحن الفعلي</mat-label>
+              <input
+                matInput
+                [matDatepickerFilter]="myFilter"
+                [matDatepicker]="picker"
+                (dateInput)="OnDateChange($event.value)"
+              />
+              <!-- <mat-hint>MM/DD/YYYY</mat-hint> -->
+              <mat-datepicker-toggle
+                matIconSuffix
+                [for]="picker"
+              ></mat-datepicker-toggle>
+              <mat-datepicker #picker></mat-datepicker>
+            </mat-form-field>
+          </div>
+        </div>
+
+        <div class="form-group col-md-2">
+          <div class="form-group">
+            <div class="form-group">
+              <select
+                class="form-control"
+                name="company"
+                ngModel
+                #company="ngModel"
+                required
+              >
+                <option selected disabled value="">شركة الشحن</option>
+                <option *ngFor="let item of companies" value="{{ item.id }}">
+                  {{ item.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2 form-group" *ngIf="customer_type == 'شركة'">
+          <div class="form-group">
+            <select id="paymentType" class="form-control" (change)="paymentType($event)">
+              <option selected disabled >طريقة الدفع</option>
+              <option value="أجل">أجل</option>
+              <option value="نقدي">نقدي</option>
+            </select>
+          </div>
+          <div class="form-group" *ngIf="cashType || cashval">
+            <input id="cash" min="0" placeholder="المبلغ" class="form-control" type="number" (change)="paymentType($event)" (keyup)="paymentType($event)">
+          </div>
+
+        </div>
+        <div class="form-group col-md-2">
+          <input
+          type="number"
+          name="shippment_number"
+          ngModel
+          #shippment_number="ngModel"
+          class="form-control"
+          placeholder=" رقم البوليصة"
+          />
+          <div class="text-danger" ></div>
+        </div>
+        <div class="form-group col-md-2">
+          <textarea class="form-control" placeholder="اضف ملحوظة" name="note" #note="ngModel" ngModel id="" cols="30" rows="3"></textarea>
+          <!-- <input
+            type="text"
+            name="note"
+            ngModel
+            #note="ngModel"
+            class="form-control"
+            placeholder="اضف ملحوظة"
+          /> -->
+        </div>
+      </div>
+
+      <div class="form-row">
+<!--
+        <div class="col-md-5 form-group">
+          <input type="file" >
+          <div class="text-center">
+            <input
+            type="file"
+            (change)="onFileChanged($event)"
+            name="uploadFile"
+            accept="image/*"
+            #uploadFile="ngModel"
+            ngModel
+            class="img"
+          />
+          </div>
+        </div> -->
+
+      </div>
+
+      <div class="text-center form-group">
+        <button
+          type="submit"
+          class="btn  px-4 py-3 btn-primary"
+          [disabled]="ship.invalid || !dateSelected || !shippStatus || paymentTypeActive || cashType"
+        >
+          شحن
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

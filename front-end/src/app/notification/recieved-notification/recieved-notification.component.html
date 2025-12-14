@@ -1,0 +1,97 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-md-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-md-5">
+      <div><p class="title header m-auto">الاشعارات المستلمة</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="mt-5 text-center">
+      <div class="row">
+        <div class="col-md-2 form-group">
+          <select id="type" class="form-control" (change)="search($event)">
+            <option selected disabled>نوع الاشعار</option>
+            <option value="مراجعة">مراجعة</option>
+            <option value="مراجعة مؤقتة">مراجعة مؤقتة</option>
+            <option value="تعديل">تعديل</option>
+            <option value="استعجال الشحن">استعجال الشحن</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group">
+          <select class="form-control" id="send_from" (change)="search($event)">
+            <option selected disabled>المرسل</option>
+            <option [value]="elm.id" *ngFor="let elm of userdata" [id]="elm.id">{{elm.name}}</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group">
+          <select class="form-control" id="status" (change)="search($event)">
+            <option selected disabled>الحاله</option>
+            <option value="1">تم القراءة</option>
+            <option value="0">لم يتم القراءة</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group" *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management'">
+          <select class="form-control" id="review_status_user" (change)="search($event)">
+            <option selected disabled>حالة المراجعة</option>
+            <option value="1">تم المراجعة</option>
+            <option value="0">لم يتم المراجعة</option>
+          </select>
+        </div>
+        <div class="col-md-2 d-flex form-group">
+          <input id="order_number" (change)="search($event)" type="text" name="orderNumber" class="form-control"  placeholder="رقم الطلب" />
+          <i class="fa-solid fa-xmark m-2" (click)="clearSearch()"></i>
+        </div>
+      </div>
+    </form>
+
+
+    <table class="table table-hover w-100 m-auto text-center">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th scope="col">رقم الاشعار</th>
+          <th scope="col">النوع</th>
+          <th scope="col">الملاحظة</th>
+          <th scope="col">المرسل</th>
+          <th scope="col">التاريخ</th>
+          <th scope="col">التوقيت</th>
+          <th scope="col">رقم الطلب</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of data; let i = index" [ngClass]="item.is_read === 0 ? 'bg-gray' : ''" (click)="openNotifiy(item)">
+          <td>{{item?.notification_number}}</td>
+          <td>{{item?.type}}</td>
+          <td>{{item?.note}}</td>
+          <td>{{item?.sender?.name}}</td>
+          <td>{{item.created_at | date:'dd/MM/yyyy'}}</td>
+          <td dir="ltr">{{item.created_at | date:'hh:mm a'}}</td>
+          <td>
+            <span style="cursor: pointer;" [routerLink]="['/dashboard/shipping/orderdetails',item.ref]">
+              {{item.ref}}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+    </div>
+
+</div>

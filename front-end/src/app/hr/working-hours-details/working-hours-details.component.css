@@ -1,0 +1,39 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+tbody td{
+  font-size: 1rem;
+}
+
+
+.sticky-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sticky-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.bg-gray{
+  background-color: rgb(202, 201, 201);
+}
+
+tr td:last-child , th td:last-child{
+  width: 30px;
+  padding: auto 0;
+}
+
+.fa-pen{
+  color: #82225e;
+  cursor: pointer;
+  font-size: 0.6rem;
+  margin-right: 0.3rem;
+}

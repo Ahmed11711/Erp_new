@@ -1,0 +1,187 @@
+<div class="container content">
+  <div class="row pt-3">
+    <div class="col-md-5">
+      <div><app-time></app-time> </div>
+    </div>
+    <div class="col-md-5">
+      <div><p class="title">اضف مورد</p></div>
+    </div>
+  </div>
+    <div class="alert-danger alert" *ngIf="errorMessage">
+      {{ errorMessage }}
+    </div>
+    <form #addSupp="ngForm" (ngSubmit)="addSupplier(addSupp)">
+      <div class="form-row">
+      <div class="form-group col-md-6">
+        <label for="type">اسم المورد</label>
+        <input
+          type="text"
+          name="name"
+          ngModel
+          #name="ngModel"
+          class="form-control"
+          aria-describedby="name"
+          id="name"
+          required
+        />
+        <div class="form-text" *ngIf="name.touched && name.invalid">
+          <div *ngIf="name.errors?.['required']" class="form-text text-danger">
+            يجب ادخال اسم المورد
+          </div>
+        </div>
+      </div>
+      <div class="form-group col-md-6">
+        <label for="price"> عنوان المورد</label>
+        <input
+          type="text"
+          name="address"
+          ngModel
+          #address="ngModel"
+          class="form-control"
+          aria-describedby="address"
+          id="address"
+          required
+        />
+        <div class="form-text" *ngIf="address.touched && address.invalid">
+          <div *ngIf="address.errors?.['required']" class="form-text text-danger">
+            يجب ادخال  عنوان المورد
+          </div>
+        </div>
+      </div>
+      </div>
+      <div class="form-row">
+      <div class="form-group col-md-6">
+        <label for="inital_price"> رقم التليفون</label>
+        <input
+          type="text"
+          name="phone"
+          ngModel
+          #phone="ngModel"
+          class="form-control"
+          aria-describedby="inital_price"
+          id="phone"
+          autocomplete="off"
+        />
+        <div
+          class="form-text"
+          *ngIf="phone.touched && phone.invalid"
+        >
+          <div
+            *ngIf="phone.errors?.['required']"
+            class="form-text text-danger"
+          >
+            يجب ادخال رقم الهاتف
+          </div>
+          <div *ngIf="phone.errors?.['pattern']" class="form-text text-danger">
+            يجب ادخال رقم صحيح
+          </div>
+        </div>
+      </div>
+      <div class="form-group col-md-6">
+        <label for="min_quantity">   تقيمم المورد</label>
+        <input
+          type="number"
+          name="supplier_rate"
+          ngModel
+          #supplier_rate="ngModel"
+          class="form-control"
+          aria-describedby="supplier_rate"
+          id="supplier_rate"
+          required
+
+          min="0"
+          max="10"
+        />
+        <div
+          class="form-text"
+          *ngIf="supplier_rate.touched && supplier_rate.invalid"
+        >
+          <div
+            *ngIf="supplier_rate.errors?.['required']"
+            class="form-text text-danger"
+          >
+            يجب ادخال تقييم المورد
+          </div>
+          <div
+          *ngIf="supplier_rate.errors?.['min'] || supplier_rate.errors?.['max']"
+          class="form-text text-danger"
+        >
+          يجب ادخال  تقييم صحيح
+        </div>
+        </div>
+      </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group col-md-6">
+            <label for="price_rate">   تقيمم السعر</label>
+            <input
+              type="number"
+              name="price_rate"
+              ngModel
+              #price_rate="ngModel"
+              class="form-control"
+              aria-describedby="price_rate"
+              id="price_rate"
+              required
+              min="0"
+              max="10"
+              autocomplete="off"
+              />
+            <div
+              class="form-text"
+              *ngIf="price_rate.touched && price_rate.invalid"
+            >
+              <div
+                *ngIf="price_rate.errors?.['required']"
+                class="form-text text-danger"
+              >
+                يجب ادخال تقييم السعر
+              </div>
+              <div
+              *ngIf="price_rate.errors?.['min'] || price_rate.errors?.['max']"
+              class="form-text text-danger"
+            >
+              يجب ادخال  تقييم صحيح
+            </div>
+            </div>
+          </div>
+
+      <div class="form-group col-md-6">
+        <label for="">فئة المورد</label>
+        <select
+          class="form-control"
+          name="type"
+          ngModel
+          required
+          #type="ngModel"
+        >
+          <option selected disabled value="">اختر فئة المورد</option>
+          <option
+            *ngFor="let type of types"
+            value="{{ type.id }}"
+          >
+            {{ type.supplier_type }}
+          </option>
+        </select>
+        <div
+          *ngIf="type.invalid && (type.dirty || type.touched)"
+          class="form-text text-danger"
+        >
+          <div *ngIf="type.errors?.['required']">
+            من فضلك اختر  فئة المورد
+          </div>
+        </div>
+      </div>
+      </div>
+
+
+         <button
+        type="submit"
+          [disabled]="addSupp.invalid"
+        class="btn btn-primary"
+      >
+        اضف
+      </button>
+    </form>
+
+  </div>

@@ -1,0 +1,91 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-3 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-6">
+      <div><p class="title header w-50 m-auto">كشف الحضور والانصراف</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+  <button *ngIf="!btnShowForm" class="btn btn-add my-3" (click)="openForm()">رفع شيت البصمة</button>
+
+  <form (ngSubmit)="submitform()" *ngIf="btnShowForm">
+    <div class="row">
+      <div class="col-md-3">
+        <div class="form-group">
+          <label for="">شيت البصمة:</label>
+          <input type="file" (change)="onFileChanged($event)" name="uploadFile" id="fileInput"  class="form-control" accept=".xls">
+        </div>
+      </div>
+      <div class="col-md-4 d-flex align-items-center mt-3">
+        <button type="submit" class="btn btn-primary">
+          حفظ
+        </button>
+        <button class="btn btn-danger mx-2" (click)="closeForm()">الغاء</button>
+      </div>
+    </div>
+  </form>
+  <div class="row d-flex justify-content-between py-2">
+    <div class="col-md-2 ">
+      <input class="form-control" type="month" (change)="onMonthChange($event)" [value]="currentMonthValue">
+    </div>
+    <div class="col-md-3">
+      <div class="d-flex justify-content-end">
+        <button class="btn bg-main" (click)="selectvacationDays()" *ngIf="!selectVacationBoolean">تحديد ايام اجازة</button>
+      </div>
+      <div class="d-flex">
+        <div *ngIf="selectVacationBoolean">
+          <mat-form-field>
+            <mat-label>تحديد أيام الاجازة</mat-label>
+            <mat-date-range-input [formGroup]="range" [rangePicker]="picker">
+              <input matStartDate formControlName="start" placeholder="Start date">
+              <input matEndDate formControlName="end" placeholder="End date">
+            </mat-date-range-input>
+            <mat-hint>MM/DD/YYYY – MM/DD/YYYY</mat-hint>
+            <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-date-range-picker #picker [startAt]="previousMonth"></mat-date-range-picker>
+            <mat-error *ngIf="range.controls.start.hasError('matStartDateInvalid')">Invalid start date</mat-error>
+            <mat-error *ngIf="range.controls.end.hasError('matEndDateInvalid')">Invalid end date</mat-error>
+          </mat-form-field> <br>
+          <input [(ngModel)]="reason" class="form-control" type="text" placeholder="السبب"><br>
+          <button class="btn btn-success mx-2" [disabled]="!isEmpSelected || !range.value.start || !range.value.end" (click)="vacationFn()">تاكيد</button>
+          <button class="btn btn-danger" (click)="cancelVac()">الغاء</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <table class="table table-hover text-center ">
+    <thead>
+      <th>رقم البصمة</th>
+      <th>الاسم</th>
+      <th>الشهر</th>
+      <th>عدد الساعات الاجمالية</th>
+      <th>عدد الساعات الفعلية</th>
+      <th>عدد سعات الخصم او الزيادة</th>
+      <th *ngIf="selectVacationBoolean">
+        <input id="selectAll" type="checkbox" (change)="selectEmp($event)">
+      </th>
+    </thead>
+    <tbody>
+      <tr *ngFor="let elm of employees; let i = index" (dblclick)="employeeDetails(elm.id)">
+        <td>{{elm.acc_no}}</td>
+        <td><a [routerLink]="'/dashboard/hr/employee/details/'+elm.id" target="_blank">{{elm.name}}</a></td>
+        <td>{{elm.month}}</td>
+        <td dir="ltr">{{elm.totalHours}}</td>
+        <td dir="ltr">{{elm.actualTotalHours | fixedTime}}</td>
+        <td dir="ltr">{{elm.hoursDifference | fixedTime}}</td>
+        <td *ngIf="selectVacationBoolean">
+          <input [id]="i" type="checkbox" [checked]="elm.selected" (change)="selectEmp($event)">
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+
+</div>

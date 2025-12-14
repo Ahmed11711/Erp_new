@@ -1,0 +1,86 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">اضافة استقطاع</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+    <div class="row">
+      <div class="col-md-3">
+        <ng-autocomplete
+            [data]="employees"
+            [searchKeyword]="catword"
+            placeholder="الموظف"
+            (selected)='empChange($event)'
+            (inputCleared)='resetData($event)'
+            [itemTemplate]="itemTemplates"
+            [notFoundTemplate]="notFoundTemplate">
+          </ng-autocomplete>
+
+          <ng-template #itemTemplates let-item>
+            <a [innerHTML]="item.name"></a>
+          </ng-template>
+
+          <ng-template #notFoundTemplate let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+      </div>
+
+      <div class="col-md-2">
+        <input disabled class="form-control" type="month" (change)="onMonthChange($event)" [value]="currentMonthValue">
+      </div>
+
+      <!-- <div class="col-md-2">
+        <button (click)="submitData()" [disabled]="id==0" class="btn"><i class="fa-solid fa-check border text-white p-2 bg-main"></i></button>
+      </div> -->
+
+
+  </div>
+
+  <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()" *ngIf="id">
+    <p class="alert alert-danger w-50 text-center m-auto" *ngIf="errorMessage">{{errorMessage}}</p>
+    <div class="row">
+      <div class="col-md-6">
+        <div class="form-group">
+          <select class="form-control" formControlName='type'  class="form-control" (change)="subType($event)">
+            <option value="نوع الاستقطاع" disabled>نوع الاستقطاع</option>
+            <option value="خصومات">خصومات</option>
+            <option value="غياب">غياب</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-group">
+          <input class="form-control"  [placeholder]="subtype =='غياب' ? 'عدد ايام الغياب':'المبلغ المصروف'"
+          [class.is-valid]="form.get('amount')?.errors ==null && form.get('amount')?.touched"
+          formControlName='amount' type="number" min="0" class="form-control">
+          <p *ngIf="form.get('amount')?.errors !=null && form.get('amount')?.touched"
+            class="error mb-0 text-danger">مطلوب</p>
+        </div>
+      </div>
+      <div class="col-md-12">
+        <div class="form-group">
+          <textarea class="form-control" placeholder="السبب"
+          [class.is-valid]="form.get('reason')?.errors ==null && form.get('reason')?.touched"
+          formControlName='reason' type="text" class="form-control"></textarea>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="text-center my-3">
+      <button [disabled]="form.invalid || form.value.type == 'نوع الاستقطاع'" class="btn submit my-3">تاكيد </button>
+    </div>
+  </form>
+
+
+</div>

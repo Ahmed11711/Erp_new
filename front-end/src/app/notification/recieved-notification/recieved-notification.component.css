@@ -1,0 +1,49 @@
+::ng-deep .mat-mdc-paginator-container{
+  justify-content: center !important;
+}
+
+input{
+  height: 39px;
+}
+
+.single-autocomplete {
+  max-height: 20px !important;
+}
+
+button {
+  background-color: #82225e !important;
+  border-color: #82225e !important;
+  font-size: 18px !important;
+  font-weight: 700  !important;
+}
+
+.form-control:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 0.1rem #82225e !important;
+}
+table td{
+  font-size: 22px;
+}
+table th{
+  font-size: 25px;
+}
+
+.bg-gray{
+  background-color: rgb(233, 233, 233);
+}
+
+.header{
+background-color: black;
+color: white;
+text-align: center;
+font-size: 2rem;
+border-radius: 7px;
+width: fit-content;
+padding: 10px 20px;
+}
+
+.fa-xmark{
+  cursor: pointer;
+  color: #82225e;
+  font-size: 1.5rem;
+}

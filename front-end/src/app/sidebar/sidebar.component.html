@@ -1,0 +1,65 @@
+<mat-accordion>
+  <mat-expansion-panel (opened)="panelOpenState = true"
+  (closed)="panelOpenState = false" class="mat-elevation-z0" >
+<mat-expansion-panel-header>
+<mat-panel-title>
+ادارة المخازن
+</mat-panel-title>
+</mat-expansion-panel-header>
+<ul class="">
+<!-- <li routerLinkActive="active"> -->
+<!-- <a routerLink="/dashboard/suppliers/list_suppliers" > الموردين</a></li> -->
+<!-- <li routerLinkActive="active"><a routerLink="/dashboard/suppliers/add_supplier" > اضافة مورد</a></li> -->
+<li routerLinkActive="active" [routerLinkActiveOptions]={exact:true}>
+<a routerLink="/dashboard/warehouse/list" >المخازن  </a></li>
+</ul>
+</mat-expansion-panel>
+    <mat-expansion-panel class="mat-elevation-z0" >
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+            الاصناف
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <ul class="">
+        <li routerLinkActive="active">
+         <a routerLink="/dashboard/categories/all_categories" > الاصناف</a></li>
+        <li routerLinkActive="active"><a routerLink="/dashboard/categories/add_category" > اضافة صنف</a></li>
+        <li routerLinkActive="active" [routerLinkActiveOptions]={exact:true}>
+         <a routerLink="/dashboard/categories/units" > وحدات القياس</a></li>
+        <li routerLinkActive="active"><a routerLink="/dashboard/categories/production">خطوط الانتاج</a></li>
+        </ul>
+    </mat-expansion-panel>
+    <mat-expansion-panel (opened)="panelOpenState = true"
+                         (closed)="panelOpenState = false" class="mat-elevation-z0" >
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+         الموردين
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <ul class="">
+        <li routerLinkActive="active">
+         <a routerLink="/dashboard/suppliers/list_suppliers" > الموردين</a></li>
+        <li routerLinkActive="active"><a routerLink="/dashboard/suppliers/add_supplier" > اضافة مورد</a></li>
+        <li routerLinkActive="active" [routerLinkActiveOptions]={exact:true}>
+         <a routerLink="/dashboard/suppliers/types" >  فئات الموردين</a></li>
+        </ul>
+    </mat-expansion-panel>
+    <!-- <mat-expansion-panel (opened)="panelOpenState = true"
+    (closed)="panelOpenState = false" class="mat-elevation-z0" >
+<mat-expansion-panel-header>
+<mat-panel-title>
+الموردين
+</mat-panel-title>
+</mat-expansion-panel-header>
+<mat-nav-list>
+  <a mat-list-item routerLink="#">
+      dd
+  </a>
+  <a mat-list-item routerLink="#">
+dd
+  </a>
+</mat-nav-list>
+</mat-expansion-panel>
+  -->
+  </mat-accordion>
+

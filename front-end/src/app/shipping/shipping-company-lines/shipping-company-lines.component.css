@@ -1,0 +1,12 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+.full-calendar{
+  width: 85%;
+  margin: 0 auto;
+}

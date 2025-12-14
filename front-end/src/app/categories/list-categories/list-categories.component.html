@@ -1,0 +1,155 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-5">
+      <app-time></app-time>
+    </div>
+
+    <!-- فلتر الرصيد -->
+    <div class="form-group col-md-3">
+      <label for="quantityFilter">فلتر الرصيد</label>
+      <select class="form-control" id="quantityFilter" [(ngModel)]="selectedQuantityFilter" (change)="onQuantityFilterChange()">
+        <option value="">الكل</option>
+        <option value="0">Out of Stock</option>
+        <option value="10">Low Stock</option>
+        <option value="more">High Stock</option>
+      </select>
+    </div>
+
+    <div class="col-5">
+      <div class="d-flex align-items-center" style="gap: 10px;">
+        <p class="header"> الاصناف</p>
+        <span (click)="exportTableToExcel()" class="bg-main p-1" style="cursor: pointer; border-radius: 5px;">
+          <!-- SVG هنا -->
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <form #listcat="ngForm">
+    <div class="form-row">
+      <div class="form-group col-md-3">
+        <select (change)="onProductionchange($event)"
+          class="form-control"
+          name="production"
+          ngModel
+          required
+          #production="ngModel"
+          [(ngModel)]="line"
+        >
+          <option selected disabled value="">خط الانتاج</option>
+          <option *ngFor="let production of productionData" [value]="production.id.toString()">
+            {{ production.production_line }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group col-md-3">
+        <select (change)="onWarehousechange($event)"
+          class="form-control"
+          name="warehouse"
+          ngModel
+          required
+          #warehouse="ngModel"
+          [(ngModel)]="ware"
+        >
+          <option selected disabled value="">المخزن</option>
+          <option value="مخزن مواد خام" *ngIf="user != 'Customer Service' && user !='Data Entry'">مخزن مواد خام</option>
+          <option value="مخزن منتج تحت التشغيل" *ngIf="user != 'Customer Service' && user !='Data Entry'">مخزن منتج تحت التشغيل</option>
+          <option value="مخزن منتج تام">مخزن منتج تام</option>
+        </select>
+      </div>
+      <div class="form-group col-md-3">
+        <input type="text"
+          name="type"
+          placeholder="اسم الصنف"
+          autocomplete="off"
+          ngModel
+          #type="ngModel"
+          class="form-control"
+          (change)="onCategorychange($event)"
+          [(ngModel)]="category_name"
+        />
+      </div>
+      <div class="form-group col-md-3">
+        <button class="btn bg-main" type="button" (click)="clearSearch()">clear search</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="row">
+    <div class="col-md-12 text-center">
+      <div class="container-fluid table-responsive py-5">
+        <table class="table table-bordered table-hover" id="capture">
+          <thead class="thead-dark">
+            <tr>
+              <th>#</th>
+              <th>اسم الصنف</th>
+              <th>المخزن</th>
+              <th>فرع الانتاج</th>
+              <th>الوحدة</th>
+              <th>التكلفة او سعر البيع</th>
+              <th>الرصيد</th>
+              <th>صورة الصنف</th>
+              <th>الخيارات</th>
+            </tr>
+          </thead>
+          <tbody>
+          <tr *ngFor="let item of categories; let i = index">
+            <th>{{ i + 1 }}</th>
+            <td>{{ item.category_name }}</td>
+            <td>{{ item.warehouse }}</td>
+            <td>{{ item.production.production_line }}</td>
+            <td>{{ item.measurement.unit }}</td>
+            <td>{{ item.category_price | customNumber }}</td>
+
+            <!-- العمود الجديد للرصد مع تعديل اللون والتحديث -->
+            <td dir="ltr">
+              <input type="number"
+                [value]="item.quantity"
+                (blur)="updateQuantity(item, $event)"
+                [ngStyle]="{
+                  'background-color': getQuantityColor(item.quantity),
+                  'border': 'none',
+                  'width': '70px',
+                  'text-align': 'center'
+                }"
+              />
+            </td>
+
+            <td>
+              <img class="img-fluid" style="width: 30px;" [src]="imgUrl + item.category_image" alt="category image">
+            </td>
+
+            <td>
+              <ng-container *ngIf="user == 'Admin' || (user =='Data Entry' && item.warehouse == 'مخزن منتج تام') || ((user =='Account Management' || user == 'Logistics Specialist') && item.warehouse != 'مخزن منتج تام')">
+                <ng-container *ngIf="['مخزن مواد خام', 'مخزن منتج تحت التشغيل', 'مخزن منتج تام'].includes(item.warehouse)">
+                  <button class="btn" mat-icon-button [matMenuTriggerFor]="menu" aria-label="menu">
+                    <mat-icon>more_vert</mat-icon>
+                  </button>
+                  <mat-menu #menu="matMenu">
+                    <button mat-menu-item [routerLink]="['/dashboard/categories/edit_category',item.id]">
+                      <span>تعديل</span>
+                    </button>
+                    <button mat-menu-item (click)="deleteCategory(item.id)">
+                      <span>حذف</span>
+                    </button>
+                  </mat-menu>
+                </ng-container>
+              </ng-container>
+            </td>
+          </tr>
+        </tbody>
+        </table>
+      </div>
+
+      <mat-paginator #paginator
+        class="demo-paginator"
+        [length]="length"
+        showFirstLastButtons
+        (page)="onPageChange($event)"
+        [pageSizeOptions]="pageSizeOptions"
+        aria-label="Select page">
+      </mat-paginator>
+
+    </div>
+  </div>
+</div>

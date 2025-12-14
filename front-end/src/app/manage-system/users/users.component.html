@@ -1,0 +1,63 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">المستخدمين</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+    <div class="row d-flex justify-content-center">
+      <div class="col-md-3">
+        <div class="form-group">
+          <input (change)="search($event)" class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        </div>
+      </div>
+    </div>
+
+    <table class="table w-75 m-auto">
+      <thead class="bg-dark text-white">
+        <th>اسم العميل</th>
+        <th>الاداره</th>
+        <th>Email</th>
+        <!-- <th>الصلاحية</th> -->
+        <!-- <th>تعديل</th> -->
+        <th>-</th>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of tableData">
+          <td>{{elm.name}}</td>
+          <td>{{elm.department}}</td>
+          <td>{{elm.email}}</td>
+          <!-- <td>{{elm.role}}</td> -->
+          <!-- <td><button (click)="editData()" class="btn btn-outline-secondary">تعديل</button></td> -->
+          <!-- <td><i (click)="deleteData(elm.id)" class="fa-solid fa-trash text-danger"></i></td> -->
+          <td>
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="deleteData(elm.id)" *ngIf="elm?.status != 1">
+                <span>حذف</span>
+              </button>
+            </mat-menu>
+        </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- <div class="text-center my-3">
+      <button class="btn submit my-3">المزيد</button>
+    </div> -->
+
+  </div>
+
+
+</div>

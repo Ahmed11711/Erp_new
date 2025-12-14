@@ -1,0 +1,22 @@
+
+
+<div class="container content">       
+    <div class="d-flex justify-content-center align-items-center h-100" style="flex-direction: column;">
+      <h1 class="text-center"> اضافة فئة مورد</h1>
+      </div>
+        <form #stype="ngForm" (ngSubmit)="addType(stype)">
+            <div class="form-group">
+              <input type="text" name="type" ngModel #type="ngModel" 
+              class="form-control" aria-describedby="type" 
+              placeholder=" فئة المورد"
+              required
+              >
+              <div class="form-text" *ngIf="type.touched && type.invalid">
+                <div *ngIf="type.errors?.['required']" id="type" class="form-text text-danger">يجب ادخال  فئة مورد </div>
+              </div>
+            </div>
+         
+            
+            <button type="submit" [disabled]="type.invalid" class="btn btn-primary loginbtn"> اضف</button>
+          </form>
+    </div>

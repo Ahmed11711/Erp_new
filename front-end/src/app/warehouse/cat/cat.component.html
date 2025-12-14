@@ -1,0 +1,89 @@
+<div class="container-fluid">
+  <div class="row pt-4">
+    <div class="col-md-4">
+      <app-time></app-time>
+    </div>
+    <div class="col-md-5 d-flex ml-3">
+      <h1 class="header">تفاصيل  {{warehouse}}</h1>
+      <a *ngIf="warehouse" style="height: fit-content;" class="btn btn-secondary mt-2 mx-2" (click)="monthlyInventory()">تسجيل الجرد الشهري</a>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-end mx-3">
+  <i (click)="back()" class="fa-solid fa-arrow-left fa-2x" style="color: #82225e; cursor: pointer;"></i>
+</div>
+
+<div class="container">
+    <form>
+        <div class="form-row justify-content-center">
+          <div class="form-group col-md-6">
+              <input
+                  (keyup)="onCategorychange($event)"
+                type="text"
+                name="type"
+                placeholder="اسم الصنف"
+                autocomplete="off"
+                ngModels
+                class="form-control"
+                aria-describedby="type"
+                id="type"
+              />
+          </div>
+          <div class="mx-4 text-center color-main">
+            <h2 class="my-0">الاجمالي</h2>
+            <h2>{{balance | customNumber}}</h2>
+          </div>
+        </div>
+    </form>
+</div>
+
+
+<div class="container-fluid table-responsive text-center py-2">
+    <table class="table table-bordered table-hover">
+      <thead class="thead-dark">
+        <tr>
+          <th scope="col"> اسم الصنف</th>
+          <th scope="col">الوحدة</th>
+          <th scope="col" *ngIf="warehouse !='مخزن صيانة'">الكمية</th>
+          <th scope="col" *ngIf="warehouse =='مخزن منتج تام'">سعر البيع</th>
+          <th scope="col" *ngIf="warehouse !='مخزن صيانة'">التكلفة الاجمالية
+            <input class="d-none" type="checkbox" name="" id="check" (change)="onCategorychange($event)">
+            <label class="mx-2" for="check"><i style="cursor: pointer;" *ngIf="warehouse != 'مخزن منتج تام'" class="fa-solid fa-arrow-up-wide-short"></i></label>
+          </th>
+          <th scope="col" *ngIf="warehouse =='مخزن منتج تام'">اجمالى سعر البيع
+            <input class="d-none" type="checkbox" name="" id="check" (change)="onCategorychange($event)">
+            <label class="mx-2" for="check"><i style="cursor: pointer;" *ngIf="warehouse == 'مخزن منتج تام'" class="fa-solid fa-arrow-up-wide-short"></i></label>
+          </th>
+          <th scope="col">الخيارات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of categories; let i = index">
+          <td>{{item.category_name}}</td>
+          <td >{{item.measurement.unit}}</td>
+          <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'"><i (click)="editQuantiy(item.id , item.category_name)" class="fa-solid fa-pen ml-2"></i>{{item.quantity | customNumber}}</td>
+          <td dir="ltr" *ngIf="warehouse =='مخزن منتج تام'">{{item.category_price | customNumber}}</td>
+          <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'">{{item.total_price | customNumber}}</td>
+          <td dir="ltr" *ngIf="warehouse =='مخزن منتج تام'">{{item.sell_total_price | customNumber}}</td>
+          <td>
+            <a class="btn btn-success" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام'" (click)="addQuantiy(item.id , item.category_name)">+</a>
+            <a class="btn btn-dark mx-2" [routerLink]="['/dashboard/warehouse/cat_details',item.id]">التفاصيل</a>
+            <a class="btn btn-danger" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام'" (click)="removeQuantiy(item.id, item.category_name)">-</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+        class="demo-paginator"
+        [length]="length"
+        showFirstLastButtons
+        (page)="onPageChange($event)"
+        [pageSizeOptions]="pageSizeOptions"
+        aria-label="Select page">
+      </mat-paginator>
+    </div>
+
+    </div>

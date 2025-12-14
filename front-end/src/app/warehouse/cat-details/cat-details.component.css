@@ -1,0 +1,13 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  padding: 10px 20px;
+  width: fit-content;
+  }
+
+  ::ng-deep .mat-mdc-paginator-container{
+    justify-content: center !important;
+}

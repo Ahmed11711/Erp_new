@@ -1,0 +1,25 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+button[type="submit"] {
+  background-color: #82225e !important;
+  border-color: #82225e !important;
+}
+
+.btn-add{
+  border: #82225e solid thin !important;
+  font-size: 1.3rem;
+  padding: 0.1rem 1.5rem !important;
+  border-radius: 2rem;
+}
+
+mat-form-field{
+  font-size: 1.1rem;
+  width: 100%;
+}
+

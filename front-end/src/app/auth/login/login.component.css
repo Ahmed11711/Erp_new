@@ -1,0 +1,28 @@
+@import url(https://fonts.googleapis.com/earlyaccess/scheherazade.css);
+.content {
+  height: 100vh;
+}
+
+form {
+  max-width: 900px;
+  width: 100%;
+  padding: 20px;
+}
+
+.loginbtn {
+    background-color: #82225e !important;
+    border-color:#82225e !important;
+}
+
+h1,label,button{
+    font-family: 'Scheherazade', serif; 
+}
+label{
+    font-size: 25px;
+}
+
+button{
+    font-size: 17px;
+    /* color:#FFF; */
+    font-weight: 600;
+}

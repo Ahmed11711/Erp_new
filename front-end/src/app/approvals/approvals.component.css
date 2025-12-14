@@ -1,0 +1,19 @@
+::ng-deep .mat-mdc-paginator-container{
+  justify-content: center !important;
+}
+
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  width: fit-content;
+  padding: 10px 20px;
+}
+
+.fa-xmark{
+  cursor: pointer;
+  color: #82225e;
+  font-size: 1.5rem;
+}

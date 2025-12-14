@@ -1,0 +1,118 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">اضافة وصفة</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container mt-5">
+
+    <div class="row">
+      <div class="col-md-3">
+        <select id="inputState" class="form-control" (change)="productType($event)">
+          <option selected disabled>نوع المنتج</option>
+          <option value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
+          <option value="مخزن منتج تام">مخزن منتج تام</option>
+        </select>
+      </div>
+      <div class="col-md-3" *ngIf="products.length !== 0">
+        <ng-autocomplete
+          [data]="products"
+          [searchKeyword]="catword"
+          placeholder="اسم المنتج"
+          (selected)='productChange($event)'
+          [itemTemplate]="itemTemplates"
+          [notFoundTemplate]="notFoundTemplate">
+        </ng-autocomplete>
+
+        <ng-template #itemTemplates let-item>
+          <a [innerHTML]="item.category_name"></a>
+        </ng-template>
+
+        <ng-template #notFoundTemplate let-notFound>
+          <div [innerHTML]="notFound"></div>
+        </ng-template>
+      </div>
+    </div>
+
+
+  </div> <br>
+
+
+  <div class="container-fluid text-center">
+    <table class="table w-75 m-auto">
+      <thead class="bg-dark text-white">
+        <th>الصنف</th>
+        <th>النوع</th>
+        <th>الكمية المطلوبة</th>
+        <th>الوحده</th>
+        <th>التكلفه</th>
+        <th>التكلفه الاجماليه</th>
+        <th>صوره الصنف</th>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of tableData; let i = index">
+          <td>{{elm.category_name}}</td>
+          <td>{{elm.measurement.warehouse}}</td>
+          <td class="text-center"><input class="form-control w-25 m-auto" type="number" min="1" [value]="elm.quantity" (change)="quantityChange($event , i)"></td>
+          <td>{{elm.measurement.unit}}</td>
+          <td>{{elm.category_price}}</td>
+          <td>{{elm.total_price}}</td>
+          <td><img class="img-fluid" style="width: 30px;" [src]="imgUrl+elm.category_image" alt="category image"></td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+  <hr>
+  <div class="w-25 m-auto mt-5" *ngIf="products.length !== 0">
+    <ng-autocomplete
+      [data]="recipes"
+      [searchKeyword]="catword2"
+      placeholder="اسم الصنف"
+      (selected)='recipesChange($event)'
+      [itemTemplate]="itemTemplates"
+      [notFoundTemplate]="notFoundTemplate">
+    </ng-autocomplete>
+
+    <ng-template #itemTemplates let-item>
+      <a [innerHTML]="item.category_name"></a>
+    </ng-template>
+
+    <ng-template #notFoundTemplate let-notFound>
+      <div [innerHTML]="notFound"></div>
+    </ng-template>
+  </div>
+
+  <div class="row mt-5 d-flex justify-content-center">
+    <div class="col-md-2 d-flex align-items-center">
+      <select id="inputState" class="form-control" (change)="priceType($event)">
+        <option selected disabled>نوع التكلفة</option>
+        <option value="ثابت">ثابت</option>
+        <option value="متغير">متغير</option>
+      </select>
+    </div>
+
+    <div class="col-md-1 offset-md-1" *ngIf="showChangedPrice">
+      <h3 class="text-center"> التكلفة المتغيره</h3>
+      <h4><input class="form-control" type="number" min="1" [(ngModel)]="changedPrice" (keyup)="calcTotalPrice()"></h4>
+    </div>
+
+    <div class="col-md-2 text-center">
+      <h3>اجمالى التكلفة</h3>
+      <h4>{{totalPrice}}</h4>
+    </div>
+  </div>
+
+  <div class="text-center mt-3">
+    <button (click)="confirmOrder()" class="btn">تأكيد</button>
+  </div>
+
+</div>

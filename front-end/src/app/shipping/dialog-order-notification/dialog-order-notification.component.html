@@ -1,0 +1,32 @@
+<h1 class="text-center" mat-dialog-title> {{data?.notifications[0]?.order_id}}     </h1>
+<div dir="rtl" mat-dialog-content>
+  <table class="table table-bordered text-center">
+    <thead>
+      <th>رقم الاشعار</th>
+      <th>النوع</th>
+      <th>المرسل</th>
+      <th>ملاحظة</th>
+      <th>تاريخ الارسال</th>
+      <th>تم القراءة</th>
+    </thead>
+    <tbody>
+      <tr *ngFor="let elm of data?.notifications">
+        <td>{{elm?.notification_number}}</td>
+        <td>{{elm?.type}}</td>
+        <td>{{elm?.sender?.name}}</td>
+        <td>{{elm?.note}}</td>
+        <td>{{elm?.created_at | date:'dd/MM/yyyy' }}</td>
+        <td>
+          <i class="fa-solid"
+          [ngClass]="{
+            'fa-xmark': elm?.is_read ===0,
+            'fa-check': elm?.is_read === 1,
+            'text-danger': elm?.is_read === 0,
+            'text-success': elm?.is_read === 1
+          }">
+      </i>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

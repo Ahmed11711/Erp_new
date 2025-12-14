@@ -1,0 +1,79 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">صرف</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+  <div class="container-fluid">
+    <form class="text-start w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
+
+      <div class="row">
+        <div class="col-md-2 mb-3">
+          <label for="">التاريخ</label>
+          <input formControlName="start" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+        </div>
+        <div class="col-md-10">
+        </div>
+        <div class="col-md-3">
+          <select formControlName='type' class="form-control type">
+            <option disabled selected value="نوع العهدة">نوع العهدة</option>
+            <option value="نقدية">نقدية</option>
+            <option value="عينية">عينية</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <div class="mb-3">
+            <input class="form-control"   placeholder="مبلغ العهدة"
+            [class.is-valid]="form.get('price')?.errors ==null && form.get('price')?.touched"
+            formControlName='price' type="number" min="0" class="form-control">
+            <p *ngIf="form.get('price')?.errors !=null && form.get('price')?.touched"
+              class="error mb-0 text-danger">رقم غير صحيح</p>
+          </div>
+        </div>
+        <div  class="col-md-3">
+          <select formControlName='kind' class="form-control type" id="inlineFormCustomSelect" >
+            <option disabled selected>متحصل العهدة</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select formControlName='bank' class="form-control type" id="inlineFormCustomSelect" >
+            <option disabled selected>الخزينة</option>
+            <option value="">خزينة المصنع</option>
+            <option value="">فودافون كاش</option>
+            <option value="">البنك الاهلي</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row mt-3">
+        <div class="col-md-6">
+          <textarea placeholder="وصف" name="" id="" cols="97%" formControlName='description'
+          [class.is-valid]="form.get('description')?.errors ==null && form.get('description')?.touched"
+          ></textarea>
+          <p *ngIf="form.get('description')?.errors !=null && form.get('description')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+        </div>
+        <div class="col-md-6">
+          <textarea placeholder="ملاحظات" name="" id="" formControlName='note'
+          [class.is-valid]="form.get('note')?.errors ==null && form.get('note')?.touched"
+          ></textarea>
+          <p *ngIf="form.get('note')?.errors !=null && form.get('note')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+        </div>
+      </div>
+
+      <div class="text-center mt-2">
+        <button
+          type="submit" class="btn submit text-white">صرف</button>
+      </div>
+
+    </form>
+  </div>
+</div>

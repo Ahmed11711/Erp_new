@@ -1,0 +1,245 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">  تعديل الطلب {{id}}</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+  <div class="container-fluid">
+    <form class="text-start w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
+      <div class="container-fluid table-responsive text-center ">
+        <table class="table table-bordered table-hover w-100">
+          <thead class="thead-dark">
+            <th>نوع الطلب</th>
+            <th>حالة الطلب</th>
+            <th>تاريخ الطلب</th>
+            <th *ngIf="order?.order_details?.status_date">تاريخ الحالة</th>
+            <th *ngIf="order?.order_details?.shipping_date">تاريخ الشحن</th>
+            <th>مصدر الطلب</th>
+            <th>طريقة الشحن</th>
+          </thead>
+          <tbody>
+            <td>{{order?.order_type}}</td>
+            <td>{{order?.order_status}}</td>
+            <td>{{order?.order_date}}</td>
+            <td *ngIf="order?.order_details?.status_date">{{order?.order_details?.status_date || ''}}</td>
+            <td *ngIf="order?.order_details?.shipping_date">{{order?.order_details?.shipping_date || ''}}</td>
+            <td>{{order?.order_source?.name}}</td>
+            <td>{{order?.shipping_method?.name}}</td>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="container-fluid table-responsive text-center ">
+        <table class="table table-bordered table-hover w-100">
+          <thead class="thead-dark">
+            <th>اسم العميل</th>
+            <th>رقم الموبيل 1</th>
+            <th *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">رقم الموبيل 2</th>
+            <th *ngIf="order?.tel != 'null'">تلفون ارضي</th>
+            <th>المحافظة</th>
+            <th *ngIf="order?.city">المدينة</th>
+            <th class="w-25">العنوان</th>
+          </thead>
+          <tbody>
+            <td>{{order?.customer_name}}</td>
+            <td>{{order?.customer_phone_1}}</td>
+            <td *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">{{order?.customer_phone_2}}</td>
+            <td *ngIf="order?.tel != 'null'">{{order?.tel}}</td>
+            <td>{{order?.governorate}}</td>
+            <td *ngIf="order?.city">{{order?.city}}</td>
+            <td>{{order?.address}}</td>
+          </tbody>
+        </table>
+      </div>
+
+        <div class="container-fluid table-responsive text-center ">
+          <table class="table table-bordered table-hover w-100">
+            <thead class="thead-dark">
+              <th *ngIf="order?.order_details?.shipping_line?.name">خط التوزيع</th>
+              <th *ngIf="order?.order_details?.shipping_company?.name">شركة الشحن</th>
+              <th *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">رقم البوليصة </th>
+            </thead>
+            <tbody>
+              <td *ngIf="order?.order_details?.shipping_line?.name">{{order?.order_details?.shipping_line?.name}}</td>
+              <td *ngIf="order?.order_details?.shipping_company?.name">{{order?.order_details?.shipping_company?.name}}</td>
+              <td *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">
+                {{order?.order_details?.shippment_number}}
+              </td>
+            </tbody>
+          </table>
+        </div> <br>
+
+      <div class="row" *ngIf="openbtn">
+        <div class="col-md-2">
+          <button class="btn btn-add my-3" (click)="openForm()">اضافة <i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
+
+      <div class="row" *ngIf="formdiv">
+        <div class="col-md-2" *ngIf="addbtn">
+
+          <ng-autocomplete
+            [data]="products"
+            [searchKeyword]="catword"
+            placeholder="اختر المنتج"
+            (selected)='productChange($event)'
+            (inputCleared)="resetInp()"
+            [itemTemplate]="itemTemplates"
+            [notFoundTemplate]="notFoundTemplate">
+          </ng-autocomplete>
+
+          <ng-template #itemTemplates let-item>
+            <a [innerHTML]="item.category_name"></a>
+          </ng-template>
+
+          <ng-template #notFoundTemplate let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+
+        </div>
+        <div class="col-md-2" *ngIf="addbtn">
+          <div class="mb-3">
+            <input class="form-control" placeholder="Price" min="1" [value]="category_price" (keyup)="changeProductPrice($event)"
+                formControlName='productprice' type="number" class="form-control">
+          </div>
+        </div>
+        <div class="col-md-2 d-flex align-items-center justify-content-end" *ngIf="editbtn">
+          <h4>الكمية المطلوبة</h4>
+        </div>
+        <div class="col-md-2">
+          <div class="mb-3">
+            <input class="form-control" placeholder="Quantity" [(ngModel)]="category_quantity" [autocomplete]="false"
+                formControlName='productquantity' type="number" class="form-control">
+                <p *ngIf="form.get('productquantity')?.errors !=null && form.get('productquantity')?.touched"
+                  class="error mb-0 text-danger">مطلوب</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="row">
+        <div class="col-md-9">
+          <div class="text-center mb-3">
+            <a *ngIf="orderStatus === 'طلب استبدال'" class="btn btn-add mt-2 mx-1">اضافة مرتجع<i class="fa-solid fa-trash"></i></a>
+            <a *ngIf="addbtn" (click)="addproduct()" class="btn btn-add mt-2 mx-1">اضافة صنف<i class="fa-solid fa-plus"></i></a>
+          </div>
+          <table class="table m-auto">
+            <thead>
+              <tr>
+                <th>اسم المنتج</th>
+                <th>الكمية المطلوبة</th>
+                <th *ngIf="customerTypeVal == 'شركة'">الكمية التي تم شحنها</th>
+                <th>سعر البيع</th>
+                <th>اجمالى سعر البيع</th>
+                <th>صورة المنتج</th>
+                <th>خاص</th>
+                <th *ngIf="user == 'Admin'">-</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let product of order_details; let i = index">
+                <td>{{product.category_name}}</td>
+                <td dir="ltr">
+                  <input class="form-control text-center w-50 m-auto" type="number" (keyup)="editQuantity($event,i)" (change)="editQuantity($event,i)" (wheel)="disableScroll($event)"
+                  [value]="product.quantity" [min]="(user == 'Shipping Management' || user == 'Operation Management' || user == 'Finance and operations management') ? product.minQuantity:false">
+                </td>
+                <td *ngIf="customerTypeVal == 'شركة'">{{product.shipped_quantity}}</td>
+                <td dir="ltr">{{product.price | customNumber}}</td>
+                <td dir="ltr">{{product.total | customNumber}}</td>
+                <td><img class="img-fluid" style="width: 30px;" [src]="imgUrl+product.imgsrc" alt="category image"></td>
+                <td class="special_details">{{product.special_details}}</td>
+                <td *ngIf="user == 'Admin'"><i *ngIf="product.quantity-product.shipped_quantity==product.quantity || !product.shipped_quantity" (click)="removeProduct(i)" class="fa-solid fa-trash"></i></td>
+              </tr>
+            </tbody>
+          </table>
+          <hr>
+        </div>
+
+        <div class="col-md-3">
+          <textarea name="" id="" cols="31" rows="5" placeholder="ملاحظات" formControlName='order_notes'></textarea>
+        </div>
+      </div>
+
+
+      <div class="row mb-4 text-center">
+        <div class="col-md-2">
+          <label for="">مصاريف الشحن</label>
+          <input class="form-control" min="1" [(ngModel)]="shipping_cost" (keyup)="calc($event)" formControlName='shipping_cost' type="number">
+        </div>
+        <div class="col-md-2 d-flex flex-column justify-content-center" *ngIf="customerTypeVal ==='شركة'">
+          <label for=""> ضريبة القيمة المضافة</label>
+          <div>
+            <input id="vat" class="mx-1 vat"  min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)"
+            [class.is-valid]="form.get('vat')?.errors ==null &&
+              form.get('vat')?.value !='' && form.get('vat')?.value !=null"
+            formControlName='vat' type="number" >
+          </div>
+        </div>
+        <div class="col-md-2 d-flex flex-column justify-content-center">
+          <h3>اجمالى الفاتورة</h3>
+          <h4 dir="ltr">{{totalInvoice | customNumber}}</h4>
+        </div>
+      </div>
+
+      <div class="row text-center">
+
+        <div class="col-md-2 ml-5 pl-5 d-flex flex-column justify-content-center" *ngIf="!(orderStatus === 'طلب صيانة')">
+          <label for="">الخصم</label>
+          <input class="form-control" min="0" [(ngModel)]="discount" (keyup)="calc($event)"
+          [class.is-valid]="form.get('discount')?.errors ==null && form.get('discount')?.touched && net_total>=0 && discount>=0"
+          formControlName='discount' type="number" class="form-control">
+        </div>
+
+        <div class="col-md-2 ml-5 pl-5 d-flex flex-column justify-content-center" *ngIf="orderStatus === 'طلب صيانة'">
+          <label for="">مصاريف الصيانة</label>
+          <input class="form-control" min="1"
+          [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
+          formControlName='name' type="number" class="form-control">
+          <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
+            class="error mb-0 text-danger">مطلوب</p>
+        </div>
+
+        <div class="col-md-2 d-flex flex-column justify-content-center" >
+          <h3>صافي القيمة</h3>
+          <h4 dir="ltr">{{net_total | customNumber}}</h4>
+        </div>
+
+      </div>
+
+      <div class="row text-center mt-3">
+        <div class="col-md-2">
+          <div class="form-group">
+            <div class="element">
+                <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
+                <input type="file" (change)="onFileChanged($event)" name="uploadFile"
+                accept="image/*" id="fileInput"  class="img" formControlName='order_image'>
+                <p *ngIf="form.get('order_image')?.errors !=null && form.get('order_image')?.touched"
+                class="error mb-0 text-danger">من فضلك اختر صورة</p>
+              </div>
+          </div>
+        </div>
+      </div>
+      <div class="alert alert-danger text-center w-25 m-auto" *ngIf="errormessage">
+        please check fields
+      </div>
+      <div class="text-center mt-2">
+        <button type="submit" class="btn submit text-white">تعديل</button>
+      </div>
+
+    </form>
+  </div>
+
+
+
+
+
+
+
+</div>

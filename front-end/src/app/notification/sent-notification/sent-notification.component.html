@@ -1,0 +1,127 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-md-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-md-5">
+      <div><p class="title header m-auto">الاشعارات المرسلة</p></div>
+    </div>
+    <div class="col-md-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="mt-5 text-center">
+      <div class="row">
+        <div class="col-md-2 form-group">
+          <select id="type" class="form-control" (change)="search($event)">
+            <option selected disabled>نوع الاشعار</option>
+            <option value="مراجعة">مراجعة</option>
+            <option value="مراجعة مؤقتة">مراجعة مؤقتة</option>
+            <option value="تعديل">تعديل</option>
+            <option value="استعجال الشحن">استعجال الشحن</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group">
+          <select class="form-control" id="send_to" (change)="search($event)">
+            <option selected disabled>المرسل اليه</option>
+            <option [value]="elm.id" *ngFor="let elm of userdata" [id]="elm.id">{{elm.name}}</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group">
+          <select class="form-control" id="status" (change)="search($event)">
+            <option selected disabled>الحاله</option>
+            <option value="1">تم القراءة</option>
+            <option value="0">لم يتم القراءة</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group" *ngIf="user == 'Admin'">
+          <select class="form-control" id="review_status_admin" (change)="search($event)">
+            <option selected disabled>حالة مراجعة الادمن</option>
+            <option value="2">تم المراجعة</option>
+            <option value="1">لم يتم المراجعة</option>
+          </select>
+        </div>
+        <div class="col-md-2 form-group" *ngIf="user == 'Admin'">
+          <select class="form-control" id="review_status_user" (change)="search($event)">
+            <option selected disabled>حالة مراجعة المستخدم</option>
+            <option value="1">تم المراجعة</option>
+            <option value="0">لم يتم المراجعة</option>
+            <!-- <option value="0">اخري</option> -->
+          </select>
+        </div>
+        <div class="col-md-2 form-group">
+          <input id="order_number" (change)="search($event)" type="text" name="orderNumber" class="form-control"  placeholder="رقم الطلب" />
+        </div>
+      </div>
+    </form>
+
+
+    <table class="table table-hover m-auto text-center">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th scope="col">رقم الاشعار</th>
+          <th scope="col">المرسل اليه</th>
+          <th scope="col">النوع</th>
+          <th scope="col">الملاحظة</th>
+          <th scope="col">تاريخ الارسال</th>
+          <th scope="col">توقيت الارسال</th>
+          <th scope="col">تاريخ الاستلام</th>
+          <th scope="col">توقيت الاستلام</th>
+          <th scope="col">رقم الطلب</th>
+          <th scope="col" *ngIf="user == 'Admin'"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of data; let i = index" [ngClass]="item.is_read === 0 ? 'bg-gray' : ''">
+          <td>
+            {{item?.notification_number}}
+            <span *ngIf="user == 'Admin' && item?.review_status != 0" [ngClass]="item?.review_status == 1 ? 'text-danger' : (item?.review_status == 2 ? 'text-success' : '')">
+              <i class="fa-solid fa-circle"></i>
+            </span>
+          </td>
+          <td>{{item?.receiver.name}}</td>
+          <td>{{item?.type}}</td>
+          <td>{{item?.note}}</td>
+          <ng-template #emptyTd><td></td></ng-template>
+          <td>{{item.created_at | date:'dd/MM/yyyy'}}</td>
+          <td dir="ltr">{{item.created_at | date:'hh:mm a'}}</td>
+          <td *ngIf="item.is_read == 1; else emptyTd">{{item.updated_at | date:'dd/MM/yyyy'}}</td>
+          <td dir="ltr" *ngIf="item.is_read == 1; else emptyTd">{{item.updated_at | date:'hh:mm a'}}</td>
+          <td>
+            <a [routerLink]="['/dashboard/shipping/orderdetails', item.ref]" target="_blank">
+              <span style="cursor: pointer;">
+                  {{item.ref}}
+              </span>
+            </a>
+          </td>
+          <td *ngIf="user == 'Admin'">
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="deleteData(item.id)">
+                <span>حذف</span>
+              </button>
+            </mat-menu>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+    </div>
+
+</div>

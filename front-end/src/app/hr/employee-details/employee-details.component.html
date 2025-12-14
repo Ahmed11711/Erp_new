@@ -1,0 +1,159 @@
+<div id="container" class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">كشف حساب <br>{{employee?.name}}</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+      <p class="bg-main m-auto print" (click)="print()">  <i class="fa-solid fa-print text-white"></i></p>
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
+      <div class="col-md-2">
+        <input class="form-control" type="month" (change)="onMonthChange($event)" [value]="currentMonthValue">
+      </div>
+    </form>
+
+    <table class="table m-auto text-center table-hover">
+      <tr>
+        <td class="bg-navy">اسم الموظف</td>
+        <td>{{employee?.name}}</td>
+        <td class="bg-navy">كود الموظف</td>
+        <td>{{employee?.code}}</td>
+      </tr>
+      <tr>
+        <td class="bg-navy">الوظيفة</td>
+        <td>{{employee?.level}}</td>
+        <td class="bg-navy">التاريخ</td>
+        <td>{{employee?.created_at | date:'dd/MM/yyyy'}}</td>
+      </tr>
+      <tr>
+        <td class="bg-navy" *ngIf="employee?.acc_no">رقم البصمة</td>
+        <td *ngIf="employee?.acc_no">{{employee?.acc_no}}</td>
+      </tr>
+    </table>
+
+    <div class="row my-3">
+      <div class="col-md-6">
+        <table class="table m-auto text-center table-hover">
+          <tr>
+            <td class="bg-navy" colspan="2">الاستحقاقات</td>
+          </tr>
+          <td class="bg-navy">الراتب الثابت</td>
+          <td>{{employee?.fixed_salary || 0 | customNumber}}</td>
+          <tr *ngFor="let elm of merits">
+            <td class="bg-navy">{{elm['type'] || ''}}</td>
+            <td>{{elm['amount'] || ''}}</td>
+          </tr>
+          <!-- <tr *ngIf="employee?.acc_no">
+            <td class="bg-navy">عدد ساعات الحضور</td>
+            <td>{{employee.actualHours}}</td>
+          </tr> -->
+          <tr *ngIf="employee?.acc_no">
+            <td class="bg-navy">حوافز( ساعات اضافية )</td>
+            <td>
+              <span *ngIf="employee?.fixed_salary >= employee.totalActualHoursSalary">0</span>
+              <span *ngIf="employee?.fixed_salary < employee.totalActualHoursSalary">
+                {{employee.totalActualHoursSalary -  employee?.fixed_salary || 0 | customNumber}}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td class="bg-navy">الاجمالي</td>
+            <td>{{employee?.total_merit || 0 | customNumber}}</td>
+          </tr>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <table class="table m-auto text-center table-hover">
+          <tr>
+            <td class="bg-navy" colspan="2">الاستقطاعات</td>
+          </tr>
+          <tr *ngFor="let elm of subtraction">
+            <td class="bg-navy">{{elm['type'] || ''}}</td>
+            <td>{{elm['amount'] || ''}}</td>
+          </tr>
+          <tr *ngFor="let elm of advance_payments">
+            <td class="bg-navy">{{elm['type'] || ''}}</td>
+            <td>{{elm['amount'] || ''}}</td>
+          </tr>
+          <tr *ngIf="employee?.acc_no">
+            <td class="bg-navy">خصم ساعات التأخير</td>
+            <td>{{employee.differnceSalary || 0 | customNumber}}</td>
+          </tr>
+          <tr>
+            <td class="bg-navy">الاجمالي</td>
+            <td>{{employee?.total_sub || 0 | customNumber}}</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <table class="table m-auto text-center table-hover">
+      <tr>
+        <td class="bg-navy">الصافي</td>
+        <td dir="ltr">{{employee?.net_total || 0 | customNumber }}</td>
+      </tr>
+    </table> <br>
+    <div *ngIf="employee?.acc_no">
+      <app-working-hours-details [dateFromEmp]="currentMonthValue" (dataEvent)="handleDataEvent($event)"></app-working-hours-details>
+    </div>
+
+    <div class="row my-4">
+      <div class="col-md-6">
+        <p class="text-center"><span class="header p-1">الاستحقاقات</span></p>
+        <table class="table m-auto text-center table-hover">
+          <thead>
+            <th>النوع</th>
+            <th>المبلغ</th>
+            <th>السبب</th>
+            <th>بواسطة</th>
+          </thead>
+          <tbody>
+            <tr *ngFor="let elm of merits">
+              <td class="bg-navy">{{elm['type'] || ''}}</td>
+              <td>{{elm['amount'] || ''}}</td>
+              <td>{{elm['reason'] || ''}}</td>
+              <td>{{elm['user'].name || ''}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <p class="text-center"><span class="header p-1">الاستقطاعات</span></p>
+        <table class="table m-auto text-center table-hover">
+          <thead>
+            <th>النوع</th>
+            <th>المبلغ</th>
+            <th>السبب</th>
+            <th>بواسطة</th>
+          </thead>
+          <tbody>
+            <tr *ngFor="let elm of subtraction">
+              <td class="bg-navy">{{elm['type'] || ''}}</td>
+              <td>{{elm['amount'] || ''}}</td>
+              <td>{{elm['reason'] || ''}}</td>
+              <td>{{elm['user'].name || ''}}</td>
+            </tr>
+            <tr *ngFor="let elm of advance_payments">
+              <td class="bg-navy">{{elm['type'] || ''}}</td>
+              <td>{{elm['amount'] || ''}}</td>
+              <td>{{elm['reason'] || ''}}</td>
+              <td>{{elm['user'].name || ''}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <app-print-empolyee-details class="d-none"  [employee]="dataPrint"></app-print-empolyee-details>
+  </div>
+</div>

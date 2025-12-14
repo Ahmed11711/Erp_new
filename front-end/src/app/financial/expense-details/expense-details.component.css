@@ -1,0 +1,62 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+i:first-child{
+  font-size: 1rem;
+  color: #82225e;
+}
+
+
+.content{
+  padding: 20px 20px;
+  width: 500px;
+}
+
+
+
+.form-control:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 0.1rem #82225e !important;
+}
+input{
+  direction: rtl;
+}
+
+form p{
+  margin: 0.5rem;
+}
+
+
+
+
+.first td{
+  display: inline-block;
+  min-width: 12rem;
+  margin: 0 3rem;
+  text-align: center;
+}
+
+input , select , option{
+  font-size: 1.3rem;
+}
+
+h3{
+  background-color: #82225e;
+  color: white;
+  padding: 0.8rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.4rem;
+  border-radius: 10px;
+}
+
+p{
+  text-align: center;
+  font-size: 1.2rem;
+}
+

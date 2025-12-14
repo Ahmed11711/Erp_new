@@ -1,0 +1,70 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">اضافة اصل</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+    <div class="w-50 m-auto mt-5">
+      <div *ngIf="errorform" class="alert alert-danger">
+        {{errorMessage}}
+      </div>
+      <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
+        <div class="row">
+          <div class="col-md-4">
+            <div class="form-group">
+              <input class="form-control"   placeholder="اسم الاصل"
+              [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
+              formControlName='name' type="text" class="form-control">
+              <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
+                class="error mb-0 text-danger">مطلوب</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <input formControlName="asset_date" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <input class="form-control"   placeholder="المبلغ المدفوع"
+              [class.is-valid]="form.get('payment_amount')?.errors ==null && form.get('payment_amount')?.touched"
+              formControlName='payment_amount' type="number" min="0" class="form-control">
+              <p *ngIf="form.get('payment_amount')?.errors !=null && form.get('payment_amount')?.touched"
+                class="error mb-0 text-danger">مطلوب</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <select name="" id="" class="form-control" formControlName='bank_id'>
+                <option disabled selected>الخزينة</option>
+                <option [value]="elm.id" *ngFor="let elm of data">{{elm.name}}</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <input class="form-control"   placeholder="قيمة الاصل الفعلية"
+              [class.is-valid]="form.get('asset_amount')?.errors ==null && form.get('asset_amount')?.touched"
+              formControlName='asset_amount' type="number" min="0" class="form-control">
+              <p *ngIf="form.get('asset_amount')?.errors !=null && form.get('asset_amount')?.touched"
+                class="error mb-0 text-danger">مطلوب</p>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="text-center my-3">
+          <button [disabled]="form.value.bank_id=='الخزينة' || form.invalid " class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>

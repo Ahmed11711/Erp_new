@@ -1,0 +1,49 @@
+<div class="container content">
+  <div class="d-flex justify-content-center align-items-center h-100" style="flex-direction: column;">
+    <h1 class="text-center"> اضافة</h1>
+  </div>
+    <form class="text-start" [formGroup]="form" (ngSubmit)="submitform()">
+      <div class="mb-3">
+        <input class="form-control"   placeholder="الاسم"
+        [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
+        formControlName='name' type="text" class="form-control">
+        <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
+          class="error mb-0 text-danger">مطلوب</p>
+      </div>
+      <div class="mb-3">
+        <input class="form-control"   placeholder="النوع"
+        [class.is-valid]="form.get('type')?.errors ==null && form.get('type')?.touched"
+        formControlName='type' type="text" class="form-control">
+        <p *ngIf="form.get('type')?.errors !=null && form.get('type')?.touched"
+          class="error mb-0 text-danger">مطلوب</p>
+      </div>
+      <div class="mb-3" *ngIf="!data?.id">
+        <input class="form-control"   placeholder="الرصيد"
+        [class.is-valid]="form.get('balance')?.errors ==null && form.get('balance')?.touched"
+        formControlName='balance' type="number" class="form-control" min="1">
+        <p *ngIf="form.get('balance')?.errors !=null && form.get('balance')?.touched"
+          class="error mb-0 text-danger">مطلوب</p>
+      </div>
+      <div class="mb-3">
+        <input class="form-control"   placeholder="الاستخدام"
+        [class.is-valid]="form.get('usage')?.errors ==null && form.get('usage')?.touched"
+        formControlName='usage' type="text" class="form-control">
+        <p *ngIf="form.get('usage')?.errors !=null && form.get('usage')?.touched"
+          class="error mb-0 text-danger">مطلوب</p>
+      </div>
+      <div class="mb-3">
+        <select dir="rtl" class="form-control"   placeholder="الاصل"
+          [class.is-valid]="form.get('asset_id')?.errors ==null && form.get('asset_id')?.touched"
+          formControlName='asset_id' type="text" class="form-control">
+          <option value="0" disabled selected>الاصل</option>
+          <option [value]="elm?.id" *ngFor="let elm of assetData">{{elm?.name}}</option>
+        </select>
+        <p *ngIf="form.get('asset_id')?.errors !=null && form.get('asset_id')?.touched"
+          class="error mb-0 text-danger">مطلوب</p>
+      </div>
+      <div class="text-center">
+        <button type="submit" class="btn text-white">{{data.id ? 'تعديل' : 'اضافة'}}</button>
+      </div>
+    </form>
+</div>
+

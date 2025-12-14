@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "magalisdemonew",
+  "private_key_id": "84d5bed43c102a9a64b136ae5aa7c5fcbc4f0fd9",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDRWp78b9/DPzL/\ngtHwYaNp1SIUpHSax7CdcBNEAPdddLNm9buwNULpz/BzhXB5bj4sp//C+9RzCgCI\nYQN2C230TvmBXNCvApHB8F4Bb14accifxduYSAJh9qKIksAiQWfy3Qpr+1bv1/dj\nsyre90t9fUZrGqv3aAEktzWWh5hLmjUjGl4ZneXsqjhy02krx9nbEdafAhQwSLRV\ncHGTC28MzJNPrnKXXeHS+Wgpjlj+uf5BTEN6BnDNs/JF7Ak1xdgpw0+CiTuEv9fj\nlWmXtiyuZEBCk1gQaJYhRrSDbaqhcSFwR/nW9y/iKd9rg2rysT9kliMhwN4a6zjK\nBW9dwaYZAgMBAAECggEAF/+L1wMaAt8lQO3lk+kVWuXgJL6fUTjP0ZRN2Q9FS9S7\nVfOYQsAwPe4ksZFbzcep3+OYKWlFtrQwUHHSfD8eKRG+fyo9D7q7K6Cang5+moht\nh4ceP4wNnd4wTniIBsU5nbjh33PtyMuYY7jfkrSFVkq8fj2N9evZqbRIs8syVYQQ\nH7JF4KI9LjjMuszqPjTu5/lK/RTPNnEURlcrWnrrFamyown6AxsnICLGKimuprIy\nYJg5BFLSDf+SofcTBJNy2dnf1Y/SaMJ0od5YQFSwXpnrud7i+jtNJBwZczFVMFU3\nOPyXoTjkddI38M9yDHsPH03J946gOXps0jC3m07UgQKBgQD3MgVQZBuFYacsKBUr\nOPo/ETLd2TjwP5/fclchr8Ocoyr7AagOD+biCoxXpY7nf3VZZ7MLuc/KScZEsUWT\nXdnKQ2CXenuwtAmofv3HPyDhIecFEZMCx01gNo+e4Ia+cjp/SMjVDOHOz5oPajGO\n4cZyGY5/h9gZk3Mlwk3X41EL4QKBgQDYz43wA7YCaGzFqjh9doUeuBOE4fCXTDI4\nh5aWfUNfayexZOLvLwwyBNjfWGbwrMhUieg4bkgv3fRNLUWh5jfk5UmZIE9hDTx3\nqIH1GEzBoZKaZC4wNM3g1K0u6UKtfreceUCpEFTf5epYT3GxIdUgMF4zh1n12faX\nH7kHo+4hOQKBgALwMkX5WqZkOcN5mn7QB5F2V99xNI8Ogoz6Y/S/jRiwi9M9+sxn\n/fuT2oU0L5Wq2y8731H1XHXwGI46eTQ+OleAI4bJauz3xuGc2NFke7SRXZie09uF\nmPLa0yw1SQS8gNuAdvqpU4nMx+0E+x/SqTQz/5CegcAUE5tQSvKU/iKhAoGAOSmn\n85MW5tWfcBIsKLAZ8vp3cv6bD1jwmMTu6CiIndzDr1q5FnTiE0IB6AkHwwbbHqbp\nig9RiwVLBxoblM79B6WIXQ4Ov7jcq3PLJ9LLUfYGkBw/rUgOy+tm6cpoYRPa1y+E\n485BgnK88aGoiRoxdfYqsA1Mo6xe/oNHpoMLIskCgYAViGIxEm+OxunETM0ryeNx\nC9tGFipK67cMo456O/Lvpw1suw+LbyvhPc8RdlKIS5t2mEjQKWOCQLg53wwbIZpG\nDvfy5Z0bSoz7QwGdnWxnTBVR0vYcZv9vdyltaTfsIjKxAHTTXklSfrN52hJi1aSf\nIMlpBDOZuPQq2g9TeeFGTg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "magalisdemonew@appspot.gserviceaccount.com",
+  "client_id": "104700712921028028558",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/magalisdemonew%40appspot.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

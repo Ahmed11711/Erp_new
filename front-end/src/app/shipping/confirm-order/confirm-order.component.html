@@ -1,0 +1,66 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto"> تاكيد الطلب</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+
+    </div>
+  </div>
+
+  <app-order-details (dataEvent)="getOrderType($event)"></app-order-details>
+
+
+<!-- <app-tracking [tracking]="tracking"></app-tracking> -->
+
+<div class="pl-5 mb-5">
+  <form #confirm="ngForm" (ngSubmit)="confirmOrder(confirm)">
+
+  <div class="form-row">
+    <div class="form-group col-md-3">
+      <div class="form-group">
+        <div class="form-group ">
+          <select class="form-control" name="line" ngModel required #line="ngModel">
+            <option selected disabled value=""> خط التوزيع</option>
+            <option *ngFor="let item of lines" value="{{item.id}}">{{item.name}}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-group col-md-3">
+      <div class=" text-center">
+        <mat-form-field class="example-full-width">
+          <mat-label>تاريخ الشحن المطلوب</mat-label>
+          <input matInput [matDatepickerFilter]="myFilter" [matDatepicker]="picker"
+          (dateInput)="OnDateChange($event.value)">
+          <mat-hint>MM/DD/YYYY</mat-hint>
+          <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+          <mat-datepicker #picker></mat-datepicker>
+        </mat-form-field>
+      </div>
+    </div>
+    <div class="form-group col-md-3">
+      <input
+      type="text"
+      name="note"
+      ngModel
+      #note="ngModel"
+      class="form-control"
+      placeholder="اضف ملحوظة"
+      />
+    </div>
+
+
+  </div>
+
+  <div class="form-group text-center">
+    <button  type="submit" class="btn btn-success px-4 py-3"
+      [disabled]="confirm.invalid || !dateSelected">تاكيد</button>
+
+  </div>
+</form>
+</div>
+</div>

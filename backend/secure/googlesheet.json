@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "magalisdemonew",
+  "private_key_id": "c19333e34f792587a09edd7878d838b1b9b479f8",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCSk+EWP+c7DR+6\n2jlkvGQPPZFmbYyvEGZmEWEDf66au9zGu+qQm1wJjZbIw9K/Z04K+9icxGTLyMjg\nUZ8e8BrI37IcaHtuuIbDckilaEsCCHsxZgDOzVlO6VsKVTmIGXUW1P2/a5+xaZG0\ns0DnwD8hcgGnSPJkS3dRFrdTJ8ZyBpVT+5Z/EKmfaK7lewCsc9zZdIcUSQro7C8V\nraCQ9YxJe9XoftTorkB+pJMKnbt0YDhas0tWGjl6kEpapHNcrRQFKBosHjK4W0VJ\nOd7legSd2bqiNgTh55zIttMh/vLVU1W7djJV7CiUOfcr8T3KsqcItSuJLm2E8FGJ\nKfMNgiCFAgMBAAECggEAEuhskrgvldh9jVb1LF948NZaWUIscbDF5Mi9IPxpg6BU\nPHalLX49AyZ2mvNXzkT/Nj+Ck8Zp0jfWYcllo1IJwnvIuA1qTsAS8kddw6iOdHav\nnZGw7PxkVt+XVN/lif7uscFL8lNpyDL8DrlI2BxeiGvydqfcTL/HZnhtsZZh7Pdm\ndbOUeeWePv3xFR/CVImeMwhBO7IAzAnsBeaeFsIUGSPDYqbE03mboUBzdHfFYC62\njXw3M+on2RELZXsa+4v54IaGuUSXQlZ83P8UuVh+FbCM8jrKI1Mkik4tWocxtlqp\nd/+ycHIkeeKUoXdpRRGsr+5rRnOGpyDF4gLFz3yBQQKBgQDC4FRPjtuhWMQTJ3d0\nxmc0ylZbrD+/KsVAlqh/CYR0mrjClYGChGHVoHePcaOORfljMm6JyXnvMxHYaPbe\nzFFySQLyUSYw3pEMKYPohS1WbelDrz3JKLRsemOnIeoVB5eoKApNGj5PYHvmZZqC\n43q/5/jchYnlsDP3EwvJx6OliQKBgQDAjWQ6emi/s/QgGc1Ma2ksrCTiTuz/fh17\nXwX6qp+zO3REXiDjX1G2qrHeM8zCSfSHJWYa/zsYs6Hrx+9Wd48BtlGhtuTadOZJ\nu9gRX9a4ibwt8m6+ecBtAcBgm7ZCeR1+Io6lNrH/1yuMQupryxapPo9GFcmPzjZb\nd5yuzn1gHQKBgGIE++NYc9hgEZ+gxlESSm8fJvjNVvMMzFKEdRQQ8XLFMBGPqajA\ndYVCRWD9Q8sYHyxp/XeIw7Aw+9TiVuoR0xWs67J+ZrtF96cqapLWCcvjVOUai/VW\naAn4NY+nW1pgi0OlgCjv/k9mtGtax7D2QpOsVlx1PrstObYY+mDv7bwhAoGALDHH\nqWxjEmz5QUzqw/l7QFead57p4pJNrf1XX/s9gGPLAc4g+k7scGKpRHjbLFTRHRvG\nXbfrFnZUWcuf8VarqhbwkY9q44ElQhMtOn+mxuBGIr2cEXfcZKicQRA8OvGVhVfl\nKaJuJGx8gErzhx4r61iChfGGO812yHOhsLWQLTkCgYEAiCwEiDHFkFpOMLMD+r87\ns4qq26j1SkYDXbOdCCSW5XES4sYOKX5CZcvJtU2ME1vl25ZhA1uUwWt0h//QaqiK\nI3ciFwi6ClZPWvS5WXFVnjzGkA0bLH9+/4MBpqpgn2+UR6IRqA7hA0ql15nVdWUG\ny/MBhbcmcaoo5k6N36N3ngk=\n-----END PRIVATE KEY-----\n",
+  "client_email": "googlesheet@magalisdemonew.iam.gserviceaccount.com",
+  "client_id": "103041384319078027624",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/googlesheet%40magalisdemonew.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

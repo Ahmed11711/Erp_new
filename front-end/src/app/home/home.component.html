@@ -1,0 +1,68 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-md-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-md-5">
+      <div><p class="title header w-50 m-auto">الصفحة الرئيسية</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+  <div *ngFor="let notification of notifications">
+    {{ notification.message }}
+  </div>
+
+  <div class="container-fluid text-center mt-5">
+    <div class="row d-flex justify-content-center">
+      <div class="head" routerLink="/dashboard/shipping/listorders" >
+        <h4>الطلبات</h4>
+        <mat-icon>local_shipping</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/financial/expenses"  *ngIf="user == 'Admin'">
+        <h4>المصروفات</h4>
+        <mat-icon>commute</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/purchases/list_invoice"  *ngIf="user == 'Admin'">
+        <h4>المشتريات</h4>
+        <mat-icon>commute</mat-icon>
+      </div>
+    </div>
+    <div class="row d-flex justify-content-center">
+      <div class="head" routerLink="/dashboard/notification">
+        <h4>الاشعارات</h4>
+        <mat-icon>notifications</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/shipping/listorders"  *ngIf="user == 'Admin'">
+        <h4>تقرير المخزون</h4>
+        <mat-icon>commute</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/shipping/shippingcompany"  *ngIf="user == 'Admin'">
+        <h4>حساب المندوبين وشركات الشحن</h4>
+        <mat-icon>commute</mat-icon>
+      </div>
+    </div>
+    <div class="row d-flex justify-content-center">
+      <div class="head" routerLink="/dashboard/approvals" *ngIf="user == 'Admin'">
+        <h4>الموافقات</h4>
+        <mat-icon>checklist</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/admin/tracking" *ngIf="user == 'Admin'">
+        <h4>تتبع</h4>
+        <mat-icon>checklist</mat-icon>
+      </div>
+    </div>
+  </div>
+
+  <div class="row p-2">
+    <div class="col-md-6">
+
+    </div>
+    <div class="col-md-6 border">
+      <app-categories-report></app-categories-report>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,146 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">  عرض(2) {{offer?.id}}</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-end justify-content-start">
+      <p  (click)="downloadPDF()"> <i class="fa-solid color-main fa-print "></i></p>
+
+    </div>
+  </div>
+  <div id="capture" dir="ltr" class="row border m-0 p-0 mx-auto">
+
+    <div class=" col-md-12 ">
+      <div class="p-5">
+        <h4 style="text-align: start; margin-top: 30px;">
+          <img width="250px" src="assets/images/logoo.png" alt="">
+        </h4>
+        <div class="mx-4 mt-5">
+          <h4 style="text-align: start;"> Date :  {{offer?.dateFrom}} </h4>
+          <h4 style="text-align: start;">Valid till :    {{offer?.dateTo}} </h4>
+          <h4 style="display: flex; align-items: center; gap: 10px; text-align: start;">
+            Quote for:
+            <input readonly type="text" [value]="offer?.quote || ''" >
+          </h4>
+          <h4 style="text-align: start;" *ngIf="offer?.title">This quotation for {{offer?.title}} </h4>
+        </div>
+
+        <div [style]="offer?.category?.length === 1 ? 'margin-bottom: 400px;' :''">
+          <table class="table" >
+            <tr class="table-head" style="text-align: start;">
+              <td style="border: solid 1px black !important;">Product</td>
+              <td style="border: solid 1px black !important;" *ngIf="showOldPrice">Price Before Discount</td>
+              <td style="border: solid 1px black !important;">Price</td>
+              <td style="border: solid 1px black !important;">Description</td>
+              <td class="w-50" style="border: solid 1px black !important;"></td>
+            </tr>
+            <tr style="text-align: center;" *ngFor="let elm of offer?.category">
+              <td style="border: solid 1px black !important;">
+                <p>{{elm.category_name}}</p>
+              </td>
+              <td style="border: solid 1px black !important;" *ngIf="showOldPrice">
+                <p>{{elm. old_category_price|customNumber}}</p>
+              </td>
+              <td style="border: solid 1px black !important;">
+                <p>{{elm.new_category_price|customNumber}}</p>
+              </td>
+              <td style="border: solid 1px black !important; text-align: start; width: 30%;">
+                <p [innerHTML]="elm.description"></p>
+              </td>
+              <td style="height: 360px !important; border: solid 1px black !important;">
+                <img width="100%" [src]="imgUrl+elm.category_image" alt="category_image">
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+
+
+      <div>
+        <table class="table w-75" >
+          <tr style="text-align: center;">
+            <td style="border: solid 1px black !important;">Product</td>
+            <td style="border: solid 1px black !important;"> Price for unit</td>
+            <td style="border: solid 1px black !important;">Quantity</td>
+            <td style="border: solid 1px black !important;">Total Price</td>
+          </tr>
+          <tr style="text-align: center;" *ngFor="let elm of offer?.category">
+            <td style="border: solid 1px black !important;">{{elm.category_name}}</td>
+            <td style="border: solid 1px black !important;">{{elm.new_category_price|customNumber}}</td>
+            <td style="border: solid 1px black !important;">{{elm.category_quantity|customNumber}}</td>
+            <td style="border: solid 1px black !important;">{{elm.total_price|customNumber}}</td>
+          </tr>
+          <tr style="text-align: center;">
+            <td colspan="2" style="border: solid 1px black !important;">Sub</td>
+            <td colspan="2" style="border: solid 1px black !important;">{{offer?.subtotal ?? 0|customNumber}}</td>
+          </tr>
+          <tr style="text-align: center;">
+            <td colspan="2" style="border: solid 1px black !important;">Vat</td>
+            <td colspan="2" style="border: solid 1px black !important;">{{offer?.vat ?? 0|customNumber}}</td>
+          </tr>
+          <tr style="text-align: center;" *ngIf="offer?.transportation > 0">
+            <td colspan="2" style="border: solid 1px black !important;">Transportation</td>
+            <td colspan="2" style="border: solid 1px black !important;">{{offer?.transportation|customNumber}}</td>
+          </tr>
+          <tr style="text-align: center;">
+            <td colspan="2" style="border: solid 1px black !important;">Net price</td>
+            <td colspan="2" style="border: solid 1px black !important;">{{offer?.total ?? 0|customNumber}}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div *ngIf="offer?.note" class="col-md-12 mb-2" dir="ltr" style="text-align: start; border: solid 1px black;">
+        <h3 style="font-size: 16px;">Note : </h3>
+        <p style="font-size: 14px;">{{offer?.note}}</p>
+      </div>
+
+      <div class="w-75 m-auto">
+        <h2 style="text-align: start;">Payment</h2>
+        <div class="footer">
+          <p class="mb-5" style="text-align: start;" dir="ltr"> <span>   50% </span>on advance through the bank Account </p>
+        </div>
+
+        <div style="border: solid 1px black;">
+          <div class="my-4 mx-2">
+            <table class="table" style="text-align: start;">
+              <tr>
+                <td style="border: solid 1px black !important;"> MAGALIS FURNITURE TRADING
+                </td>
+              </tr>
+              <tr>
+                <td style="border: solid 1px black !important;">100054371343</td>
+              </tr>
+              <tr>
+                <td style="border: solid 1px black !important;">Cib nasr branch</td>
+              </tr>
+              <tr>
+                <td style="border: solid 1px black !important;">
+                  IBANN :
+                  <div class="px-2 pb-2" style="border: solid 1px black;">EG940010002000000100054371343</div>
+                  SWIFT CODE : CIBEEGCX020
+
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="footer">
+          <h2 class="my-5" style="text-align: start;" dir="ltr">50% on delivery  </h2>
+          <p style="text-align: start;">➢ We hope you are satisfied with your purchase. Thank you for putting your trust and confidence in our company. </p>
+          <p style="text-align: start;" class="d-flex"> ➢  For more information, email us on {{offer.email}}</p>
+          <p style="text-align: start;"> ➢ This quotation without delivery fees</p>
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+
+</div>
+
+

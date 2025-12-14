@@ -1,0 +1,103 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto"> اوامر التصنيع</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container mt-5">
+
+    <div class="row">
+      <div class="col-md-5">
+
+      </div>
+      <div class="col-md-3">
+        <ng-autocomplete
+          [data]="products"
+          [searchKeyword]="catword"
+          placeholder="البحث"
+          (selected)='productChange($event)'
+          (inputCleared)='filterData($event)'
+          [itemTemplate]="itemTemplates"
+          [notFoundTemplate]="notFoundTemplate">
+        </ng-autocomplete>
+
+        <ng-template #itemTemplates let-item>
+          <a [innerHTML]="item.category_name"></a>
+        </ng-template>
+
+        <ng-template #notFoundTemplate let-notFound>
+          <div [innerHTML]="notFound"></div>
+        </ng-template>
+      </div>
+      <div class="col-md-2">
+      </div>
+    </div>
+
+
+  </div>
+
+
+  <div class="container mt-5">
+
+    <div class="row">
+      <div class="col-md-3 text-center">
+        <mat-form-field class="example-full-width">
+          <mat-label>التاريخ</mat-label>
+          <input matInput [matDatepicker]="picker"
+          (dateInput)="OnDateChange($event.value)">
+          <mat-hint>MM/DD/YYYY</mat-hint>
+          <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+          <mat-datepicker #picker></mat-datepicker>
+        </mat-form-field>
+      </div>
+
+      <div class="col-md-3">
+        <select id="inputState" class="form-control" [(ngModel)]="status" (change)="filterData('')">
+          <option selected disabled>حاله التصنيع</option>
+          <option>تم الانتهاء</option>
+          <option>في التصنيع</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-fluid text-center mt-5">
+    <table class="table w-75 m-auto">
+      <thead class="bg-dark text-white">
+        <th>تاريخ الطلب</th>
+        <th>تاريخ الانتهاء</th>
+        <th>حالة التصنيع</th>
+        <th>اسم المنتج</th>
+        <th>الكمية</th>
+        <th>اجمالى التكلفه</th>
+        <th>تم بواسطة</th>
+        <th>-</th>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of tableData">
+          <td>{{elm.date}}</td>
+          <td>-</td>
+          <td>{{elm.status}}</td>
+          <td>{{elm.product.category_name}}</td>
+          <td>{{elm.quantity}}</td>
+          <td>{{elm.total}}</td>
+          <td>{{elm.user.name}}</td>
+          <td *ngIf="elm.status === 'في التصنيع'"><button (click)="finish(elm.id)" class="btn btn-outline-dark">تم الانتهاء</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <hr>
+  <!-- <div class="text-center">
+    <button class="btn">المزيد</button>
+  </div> -->
+
+</div>

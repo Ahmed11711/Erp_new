@@ -1,0 +1,127 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <h1 class="header text-center mx-auto my-4">تفاصيل الفاتورة رقم ( {{ 'PO'+id || '' }} )</h1>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+</div>
+<div class="container-fluid text-center">
+  <div class="row">
+    <div class="form-group col-md-2">
+          <p >حالة الشراء</p>
+          <h3>{{ invoice?.invoice_type || '' }}</h3>
+      </div>
+
+      <div class="form-group col-md-2">
+        <p>المورد</p>
+        <h3>{{ invoice?.supplier.supplier_name || '' }}</h3>
+      </div>
+
+      <div class="form-group col-md-2">
+        <p>تاريخ الاستلام</p>
+        <h3>{{ invoice?.receipt_date || '' }}</h3>
+      </div>
+  </div>
+
+  <div class=" table-responsive py-5">
+    <table class="table w-75 table-bordered table-hover text-center">
+      <thead class="thead-dark">
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col"> اسم الصنف</th>
+          <th scope="col">الوحدة</th>
+          <th scope="col"> الكمية </th>
+          <th scope="col"> السعر </th>
+          <th scope="col"> الاجمالي</th>
+          <th scope="col">السعر معدل</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of data let i = index">
+          <th scope="row">{{i+1}}</th>
+          <td>{{item?.product_name}}</td>
+          <td>{{item?.product_unit}}</td>
+          <td>{{item?.product_quantity | customNumber}}</td>
+          <td>{{item?.product_price | customNumber}}</td>
+          <td>{{item?.total | customNumber}}</td>
+          <td>
+            <i class="fa-solid"
+                [ngClass]="{
+                  'fa-check': item?.price_edited === 1,
+                  'text-success': item?.price_edited === 1
+                }">
+            </i>
+          </td>
+          <td></td>
+          <!-- <td><a (click)="reomveProduct(item?.id)" class="btn btn-dark">X</a></td> -->
+          <!-- <td>{{item}}</td> -->
+          <!-- <td><i class="fa fa-trash" aria-hidden="true"></i></td> -->
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="form-row text-center">
+    <div class="col-md-8 row">
+      <div class="form-group col-md-3">
+        <p>المبلغ الكلي</p>
+        <h3>{{ invoice?.total_price | customNumber}}</h3>
+      </div>
+      <div class="form-group col-md-3">
+        <p>المبلغ المدفوع</p>
+        <h3>{{ invoice?.paid_amount | customNumber}}</h3>
+      </div>
+      <div class="form-group col-md-3">
+        <p>المبلغ المتبقي</p>
+        <h3>{{ invoice?.due_amount | customNumber }}</h3>
+      </div>
+
+      <div class="form-group col-md-3">
+        <p> مصاريف الشحن</p>
+        <h3>{{ invoice?.transport_cost | customNumber}}</h3>
+      </div>
+
+      <div class="form-group col-md-3">
+        <p> الخزينة</p>
+        <h3>{{ invoice?.bank.name || '' }}</h3>
+      </div>
+
+    </div>
+
+    <div class="col-md-4 table-responsive">
+      <table class="table w-100 my-0 table-hover">
+        <thead>
+            <th>action</th>
+            <th>date</th>
+            <th>user</th>
+        </thead>
+      </table>
+      <div class="content">
+        <table class="table w-100 table-hover">
+          <tbody>
+            <tr *ngFor="let item of tracking" (dblclick)="getInvoice(item?.invoice_number)">
+              <td>
+                <span [id]="item.id">{{item?.action}}</span>
+              </td>
+              <td>
+                <span [id]="item.id">{{item?.created_at | date}}</span>
+              </td>
+              <td>{{item?.user.name}}</td>
+            </tr>
+        </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</div>

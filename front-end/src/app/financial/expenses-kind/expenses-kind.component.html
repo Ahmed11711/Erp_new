@@ -1,0 +1,92 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">فئات المصروف</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container">
+    <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
+
+    <div *ngIf="formdiv" class="w-50 m-auto mt-5">
+      <div *ngIf="errorform" class="alert alert-danger">
+        {{errorMessage}}
+      </div>
+      <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
+        <div class="form-group">
+          <select name="" id="" class="form-control" formControlName='expense_type'>
+            <option disabled selected>نوع المصروف</option>
+            <option value="مصروف تشغيل">مصروف تشغيل</option>
+            <option value="مصروف تسويق">مصروف تسويق</option>
+            <option value="مصروف ادارى">مصروف ادارى</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <input class="form-control"   placeholder="فئة المصروف"
+          [class.is-valid]="form.get('expense_kind')?.errors ==null && form.get('expense_kind')?.touched"
+          formControlName='expense_kind' type="text" class="form-control">
+          <p *ngIf="form.get('expense_kind')?.errors !=null && form.get('expense_kind')?.touched"
+            class="error mb-0 text-danger">مطلوب</p>
+        </div>
+        <div class="text-center my-3">
+          <button [disabled]="form.invalid || form.get('expense_type')?.value=== 'نوع المصروف'" *ngIf="addbtn" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <div class="container text-center">
+    <div class="row my-2">
+      <div class="col-md-3 offset-md-3">
+        <select id="state"  class="form-control type" (change)="search($event)">
+          <option disabled selected value="فئة المصروف">فئة المصروف</option>
+          <option *ngFor="let elm of expenseKind" [value]="elm.id">{{elm.expense_kind}}</option>
+        </select>
+      </div>
+      <div  class="col-md-3">
+        <select id="type" class="form-control type" (change)="search($event)">
+          <option disabled selected value="نوع المصروف">نوع المصروف</option>
+          <option value="مصروف تشغيل">مصروف تشغيل</option>
+          <option value="مصروف تسويق">مصروف تسويق</option>
+          <option value="مصروف ادارى">مصروف ادارى</option>
+        </select>
+      </div>
+    </div>
+    <table class="table w-75 m-auto">
+      <thead class="bg-dark text-white">
+        <th>فئة المصروف</th>
+        <th>نوع المصروف</th>
+        <th>-</th>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of data">
+          <td>{{elm.expense_kind}}</td>
+          <td>{{elm.expense_type}}</td>
+          <td><i (click)="deleteData(elm.id)" class="fa-solid fa-trash text-danger"></i></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4 w-75">
+      <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+  </div>
+
+
+
+
+</div>

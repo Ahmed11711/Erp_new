@@ -1,0 +1,87 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">مراجعة الغيابات</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid text-center">
+
+    <form class="mt-5">
+      <div class="row">
+        <div class="col-md-3">
+          <ng-autocomplete
+              [data]="employees"
+              [searchKeyword]="catword"
+              placeholder="الموظف"
+              (selected)='empChange($event)'
+              (inputCleared)='resetData($event)'
+              [itemTemplate]="itemTemplates"
+              [notFoundTemplate]="notFoundTemplate">
+            </ng-autocomplete>
+
+            <ng-template #itemTemplates let-item>
+              <a [innerHTML]="item.name"></a>
+            </ng-template>
+
+            <ng-template #notFoundTemplate let-notFound>
+              <div [innerHTML]="notFound"></div>
+            </ng-template>
+        </div>
+
+        <div class="col-md-2 mb-3">
+          <input placeholder="كود الموظف" id="code" class="form-control" type="text" (change)="search($event)">
+        </div>
+
+        <div class="col-md-2 mb-3">
+          <input id="date" class="form-control" type="date" (change)="search($event)">
+        </div>
+
+      </div>
+
+    </form>
+
+    <table class="table table-bordered table-hover text-center w-75 m-auto">
+      <thead class="bg-dark text-white">
+        <th>كود الموظف</th>
+        <th>اسم الموظف</th>
+        <th>الشهر</th>
+        <th>التاريخ</th>
+        <th>عدد ايام الغياب</th>
+        <th></th>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of data">
+          <td>{{elm?.employee?.code}}</td>
+          <td>{{elm?.employee?.name}}</td>
+          <td>{{elm?.month}}-{{elm?.year}}</td>
+          <td>{{elm?.created_at | date:'dd-MM-yyyy'}}</td>
+          <td>{{elm?.amount}}</td>
+          <td>
+            <button (click)="sendStatus('تم باستاذان' , elm?.id)" class="btn btn-success">تم باستاذان</button>
+            <button (click)="sendStatus('خصم' , elm?.id)" class="btn btn-danger mx-2 my-1">خصم</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+  </div>
+
+  <mat-paginator #paginator
+  class="demo-paginator"
+  [length]="length"
+  showFirstLastButtons
+  (page)="onPageChange($event)"
+  [pageSizeOptions]="pageSizeOptions"
+  aria-label="Select page">
+</mat-paginator>
+
+
+</div>

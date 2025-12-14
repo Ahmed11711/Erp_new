@@ -1,0 +1,169 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header m-auto">كشف حساب ( {{name}} )</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="my-5 text-center">
+      <div class="row">
+        <div class="col-md-2">
+          <label for="">تاريخ التحصيل</label>
+          <input class="form-control" type="date" (change)="oncollectDateChange($event)" [value]="collectDate">
+        </div>
+        <div class="col-md-2">
+          <label for="">تاريخ الشحن</label>
+          <input class="form-control" type="date" (change)="onshippingDateChange($event)" [value]="shippingDate">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <div class="form-group w-100" >
+            <select id="status" class="form-control" (change)="search($event)"
+              type="text" class="form-control">
+              <option disabled>الحالة</option>
+              <option selected value="تم شحن">تم شحن</option>
+              <option value="تم التحصيل">تم التحصيل</option>
+              <option value="رفض استلام">رفض الاستلام</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-md-2 d-flex align-items-end" *ngIf="user == 'Admin'">
+          <div class="form-group w-100">
+            <select id="review" class="form-control" type="text" class="form-control"  (change)="search($event)">
+              <option disabled>المراجعة</option>
+              <option value="1">تم المراجعة</option>
+              <option selected value="0">لم يتم المراجعة</option>
+              <option value="all">الكل</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-md-2 ">
+          <h4>عدد الطلبات</h4>
+          <p>{{totalOrders}}</p>
+        </div>
+        <div class="col-md-2">
+          <h4>المبلغ الكلي</h4>
+          <p>{{totalPrice | customNumber}}</p>
+        </div>
+
+      </div>
+    </form>
+
+
+    <table class="table m-auto text-center table-hover">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th colspan="12">الطلبــــــات</th>
+        </tr>
+        <tr>
+          <th>نوع الطلب</th>
+          <th>رقم الطلب</th>
+          <th>اسم العميل</th>
+          <th>رقم الموبايل</th>
+          <th>تاريخ الطلب</th>
+          <th>تاريخ الشحن </th>
+          <th>تاريخ التحصيل</th>
+          <th>حالة الدفع</th>
+          <th>التعديلات</th>
+          <th>المبلغ</th>
+          <th>-</th>
+          <th *ngIf="user == 'Admin'">
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="reviewFn()">
+                <span>مراجعة الاوردرات المختاره</span>
+              </button>
+              <button class="d-flex justify-content-start" mat-menu-item [matMenuTriggerFor]="users">
+                <span>ارسال الي</span>
+              </button>
+            </mat-menu>
+            <mat-menu #users="matMenu">
+              <button (click)="sendNotification(elm)" mat-menu-item *ngFor="let elm of userdata" [id]="elm.id">{{elm.name}}</button>
+            </mat-menu>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of tableData">
+          <td>{{elm.order.order_type}}</td>
+          <td [ngClass]="elm.old_amount  ? 'bg-danger': '' ">
+            <a [routerLink]="['/dashboard/shipping/orderdetails', elm.order_id]" target="_blank">
+              <span style="cursor: pointer;">
+                  {{elm.order_id}}
+              </span>
+            </a>
+            <!-- <span class="cursor-pointer" [routerLink]="['/dashboard/shipping/orderdetails',elm.order_id]">{{elm.order_id}}</span> -->
+          </td>
+          <td>{{elm.order.customer_name}}</td>
+          <td>{{elm.order.customer_phone_1}}</td>
+          <td>{{elm.order.order_date}}</td>
+          <td>{{elm.shipping_date}}</td>
+          <td>
+            <span>{{elm.collect_date}}</span>
+          </td>
+          <td>{{elm?.status}}</td>
+          <td>{{elm?.order?.order_details?.edits}}</td>
+          <td dir="ltr"><span *ngIf="elm.old_amount">{{elm?.old_amount | customNumber}} - </span>{{elm?.amount | customNumber}} </td>
+          <td *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management'  || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="elm.status=='تم شحن'  && elm.order.order_status=='تم شحن'">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu" >
+              <button mat-menu-item *ngIf="elm.status=='تم شحن' && elm.order.order_status=='تم شحن' " [routerLink]="['/dashboard/shipping/collectorder',elm.order_id]">
+                <span> تحصيل الطلب</span>
+              </button>
+
+              <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
+                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm.order.order_status=='تم شحن') && elm.order.customer_type=='افراد'" (click)="refuseOrder(elm.order.customer_type,elm.order_id)">
+                  <span> رفض استلام</span>
+                </button>
+              </ng-container>
+
+              <ng-container *ngIf="user == 'Admin'  || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
+                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm.order.order_status=='تم شحن') && elm.order.customer_type=='شركة'" (click)="changeOrderStatus(elm.order.customer_type,elm.order_id,'رفض استلام','refused')">
+                  <span> رفض استلام</span>
+                </button>
+              </ng-container>
+
+              <button *ngIf="user == 'Admin'" class="d-flex justify-content-end" mat-menu-item [matMenuTriggerFor]="users" (click)="sendOrder(elm)" (mouseenter)="sendOrder(elm)">
+                <span>ارسال الي</span>
+              </button>
+
+            </mat-menu>
+            <mat-menu #users="matMenu">
+              <button (click)="sendNotification(elm)" mat-menu-item *ngFor="let elm of userdata" [id]="elm.id">{{elm.name}}</button>
+            </mat-menu>
+          </td>
+          <td *ngIf="user == 'Admin'">
+            <input [disabled]="elm?.order?.order_details?.reviewed == 1" [id]="elm.order_id" type="checkbox"  (change)="selectOrder($event,elm)">
+          </td>
+
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+    </div>
+
+
+
+</div>

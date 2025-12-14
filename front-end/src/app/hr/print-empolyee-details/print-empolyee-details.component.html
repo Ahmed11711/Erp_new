@@ -1,0 +1,231 @@
+<div id="capture" class="container-fluid p-4">
+  <div class="row p-3 mt-5">
+    <div class="col-4 d-flex justify-content-start ">
+      <span class="dat">
+        {{currentDateValue}}
+      </span>
+    </div>
+    <div class="col-5 mt-5">
+    </div>
+    <div class="col-3 d-flex justify-content-center ">
+      <span class="bg-navy name"><input id="input" type="text" [value]=" ' كشف حساب ' +  employee?.name"></span>
+
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form>
+      <div class="mb-2 text-left">
+        <span class="date date2">
+          <input id="input" type="text" [value]=" '  الشهر : ' +  employee?.currentMonthValue">
+        </span>
+      </div>
+    </form>
+
+    <table class="table m-auto text-center table-hover">
+      <tr>
+        <td>
+          <input id="input" class="text-center w-10" type="text" [value]="employee.code">
+        </td>
+        <td class="bg-navy">
+          <input id="input" class="text-center w-8" type="text" value="كود الموظف">
+        </td>
+        <td>
+          <input id="input" class="text-center w-10" type="text" [value]="employee.name">
+        </td>
+        <td class="bg-navy">
+          <input id="input" class="text-center w-8" type="text" value="اسم الموظف">
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input id="input" class="text-center w-10" type="text" [value]="employee.created_at | date:'dd/MM/yyyy' ">
+        </td>
+        <td class="bg-navy">
+          <input id="input" class="text-center w-8" type="text" value=" التاريخ">
+        </td>
+        <td>
+          <input id="input" class="text-center w-10" type="text" [value]="employee.level">
+        </td>
+        <td class="bg-navy">
+          <input id="input" class="text-center w-8" type="text" value=" الوظيفة">
+        </td>
+      </tr>
+      <tr>
+        <td class="border-0"></td>
+        <td class="border-0"></td>
+        <td *ngIf="employee?.acc_no" [ngClass]="!employee?.acc_no ? 'td-none':''">
+          <input id="input" class="text-center w-10" type="text" [value]="employee.acc_no">
+        </td>
+        <td class="bg-navy" *ngIf="employee?.acc_no" [ngClass]="!employee?.acc_no ? 'td-none':''">
+          <input id="input" class="text-center w-8" type="text" value=" رقم البصمة ">
+        </td>
+      </tr>
+
+    </table>
+
+    <div class="row my-3">
+      <div class="col-md-6">
+        <table class="table m-auto text-center table-hover">
+          <tr>
+            <td class="bg-navy" colspan="2">
+              <input id="input" class="text-center w-8" type="text" value="الاستقطاعات">
+            </td>
+          </tr>
+          <tr *ngFor="let elm of employee.subtraction">
+            <td>
+              <input id="input" class="text-center w-10" type="text" [value]="elm.amount | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" [value]="elm.type">
+            </td>
+          </tr>
+          <tr *ngFor="let elm of employee.advance_payments">
+            <td>
+              <input id="input" class="text-center w-10" type="text" [value]="elm.amount | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" [value]="elm.type">
+            </td>
+          </tr>
+          <tr *ngIf="employee?.acc_no">
+            <td>
+              <input id="input" class="text-center w-10" type="text" [value]="employee.differnceSalary | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" value="خصم ساعات التأخير">
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input id="input" class="text-center w-10" type="text" [value]="employee.total_sub || 0 | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" value="الاجمالي">
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <table class="table m-auto text-center table-hover">
+          <tr>
+            <td class="bg-navy" colspan="2">
+              <input id="input" class="text-center w-8" type="text" value="الاستحقاقات">
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input id="input" class="text-center" type="text" [value]="employee.fixed_salary">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" value=" الراتب الثابت">
+            </td>
+          </tr>
+          <tr *ngFor="let elm of employee.merits">
+            <td>
+              <input id="input" class="text-center" type="text" [value]="elm.amount | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" [value]="elm.type">
+            </td>
+          </tr>
+          <tr *ngIf="employee?.acc_no">
+            <td>
+              <span *ngIf="employee?.fixed_salary < employee.totalActualHoursSalary">
+                <input id="input" class="text-center" type="text" [value]="employee.totalActualHoursSalary -  employee?.fixed_salary || 0 | customNumber">
+              </span>
+              <span *ngIf="employee?.fixed_salary >= employee.totalActualHoursSalary">
+                <input id="input" class="text-center" type="text" [value]=" 0 ">
+              </span>
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center text-white w-10" type="text" value="حوافز( ساعات اضافية )">
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <input id="input" class="text-center w-10" type="text" [value]="employee.total_merit || 0 | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-8" type="text" value="الاجمالي">
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <table class="table m-auto text-center table-hover">
+      <tr>
+        <td>
+          <input id="input" class="text-center w-10" type="text" [value]="employee?.net_total|| 0  | customNumber">
+        </td>
+        <td class="bg-navy">
+          <input id="input" class="text-center w-8" type="text" value="الصافي">
+        </td>
+      </tr>
+    </table>
+
+    <br>
+    <div *ngIf="employee?.acc_no">
+      <div class="text-center">
+          <input id="input2"  class="w-12" type="text" value="كشف الحضور والانصراف">
+      </div>
+      <table class="table table-hover text-center sticky-table">
+        <thead>
+          <th>
+            <input id="input2" class="w-3" type="text" value="إذن">
+          </th>
+          <th>
+            <input id="input2" class="w-5" type="text" value="خصم او حافز">
+          </th>
+          <th>
+            <input id="input2" class="w-7" type="text" value=" ساعات الخصم او الزيادة">
+          </th>
+          <th>
+            <input id="input2" class="w-5" type="text" value=" ساعات الحضور">
+          </th>
+          <th>
+            <input id="input2" class="w-3" type="text" value="الانصراف">
+          </th>
+          <th>
+            <input id="input2" class="w-3" type="text" value="الحضور">
+          </th>
+          <th>
+            <input id="input2" class="w-3" type="text" value="اليوم">
+          </th>
+          <th>
+            <input id="input2" class="w-3" class="w-3" type="text" value="التاريخ">
+          </th>
+        </thead>
+        <tbody>
+          <tr *ngFor="let elm of employee.tableData">
+            <td dir="ltr"><span *ngIf="elm.hours_permission && elm.check_in != elm.check_out || elm.hours_permission && elm.check_in == elm.check_out && elm.holiday">{{elm.hours_permission}} <input id="input2" class="w-3" type="text" value=" : اذن "></span><span *ngIf="elm.hours == '00:00' && !elm.holiday && '-'+elm.hours_permission == elm.hoursDifference"><input id="input2" class="w-5" type="text" value=" اجازة باذن "></span></td>
+            <td *ngIf="((elm.salary_type2 == 'حافز' && !elm.holiday && !elm.vacation) || (elm.salary_type2 == 'حافز' && elm.holiday && elm.check_in != elm.check_out))">
+                <span *ngIf="!elm.is_overTime_removed"> {{elm.salary_type | customNumber}} <input id="input2" class="w-3" type="text" value=" : حافز "></span><span *ngIf="elm.is_overTime_removed"><input id="input2" class="w-5" type="text" value="راتب متغير"></span>
+            </td>
+            <td *ngIf="((elm.salary_type2 == 'خصم' && !elm.holiday && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.holiday && elm.check_in != elm.check_out))"><span *ngIf="elm.absence_deduction">(<input id="input2" class="w-1" type="text" value="يوم">{{elm.absence_deduction}} )</span> {{elm.salary_type | customNumber}}  <input id="input2" class="w-3" type="text" value=" : خصم "> </td>
+            <td dir="ltr" *ngIf="elm.hours_permission || !elm.holiday && !elm.vacation || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)">{{elm.hoursDifference}}</td>
+            <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.hours}}</td>
+            <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.check_out}}</td>
+            <td *ngIf="elm.hours == '00:00' && !elm.holiday && (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" class="bg-danger"><input id="input2" class="w-5" type="text" value=" "></td>
+            <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.check_in}}</td>
+            <td colspan="1" *ngIf="elm.vacation">0</td>
+            <td colspan="1" *ngIf="elm.vacation">00:00</td>
+            <td colspan="3" *ngIf="elm.vacation" class="bg-success"><input id="input2" class="w-10" type="text" [value]=" elm.vacation_reason "></td>
+            <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">0</td>
+            <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">00:00</td>
+            <td [attr.colspan]="!elm?.hours_permission ? 3 : 3" *ngIf="elm.holiday && elm.check_in == elm.check_out" class="bg-main"><input id="input2" class="w-7" type="text" value=" أجازة اسبوعية"></td>
+            <td colspan="3" *ngIf="elm.hours == '00:00' && !elm.holiday && elm.check_in == '08:00 AM'" class="bg-gray"><input id="input2" class="w-5" type="text" value=" متغيب "></td>
+            <td dir="ltr">
+              <input id="input2" class="w-3" type="text" [value]="elm.date | customDayName">
+            </td>
+            <td dir="ltr">{{elm.date}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+</div>

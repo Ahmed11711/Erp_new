@@ -1,0 +1,118 @@
+<div class="container-fluid table-responsive" *ngIf="url == '/dashboard/categoriesreports'">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5 d-flex justify-content-center align-items-center">
+      <div><p class="title header m-auto">تقارير الأصناف</p></div>
+      <button class="btn bg-main mx-2" style="height: 40px;" (click)="export('print')" *ngIf="url == '/dashboard/categoriesreports'"><i class="fa-solid fa-print text-white"></i></button>
+
+      <span (click)="exportTableToExcel()" class="bg-main p-1" style="cursor: pointer; border-radius: 5px;">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g clip-path="url(#clip0_608_20721)">
+            <path
+              d="M14.4167 3.74992H14.6667H24C24.8745 3.74992 25.5833 4.45881 25.5833 5.33325V11.9999C25.5833 12.5982 26.0683 13.0833 26.6667 13.0833C27.265 13.0833 27.75 12.5982 27.75 11.9999V5.33325C27.75 3.26219 26.0711 1.58325 24 1.58325H13.3333C13.046 1.58325 12.7705 1.69739 12.5673 1.90055M14.4167 3.74992L12.5673 1.90055M14.4167 3.74992V3.99992V10.6666C14.4167 11.2649 13.9317 11.7499 13.3333 11.7499H6.66667H6.41667V11.9999V26.6666C6.41667 27.5411 7.12556 28.2499 8 28.2499H9.33333C9.93164 28.2499 10.4167 28.7349 10.4167 29.3333C10.4167 29.9316 9.93164 30.4166 9.33333 30.4166H8C5.92894 30.4166 4.25 28.7377 4.25 26.6666V10.6666C4.25 10.3793 4.36414 10.1037 4.5673 9.90054L12.5673 1.90055M14.4167 3.74992L12.3905 1.72377L12.5673 1.90055M8.3755 9.15648L7.94873 9.58325H8.55228H12H12.25V9.33325V5.88553V5.28198L11.8232 5.70876L8.3755 9.15648ZM26.4167 25.3333V25.5833H26.6667H30.6667C31.265 25.5833 31.75 26.0683 31.75 26.6666C31.75 27.2649 31.265 27.7499 30.6667 27.7499H25.3333C24.735 27.7499 24.25 27.2649 24.25 26.6666V17.3333C24.25 16.7349 24.735 16.2499 25.3333 16.2499C25.9317 16.2499 26.4167 16.7349 26.4167 17.3333V25.3333ZM15.5482 16.7036L15.5482 16.7036L17.7966 19.8512L18 20.136L18.2034 19.8512L20.4518 16.7036L20.4519 16.7036C20.7996 16.2167 21.4761 16.104 21.963 16.4518L21.963 16.4518C22.4499 16.7995 22.5626 17.476 22.2148 17.9629L19.4351 21.8546L19.3313 21.9999L19.4351 22.1452L22.2148 26.037C22.5626 26.5238 22.4499 27.2003 21.963 27.5481L21.963 27.5481C21.4761 27.8959 20.7996 27.7832 20.4519 27.2962L20.4518 27.2962L18.2034 24.1486L18 23.8638L17.7966 24.1486L15.5482 27.2962L15.5482 27.2962C15.2004 27.7832 14.5239 27.8959 14.037 27.5481L13.8917 27.7515L14.037 27.5481C13.5501 27.2003 13.4374 26.5238 13.7852 26.037L13.7852 26.037L16.5649 22.1452L16.6687 21.9999L16.5649 21.8546L13.7852 17.9629L13.7852 17.9629C13.4374 17.476 13.5501 16.7995 14.037 16.4518L14.037 16.4518C14.5239 16.104 15.2004 16.2167 15.5482 16.7036Z"
+              fill="#ffffff" stroke-width="0.5" />
+          </g>
+          <defs>
+            <clipPath id="clip0_608_20721">
+              <rect width="32" height="32" fill="white" />
+            </clipPath>
+          </defs>
+        </svg>
+      </span>
+
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+
+    </div>
+  </div>
+</div>
+
+<div class="row m-2">
+  <div class="col-md-3">
+    <label for="">من تاريخ</label>
+    <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+  </div>
+  <div class="col-md-3">
+    <label for="">الى تاريخ</label>
+    <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+  </div>
+  <div class="col-md-3 d-flex align-items-end" *ngIf="url == '/dashboard/categoriesreports'">
+    <select class="form-control" (change)="selectProductionLine($event)">
+      <option selected>خط انتاج</option>
+      <option *ngFor="let elm of productionData" [value]="elm.id">{{elm.production_line}}</option>
+    </select>
+  </div>
+</div>
+
+<div class="container-fluid table-responsive" *ngIf="url == '/dashboard/categoriesreports'">
+  <table id="capture" class="table table-bordered table-hover text-center">
+  <thead class="thead-dark">
+    <tr>
+      <th scope="col">الصنف
+        <input class="d-none" type="checkbox" name="" id="check" (change)="sort('category_name')">
+        <label class="mx-2" for="check"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
+      </th>
+      <th scope="col">عدد الطلبات
+        <input class="d-none" type="checkbox" name="" id="total_orders" (change)="sort('total_orders')">
+        <label class="mx-2" for="total_orders"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
+      </th>
+      <th scope="col">اجمالي قطع الطلبات الجديدة
+        <input class="d-none" type="checkbox" name="" id="total_quantity_new" (change)="sort('total_quantity_new')">
+        <label class="mx-2" for="total_quantity_new"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
+      </th>
+      <th scope="col">اجمالي قطع الطلبات المرتجع
+        <input class="d-none" type="checkbox" name="" id="total_quantity_return" (change)="sort('total_quantity_return')">
+        <label class="mx-2" for="total_quantity_return"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
+      </th>
+      <th scope="col">اجمالي قيمة الجديد
+        <input class="d-none" type="checkbox" name="" id="total_new" (change)="sort('total_new')">
+        <label class="mx-2" for="total_new"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
+      </th>
+      <th scope="col">اجمالي قيمة المرتجع
+        <input class="d-none" type="checkbox" name="" id="total_postpone" (change)="sort('total_postpone')">
+        <label class="mx-2" for="total_postpone"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let elm of soldCategories">
+      <td>{{elm.category_name}}</td>
+      <td dir="ltr">{{elm.total_orders | customNumber}}</td>
+      <td dir="ltr">{{elm.total_quantity_new | customNumber}}</td>
+      <td dir="ltr">{{elm.total_quantity_return | customNumber}}</td>
+      <td dir="ltr">{{elm.total_new | customNumber}}</td>
+      <td dir="ltr">{{elm.total_postpone | customNumber}}</td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>الاجمالي</td>
+      <td>{{totalOrders | customNumber}}</td>
+      <td>{{totalNewOrders | customNumber}}</td>
+      <td>{{totalReturnedOrders | customNumber}}</td>
+      <td>{{totalPriceNewOrders | customNumber}}</td>
+      <td>{{totalPriceReturnedOrders | customNumber}}</td>
+    </tr>
+  </tfoot>
+  </table>
+  <div>
+    <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+  </div>
+</div>
+
+
+<div style="cursor: pointer;" *ngIf="url == '/dashboard'">
+  <app-report-categories-chart [soldCategories]="soldCategories" [routerLink]="user == 'Admin' || 'Data Entry'?'/dashboard/categoriesreports' : '/dashboard'">
+  </app-report-categories-chart>
+</div>
+

@@ -1,0 +1,93 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+i{
+  cursor: pointer;
+}
+
+
+hr{
+  background-color: white ;
+  height: 0.1rem;
+}
+
+
+
+.section2 hr{
+  background-color: #82225e ;
+}
+
+.border{
+  border: none !important;
+}
+
+i{
+  font-size: 1.5rem;
+}
+
+
+.bank{
+  direction: ltr;
+  text-align: start;
+}
+
+
+
+.bank{
+  color: black;
+  border: 2px solid rgb(167, 167, 167);
+  margin: 2px;
+}
+
+.condition{
+  direction: ltr;
+  text-align: start;
+}
+
+h3{
+  margin: 0 !important;
+}
+
+.f-1{
+  font-size: .9rem !important;
+}
+
+.f-07{
+  font-size: 0.7rem !important;
+}
+
+#capture {
+  width: 213mm;
+  min-height: 296mm;
+  box-sizing: border-box;
+  font-family:'Montserrat SemiBold' !important;
+  font-weight:normal;
+}
+
+h3{
+  font-family:'Montserrat SemiBold' !important;
+}
+
+h4{
+  font-family:'Montserrat SemiBold' !important;
+}
+.bank{
+  margin: 0 !important;
+  border: none !important;
+}
+#capture .bank h2{
+  margin-top: 3rem !important;
+  font-family: 'Anton' !important;
+}
+#capture .bank h4{
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
+.invoice-font h3{
+  font-size: 0.8rem !important;
+}

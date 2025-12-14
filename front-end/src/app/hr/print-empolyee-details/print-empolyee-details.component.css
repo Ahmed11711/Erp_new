@@ -1,0 +1,123 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+
+thead{
+  font-size: 1rem;
+}
+
+
+
+
+input{
+  font-size: 1rem;
+}
+
+
+thead tr:last-child th{
+  font-size: 1rem;
+  vertical-align:  middle;
+}
+td,th{
+  border: solid 1px black;
+  vertical-align:  middle;
+}
+
+input{
+  border: none !important;
+  background-color: transparent;
+  font-size: 1rem;
+}
+
+.w-8{
+  width: 8rem;
+  color: white;
+}
+
+.w-10{
+  width: 10rem;
+
+}
+
+td{
+  font-size: 1rem;
+}
+
+.print{
+  padding: 10px 20px;
+  border-radius: 10px !important;
+  cursor: pointer;
+}
+
+.td-none{
+  border: none;
+}
+.form-control{
+  border: solid 1px black !important;
+  width: 8rem;
+  text-align: center;
+}
+
+.date{
+  font-size: 1.2rem;
+}
+
+
+
+.name #input{
+  color: white !important;
+  width: 13rem;
+  padding: 10px 5px;
+  border-radius: 10px !important;
+}
+
+.date2{
+  border: #82225e solid 2px !important;
+  display: inline-block;
+  padding: 10px 20px;
+  border-radius: 10px;
+}
+
+.date2 #input{
+  width: 9rem;
+}
+
+
+
+th #input2{
+  color: white;
+}
+
+.w-1{
+  width: 1.9rem !important;
+}
+
+.w-3{
+  width: 3rem !important;
+}
+
+.w-5{
+  width: 5rem !important;
+}
+
+.w-7{
+  width: 7rem !important;
+}
+
+.w-12{
+  width: 12rem !important;
+}
+
+
+.bg-gray{
+  background-color: rgb(202, 201, 201);
+}
+
+input{
+  text-align: center;
+}

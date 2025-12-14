@@ -1,0 +1,118 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+.bg-main {
+  background-color: #82225e !important;
+}
+
+thead{
+  font-size: 1.2rem;
+}
+
+.btn-add{
+  border: #82225e solid thin !important;
+  font-size: 1.8rem;
+  padding: 0.1rem 1.5rem !important;
+  border-radius: 2rem;
+}
+
+select , select:focus{
+  background-color: #82225e;
+  color: white;
+  font-size: 1.3rem;
+}
+
+input{
+  font-size: 1.2rem;
+}
+
+i{
+  cursor: pointer;
+}
+
+.submit , .submit:hover{
+  background-color: black !important;
+  font-size: 1.8rem;
+  padding: 0.5rem 2rem !important;
+  color: white;
+}
+
+hr{
+  background-color: white ;
+  height: 0.1rem;
+}
+
+.quote {
+  background-color: transparent;
+  border: none;
+  color: white;
+  text-align: end;
+}
+.quote::placeholder{
+  color: white;
+  font-size: 1.3rem;
+}
+
+input[type="date"]{
+  background-color: transparent;
+  color: white;
+  border: none;
+}
+
+.section2 hr{
+  background-color: #82225e ;
+}
+
+.border{
+  border: 1px solid rgb(61, 61, 61)  !important;
+}
+
+i{
+  font-size: 1.5rem;
+}
+
+input[name="vat"] , input[name="email"] ,input[name="phone"]{
+  border: none;
+  background-color: transparent;
+  color: white;
+}
+input[name="vat"]{
+  width: 5rem;
+  color: black;
+}
+
+.bank{
+  direction: ltr;
+  text-align: start;
+}
+
+.bank i{
+  display: inline-block;
+  margin-right: 10px;
+  font-size: 1.7rem;
+}
+
+.bank{
+  color: black;
+  border: 2px solid rgb(167, 167, 167);
+  margin: 2px;
+}
+
+.foot{
+  font-size: 0.8rem;
+}
+
+.condition{
+  direction: ltr;
+  text-align: start;
+}
+
+li{
+  font-size: 1.2rem;
+}
+

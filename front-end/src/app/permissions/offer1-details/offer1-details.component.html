@@ -1,0 +1,116 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">  عرض  {{offer?.id}}</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-end justify-content-start">
+      <p  (click)="downloadPDF()"> <i class="fa-solid color-main fa-print "></i></p>
+
+    </div>
+  </div>
+  <div id="capture" dir="ltr" class="row border m-0 p-0 mx-auto">
+    <div class=" col-md-12 bg-main top" style="padding-left: 5rem; padding-right: 5rem; padding-bottom: 0;">
+      <div class="d-flex py-3 justify-content-between my-2 align-items-end text-white">
+        <span>
+          <img width="100px" src="assets/images/logowhite.png" alt="">
+        </span>
+        <h3 [ngClass]="font" style="font-size: 16px !important;"> Quotation #{{offer?.id}} </h3>
+      </div>
+      <hr class="my-0">
+      <div class="d-flex justify-content-between my-3 align-items-center text-white">
+        <div class="mt-3">
+          <h4 [ngClass]="font">Quote for : {{offer?.quote}}  </h4>
+        </div>
+        <div>
+          <h4 [ngClass]="font"  class="my-0">Date : {{offer?.dateFrom}}</h4>
+          <h4 [ngClass]="font"  class="my-0" *ngIf="offer?.dateFrom !== offer?.dateTo">Valid until : {{offer?.dateTo}} </h4>
+        </div>
+      </div>
+    </div>
+
+    <div dir="ltr" class="col-md-12 section2" style="padding: 0 5rem;">
+      <hr style="margin-top: 10rem;">
+      <table class="table text-center" >
+        <thead class="bg-main text-white">
+          <th [ngClass]="font" style="background-color: #82225e!important">DESCRIPTION</th>
+          <th [ngClass]="font" style="background-color: #82225e!important">QUANTITY</th>
+          <th [ngClass]="font" style="background-color: #82225e!important" *ngIf="showOldPrice">PRICE Before Discount</th>
+          <th [ngClass]="font" style="background-color: #82225e!important">PRICE After Discount</th>
+          <th [ngClass]="font" style="background-color: #82225e!important">TOTAL After Discount</th>
+        </thead>
+        <tbody>
+          <tr *ngFor="let elm of categories" [ngClass]="font">
+            <td>{{elm?.category_name}}</td>
+            <td>{{elm?.category_quantity | customNumber}}</td>
+            <td  *ngIf="showOldPrice">{{elm?.old_category_price | customNumber}}</td>
+            <td>{{elm?.new_category_price | customNumber}}</td>
+            <td>{{elm?.total_price | customNumber}}</td>
+          </tr>
+
+        </tbody>
+
+      </table>
+      <hr>
+    </div>
+
+    <div class="col-md-6 condition" >
+
+    </div>
+
+    <div class="col-md-6" style="padding: 0 5rem;">
+      <div class="pl-2">
+        <div class="d-flex justify-content-between">
+          <h3 [ngClass]="font">Subtotal : </h3>
+          <h3 [ngClass]="font">{{offer?.subtotal | customNumber}}</h3>
+        </div>
+        <div class="d-flex justify-content-between" *ngIf="offer?.transportation > 0">
+          <h3 [ngClass]="font">Transportation : </h3>
+          <h3 [ngClass]="font">{{offer?.transportation | customNumber}}</h3>
+        </div>
+        <div class="d-flex justify-content-between" *ngIf="offer?.vat > 0">
+          <h3 [ngClass]="font">VAT : </h3>
+          <h3 [ngClass]="font">{{offer?.vat | customNumber}}</h3>
+        </div>
+        <hr class="my-0">
+        <div class="d-flex justify-content-between" >
+          <h3 [ngClass]="font">Total : </h3>
+          <h3 [ngClass]="font">{{ offer?.total | customNumber}}</h3>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="offer?.note" class="col-md-12 mb-2" dir="ltr" style="text-align: start; border: solid 1px black;">
+      <h3 style="font-size: 16px;">Note : </h3>
+      <p style="font-size: 14px;">{{offer?.note}}</p>
+    </div>
+
+    <div class="col-md-12 mt-3 bank bg-main py-3 text-white" style="padding: 0 5rem;">
+      <h3 class="foot" [ngClass]="font">Thank you for considering our products. please let us know if you have any questions or if there is anything else we can do to assist you. We look
+        forward to working with you soon.
+      </h3>
+      <div class="row">
+        <div class="col-md-4">
+          <h2 [ngClass]="font" class="my-0"><i class="fa-solid fa-globe" [ngClass]="font"></i> Website</h2>
+          <h4 [ngClass]="font" class="my-0">www.magalis-egypt.com</h4>
+        </div>
+        <div class="col-md-4">
+          <h2 [ngClass]="font" class="my-0"><i class="fa-solid fa-phone" [ngClass]="font"></i> Telephone</h2>
+          <h4 [ngClass]="font" class="my-0">{{offer?.phone_number}}</h4>
+        </div>
+        <div class="col-md-4">
+          <h2 [ngClass]="font"  class="my-0"><i class="fa-solid fa-envelope" [ngClass]="font"></i> Email</h2>
+          <h4 [ngClass]="font" class="my-0">{{offer?.email}}</h4>
+        </div>
+      </div>
+
+    </div>
+
+
+  </div>
+
+</div>
+
+

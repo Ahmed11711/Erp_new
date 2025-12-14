@@ -1,0 +1,68 @@
+<div class="container-fluid">
+  <div class="row pt-4">
+    <div class="col-md-4">
+      <app-time></app-time>
+    </div>
+    <div class="col-md-5">
+      <h1 class="header">تتبع ( {{warehouse}} )</h1>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between px-3">
+  <div>
+    <input style="width: 10rem;" class="form-control" type="date" (change)="onDateFromChange($event)">
+  </div>
+  <div>
+    <i (click)="back()" class="fa-solid fa-arrow-left fa-2x" style="color: #82225e; cursor: pointer;"></i>
+  </div>
+</div>
+<div class="container-fluid table-responsive pt-2 pb-5">
+    <table class="table table-bordered table-hover text-center">
+      <thead class="thead-dark">
+        <tr>
+          <th scope="col"  >الصنف</th>
+          <th scope="col" *ngIf="type && type !='صيانة'"> الحركة </th>
+          <th scope="col" *ngIf="type && type =='صيانة'">رقم الطلب</th>
+          <th scope="col">  الكمية</th>
+          <th scope="col" *ngIf="type && type =='صيانة'">الحالة</th>
+          <th scope="col" *ngIf="type && type !='صيانة'"> الرصيد قبل</th>
+          <th scope="col" *ngIf="type && type !='صيانة'"> الرصيد بعد</th>
+          <th scope="col" *ngIf="type && type !='صيانة'"> تكلفة الوحدة</th>
+          <th scope="col" *ngIf="type && type !='صيانة'">  الاجمالي</th>
+          <th scope="col">التاريخ</th>
+          <th scope="col" *ngIf="type && type !='صيانة'">  المرجع</th>
+          <th scope="col">بواسطة</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of data; let i = index">
+          <td >{{item.category_name}}</td>
+          <td *ngIf="type && type !='صيانة'">{{item.type}}</td>
+          <td *ngIf="type && type =='صيانة'">{{item.ref}}</td>
+          <td dir="ltr">{{item.quantity}}</td>
+          <td *ngIf="type && type =='صيانة'">{{item.status}}</td>
+          <td *ngIf="type && type !='صيانة'" dir="ltr">{{item.balance_before | customNumber}}</td>
+          <td *ngIf="type && type !='صيانة'" dir="ltr">{{item.balance_after | customNumber}}</td>
+          <td *ngIf="type && type !='صيانة'" dir="ltr">{{item.price | customNumber}}</td>
+          <td *ngIf="type && type !='صيانة'" dir="ltr">{{item.total_price | customNumber}}</td>
+          <td>{{item.created_at | date:'dd/MM/yyyy'}}</td>
+          <td *ngIf="type && type !='صيانة'" dir="ltr">{{item.invoice_number}}</td>
+          <td>{{item.by}}</td>
+
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+        class="demo-paginator"
+        [length]="length"
+        showFirstLastButtons
+        (page)="onPageChange($event)"
+        [pageSizeOptions]="pageSizeOptions"
+        aria-label="Select page">
+      </mat-paginator>
+    </div>
+
+    </div>

@@ -1,0 +1,17 @@
+::ng-deep .mat-mdc-paginator-container{
+  justify-content: center !important;
+}
+
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  width: fit-content;
+  padding: 10px 20px;
+}
+
+table th, table td{
+  letter-spacing: 0 !important;
+}

@@ -1,0 +1,115 @@
+/* You can add global styles to this file, and also import other style files */
+@import "../node_modules/@angular/material/prebuilt-themes/deeppurple-amber.css";
+@font-face {
+  font-family: 'Montserrat SemiBold';
+  font-style: normal;
+  font-weight: normal;
+  src: url('./assets/webfonts/Montserrat-SemiBold.woff') format('woff');
+}
+@font-face {
+  font-family: 'Anton';
+  font-style: normal;
+  font-weight: normal;
+  src: url('./assets/webfonts/anton.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Montserrat Thin';
+  font-style: normal;
+  font-weight: normal;
+  src: url('./assets/webfonts/Montserrat-Thin.woff') format('woff');
+  }
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  /* font-family: Roboto, "Helvetica Neue", sans-serif; */
+}
+
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
+
+a{
+  color: black;
+}
+
+a:hover{
+  text-decoration: none;
+  color: #82225e;
+}
+
+.bg-main{
+  background-color: #82225e;
+  color: white;
+}
+
+.bg-main:focus{
+  background-color: #82225e;
+  color: white;
+  font-size: 1.3rem;
+}
+
+.color-main{
+  color: #82225e;
+}
+
+.color-navy{
+  color: #0E4057;
+}
+
+.bg-navy{
+  background-color: #0E4057;
+  color: white;
+}
+
+.autocomplete-container .input-container .x {
+  right: 90% !important;
+}
+
+.autocomplete-container .suggestions-container ul li a,
+select , input ,tbody , .autocomplete-container .input-container input{
+  font-size: 1.2rem !important;
+}
+
+
+.fa-trash {
+  color: rgb(168, 6, 6) !important;
+  cursor: pointer;
+}
+
+thead th{
+  background-color:#0E4057 !important;
+  color: white;
+}
+
+tfoot td{
+  background-color:#0E4057 !important;
+  color: white;
+}
+
+
+.date{
+  position: relative;
+}
+
+.date-time{
+  position: absolute;
+  width: 10rem;
+  top: -20px;
+  left: -20%;
+}
+
+tbody td{
+  font-size: 1rem !important;
+}
+
+thead th{
+  font-size: 1.1rem !important;
+}
+
+tfoot td{
+  font-size: 1.1rem !important;
+}

@@ -1,0 +1,62 @@
+h1 span{
+    color: white !important;
+    background-color: black;
+    padding: 5px 10px;
+}
+
+table th{
+    font-size: 30px;
+}
+
+table td{
+    font-size: 25px;
+}
+
+a{
+    font-size: 22px;
+    text-decoration: none;
+    color: white;
+    background-color: #82225e !important;
+}
+a:hover{
+    color: #82225e;
+    background-color: white !important;
+}
+
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  padding: 10px 20px;
+  width: fit-content;
+  }
+
+
+  .header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+thead{
+  font-size: 1.5rem;
+}
+
+tbody{
+  font-size: 1.3rem;
+}
+
+i:first-child{
+  border-radius: 50%;
+  cursor: pointer;
+  background-color: black;
+  color: white;
+}
+
+tr td:first-child{
+  text-align: start;
+}

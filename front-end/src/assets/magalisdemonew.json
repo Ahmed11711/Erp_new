@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "magalisdemonew",
+  "private_key_id": "4eb797429ed952624f7ea622c99e564388ce0be1",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCWTpj+twzmscIV\nvXoSwjVWU9/Ph/a7PmhmS40K839e4fasZvWGUxHGc0u/yVeOaGrVllFy7hbtlxR8\nMVzD6kldBzd3WRPy5r5AcaJ6DapI9/26PPEp/qeKT7iHRlFteW2nws86ptiDmABK\nwM1DdGjbtYtLYrDR613ZmIc0OeadXRMsN8g9IztMC12xpBAhlXu6mf4tQ1fkSOut\nqbDKxLxylHEFFRVfqE7sRTtOC35YukkIh3kZAk6TsyUiEgvhjsk+r7kHgLw9+SL/\nPygP0TrGRMrAUbhg+A48sOMXeme8x+vbRWXwHpksC3q2aYyVpRMiDrLYI+swnA45\nV0+kagBhAgMBAAECggEAGnIGP6yfx7gnXJFbmNDUNxXnRzmWGvA6SKNK084vTxel\nQcSUttdHRZoUDhCkB9GN2HoL5xOGc7OU/lvmBS9jzIsgQm6pEJ/yAd8sddqRJykA\n2qNt0BR20GJB5oUj/wWyGiXvtZNU/WRBSuW8x71D1MJOmYsp7qlBeC86vKDiVzXb\nvTHyoPk9ZKvx4ywD7TzdzCHqesUUjy9rZOiRxlzNAGCX6eonA2YoDP6m1wVvQTiS\n9FrTe9dKCtJnjfzjn7Ty3Higk5XsDdMJvxdRN1+1fWdnUgaEGdnjN83WpZK6WTpU\nqL2PNIR47AmcsK38CG7tB3fNssQAFQ46tWzSZZttRQKBgQDL9YXpAH2Oi6IL5nlt\n1T9ePaM+z49+7KlpP92Ra2moa1atA3f8fLjr67YBDZSI706R9SVX5TtYhOOnOL3n\nItWK4HvIYvHZu+9YcqY5iLbN3URA9LunYECqV6YDePDs2oWT02k2uXaiAo1TpHls\nGE77HQNYMZ80bbgRMKA1c9fWfQKBgQC8qI5/cdhKqWoLmG1aVPo0qqIXOAOfD1Lb\nZlJhz98O36MhmiRfYXJVEqvh27VJ7fICFcfIaiudQUJSHaXU3KN2Ylf+g5bEzteh\ngcGPKZkCpU0M/yLcKR4o0VqiLbeiFOFR/Bl75r5QCNP77+p195tAmdICbPqS8Buu\nOfOzIFnitQKBgH0LhpIXzuK6ERuirgf8meE5gQBdWOjESAlTMpCZfinXxUhFvCZ8\ngRODbA6xOMPLlCxAVCjTTdMzhi9bxnITFUET6FAu+YA4jMF5aRgVDZ6hbds1MGep\nx3uoSQwP9gYA46yCDRuUEXu6fNMvH5J6RNIIM6i6o5UNP7CqU07yOv4xAoGBAKuK\nvJ+Hnfstlp5aiDxV/ng7G03vgeN0pIuYu5ny0MkOcp/QL/iGe9Z9NssU4wAJGz/o\nHBPQ7j18JFjUWoB16zBu9cIYVtQ3m/xgJucNFPNB6RDDQShdPu4whq/m0A3R3JuW\nlnmB81SE4nQ3z8JaVdHky/+mpiVLrG+8hCpBZVntAoGBAMmCJqV7QKXFYdsfOkSl\n6DZXJ6+MP2PeIMADeK9CkY8JX52rpgnzZ9sjhrPUrqFPwVM/P0fv0s7dU7ixIlch\nmkrY5hRYJMMa3Wpb7hWoQcl8e7DDrPQVaiU+/V0GLgodQJa+dGgPsPycGAn7eF25\nU/sQzUNCpOmzQrFf2ErAT06J\n-----END PRIVATE KEY-----\n",
+  "client_email": "magalis@magalisdemonew.iam.gserviceaccount.com",
+  "client_id": "105161198538990620756",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/magalis%40magalisdemonew.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

@@ -1,0 +1,39 @@
+<div id="capture2" dir="ltr" class="container">
+  <ng-container *ngFor="let item of countArray; let i = index">
+    <div class="content">
+      <div class="text-center my-2">
+        <img width="250px" src="assets/images/iconmaga.png" alt="">
+      </div>
+
+      <div dir="ltr" class="client ">
+        <div>
+          <span> Client : </span>
+          <span ><input id="input" type="text" [value]="sticker?.customer_name"></span>
+        </div>
+        <div>
+          <span> Phone : </span>
+          <span ><input id="input" type="text" [value]="sticker?.customer_phone_1"></span>
+        </div>
+      </div>
+      <table class="table table-bordered text-center">
+        <tr>
+          <td class="w-75">
+            <h3 class="mt-2">{{sticker?.id}}</h3>
+          </td>
+          <td>
+            <div>
+              {{i+1}}
+            </div>
+            <div>
+              {{sticker?.size}}
+            </div>
+          </td>
+        </tr>
+      </table>
+      <div class="text-center">
+        <h1>Thanks for choosing us .</h1>
+        <h3>www.magalis-egypt.com</h3>
+      </div>
+    </div>
+  </ng-container>
+</div>

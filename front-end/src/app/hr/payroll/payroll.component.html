@@ -1,0 +1,164 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">كشف المرتبات</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
+      <div class="col-md-2">
+        <input class="form-control" type="month" (change)="onMonthChange($event)" [value]="currentMonthValue">
+      </div>
+
+      <div class="row mt-3">
+        <div class="col-md-3">
+          <div class="form-group">
+            <input class="form-control" id="name" placeholder="الإسم" (change)="search($event)"
+              type="text" class="form-control">
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="form-group">
+            <input class="form-control" id="code" placeholder="كود الموظف" (change)="search($event)"
+              type="text" class="form-control">
+          </div>
+        </div>
+
+        <div class="col-md-2">
+          <div class="form-group">
+            <select class="form-control" id="type" placeholder="الادارة" (change)="search($event)"
+            formControlName='type' type="text" class="form-control">
+              <option selected disabled>نوع الراتب</option>
+              <option value="ثابت">ثابت</option>
+              <option value="متغير">متغير</option>
+              <option value="متباين">متباين</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <table class="table m-auto text-center table-hover">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th colspan="3">الموظفين</th>
+          <th colspan="8">الاستحقاقات</th>
+          <th colspan="6">الاستقطاعات</th>
+          <th rowspan="2">المحصلة</th>
+          <th rowspan="2">المراجعة</th>
+          <th rowspan="2">-</th>
+          <th rowspan="2"></th>
+        </tr>
+        <tr>
+          <th>كود الموظف</th>
+          <th>اسم الموظف</th>
+          <th>الوظيفة</th>
+          <th>الراتب المتغير</th>
+          <th>الراتب الثابت</th>
+          <th>المحسوب</th>
+          <th>حوافز الساعات الاضافية</th>
+          <th>حوافز</th>
+          <th>مكافئات</th>
+          <th>بدلات</th>
+          <th>الاجمالي</th>
+          <th>خصومات</th>
+          <th>عدد ايام الغياب</th>
+          <th>عدد ساعات التاخير</th>
+          <th>خصم الغياب والتاخير</th>
+          <th>السلف</th>
+          <th>الاجمالي</th>
+        </tr>
+
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of data">
+          <td>{{elm?.code}}</td>
+          <td><a [routerLink]="'/dashboard/hr/employee/details/'+elm.id" target="_blank">{{elm?.name}}</a></td>
+          <td>{{elm?.level}}</td>
+          <td (dblclick)="addChangedSalary(elm)">{{elm?.changed_salary | customNumber}}</td>
+          <td>{{elm?.fixed_salary | customNumber}}</td>
+          <td class="bg-navy" (dblclick)="addFixedChangedSalary(elm)">{{elm?.calc_salary | customNumber}}</td>
+          <td>{{elm?.extraHours | customNumber}}</td>
+          <td (dblclick)="addIncentives(elm)">{{elm?.incentives | customNumber}}</td>
+          <td (dblclick)="addRewards(elm)">{{elm?.rewards | customNumber}}</td>
+          <td (dblclick)="addSuits(elm)">{{elm?.suits | customNumber}}</td>
+          <td class="bg-main">{{elm?.total_merit | customNumber}}</td>
+          <td (dblclick)="addRival(elm)">{{elm?.rival | customNumber}}</td>
+          <td (dblclick)="addAbsence(elm)">{{elm?.absence | customNumber}}</td>
+          <td>{{elm?.absenceDetails?.absenceHours || 0 | customNumber}}</td>
+          <td>{{elm?.absence_sub | customNumber}}</td>
+          <td (dblclick)="advancePayment(elm)">{{elm?.advance_payment | customNumber}}</td>
+          <td class="bg-main">{{elm?.total_sub | customNumber}}</td>
+          <td class="bg-navy">{{elm?.net_total | customNumber}}</td>
+          <td>
+            <i class="fa-solid" (click)="reviewMonth(elm)"
+                [ngClass]="{
+                  'fa-xmark': elm.isReviewed === 0,
+                  'fa-check': elm.isReviewed === 1,
+                  'text-danger': elm.isReviewed === 0,
+                  'text-success': elm.isReviewed === 1
+                }">
+            </i>
+          </td>
+          <td>
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="salaryCashing(elm)">
+                <span>صرف المرتب</span>
+              </button>
+              <button mat-menu-item (click)="addMerits(elm)">
+                <span>اضافة استحقاق</span>
+              </button>
+              <button mat-menu-item (click)="addSubtraction(elm)">
+                <span>اضافة استقطاع</span>
+              </button>
+              <button mat-menu-item (click)="advancePayment(elm)">
+                <span>صرف سلف</span>
+              </button>
+            </mat-menu>
+          </td>
+          <td>
+            <i class="fa-solid"
+                [ngClass]="{
+                  'fa-xmark': !elm.salary_paid,
+                  'fa-check': elm.salary_paid,
+                  'text-danger': !elm.salary_paid,
+                  'text-success': elm.salary_paid
+                }">
+            </i>
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">الاجمالى</td>
+          <td colspan="8">{{total_merit | customNumber}}</td>
+          <td colspan="6">{{total_subtraction | customNumber}}</td>
+          <td rowspan="2" colspan="4">{{total_merit-total_subtraction | customNumber}}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+
+    <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+
+</div>

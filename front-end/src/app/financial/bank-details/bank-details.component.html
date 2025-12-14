@@ -1,0 +1,53 @@
+<div class="container-fluid">
+ <div class="row py-3">
+  <div class="col-4 d-flex align-items-center">
+   <app-time></app-time>
+  </div>
+  <div class="col-5">
+   <h1 class="header text-center mx-auto my-4">كشف حساب ( {{ name ||'' }} )</h1>
+  </div>
+  <div class="col-3 d-flex align-items-center justify-content-end">
+   <!-- <app-time></app-time> -->
+  </div>
+ </div>
+</div>
+<div class="container-fluid table-responsive py-5">
+ <table class="table table-bordered table-hover text-center">
+  <thead class="thead-dark">
+   <tr>
+    <th scope="col"> المرجع</th>
+    <th scope="col"> تفاصيل</th>
+    <th scope="col"> النوع</th>
+    <th scope="col"> المبلغ </th>
+    <th scope="col"> الرصيد قبل</th>
+    <th scope="col"> الرصيد بعد</th>
+    <th scope="col"> التاريخ</th>
+    <th scope="col"> بواسطة</th>
+   </tr>
+  </thead>
+  <tbody>
+   <tr *ngFor="let item of suppliersData; let i = index"
+    [ngClass]="{'bg-danger': item.details.trim().startsWith('حذف'), 'bg-success': item.details.trim().startsWith('تعديل')}">
+    <td>
+     <span class="cursor-pointer" [routerLink]="getRouterLink(item.ref)">{{item.ref}}</span>
+    </td>
+    <td>{{item.details}}</td>
+    <td>{{item.type}}</td>
+    <td dir="ltr">{{item.amount | number}}</td>
+    <td dir="ltr">{{item.balance_before | number}}</td>
+    <td dir="ltr">{{item.balance_after | number}}</td>
+    <td>{{item.date}}</td>
+    <td>{{item.name}}</td>
+   </tr>
+  </tbody>
+ </table>
+
+ <div class="mt-4">
+  <mat-paginator #paginator class="demo-paginator" [length]="length" showFirstLastButtons (page)="onPageChange($event)"
+   [pageSizeOptions]="pageSizeOptions" aria-label="Select page">
+  </mat-paginator>
+ </div>
+
+
+
+</div>

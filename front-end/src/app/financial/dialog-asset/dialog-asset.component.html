@@ -1,0 +1,94 @@
+<div class="container content">
+  <div
+    class="d-flex justify-content-center align-items-center h-100"
+    style="flex-direction: column"
+  >
+    <h1 class="text-center">اضافة</h1>
+  </div>
+  <form class="text-start" [formGroup]="form" (ngSubmit)="closeDialog()">
+    <div class="mb-3">
+      <input
+        class="form-control"
+        placeholder="الاسم"
+        [class.is-valid]="
+          form.get('name')?.errors == null && form.get('name')?.touched
+        "
+        formControlName="name"
+        type="text"
+        class="form-control"
+      />
+      <p
+        *ngIf="form.get('name')?.errors != null && form.get('name')?.touched"
+        class="error mb-0 text-danger"
+      >
+        مطلوب
+      </p>
+    </div>
+    <div class="mb-3">
+      <select
+        class="form-control"
+        dir="rtl"
+        placeholder="النوع"
+        [class.is-valid]="
+          form.get('type')?.errors == null && form.get('type')?.touched
+        "
+        formControlName="type"
+        type="text"
+        class="form-control"
+      >
+        <option value="0" disabled selected>النوع</option>
+
+        <option value="asset">أصل</option>
+        <option value="liability">التزام</option>
+        <option value="equity">حقوق ملكية</option>
+        <option value="revenue">إيراد</option>
+        <option value="expense">مصروف</option>
+
+        <!-- 'asset','liability','equity','revenue','expense' -->
+      </select>
+      <p
+        *ngIf="form.get('type')?.errors != null && form.get('type')?.touched"
+        class="error mb-0 text-danger"
+      >
+        مطلوب
+      </p>
+    </div>
+    <!-- <div class="mb-3">
+      <input
+        class="form-control"
+        placeholder="الكود"
+        [class.is-valid]="
+          form.get('code')?.errors == null && form.get('code')?.touched
+        "
+        formControlName="code"
+        type="text"
+        class="form-control"
+      />
+      <p
+        *ngIf="form.get('code')?.errors != null && form.get('code')?.touched"
+        class="error mb-0 text-danger"
+      >
+        مطلوب
+      </p>
+    </div> -->
+    <div class="mb-3">
+      <input
+        class="form-control"
+        placeholder="الرصيد"
+        [class.is-valid]="
+          form.get('balance')?.errors == null && form.get('balance')?.touched
+        "
+        formControlName="balance"
+        type="number"
+        class="form-control"
+        
+      />
+     
+    </div>
+    <div class="text-center">
+      <button type="submit" class="btn text-white">
+        {{ data.id ? "تعديل" : "اضافة" }}
+      </button>
+    </div>
+  </form>
+</div>

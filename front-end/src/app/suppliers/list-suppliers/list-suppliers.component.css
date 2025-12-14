@@ -1,0 +1,36 @@
+
+.clr {
+  background-color: #82225e !important;
+  border-color: #82225e !important;
+  font-size: 18px !important;
+  font-weight: 700  !important;
+}
+
+.form-control:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 0.1rem #82225e !important;
+}
+
+.title{
+  font-size: 30px;
+  font-weight: 700;
+  color: white;
+  background-color: black;
+  width: fit-content;
+  padding: 5px 10px;
+  border-radius: 8px;
+  margin-bottom: 3rem;
+}
+
+table td{
+  font-size: 22px;
+}
+
+table th{
+  font-size: 25px;
+}
+
+
+::ng-deep .mat-mdc-paginator-container{
+  justify-content: center !important;
+}

@@ -1,0 +1,24 @@
+<div class="d-flex justify-content-between">
+  <h1 mat-dialog-title> {{data.company.balance | customNumber}}</h1>
+  <h1 mat-dialog-title>    ( {{data.company.name}} )  تحصيل من </h1>
+</div>
+
+<div mat-dialog-content>
+  <form #form="ngForm" (ngSubmit)="submit(form)">
+    <div class="form-group">
+      <select (change)="onBankSelect($event)" class="form-control" dir="rtl">
+        <option selected disabled>الخزينة</option>
+        <option *ngFor="let elm of banksData" [value]="elm.id">
+          {{ elm.name }}
+        </option>
+      </select>
+    </div>
+    <div class="form-group">
+      <input dir="rtl" type="number" min="0" name="amount" placeholder="ادخل المبلغ " ngModel #amount="ngModel" class="form-control" required>
+    </div>
+    <div class="d-flex justify-content-center ">
+      <a mat-button (click)="onCloseClick()" class="btn btn-danger mx-2">الغاء </a>
+      <button class="btn btn-success" [disabled]="!bank || amount.invalid || amount.value < 1 ">تحصيل</button>
+    </div>
+  </form>
+</div>

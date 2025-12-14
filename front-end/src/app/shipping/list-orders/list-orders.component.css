@@ -1,0 +1,112 @@
+form{
+    padding: 20px;
+}
+
+.new{
+    color: white;
+    background-color: #82225e;
+}
+
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+
+.new{
+  background-color: #82225e
+}
+
+.confirmed{
+  background-color: #ffeb3b
+}
+.partshipped{
+  background-color: #92832d
+}
+
+.shipped{
+  background-color: #b8e1cd
+}
+.received{
+  background-color: #3f51b5
+}
+.postponed{
+background-color: #ff9800;
+}
+.canceled{
+  background-color: #f44336
+}
+.refuse{
+  background-color: #f44336
+}
+.collected{
+  background-color: #9e9e9e
+}
+.fixed{
+  background-color: #4caf50;
+}
+.archived{
+  background-color: #2196f3;
+}
+/* .new,.refuse, .confirmed, .shipped, .received, .postponed, .canceled,.collected,.fixed,.archived,.partshipped{
+  color: white;
+} */
+
+::ng-deep .mat-mdc-paginator-container{
+  justify-content: center !important;
+}
+
+.sticky-menu {
+  position: fixed !important;
+  top: 0 !important;
+  left: 7.5rem;
+  z-index: 100000000000000000000000000 !important;
+
+}
+
+.fa-bell{
+  cursor: pointer;
+}
+
+.notification_position{
+  position: absolute;
+  top: -5rem;
+  right: 40px;
+  background-color: white;
+  z-index: 99999999999999999999999 !important;
+}
+
+.notification_number{
+  position: absolute;
+  font-size: 0.9rem;
+  top: -5px;
+  right: 5px;
+}
+
+.table-checkbox{
+  display: none;
+}
+
+td,th {
+  vertical-align: middle !important;
+}
+
+.fa-star{
+  cursor: pointer;
+}
+
+label>.fa-check{
+  cursor: pointer;
+}
+
+tbody td {
+  font-size: 1rem;
+}
+
+sup{
+  color: #82225e;
+  border-radius: 50%;
+}

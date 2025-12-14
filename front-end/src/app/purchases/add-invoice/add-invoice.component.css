@@ -1,0 +1,53 @@
+.ng-autocomplete{
+    background-color: black;
+    color: red;
+    width: 90%;
+}
+
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  padding: 10px 20px;
+  width: fit-content;
+}
+
+
+thead{
+  font-size: 1.5rem;
+}
+
+.btn-add{
+  border: #82225e solid thin !important;
+  font-size: 1.8rem;
+  padding: 0.1rem 1.5rem !important;
+  border-radius: 2rem;
+}
+
+select , select:focus{
+  background-color: #82225e;
+  color: white;
+  font-size: 1.3rem;
+}
+
+input{
+  font-size: 1.2rem;
+}
+
+i{
+  cursor: pointer;
+}
+
+.submit , .submit:hover{
+  background-color: black !important;
+  font-size: 1.8rem;
+  padding: 0.5rem 2rem !important;
+  color: white;
+}
+
+
+.fa-solid{
+  cursor: auto;
+}

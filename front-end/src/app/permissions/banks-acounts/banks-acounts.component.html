@@ -1,0 +1,55 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto"> الحسابات البنكية</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+  <div class="container">
+    <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
+
+    <div *ngIf="formdiv" class="w-50 m-auto mt-5">
+      <div *ngIf="errorform" class="alert alert-danger">
+        {{errorMessage}}
+      </div>
+      <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
+        <div class="form-group">
+          <input class="form-control" id="exampleFormControlInput1" placeholder="رقم الحساب"
+          [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
+          formControlName='name' type="text" class="form-control">
+          <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
+            class="error mb-0 text-danger">مطلوب</p>
+        </div>
+        <div class="text-center my-3">
+          <button *ngIf="addbtn" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+    <table class="table table-bordered m-auto text-center">
+      <thead class="bg-dark text-white">
+        <th>رقم الحساب</th>
+        <th>خيارات</th>
+      </thead>
+      <tbody>
+        <tr >
+
+        </tr>
+      </tbody>
+
+    </table>
+
+
+
+</div>

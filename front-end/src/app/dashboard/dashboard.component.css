@@ -1,0 +1,144 @@
+button span{
+  color: black;
+}
+
+.bg-gray{
+  background-color: rgb(233, 233, 233);
+}
+
+.notification-w{
+  width: fit-content;
+}
+
+.notifiy {
+  max-height: 70vh;
+  position: relative;
+}
+
+.notifiy-filter {
+  background-color: white;
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  z-index: 99999999999;
+}
+
+.notifiy-filter a {
+  color: #82225e;
+  cursor: pointer;
+}
+
+
+
+
+.notifiy-filter a:hover {
+  color: blue;
+}
+
+.toolbar-item-spacer {
+    flex: 1 1 auto;
+}
+
+.app-container {
+    height: 92.7vh;
+    margin: 0;
+    background-color: white;
+}
+
+::ng-deep .mat-drawer-inner-container::-webkit-scrollbar {
+  width: 5px;
+}
+
+::ng-deep .mat-drawer-inner-container::-webkit-scrollbar-thumb {
+  background-color: white;
+  border-radius: 6px;
+}
+
+::ng-deep .mat-drawer-inner-container::-webkit-scrollbar-track {
+  background-color: #82225e;
+}
+
+
+.app-sidenav {
+    width: 20rem;
+    background-color: #82225e;
+}
+
+.app-sidenav-content {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+
+.mat-expansion-panel {
+    background-color: #82225e;
+    color: white;
+}
+
+.mat-expansion-panel-header{
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+::ng-deep .mat-expansion-indicator:after {
+  color: white;
+}
+
+a.active , a.active span {
+  color: #82225e !important;
+  background-color: white;
+  /* transition: background-color 0.5s ease; */
+}
+a.active span::before{
+  background-color: #82225e !important;
+}
+
+a{
+  text-decoration: none !important;
+}
+
+span{
+  font-size: 1rem;
+  font-weight: 500;
+  color: white;
+}
+
+a span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: white;
+  margin-left: 4px;
+}
+
+.mat-expansion-panel-header .mat-icon{
+  margin-left: 10px;
+}
+
+.mat-list-item{
+  color: white;
+}
+
+mat-sidenav-content{
+  position: relative;
+}
+
+i{
+  position: absolute;
+  left: 1rem;
+  top: 5%;
+  cursor: pointer;
+  font-size: 1.8rem;
+  background-color: #82225e;
+  color: white;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  padding: 10px;
+  z-index: 99999;
+}

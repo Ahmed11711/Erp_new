@@ -1,0 +1,115 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header m-auto"> الشركات العملاء</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="mt-5 text-center">
+      <div class="row">
+        <div class="col-md-2">
+          <div class="form-group w-100" >
+            <input class="form-control" placeholder="اسم الشركة" id="name" type="text" (change)="search($event)">
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="form-group w-100" >
+            <input class="form-control" placeholder="رقم الموبايل" id="phone" type="text" (change)="search($event)">
+          </div>
+        </div>
+
+      </div>
+    </form>
+
+    <div class="text-center">
+      <button class="btn btn-add my-3" (click)="openDialog()">اضافة<i class="fa-solid fa-plus"></i></button>
+    </div>
+
+    <table class="table w-75 m-auto text-center table-hover">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th scope="col"> اسم الشركة</th>
+          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 1</th>
+          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 2</th>
+          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 3</th>
+          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 4</th>
+          <th scope="col" *ngIf="user == 'Admin'">تلفون ارضي</th>
+          <th scope="col" *ngIf="user == 'Admin'">المحافظة</th>
+          <th scope="col" *ngIf="user == 'Admin'"> المدينة</th>
+          <th scope="col" *ngIf="user == 'Admin'">العنوان</th>
+          <th scope="col">عدد الطلبات</th>
+          <th scope="col">الرصيد</th>
+          <th scope="col">-</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of data; let i = index">
+          <td>{{item.name}}</td>
+          <td *ngIf="user == 'Admin'">{{item.phone1}}</td>
+          <ng-container *ngIf="user == 'Admin'">
+            <td *ngIf="item.phone2 !== 'null'; else emptyTd">{{ item.phone2 }}</td>
+          </ng-container>
+          <ng-container *ngIf="user == 'Admin'">
+            <td *ngIf="item.phone3 !== 'null'; else emptyTd">{{ item.phone3 }}</td>
+          </ng-container>
+          <ng-container *ngIf="user == 'Admin'">
+            <td *ngIf="item.phone4 !== 'null'; else emptyTd">{{ item.phone4 }}</td>
+          </ng-container>
+          <ng-container *ngIf="user == 'Admin'">
+            <td *ngIf="item.tel !== 'null'; else emptyTd">{{ item.tel }}</td>
+          </ng-container>
+          <ng-container *ngIf="user == 'Admin'">
+            <td>{{item.governorate}}</td>
+          </ng-container>
+          <ng-container *ngIf="user == 'Admin'">
+            <td *ngIf="item.city !== 'null'; else emptyTd">{{item.city}}</td>
+          </ng-container>
+          <ng-template #emptyTd><td></td></ng-template>
+          <td *ngIf="user == 'Admin'">{{item.address}}</td>
+          <td>{{item.number_of_orders}}</td>
+          <td dir="ltr">{{item.balance || 0 | customNumber}}</td>
+          <td>
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu">
+              <button *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user =='Operation Management' || user =='Finance and operations management'" mat-menu-item [routerLink]="['/dashboard/shipping/companybalance',item.id]">
+                <span>كشف حساب</span>
+              </button>
+              <button *ngIf="user == 'test'" mat-menu-item [routerLink]="['/dashboard/shipping/companydetails',item.id]">
+                <span>تفاصيل</span>
+              </button>
+              <!-- <button *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user =='Operation Management'" mat-menu-item [routerLink]="['/dashboard/shipping/companydetails',item.id]">
+                <span>تفاصيل</span>
+              </button> -->
+              <button *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'" mat-menu-item (click)="collectFromCompany(item)">
+                <span>تحصيل</span>
+              </button>
+            </mat-menu>
+        </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+    </div>
+
+</div>

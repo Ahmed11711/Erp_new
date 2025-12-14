@@ -1,0 +1,87 @@
+<div class="p-3">
+  <h1 class="text-center" mat-dialog-title>
+    <div *ngIf="data?.data?.table_name == 'كشف الحضور والانصراف'">
+      {{tableData[0].employee.name}}
+    </div>
+  </h1>
+  <div dir="rtl" mat-dialog-content class="table-responsive">
+
+
+    <table class="table table-hover text-center sticky-table" *ngIf="data?.data?.table_name == 'كشف الحضور والانصراف'">
+      <thead>
+        <th>التاريخ</th>
+        <th>اليوم</th>
+        <th>الحضور</th>
+        <th>الانصراف</th>
+        <th>عدد ساعات الحضور</th>
+        <th>عدد ساعات الخصم او الزيادة</th>
+        <th>خصم او حافز</th>
+        <th>إذن</th>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of tableData; let i = index;">
+          <td dir="ltr">{{elm.date}}</td>
+          <td dir="ltr">{{elm.date | customDayName}}</td>
+          <td colspan="3" *ngIf="elm.hours == '00:00' && !elm.holiday && elm.check_in == '08:00 AM'" class="bg-gray">متغيب</td>
+          <td [attr.colspan]="!elm?.hours_permission ? 3 : 3" *ngIf="elm.holiday && elm.check_in == elm.check_out" class="bg-main">أجازة اسبوعية</td>
+          <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">00:00</td>
+          <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">0</td>
+          <td colspan="3" *ngIf="elm.vacation" class="bg-success">{{elm.vacation_reason}}</td>
+          <td colspan="1" *ngIf="elm.vacation">00:00</td>
+          <td colspan="1" *ngIf="elm.vacation">0</td>
+          <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''" [ngClass]="elm.times.length > 2 ? 'bg-info' : ''" >{{elm.check_in}}</td>
+          <td *ngIf="elm.hours == '00:00' && !elm.holiday && (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" class="bg-danger"></td>
+          <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.check_out}}</td>
+          <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.hours}}</td>
+          <td dir="ltr" *ngIf="elm.hours_permission || !elm.holiday && !elm.vacation || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)">{{elm.hoursDifference}}</td>
+          <td *ngIf="((elm.salary_type2 == 'خصم' && !elm.holiday && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.holiday && elm.check_in != elm.check_out))">خصم : {{elm.salary_type | customNumber}}ج   <span *ngIf="elm.absence_deduction">( {{elm.absence_deduction}} يوم )</span></td>
+          <td *ngIf="((elm.salary_type2 == 'حافز' && !elm.holiday && !elm.vacation) || (elm.salary_type2 == 'حافز' && elm.holiday && elm.check_in != elm.check_out))"><span *ngIf="!elm.is_overTime_removed">حافز : {{elm.salary_type | customNumber}}ج</span><span *ngIf="elm.is_overTime_removed">راتب متغير</span></td>
+          <td dir="ltr"><span *ngIf="elm.hours_permission && elm.check_in != elm.check_out || elm.hours_permission && elm.check_in == elm.check_out && elm.holiday || (elm.hours_permission && '-'+elm.hours_permission != elm.hoursDifference)">{{elm.hours_permission | fixedTime}} : اذن </span><span *ngIf="elm.hours == '00:00' && !elm.holiday && '-'+elm.hours_permission == elm.hoursDifference">اجازة باذن</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+
+    <table class="table table-hover text-center sticky-table" *ngIf="data?.data?.table_name == 'مشتريات'">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th scope="col">  المرجع</th>
+          <th scope="col"> اسم المورد</th>
+          <th scope="col"> حالة الشراء</th>
+          <th scope="col">اجمالي الفاتورة</th>
+          <th scope="col">المدفوع</th>
+          <th scope="col"> المتبقي</th>
+          <th scope="col">الشحن</th>
+          <th scope="col">السعر معدل </th>
+          <th scope="col">تاريخ الاستلام</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of tableData; let i = index">
+          <td>{{item?.invoice_number}}</td>
+          <td>{{item?.supplier?.supplier_name}}</td>
+          <td>{{item?.invoice_type}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.total_price | customNumber ): (item?.updated_purchase?.total_price | customNumber )}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.paid_amount | customNumber ): (item?.updated_purchase?.paid_amount | customNumber )}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.due_amount | customNumber ): (item?.updated_purchase?.due_amount | customNumber )}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.transport_cost | customNumber ): (item?.updated_purchase?.transport_cost | customNumber )}}</td>
+          <td>
+            <i class="fa-solid"
+                [ngClass]="{
+                  'fa-check': item?.price_edited === '1',
+                  'text-success': item?.price_edited === '1'
+                }">
+            </i>
+          </td>
+          <td>{{item?.receipt_date}}</td>
+        </tr>
+      </tbody>
+    </table>
+
+
+  </div>
+  <div class="text-center">
+    <button class="btn btn-success mx-2" (click)="sendApprovelStatus(data.data.id , 'approved')" *ngIf="data.data.status == 'قيد الانتظار'">موافقة</button>
+    <button class="btn btn-danger" (click)="sendApprovelStatus(data.data.id , 'rejected')" *ngIf="data.data.status == 'قيد الانتظار'">رفض</button>
+  </div>
+</div>

@@ -1,0 +1,58 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+
+thead{
+  font-size: 1.5rem;
+  background-color: #82225e !important;
+}
+
+.btn-add{
+  border: #82225e solid thin !important;
+  font-size: 1.8rem;
+  padding: 0.1rem 1.5rem !important;
+  border-radius: 2rem;
+}
+
+i{
+  color: #82225e;
+  font-size: 1rem;
+}
+
+.head{
+  background-color: #82225e;
+  font-size: 1.4rem;
+  color: white;
+  border-radius: 1rem;
+  padding: 0.2rem;
+  height: 7rem;
+  cursor: pointer;
+  margin: 1.5rem;
+  width: 9rem;
+}
+
+.head h4{
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+::ng-deep .mat-mdc-paginator-container{
+  justify-content: center !important;
+}
+
+mat-icon{
+  font-size: 4rem;
+  width: 100%;
+  height: 100%;
+}
+
+.border{
+  border: #82225e solid 2px !important;
+  padding: 10px;
+  border-radius: 20px;
+}

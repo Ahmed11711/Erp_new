@@ -1,0 +1,86 @@
+<h1 mat-dialog-title>اضافة شركة جديدة</h1>
+<div mat-dialog-content>
+  <div class="alert alert-danger text-center m-auto" *ngIf="errormessage">
+    <p>{{existName}}</p>
+    <p>{{existPhone}}</p>
+  </div>
+  <form dir="rtl" class="text-first w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
+
+    <div class="form-group">
+      <input class="form-control" id="exampleFormControlInput1" placeholder="اسم الشركة"
+      [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
+      formControlName='name' type="text" class="form-control">
+      <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
+        class="error mb-0 text-danger">مطلوب</p>
+    </div>
+
+    <div class="form-group">
+      <input class="form-control" id="exampleFormControlInput1" placeholder="رقم الموبيل 1"
+      [class.is-valid]="form.get('phone1')?.errors ==null && form.get('phone1')?.touched"
+      formControlName='phone1' type="text" class="form-control">
+      <p *ngIf="form.get('phone1')?.errors !=null && form.get('phone1')?.touched"
+        class="error mb-0 text-danger">رقم غير صحيح</p>
+    </div>
+
+    <div class="form-group">
+      <input class="form-control" id="exampleFormControlInput1" placeholder="رقم الموبيل 2"
+      [class.is-valid]="form.get('phone2')?.errors ==null &&
+      form.get('phone2')?.value !='' && form.get('phone2')?.value !=null"
+      formControlName='phone2' type="text" class="form-control">
+      <p *ngIf="form.get('phone2')?.errors !=null && form.get('phone2')?.touched"
+        class="error mb-0 text-danger">رقم غير صحيح</p>
+    </div>
+
+    <div class="form-group">
+      <input class="form-control" id="exampleFormControlInput1" placeholder="رقم الموبيل 3"
+      [class.is-valid]="form.get('phone3')?.errors ==null &&
+      form.get('phone3')?.value !='' && form.get('phone3')?.value !=null"
+      formControlName='phone3' type="text" class="form-control">
+      <p *ngIf="form.get('phone3')?.errors !=null && form.get('phone3')?.touched"
+        class="error mb-0 text-danger">رقم غير صحيح</p>
+    </div>
+
+    <div class="form-group">
+      <input class="form-control" id="exampleFormControlInput1" placeholder="رقم الموبيل 4"
+      [class.is-valid]="form.get('phone4')?.errors ==null &&
+      form.get('phone4')?.value !='' && form.get('phone4')?.value !=null"
+      formControlName='phone4' type="text" class="form-control">
+      <p *ngIf="form.get('phone4')?.errors !=null && form.get('phone4')?.touched"
+        class="error mb-0 text-danger">رقم غير صحيح</p>
+    </div>
+
+    <div class="form-group">
+      <input class="form-control" id="exampleFormControlInput1" placeholder="تلفون ارضي"
+      [class.is-valid]="form.get('tel')?.errors ==null &&
+      form.get('tel')?.value !='' && form.get('tel')?.value !=null"
+      formControlName='tel' type="text" class="form-control">
+    </div>
+
+    <div class="form-group">
+      <select id="inputState" class="form-control" formControlName='governorate' (change)="govern($event)">
+        <option selected disabled >المحافظة</option>
+        <option *ngFor="let elm of location" [value]="elm.governorate_name_ar">{{elm.governorate_name_ar}}</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <select id="inputState" class="form-control" formControlName='city' *ngIf="governName">
+        <option selected disabled >المدينة</option>
+        <option *ngFor="let elm of cities" [value]="elm.city_name_ar">{{elm.city_name_ar}}</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <textarea placeholder="العنوان" name="" id="" cols="20" formControlName='address' class="form-control"
+      [class.is-valid]="form.get('address')?.errors ==null && form.get('address')?.touched"
+      ></textarea>
+      <p *ngIf="form.get('address')?.errors !=null && form.get('address')?.touched"
+          class="error mb-0 text-danger">مطلوب</p>
+    </div>
+    <div class="d-flex justify-content-center ">
+      <button class="btn btn-success" [disabled]="form.invalid">اضف</button>
+      <a mat-button (click)="onCloseClick()" class="btn btn-danger mx-2">الغاء </a>
+
+    </div>
+  </form>
+</div>

@@ -1,0 +1,21 @@
+.mat-expansion-panel {
+    background-color: #82225e;
+    color: white;
+}
+.mat-expansion-panel-header-title{
+    color: white;
+}
+::ng-deep .mat-expansion-indicator:after {
+  color: white;
+}
+
+li a {
+    color: white;
+    text-decoration: none;
+}
+.active {
+    background-color: white !important;
+}
+.active a {
+    color: #82225e !important;
+}

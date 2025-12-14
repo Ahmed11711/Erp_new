@@ -1,0 +1,73 @@
+.invoice{
+  padding: 10px 40px;
+  border-radius: 10px;
+  background-color: #7b2869;
+  color: white;
+}
+
+p{
+  font-size: 1.2rem;
+}
+
+
+
+
+.bg-invoice{
+  background-color: #7b2869;
+  color: white;
+  font-weight: 600;
+}
+
+
+
+
+.footer p{
+  font-size: 1rem;
+  border: 2px solid #7b2869;
+  padding: 10px 0;
+  width: 19rem;
+  border-radius: 10px;
+  text-align: center;
+}
+
+thead th{
+  background-color: #7b2869 !important;
+}
+
+.container{
+  padding: 3rem;
+}
+
+#capture{
+  position: relative;
+}
+
+.bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  text-align: center;
+}
+
+.footer2 {
+  margin-top: 2rem; /* Adjust as needed */
+}
+
+.connect p,
+.footer2 p {
+  font-size: 0.8rem !important;
+  margin: 0;
+}
+
+table th,td{
+  font-size: 0.8rem;
+}
+
+input{
+  border: 2px solid #7b2869;
+  margin-left: 10px;
+  padding: 5px 10px;
+  font-size: 12px !important;
+}

@@ -1,0 +1,105 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+.element {
+  display: inline-flex;
+  align-items: center;
+}
+i.fa-camera {
+  margin: 10px;
+  cursor: pointer;
+  font-size: 30px;
+}
+i:hover {
+  opacity: 0.6;
+}
+.img {
+  display: none;
+}
+
+
+thead{
+  font-size: 1.5rem;
+}
+
+.btn-add{
+  border: #82225e solid thin !important;
+  font-size: 1.8rem;
+  padding: 0.1rem 1.5rem !important;
+  border-radius: 2rem;
+}
+
+select , select:focus{
+  background-color: #82225e;
+  color: white;
+  font-size: 1.3rem;
+}
+
+input{
+  font-size: 1.2rem;
+}
+
+i{
+  cursor: pointer;
+}
+
+.submit , .submit:hover{
+  background-color: black !important;
+  font-size: 1.8rem;
+  padding: 0.5rem 2rem !important;
+  color: white;
+}
+
+hr{
+  background-color: white ;
+  height: 0.1rem;
+}
+
+.quote {
+  background-color: transparent;
+  border: none;
+  text-align: end;
+}
+.quote::placeholder{
+  font-size: 1.3rem;
+}
+
+input[type="date"]{
+  background-color: transparent;
+  border: none;
+}
+
+.section2 hr{
+  background-color: #82225e ;
+}
+
+.border{
+  border: 1px solid rgb(61, 61, 61)  !important;
+}
+
+i{
+  font-size: 2rem;
+}
+
+input[type="number"]{
+  border: none;
+  width: 5rem;
+}
+
+.bank{
+  direction: ltr;
+  text-align: start;
+}
+
+.bank i{
+  display: inline-block;
+  margin-right: 10px;
+  font-size: 1.7rem;
+}
+
+

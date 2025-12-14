@@ -1,0 +1,41 @@
+<div class="container content">
+    <div class="d-flex justify-content-center align-items-center h-100" style="flex-direction: column;">
+      <div class="mb-5">
+        <img width="300px" src="assets/images/iconmaga.png" alt="">
+      </div>
+      <h1 class="text-center">تسجيل الدخول</h1>
+      <div class="alert alert-danger" *ngIf="errorMessage&&Display">
+        {{errorMessage}}
+      </div>
+        <form #login="ngForm" (ngSubmit)="loginUser(login)" autocomplete="off">
+            <div class="form-group">
+              <label for="exampleInputEmail1">البريد الالكتروني</label>
+              <input type="email" name="email" ngModel #email="ngModel"
+              class="form-control" id="exampleInputEmail1" aria-describedby="emailHelp"
+              placeholder="البريد الالكتروني"
+              required email
+              autocomplete="off"
+              >
+              <div class="form-text" *ngIf="email.touched && email.invalid">
+                <small *ngIf="email.errors?.['required']" id="emailHelp" class="form-text text-danger">يجب ادخال البريد الالكتروني</small>
+                <small *ngIf="email.errors?.['email']" id="emailHelp" class="form-text text-danger">يجب ادخال بريد الكتروني صحيح</small>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="exampleInputPassword1">كلمة المرور</label>
+              <input name="password" ngModel #password="ngModel" required minlength="6"
+              [type]="show?'text':'password'" class="form-control" id="exampleInputPassword1" autocomplete="off" placeholder="كلمة المرور">
+              <div class="form-text" *ngIf="password.touched && password.invalid">
+                <small *ngIf="password.errors?.['required']" class="form-text text-danger">يجب ادخال كلمة المرور </small>
+                <small *ngIf="password.errors?.['minlength']" class="form-text text-danger">كلمة المرور 6 احرف او اكثر </small>
+              </div>
+              <div class="form-check">
+                <input type="checkbox" (change)="showPassword($event)" class="form-check-input" id="exampleCheck1">
+                <label class="form-check-label" for="exampleCheck1">عرض كلمة المرور</label>
+              </div>
+            </div>
+
+            <button type="submit" [disabled]="login.invalid" class="btn btn-primary loginbtn">تسجيل الدخول</button>
+          </form>
+    </div>
+</div>

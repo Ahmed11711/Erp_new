@@ -1,0 +1,240 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <h1 class="header text-center my-4"> اضف فاتورة مشتريات</h1>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+</div>
+
+<div class="container content">
+    <!-- <div class="alert-danger alert" *ngIf="errorMessage">
+      {{ errorMessage }}
+    </div> -->
+    <form #invoices="ngForm" (ngSubmit)="addInvoice(invoices)">
+      <div class="form-row">
+        <div class="form-group col-md-5">
+            <select id="status" class="form-control" (change)="changeStatus($event)">
+              <option selected disabled value="">حالة الشراء</option>
+              <option value="تم الاستلام">تم الاستلام</option>
+              <option value="مرتجع">مرتجع</option>
+            </select>
+          </div>
+
+          <div class="form-group col-md-5">
+            <div class="ng-autocomplete">
+              <ng-autocomplete id="supplier"
+                [data]="suppliers"
+                [searchKeyword]="keyword"
+                placeholder="اختر المورد"
+                (selected)='supEvent($event)'
+                (inputCleared)="resetSup()"
+                [itemTemplate]="itemTemplate"
+                [notFoundTemplate]="notFoundTemplate">
+              </ng-autocomplete>
+
+              <ng-template #itemTemplate let-item>
+              <a [innerHTML]="item.supplier_name"></a>
+              </ng-template>
+
+              <ng-template #notFoundTemplate let-notFound>
+              <div [innerHTML]="notFound"></div>
+              </ng-template>
+            </div>
+          </div>
+
+          <div class="form-group col-md-2">
+            <mat-form-field class="example-full-width">
+                <mat-label>تاريخ الاستلام</mat-label>
+                <input id="receipt_date" matInput [matDatepickerFilter]="myFilter" [matDatepicker]="picker"
+                (dateInput)="OnDateChange($event.value)">
+                <mat-hint>MM/DD/YYYY</mat-hint>
+                <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+                <mat-datepicker #picker></mat-datepicker>
+              </mat-form-field>
+
+          </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group col-md-3">
+            <div class="ng-autocomplete">
+                <ng-autocomplete
+                  [data]="categories"
+                  [searchKeyword]="catword"
+                  placeholder="اختر الصنف"
+                  (selected)='selectEvent($event)'
+                  (inputCleared)="resetInp()"
+                  [itemTemplate]="itemTemplates"
+                  [notFoundTemplate]="notFoundTemplate">
+                </ng-autocomplete>
+
+                <ng-template #itemTemplates let-item>
+                <a [innerHTML]="item.category_name"></a>
+                </ng-template>
+
+                <ng-template #notFoundTemplate let-notFound>
+                <div [innerHTML]="notFound"></div>
+                </ng-template>
+                </div>
+        </div>
+        <div class="form-group col-md-3">
+      <input
+        type="number"
+        name="price"
+        ngModel
+        #price="ngModel"
+        class="form-control"
+        aria-describedby="price"
+        id="min_quantity"
+        required
+        min="0"
+        [(ngModel)]="productprice"
+      />
+
+        </div>
+        <div class="form-group col-md-3">
+      <input
+        type="number"
+        name="quantity"
+        ngModel
+        #quantity="ngModel"
+        class="form-control"
+        aria-describedby="min_quantity"
+        id="quantity"
+        required
+        min="0"
+        [(ngModel)]="productQuantity"
+      />
+        </div>
+        <div class="form-group col-md-3">
+            <button type="button" (click)="addToTabel()" [disabled]="!productQuantity|| !productprice || !productSelected" class="btn btn-success">add</button>
+        </div>
+
+    </div>
+
+    <div class="container table-responsive py-5">
+        <table class="table table-bordered table-hover">
+          <thead class="thead-dark">
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col"> اسم الصنف</th>
+              <th scope="col"> الوحدة </th>
+              <th scope="col"> الكمية </th>
+              <th scope="col"> السعر </th>
+              <th scope="col"> الاجمالي</th>
+              <th scope="col"> خيارات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of products; let i = index">
+              <th scope="row">{{i+1}}</th>
+              <td>{{item.product_name}}</td>
+              <td>{{item.product_unit}}</td>
+              <td dir="ltr" style="width: 100px;">
+                <span *ngIf="!invoiceId">
+                  {{item.product_quantity}}
+                </span>
+                <span *ngIf="invoiceId">
+                  <input min="1" class="form-control " type="number" [value]="item.product_quantity" (keyup)="changeQuantity($event , i)" (change)="changeQuantity($event , i)">
+                </span>
+              </td>
+              <td>{{item.product_price | customNumber}}</td>
+              <td dir="ltr">{{item.total | customNumber}}</td>
+              <td><a (click)="reomveProduct(i)" class="btn btn-dark">X</a></td>
+              <!-- <td>{{item}}</td> -->
+              <!-- <td><i class="fa fa-trash" aria-hidden="true"></i></td> -->
+            </tr>
+          </tbody>
+        </table>
+
+        </div>
+
+
+        <div class="form-group">
+          <input type="file" (change)="chooseImg($event)" name="uploadFile"  accept="image/*"  #uploadFile="ngModel" ngModel class="img">
+        </div>
+        <div class="form-group">
+          <div class="form-group col-md-5">
+            <select id="bank" class="form-control" name="bank" ngModel required #bank="ngModel" (change)="bankChange($event)">
+              <option selected disabled value=""> الخزينة</option>
+              <option *ngFor="let item of banks" value="{{item.id}}">{{item.name}}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-3">
+              <label for="">{{status === 'مرتجع' ? 'المبلغ المرتجع' : 'المبلغ المدفوع'}}</label>
+                <input
+                  type="number"
+                  name="paid"
+                  ngModel
+                  #paid="ngModel"
+                  class="form-control"
+                  required
+                  placeholder="المبلغ المدفوع"
+                  [(ngModel)]="paidamount"
+                  (change)="calc()"
+                  (keyup)="calc()"
+                  min="0"
+                  max="{{producttotal+transportcost}}"
+                  autocomplete="off"
+                  />
+
+                  <div
+                  *ngIf="paid.invalid && (paid.dirty || paid.touched)"
+                  class="form-text text-danger"
+                >
+                  <div *ngIf="paid.errors?.['required'] && status === 'تم الاستلام'">
+                    من فضلك ادخل المبلغ المدفوع
+                  </div>
+                  <div *ngIf="paid.errors?.['max']  && status === 'تم الاستلام'">
+                    المبلغ المدفوع اكبر من المبلغ المطلوب
+                  </div>
+                  <div *ngIf="paid.errors?.['min']  && status === 'تم الاستلام'">
+                    المبلغ المدفوع اقل من المبلغ المطلوب
+                  </div>
+                </div>
+
+                  </div>
+
+                  <div class="form-group col-md-3">
+                    <label for=""> مصاريف الشحن</label>
+                    <input
+                      type="number"
+                      step="any"
+                      name="transport"
+                      ngModel
+                      #transport="ngModel"
+                      class="form-control"
+                      required
+                      placeholder=" مصاريف الشحن"
+                      [(ngModel)]="transportcost"
+                      (change)="calc()"
+                      (keyup)="calc()"
+                      />
+                      </div>
+
+                      <div class="form-group col-md-3 px-5">
+                        <label for="">المتبقي</label>
+                        <p dir="ltr" [innerHTML]="dueamount  | customNumber"></p>
+                      </div>
+
+        </div>
+
+
+
+      <button type="submit" [disabled]="!date || !suplierSelected || !dateSelected || products.length==0 || !status || !bankId"
+        class="btn btn-primary">
+        {{!invoiceId ? 'اضف' : 'تعديل'}}
+      </button>
+    </form>
+
+  </div>

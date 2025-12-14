@@ -1,0 +1,66 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header"> المخازن</p></div>
+    </div>
+    <div class="col-3 text-right d-flex align-items-center justify-content-end">
+      <div><i class="fa-solid fa-plus p-2" (click)="openDialog()"></i></div>
+    </div>
+  </div>
+    <div class="row justify-content-center">
+      <div class="col-md-6 text-center">
+  <div class="container table-responsive py-5">
+    <table class="table table-bordered table-hover">
+      <thead class="thead-dark">
+        <tr>
+          <!-- <th scope="col">#</th> -->
+          <th scope="col">المخزن</th>
+          <th scope="col" *ngIf="url == 'list'">الاصل</th>
+          <th scope="col" *ngIf="url == 'list'">الرصيد</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let elm of data">
+          <td>{{elm.name}}</td>
+          <td *ngIf="url == 'list'">{{elm?.asset_name }}</td>
+          <td *ngIf="url == 'list'">{{elm?.balance * 1 || 0 | customNumber }}</td>
+          <td *ngIf="url == 'list'">
+            <button class="btn" mat-icon-button [matMenuTriggerFor]="menu" aria-label="Example icon-button with a menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse:'مخزن مواد خام',balance:data?.Raw}">
+                <span>التفاصيل</span>
+              </button>
+              <button mat-menu-item (click)="openDialog(elm)">
+                <span>تعديل البيانات</span>
+              </button>
+              <button mat-menu-item routerLink="/dashboard/warehouse/warehousedetails" [queryParams]="{warehouse:'مخزن مواد خام'}">
+                <span>تتبع</span>
+              </button>
+              <button mat-menu-item routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse:'مخزن مواد خام'}">
+                <span>التحويلات</span>
+              </button>
+              <button mat-menu-item (click)="deleteWarehouse(elm.id)">
+                <span>حذف</span>
+              </button>
+            </mat-menu>
+          </td>
+          <td *ngIf="url == 'listwarhouse'">
+            <button class="btn btn-secondary" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse:'مخزن مواد خام'}">
+              <span>التفاصيل</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+
+      </div>
+    </div>
+  </div>

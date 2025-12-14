@@ -1,0 +1,89 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header w-50 m-auto">سند تسليم الطلبات</p><mat-icon>print</mat-icon></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+    <table class="table table-bordered w-75 m-auto text-center">
+      <thead class="bg-dark text-white">
+        <th>رقم الطلب</th>
+        <th>عدد القطع</th>
+        <th>عدد الاكياس</th>
+        <th>المبلغ</th>
+        <th>المنطقة</th>
+        <th>العنوان بالتفصيل</th>
+        <th>رقم الهاتف</th>
+        <th>ملحوظات العميل</th>
+      </thead>
+      <tbody>
+        <tr >
+          <td>
+            <ng-autocomplete
+            [data]="products"
+            [searchKeyword]="catword"
+            placeholder=""
+            (selected)='productChange($event)'
+            [itemTemplate]="itemTemplates"
+            [notFoundTemplate]="notFoundTemplate">
+          </ng-autocomplete>
+
+          <ng-template #itemTemplates let-item>
+            <a [innerHTML]="item.category_name"></a>
+          </ng-template>
+
+          <ng-template #notFoundTemplate let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+          </td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td>
+            <ng-autocomplete
+            [data]="products"
+            [searchKeyword]="catword"
+            placeholder=""
+            (selected)='productChange($event)'
+            [itemTemplate]="itemTemplates"
+            [notFoundTemplate]="notFoundTemplate">
+          </ng-autocomplete>
+
+          <ng-template #itemTemplates let-item>
+            <a [innerHTML]="item.category_name"></a>
+          </ng-template>
+
+          <ng-template #notFoundTemplate let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+          </td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+          <td>0</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="text-center my-3">
+      <button class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button> <br>
+    </div>
+</div>

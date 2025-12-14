@@ -1,0 +1,14 @@
+/* @import url(https://fonts.googleapis.com/earlyaccess/scheherazade.css); */
+
+@font-face {
+	font-family: 'scheherazade';
+	src: url("../assets/webfonts/scheherazade.woff2"),
+      url("../assets/webfonts/scheherazade.woff"),
+      url("../assets/webfonts/scheherazade.ttf");
+}
+
+body{
+    /* font-family: 'scheherazade', serif !important; */
+    font-family: 'scheherazade', serif !important;
+    /* font-size: large !important; */
+}

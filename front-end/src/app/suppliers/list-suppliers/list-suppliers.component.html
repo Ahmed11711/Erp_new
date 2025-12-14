@@ -1,0 +1,136 @@
+<div class="container">
+  <div class="row pt-3">
+    <div class="col-md-5">
+      <div><app-time></app-time> </div>
+    </div>
+    <div class="col-md-5">
+      <div><p class="title"> الموردين</p></div>
+    </div>
+  </div>
+    <form #listSupp="ngForm" >
+      <div class="form-row">
+        <div class="form-group col-md-3">
+            <!-- <label for="">فئة المورد</label> -->
+            <select
+            (change)="onTypeChange($event)"
+              class="form-control"
+              name="type"
+              ngModel
+              required
+              #type="ngModel"
+            >
+              <option selected disabled value="">اختر فئة المورد</option>
+              <option
+                *ngFor="let type of types"
+                value="{{ type.id }}"
+              >
+                {{ type.supplier_type }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group col-md-3">
+            <input
+            (change)="onPhonechanges($event)"
+            placeholder="رقم التليفون"
+              type="text"
+              name="phone"
+              ngModel
+              #phone="ngModel"
+              class="form-control"
+              id="phone"
+              autocomplete="off"
+            />
+          </div>
+          <div class="form-group col-md-3">
+            <!-- <label for="inital_price">  اسم المورد</label> -->
+            <input
+            (change)="onSuppliernamechanges($event)"
+            placeholder="اسم المورد"
+              type="text"
+              name="sname"
+              ngModel
+              #sname="ngModel"
+              class="form-control"
+              id="sname"
+              autocomplete="off"
+            />
+          </div>
+          <div class="form-group col-md-3">
+            <button class="btn btn-danger clr" (click)="clrSearch()">clear search</button>
+          </div>
+          <div class="col-md-3">
+            <div>
+              <input (change)="search()" id="own" type="radio" name="status" ngModel [(ngModel)]="selectedStatus" value="own">
+              <label class="mx-2" for="own">مدين</label>
+            </div>
+            <div>
+              <input (change)="search()" id="want" type="radio" name="status" ngModel [(ngModel)]="selectedStatus" value="want">
+              <label class="mx-2" for="want">دائن</label>
+            </div>
+          </div>
+          <div class="col-md-3 text-center" *ngIf="selectedStatus">
+            <h3 class="my-1">المبلغ</h3>
+            <p dir="ltr" class="my-1">{{totalBalance | customNumber}}</p>
+          </div>
+
+      </div>
+    </form>
+    <div class="row">
+      <div class="col-md-12 text-center">
+  <div class="container table-responsive py-5">
+    <table class="table table-bordered table-hover">
+      <thead class="thead-dark">
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col"> اسم المورد</th>
+          <th scope="col">فئة المورد</th>
+          <th scope="col"> رقم الهاتف</th>
+          <th scope="col">العنوان</th>
+          <!-- <th scope="col">تقييم المورد</th>
+          <th scope="col">تقييم السعر</th> -->
+          <th scope="col">رصيد حساب المورد</th>
+          <th scope="col">-</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of suppliersData; let i = index">
+          <th scope="row">{{i+1}}</th>
+          <td>{{item.supplier_name}}</td>
+          <td>{{item.supplier_type.supplier_type}}</td>
+          <td>{{item.supplier_phone}}</td>
+          <td>{{item.supplier_address}}</td>
+          <!-- <td>{{item.supplier_rate}}</td>
+          <td>{{item.price_rate}}</td> -->
+          <td dir="ltr">{{item.balance | customNumber}}</td>
+          <td>
+            <button class="btn" mat-icon-button [matMenuTriggerFor]="menu" aria-label="Example icon-button with a menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item [routerLink]="['/dashboard/suppliers/supplier_details',item.id]">
+                <!-- <mat-icon>dialpad</mat-icon> -->
+              <span>تفاصيل حساب المورد</span>
+              </button>
+              <button mat-menu-item (click)="openDialog(item)">
+              <span>سداد حساب المورد</span>
+              </button>
+            </mat-menu>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    </div>
+    <mat-paginator #paginator
+              class="demo-paginator"
+              [length]="length"
+              showFirstLastButtons
+              (page)="onPageChange($event)"
+              [pageSizeOptions]="pageSizeOptions"
+              aria-label="Select page">
+</mat-paginator>
+
+
+      </div>
+    </div>
+  </div>

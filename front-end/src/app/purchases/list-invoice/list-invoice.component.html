@@ -1,0 +1,128 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="title header m-auto">فواتير المشتريات</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+
+
+  <div class="container-fluid">
+
+
+    <form class="my-5 text-center">
+      <div class="row">
+        <div class="form-group col-md-3">
+          <div class="ng-autocomplete">
+              <ng-autocomplete
+                [data]="suppliers"
+                [searchKeyword]="keyword"
+                placeholder="اختر المورد"
+                (selected)='supEvent($event)'
+                (inputCleared)="resetInp()"
+                [itemTemplate]="itemTemplate"
+                [notFoundTemplate]="notFoundTemplate">
+              </ng-autocomplete>
+
+              <ng-template #itemTemplate let-item>
+              <a [innerHTML]="item?.supplier_name"></a>
+              </ng-template>
+
+              <ng-template #notFoundTemplate let-notFound>
+              <div [innerHTML]="notFound"></div>
+              </ng-template>
+              </div>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <div class="form-group w-100" (change)="search($event)">
+            <select id="status" class="form-control"
+              type="text" class="form-control">
+              <option selected disabled>حالة الشراء</option>
+              <option value="تم الاستلام">تم الاستلام</option>
+              <option value="مرتجع">مرتجع</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <label for="">تاريخ الاستلام</label>
+          <input class="form-control" type="date" (change)="onrecieveDateChange($event)" [value]="recieveDate">
+        </div>
+
+      </div>
+    </form>
+
+
+    <table class="table w-75 m-auto text-center table-hover">
+      <thead class="bg-dark text-white">
+        <tr>
+          <th scope="col">  المرجع</th>
+          <th scope="col"> اسم المورد</th>
+          <th scope="col"> حالة الشراء</th>
+          <th scope="col">اجمالي الفاتورة</th>
+          <th scope="col">المدفوع</th>
+          <th scope="col"> المتبقي</th>
+          <th scope="col">الشحن</th>
+          <th scope="col">السعر معدل </th>
+          <th scope="col">عدد التعديلات </th>
+          <th scope="col">تاريخ الاستلام</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of invoices; let i = index" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
+          <td>{{item?.invoice_number}}</td>
+          <td>{{item?.supplier.supplier_name}}</td>
+          <td>{{item?.invoice_type}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.total_price | customNumber ): (item?.updated_purchase?.total_price | customNumber )}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.paid_amount | customNumber ): (item?.updated_purchase?.paid_amount | customNumber )}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.due_amount | customNumber ): (item?.updated_purchase?.due_amount | customNumber )}}</td>
+          <td dir="ltr">{{!item?.updated_purchase ?  (item?.transport_cost | customNumber ): (item?.updated_purchase?.transport_cost | customNumber )}}</td>
+          <!-- <td dir="ltr">{{item?.paid_amount | customNumber}}</td>
+          <td dir="ltr">{{item?.due_amount | customNumber}}</td>
+          <td dir="ltr">{{item?.transport_cost  | customNumber}}</td> -->
+          <td>
+            <i class="fa-solid"
+                [ngClass]="{
+                  'fa-check': item?.price_edited === '1',
+                  'text-success': item?.price_edited === '1'
+                }">
+            </i>
+          </td>
+          <td>{{item?.edits}}</td>
+          <td>{{item?.receipt_date}}</td>
+          <td>
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+              <mat-icon>more_vert</mat-icon>
+            </span>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="invoiceDetails(item?.id)">
+                <span>تفاصيل</span>
+              </button>
+              <button mat-menu-item (click)="editInvoice(item?.id)" *ngIf="item?.status != 1">
+                <span>تعديل</span>
+              </button>
+              <button mat-menu-item (click)="deleteInvoice(item?.id)" *ngIf="item?.status != 1">
+                <span>حذف</span>
+              </button>
+            </mat-menu>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="mt-4">
+      <mat-paginator #paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+    </div>
+
+</div>

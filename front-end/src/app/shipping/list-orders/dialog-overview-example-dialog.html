@@ -1,0 +1,11 @@
+<h1 mat-dialog-title> {{data.name}}</h1>
+<div mat-dialog-content>
+ <form #postpo="ngForm" (ngSubmit)="postpone(postpo,data.id,data.status)">
+   <div class="form-group">
+    <input type="text" name="note" ngModel #note="ngModel" class="form-control">
+   </div>
+   <button mat-button (click)="onNoClick()">الغاء </button>
+   <button mat-button (click)="onNoClick()" class="btn btn-add">اضف</button>
+ </form>
+</div>
+

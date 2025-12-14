@@ -1,0 +1,28 @@
+td div{
+  width: 30px;
+  margin: 0 auto;
+}
+td div:first-child{
+  border-bottom: 2px solid black;
+}
+
+table ,td{
+  border: 2px solid black;
+}
+
+.client{
+  text-align: start;
+  margin: 13px 0;
+}
+
+input{
+  border: none;
+}
+
+.content{
+  border: 2px solid black;
+  border-radius: 10px;
+  margin-top: 18px;
+  padding: 10px;
+  height: 9.4cm;
+}

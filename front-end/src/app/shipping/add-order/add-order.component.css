@@ -1,0 +1,145 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+i:first-child{
+  font-size: 1rem;
+  color: #82225e;
+}
+
+
+.content{
+  padding: 20px 20px;
+  width: 500px;
+}
+
+
+
+.form-control:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 0.1rem #82225e !important;
+}
+input{
+  direction: rtl;
+}
+
+form p{
+  margin: 0.5rem;
+}
+
+
+
+
+.first td{
+  display: inline-block;
+  min-width: 12rem;
+  margin: 0 3rem;
+  text-align: center;
+}
+
+input , select , option{
+  font-size: 1.3rem;
+}
+
+.type , .type:focus{
+  background-color: #82225e;
+  color: white;
+  padding-right: 1rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.4rem;
+  border-radius: 10px;
+}
+
+label{
+  font-size: 1.8remz;
+  font-weight: 500;
+}
+
+.row table{
+  width: 90%;
+}
+
+.row thead th{
+  background-color: #82225e;
+}
+
+.row thead{
+  color: white;
+  font-size: 1.5rem;
+  padding: 0 0.5rem;
+}
+
+textarea{
+  font-size: 1.5rem;
+  padding: 0 0.5rem;
+}
+
+textarea:first-child::placeholder{
+  font-size: 1.5rem;
+}
+
+.submit {
+  background-color: black !important;
+  font-size: 1.8rem;
+  padding: 0.5rem 2rem !important;
+}
+
+.btn-add{
+  border: #82225e solid thin !important;
+  font-size: 1.8rem;
+  padding: 0.1rem 1.5rem !important;
+  border-radius: 2rem;
+}
+
+
+.element {
+  display: inline-flex;
+  align-items: center;
+}
+
+.img {
+  display: none;
+}
+
+i.fa-camera {
+  margin: 10px;
+  cursor: pointer;
+  font-size: 30px;
+}
+
+i:hover {
+  opacity: 0.6;
+}
+
+tr{
+  text-align: center;
+  font-size: 1.5rem;
+}
+
+i.fa-trash{
+  cursor: pointer;
+}
+
+.vat {
+  border: none;
+  width: 5rem;
+  direction: ltr;
+}
+
+.vat:focus {
+  outline: none;
+}
+
+.fa-plus{
+  cursor: pointer;
+  font-size: 1.2rem !important;
+}
+
+.special-details::placeholder , .special-details{
+  font-size: 1rem !important;
+}

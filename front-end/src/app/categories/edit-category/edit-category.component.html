@@ -1,0 +1,121 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-3 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div><p class="header m-auto">تعديل صنف</p></div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <!-- <app-time></app-time> -->
+    </div>
+  </div>
+</div>
+<div class="container content mt-4">
+  <div
+    class="d-flex justify-content-center align-items-center h-100"
+    style="flex-direction: column"
+  >
+  </div>
+  <form [formGroup]="form" (ngSubmit)="submitform()">
+    <div class="form-row">
+    <div class="form-group col-md-6">
+      <label for="type">اسم الصنف</label>
+      <input class="form-control"
+      [class.is-valid]="form.get('category_name')?.errors ==null && form.get('category_name')?.touched"
+      formControlName='category_name' type="text" class="form-control">
+      <p *ngIf="form.get('category_name')?.errors !=null && form.get('category_name')?.touched"
+        class="error mb-0 text-danger">مطلوب</p>
+    </div>
+    <div class="form-group col-md-6">
+      <label for="price">سعر الصنف</label>
+      <input class="form-control" min="0"
+      [class.is-valid]="form.get('category_price')?.errors ==null && form.get('category_price')?.touched"
+      formControlName='category_price' type="number" class="form-control">
+      <p *ngIf="form.get('category_price')?.errors !=null && form.get('category_price')?.touched"
+        class="error mb-0 text-danger">مطلوب</p>
+    </div>
+    </div>
+    <div class="form-row">
+    <div class="form-group col-md-6">
+      <label for="inital_price"> الرصيد الافتتاحي</label>
+      <input class="form-control" min="0"
+      [class.is-valid]="form.get('initial_balance')?.errors ==null && form.get('initial_balance')?.touched"
+      formControlName='initial_balance' type="number" class="form-control">
+      <p *ngIf="form.get('initial_balance')?.errors !=null && form.get('initial_balance')?.touched"
+        class="error mb-0 text-danger">مطلوب</p>
+    </div>
+    <div class="form-group col-md-6">
+      <label for="min_quantity"> الحد الادنى للمخزون</label>
+      <input class="form-control" min="0"
+      [class.is-valid]="form.get('minimum_quantity')?.errors ==null && form.get('minimum_quantity')?.touched"
+      formControlName='minimum_quantity' type="number" class="form-control">
+      <p *ngIf="form.get('minimum_quantity')?.errors !=null && form.get('minimum_quantity')?.touched"
+        class="error mb-0 text-danger">مطلوب</p>
+    </div>
+    </div>
+    <div class="form-row">
+    <div class="form-group col-md-4">
+      <select (change)="onWarehouseChange($event)" formControlName='warehouse' class="form-control">
+        <option selected disabled>المخزن</option>
+        <ng-container *ngFor="let elm of stockData">
+          <option
+            *ngIf="(
+                    ( (user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist')
+                      && (elm.name == 'مخزن مواد خام' || elm.name == 'مخزن منتج تحت التشغيل')
+                    )
+                    ||
+                    ( (user == 'Admin' || user == 'Data Entry')
+                      && elm.name == 'مخزن منتج تام'
+                    )
+                  )"
+            [value]="elm.name"
+          >
+            {{ elm.name }}
+          </option>
+        </ng-container>
+        <!-- <option *ngIf="user =='Admin' || user == 'Account Management' || user == 'Logistics Specialist'" value="مخزن مواد خام">مخزن مواد خام</option>
+        <option *ngIf="user =='Admin' || user == 'Account Management' || user == 'Logistics Specialist'" value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
+        <option *ngIf="user =='Admin' || user =='Data Entry'" value="مخزن منتج تام">مخزن منتج تام</option> -->
+      </select>
+    </div>
+    <div class="form-group col-md-4">
+      <select class="form-control" formControlName='measurement_id'>
+        <option selected disabled >وحدة القياس</option>
+        <option *ngFor="let unit of unitsData" value="{{ unit.id }}">
+          {{ unit.unit }}
+        </option>
+      </select>
+    </div>
+    <div class="form-group col-md-4">
+      <select class="form-control" formControlName='production_id'>
+        <option selected disabled >خط الانتاج</option>
+        <option
+          *ngFor="let production of productionData"
+          value="{{ production.id }}"
+        >
+          {{ production.production_line }}
+        </option>
+      </select>
+    </div>
+    </div>
+
+    <div class="row text-center">
+      <div>
+        <div class="form-group">
+          <div class="element">
+              <div>
+                <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
+              </div>
+              <input type="file" (change)="onFileChanged($event)" name="uploadFile"
+              accept="image/*" id="fileInput"  class="img" formControlName='category_image'>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <button type="submit"  class="btn btn-primary">
+      تعديل
+    </button>
+  </form>
+</div>

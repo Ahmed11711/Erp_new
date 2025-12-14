@@ -1,0 +1,32 @@
+.fa-plus{
+    background-color: black;
+    padding: 5px;
+    border-radius: 50%;
+}
+
+.title{
+    font-size: 20px;
+    /* font-family: 'Scheherazade', serif; */
+    font-weight: bold;
+    background-color: black;
+    padding: 10px 20px;
+    color: #FFF;
+    border-radius: 5%;
+}
+
+table td{
+    font-size: 20px;
+}
+table th{
+    font-size: 25px;
+}
+
+.header2{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  width: fit-content;
+  padding: 10px 20px;
+}
