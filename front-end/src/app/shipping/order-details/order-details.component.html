@@ -1,352 +1,364 @@
-  <div class="container-fluid">
+<div class="container-fluid">
 
-    <div class="row py-3" *ngIf="isDetails">
-      <div class="col-md-3">
-        <app-time></app-time>
-      </div>
-      <div class="col-md-2 offset-md-2 p-3">
-        <div><p class="title header"> تفاصيل الطلب {{id}}</p></div>
-        <div class="d-flex justify-content-between ">
-          <p class="bg-main " (click)="printSticker()"> ملصقات <i class="fa-solid fa-print text-white"></i></p>
-          <p class="bg-main" (click)="printInvoice('A3')"> A3 <i class="fa-solid fa-print text-white"></i></p>
-          <p class="bg-main" (click)="printInvoice('A4')"> A4 <i class="fa-solid fa-print text-white"></i></p>
-        </div>
-      </div>
-    </div>
+ <div class="row py-3" *ngIf="isDetails">
+  <div class="col-md-3">
+   <app-time></app-time>
+  </div>
+  <div class="col-md-2 offset-md-2 p-3">
+   <div>
+    <p class="title header"> تفاصيل الطلب {{id}}</p>
+   </div>
+   <div class="d-flex justify-content-between ">
+    <p class="bg-main " (click)="printSticker()"> ملصقات <i class="fa-solid fa-print text-white"></i></p>
+    <p class="bg-main" (click)="printInvoice('A3')"> A3 <i class="fa-solid fa-print text-white"></i></p>
+    <p class="bg-main" (click)="printInvoice('A4')"> A4 <i class="fa-solid fa-print text-white"></i></p>
+   </div>
+  </div>
+ </div>
 
-    <div class="container-fluid table-responsive text-center ">
-      <table class="table table-bordered table-hover w-100">
-        <thead class="thead-dark">
-          <th>نوع الطلب</th>
-          <th>حالة الطلب</th>
-          <th>تاريخ الطلب</th>
-          <th *ngIf="order?.delivery_date">تاريخ التسليم ( حسب العميل )</th>
-          <th *ngIf="order?.order_details?.status_date">تاريخ الحالة</th>
-          <th *ngIf="order?.order_details?.shipping_date">تاريخ الشحن</th>
-          <th>مصدر الطلب</th>
-          <th>طريقة الشحن</th>
-        </thead>
-        <tbody>
-          <td>{{order?.order_type}}</td>
-          <td>{{order?.order_status}}</td>
-          <td>{{order?.order_date}}</td>
-          <td *ngIf="order?.delivery_date">{{order?.delivery_date}}</td>
-          <td *ngIf="order?.order_details?.status_date">{{order?.order_details?.status_date || ''}}</td>
-          <td *ngIf="order?.order_details?.shipping_date">{{order?.order_details?.shipping_date || ''}}</td>
-          <td>{{order?.order_source?.name}}</td>
-          <td>{{order?.shipping_method?.name}}</td>
-        </tbody>
+ <div class="container-fluid table-responsive text-center ">
+  <table class="table table-bordered table-hover w-100">
+   <thead class="thead-dark">
+    <th>نوع الطلب</th>
+    <th>حالة الطلب</th>
+    <th>تاريخ الطلب</th>
+    <th *ngIf="order?.delivery_date">تاريخ التسليم ( حسب العميل )</th>
+    <th *ngIf="order?.order_details?.status_date">تاريخ الحالة</th>
+    <th *ngIf="order?.order_details?.shipping_date">تاريخ الشحن</th>
+    <th>مصدر الطلب</th>
+    <th>طريقة الشحن</th>
+   </thead>
+   <tbody>
+    <td>{{order?.order_type}}</td>
+    <td>{{order?.order_status}}</td>
+    <td>{{order?.order_date}}</td>
+    <td *ngIf="order?.delivery_date">{{order?.delivery_date}}</td>
+    <td *ngIf="order?.order_details?.status_date">{{order?.order_details?.status_date || ''}}</td>
+    <td *ngIf="order?.order_details?.shipping_date">{{order?.order_details?.shipping_date || ''}}</td>
+    <td>{{order?.order_source?.name}}</td>
+    <td>{{order?.shipping_method?.name}}</td>
+   </tbody>
+  </table>
+ </div>
+
+ <div class="container-fluid table-responsive text-center ">
+  <table class="table table-bordered table-hover w-100">
+   <thead class="thead-dark">
+    <th>اسم العميل</th>
+    <th>رقم الموبيل 1</th>
+    <th *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">رقم الموبيل 2
+    </th>
+    <th *ngIf="order?.tel != 'null'">تلفون ارضي</th>
+    <th>المحافظة</th>
+    <th *ngIf="order?.city">المدينة</th>
+    <th class="w-25">العنوان</th>
+   </thead>
+   <tbody>
+    <td>{{order?.customer_name}}</td>
+    <td>{{order?.customer_phone_1}}</td>
+    <td *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">
+     {{order?.customer_phone_2}}</td>
+    <td *ngIf="order?.tel != 'null'">{{order?.tel}}</td>
+    <td>{{order?.governorate}}</td>
+    <td *ngIf="order?.city">{{order?.city}}</td>
+    <td>{{order?.address}}</td>
+   </tbody>
+  </table>
+ </div>
+
+ <div class="container-fluid table-responsive text-center ">
+  <table class="table table-bordered table-hover w-100">
+   <thead class="thead-dark">
+    <th *ngIf="order?.order_details?.shipping_line?.name">خط التوزيع</th>
+    <th *ngIf="maintenReasons.length > 0">سبب الصيانة</th>
+    <th *ngIf="order?.order_details?.shipping_company?.name">شركة الشحن</th>
+    <th *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">رقم البوليصة </th>
+    <th *ngIf="order?.collect_note">ملحوظة التحصيل المتغير</th>
+
+   </thead>
+   <tbody>
+    <td *ngIf="order?.order_details?.shipping_line?.name">{{order?.order_details?.shipping_line?.name}}</td>
+    <td *ngIf="maintenReasons.length > 0">
+     <ul>
+      <li *ngFor="let elm of  maintenReasons">{{elm?.mainten_reason}}</li>
+     </ul>
+    </td>
+    <td *ngIf="order?.order_details?.shipping_company?.name">{{order?.order_details?.shipping_company?.name}}</td>
+    <td *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">
+     <button
+      *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management'"
+      class="btn bg-main" (click)="addShippmentNumber(order?.id)">اضف رقم بوليصة</button><br>
+     <div class="table-responsive" *ngIf="order?.order_shipment_number.length > 0">
+      <table class="table mx-auto mt-1 w-75">
+       <tr *ngFor="let elm of order.order_shipment_number">
+        <td>{{elm.shipment_number}}</td>
+        <td>{{elm.user.name}}</td>
+       </tr>
       </table>
+     </div>
+    </td>
+    <td *ngIf="order?.collect_note">{{order?.collect_note}}</td>
+   </tbody>
+  </table>
+ </div>
+
+ <div class="row">
+  <div class="col-md-2 mt-2" *ngIf="user == 'Admin'">
+   <textarea class="form-control" [(ngModel)]="reviewdNote" placeholder="ملحوظة مراجعة الادمن" type="text"></textarea>
+   <input class="my-2" id="reviewed" [(ngModel)]="reviewd" type="checkbox" name=""> <span class="m-2">تم المراجعة</span>
+   <button (click)="reviewFn()" class="btn btn-dark mt-2">تاكيد</button>
+  </div>
+  <div class="col-md-2 mt-2" *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management'">
+   <textarea class="form-control" [(ngModel)]="userReviewdNote" placeholder="ملحوظة مراجعة المستخدم"
+    type="text"></textarea>
+   <input class="my-2" id="reviewed" [(ngModel)]="userReviewd" type="checkbox" name=""> <span class="m-2">تم
+    المراجعة</span>
+   <button (click)="UserReviewFn()" class="btn btn-dark mt-2">تاكيد</button>
+  </div>
+  <div class="col-md-4 mt-2 text-center" *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management'">
+   <button class="btn bg-main" (click)="addTempReview(order?.id)">اضف مراجعة مؤقتة</button>
+   <button *ngIf="tempReviewNotification.length > 0 && user == 'Admin'" class="btn bg-success ml-5 "
+    (click)="adminReadTempReview(order?.id)"><i class="fa-solid fa-check text-white"></i></button>
+
+   <div class="table-responsive">
+    <table class="table my-0 w-100">
+     <thead class="text-center notification-head">
+      <th>المراجعة</th>
+      <th>التاريخ</th>
+      <th>بواسطة</th>
+     </thead>
+    </table>
+    <div class="content">
+     <table class="table w-100 table-hover">
+      <tbody class="text-center">
+       <tr *ngFor="let elm of tempReview">
+        <td>{{elm?.review}}</td>
+        <td>{{elm?.created_at | date:'YYYY-MM-dd'}}</td>
+        <td>{{elm?.user.name}}</td>
+       </tr>
+      </tbody>
+     </table>
     </div>
+   </div>
+  </div>
+  <div class="col-md-4" *ngIf="order?.reference_number || order?.reference_image">
+   <table class="table table-bordered text-center my-0">
+    <thead class=" notification-head">
+     <th>الرقم المرجعي</th>
+     <th>صورة الإيصال</th>
+    </thead>
+    <tbody>
+     <td>{{order?.reference_number}}</td>
+     <td><img (click)="showImg($event)" class="img-fluid cursor-pointer" style="width: 50px;"
+       [src]="imgUrl+order?.reference_image"></td>
+    </tbody>
+   </table>
+  </div>
+ </div> <br>
 
-    <div class="container-fluid table-responsive text-center ">
-      <table class="table table-bordered table-hover w-100">
-        <thead class="thead-dark">
-          <th>اسم العميل</th>
-          <th>رقم الموبيل 1</th>
-          <th *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">رقم الموبيل 2</th>
-          <th *ngIf="order?.tel != 'null'">تلفون ارضي</th>
-          <th>المحافظة</th>
-          <th *ngIf="order?.city">المدينة</th>
-          <th class="w-25">العنوان</th>
-        </thead>
-        <tbody>
-          <td>{{order?.customer_name}}</td>
-          <td>{{order?.customer_phone_1}}</td>
-          <td *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">{{order?.customer_phone_2}}</td>
-          <td *ngIf="order?.tel != 'null'">{{order?.tel}}</td>
-          <td>{{order?.governorate}}</td>
-          <td *ngIf="order?.city">{{order?.city}}</td>
-          <td>{{order?.address}}</td>
-        </tbody>
-      </table>
-    </div>
+ <div class="row">
+  <div class="col-md-8 table-responsive" *ngIf="order?.order_products_archive.length > 0 && user == 'Admin'">
+   <button class="btn bg-main" (click)="toggleUpdatedProduct()">طلب معدل</button>
+   <table class="table table-bordered table-hover" *ngIf="oldProduct">
+    <thead>
+     <tr>
+      <th>اسم المنتج</th>
+      <th>الكمية المطلوبة</th>
+      <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
+      <th>سعر البيع</th>
+      <th>اجمالى سعر البيع</th>
+      <th>بواسطة</th>
+      <th>التاريخ</th>
+     </tr>
+    </thead>
+    <tbody>
+     <tr *ngFor="let elm of order?.order_products_archive;">
+      <td>{{elm.category.category_name}}</td>
+      <td dir="ltr">{{elm.quantity}}</td>
+      <td *ngIf="order?.customer_type=='شركة'">{{elm.shipped_quantity}}</td>
+      <td dir="ltr">{{elm.price | customNumber}}</td>
+      <td dir="ltr">{{elm.total_price | customNumber}}</td>
+      <td>{{elm.updated_by}}</td>
+      <td>{{elm.created_at | customDate}}</td>
+     </tr>
+    </tbody>
+   </table>
+   <hr>
+  </div>
 
-      <div class="container-fluid table-responsive text-center ">
-        <table class="table table-bordered table-hover w-100">
-          <thead class="thead-dark">
-            <th *ngIf="order?.order_details?.shipping_line?.name">خط التوزيع</th>
-            <th *ngIf="maintenReasons.length > 0">سبب الصيانة</th>
-            <th *ngIf="order?.order_details?.shipping_company?.name">شركة الشحن</th>
-            <th *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">رقم البوليصة </th>
-            <th *ngIf="order?.collect_note">ملحوظة التحصيل المتغير</th>
-
-          </thead>
-          <tbody>
-            <td *ngIf="order?.order_details?.shipping_line?.name">{{order?.order_details?.shipping_line?.name}}</td>
-            <td *ngIf="maintenReasons.length > 0">
-              <ul>
-                <li *ngFor="let elm of  maintenReasons">{{elm?.mainten_reason}}</li>
-              </ul>
-            </td>
-            <td *ngIf="order?.order_details?.shipping_company?.name">{{order?.order_details?.shipping_company?.name}}</td>
-            <td *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">
-              <button *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management'" class="btn bg-main" (click)="addShippmentNumber(order?.id)">اضف رقم بوليصة</button><br>
-              <div class="table-responsive" *ngIf="order?.order_shipment_number.length > 0">
-                <table class="table mx-auto mt-1 w-75">
-                    <tr *ngFor="let elm of order.order_shipment_number">
-                      <td>{{elm.shipment_number}}</td>
-                      <td>{{elm.user.name}}</td>
-                    </tr>
-                </table>
-              </div>
-            </td>
-            <td *ngIf="order?.collect_note">{{order?.collect_note}}</td>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="row">
-        <div class="col-md-2 mt-2" *ngIf="user == 'Admin'">
-            <textarea class="form-control" [(ngModel)]="reviewdNote" placeholder="ملحوظة مراجعة الادمن" type="text"></textarea>
-            <input class="my-2" id="reviewed" [(ngModel)]="reviewd" type="checkbox" name=""> <span class="m-2">تم المراجعة</span>
-            <button (click)="reviewFn()" class="btn btn-dark mt-2">تاكيد</button>
-        </div>
-        <div class="col-md-2 mt-2" *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management'">
-            <textarea class="form-control" [(ngModel)]="userReviewdNote" placeholder="ملحوظة مراجعة المستخدم" type="text"></textarea>
-            <input class="my-2" id="reviewed" [(ngModel)]="userReviewd" type="checkbox" name=""> <span class="m-2">تم المراجعة</span>
-            <button (click)="UserReviewFn()" class="btn btn-dark mt-2">تاكيد</button>
-        </div>
-        <div class="col-md-4 mt-2 text-center" *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management'">
-          <button class="btn bg-main" (click)="addTempReview(order?.id)">اضف مراجعة مؤقتة</button>
-          <button *ngIf="tempReviewNotification.length > 0 && user == 'Admin'" class="btn bg-success ml-5 " (click)="adminReadTempReview(order?.id)"><i class="fa-solid fa-check text-white"></i></button>
-
-          <div class="table-responsive">
-            <table class="table my-0 w-100">
-              <thead class="text-center notification-head">
-                <th>المراجعة</th>
-                <th>التاريخ</th>
-                <th>بواسطة</th>
-              </thead>
-            </table>
-            <div class="content">
-              <table class="table w-100 table-hover">
-                <tbody class="text-center">
-                  <tr *ngFor="let elm of tempReview">
-                    <td>{{elm?.review}}</td>
-                    <td>{{elm?.created_at | date:'YYYY-MM-dd'}}</td>
-                    <td>{{elm?.user.name}}</td>
-                  </tr>
-              </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-4" *ngIf="order?.reference_number || order?.reference_image">
-          <table class="table table-bordered text-center my-0">
-            <thead class=" notification-head">
-              <th>الرقم المرجعي</th>
-              <th>صورة الإيصال</th>
-            </thead>
-            <tbody>
-              <td>{{order?.reference_number}}</td>
-              <td><img (click)="showImg($event)" class="img-fluid cursor-pointer" style="width: 50px;" [src]="imgUrl+order?.reference_image"></td>
-            </tbody>
-          </table>
-        </div>
-      </div> <br>
-
-      <div class="row">
-        <div class="col-md-8 table-responsive" *ngIf="order?.order_products_archive.length > 0 && user == 'Admin'">
-          <button class="btn bg-main" (click)="toggleUpdatedProduct()">طلب معدل</button>
-          <table class="table table-bordered table-hover" *ngIf="oldProduct">
-            <thead>
-              <tr>
-                <th>اسم المنتج</th>
-                <th>الكمية المطلوبة</th>
-                <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
-                <th>سعر البيع</th>
-                <th>اجمالى سعر البيع</th>
-                <th>بواسطة</th>
-                <th>التاريخ</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let elm of order?.order_products_archive;">
-                <td>{{elm.category.category_name}}</td>
-                <td dir="ltr">{{elm.quantity}}</td>
-                <td *ngIf="order?.customer_type=='شركة'">{{elm.shipped_quantity}}</td>
-                <td dir="ltr">{{elm.price | customNumber}}</td>
-                <td dir="ltr">{{elm.total_price | customNumber}}</td>
-                <td>{{elm.updated_by}}</td>
-                <td>{{elm.created_at | customDate}}</td>
-            </tr>
-            </tbody>
-          </table>
-          <hr>
-        </div>
-
-        <div class="col-md-8 table-responsive">
-          <table class="table table-bordered table-hover">
-            <thead>
-              <tr>
-                <th>اسم المنتج</th>
-                <th>الكمية المطلوبة</th>
-                <!-- <th *ngIf="order?.customer_type=='شركة' && order?.order_status=='طلب جديد' || order?.order_status=='طلب مؤكد'">الكمية التي تم شحنها</th> -->
-                <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
-                <th>سعر البيع</th>
-                <th>اجمالى سعر البيع</th>
-                <th>صورة المنتج</th>
-                <th>  الرصيد</th>
-                <th *ngIf="special_order">خاص</th>
-                <th *ngIf="order?.customer_type=='شركة' && isShipCompany">كمية الشحن المطلوبة</th>
-                <!-- <th>a</th> -->
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let product of order_products; let i = index">
-                <td>{{product.category.category_name}}</td>
-                <td dir="ltr">{{product.quantity}}</td>
-                <!-- <td *ngIf="order?.customer_type=='شركة' && order.order_status=='طلب جديد' || order.order_status=='طلب مؤكد'">{{product.shipped_quantity}}</td> -->
-                <td *ngIf="order?.customer_type=='شركة'">{{product.shipped_quantity}}</td>
-                <td dir="ltr">{{product.price | customNumber}}</td>
-                <td dir="ltr">{{product.total_price | customNumber}}</td>
-                <td><img class="img-fluid" style="width: 50px;" [src]="imgUrl+product.category.category_image"></td>
-<td
-  [ngStyle]="{
+  <div class="col-md-8 table-responsive">
+   <table class="table table-bordered table-hover">
+    <thead>
+     <tr>
+      <th>اسم المنتج</th>
+      <th>كود المنتج</th>
+      <th>الكمية المطلوبة</th>
+      <!-- <th *ngIf="order?.customer_type=='شركة' && order?.order_status=='طلب جديد' || order?.order_status=='طلب مؤكد'">الكمية التي تم شحنها</th> -->
+      <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
+      <th>سعر البيع</th>
+      <th>اجمالى سعر البيع</th>
+      <th>صورة المنتج</th>
+      <th> الرصيد</th>
+      <th *ngIf="special_order">خاص</th>
+      <th *ngIf="order?.customer_type=='شركة' && isShipCompany">كمية الشحن المطلوبة</th>
+      <!-- <th>a</th> -->
+     </tr>
+    </thead>
+    <tbody>
+     <tr *ngFor="let product of order_products; let i = index">
+      <td>{{product.category.category_name}}</td>
+      <td>{{product.category.category_code}}</td>
+      <td dir="ltr">{{product.quantity}}</td>
+      <!-- <td *ngIf="order?.customer_type=='شركة' && order.order_status=='طلب جديد' || order.order_status=='طلب مؤكد'">{{product.shipped_quantity}}</td> -->
+      <td *ngIf="order?.customer_type=='شركة'">{{product.shipped_quantity}}</td>
+      <td dir="ltr">{{product.price | customNumber}}</td>
+      <td dir="ltr">{{product.total_price | customNumber}}</td>
+      <td><img class="img-fluid" style="width: 50px;" [src]="imgUrl+product.category.category_image"></td>
+      <td [ngStyle]="{
     'background-color':
       product.category.quantity < 0
         ? '#ffcccc'
         : product.category.quantity >= 0 && product.category.quantity <= 10
         ? '#ffe5b4'
         : '#ccffcc'
-  }"
->
-  {{ product.category.quantity }}
-</td>
+  }">
+       {{ product.category.quantity }}
+      </td>
 
-                <td class="special_details" *ngIf="special_order">{{product.special_details}}</td>
-                <td *ngIf="order?.customer_type=='شركة' && isShipCompany">
-                  <input class="form-control" *ngIf="!product.hideinput" [value]="product.requiredQuantity" (keyup)="shippedQuantity($event,product.id)" type="number">
-                  <p class="text-danger" *ngIf="product.requiredQuantity > ( product.quantity-product.shipped_quantity) ">الكمية المطلوبة اكبر من الموجود</p>
-                  <p class="text-success" *ngIf="product.quantity-product.shipped_quantity ==0 ">تم الشحن </p>
-                </td>
-            <!-- <td></td> -->
-            </tr>
-            </tbody>
-          </table>
-          <hr>
+      <td class="special_details" *ngIf="special_order">{{product.special_details}}</td>
+      <td *ngIf="order?.customer_type=='شركة' && isShipCompany">
+       <input class="form-control" *ngIf="!product.hideinput" [value]="product.requiredQuantity"
+        (keyup)="shippedQuantity($event,product.id)" type="number">
+       <p class="text-danger" *ngIf="product.requiredQuantity > ( product.quantity-product.shipped_quantity) ">الكمية
+        المطلوبة اكبر من الموجود</p>
+       <p class="text-success" *ngIf="product.quantity-product.shipped_quantity ==0 ">تم الشحن </p>
+      </td>
+      <!-- <td></td> -->
+     </tr>
+    </tbody>
+   </table>
+   <hr>
+  </div>
+
+  <div class="col-md-4 ">
+   <!-- <textarea disabled name="" id="" cols="31" rows="5" [placeholder]="order?.order_notes"></textarea> -->
+   <div class="text-center table-responsive w-100" *ngIf="user != 'Review Management'">
+    <button class="btn bg-main mb-2" (click)="addNote(order?.id)">اضف ملاحظة</button>
+
+    <table class="table w-100 my-0">
+     <thead>
+      <th>ملحوظة</th>
+      <th>بواسطة</th>
+     </thead>
+    </table>
+    <div class="content">
+     <table class="table w-100 table-hover">
+      <tbody>
+       <ng-container *ngFor="let item of notes">
+        <ng-container *ngIf="item?.note">
+         <tr *ngIf="item?.note !='null'" [ngClass]="item?.is_problem ? 'text-danger' : ''">
+          <td>{{item?.note}}</td>
+          <td>{{item?.user?.name}}</td>
+         </tr>
+        </ng-container>
+       </ng-container>
+      </tbody>
+     </table>
+    </div>
+
+   </div>
+   <div class="table-responsive mb-2">
+    <table class="table w-100 my-0 mt-3">
+     <thead class="text-center notification-head">
+      <th>رقم الاشعار</th>
+      <th>النوع</th>
+      <th>المرسل</th>
+      <th>المرسل اليه</th>
+      <th>الملاحظة</th>
+      <th>تاريخ الارسال</th>
+     </thead>
+    </table>
+    <div class="content">
+     <table class="table table-hover w-100">
+      <tbody class="text-center">
+       <tr *ngFor="let elm of notifications" [ngClass]="elm?.type=='مرتجع' ? 'text-danger' : ''">
+        <td>{{elm?.notification_number}}</td>
+        <td>{{elm?.type}}</td>
+        <td>{{elm?.sender?.name}}</td>
+        <td>{{elm?.receiver?.name}}</td>
+        <td>{{elm?.note}}</td>
+        <td>{{elm?.created_at | date:'dd/MM/yyyy' }}</td>
+       </tr>
+      </tbody>
+     </table>
+    </div>
+   </div>
+  </div>
+ </div>
+
+
+
+ <div class="row mb-4 text-center">
+
+  <div class="col-md-8 container-fluid table-responsive text-center ">
+   <table class="table table-bordered table-hover w-100">
+    <thead class="thead-dark">
+     <th>مصاريف الشحن</th>
+     <th *ngIf="order?.order_type == 'طلب صيانة'">مصاريف الصيانة</th>
+     <th *ngIf="order?.customer_type == 'شركة'">القيمة المضافة</th>
+     <th>اجمالى الفاتورة</th>
+     <th>مبلغ تحت الحساب </th>
+     <th *ngIf="order?.bank">الخزينة</th>
+     <th>الخصم</th>
+     <th>صافي القيمة</th>
+    </thead>
+    <tbody>
+     <td dir="ltr">{{order?.shipping_cost || 0 | customNumber }}</td>
+     <td *ngIf="order?.order_type == 'طلب صيانة'" dir="ltr">{{order?.order_details?.maintenance_cost || 0 | customNumber
+      }}</td>
+     <td dir="ltr" *ngIf="order?.customer_type == 'شركة'">{{order?.vat || 0 | customNumber }}</td>
+     <td dir="ltr">{{order?.total_invoice || 0 | customNumber}}</td>
+     <td dir="ltr">{{order?.prepaid_amount || 0 | customNumber}}</td>
+     <td *ngIf="order?.bank">{{order?.bank?.name}}</td>
+     <td dir="ltr">{{order?.discount || 0 | customNumber}}</td>
+     <td dir="ltr">{{order?.net_total || 0 | customNumber}}</td>
+    </tbody>
+   </table>
+  </div>
+
+  <div class="col-md-4 table-responsive">
+   <table class="table w-100 my-0 table-hover">
+    <thead>
+     <th>action</th>
+     <th>date</th>
+     <th>user</th>
+    </thead>
+   </table>
+   <div class="content">
+    <table class="table w-100 table-hover">
+     <tbody>
+      <tr *ngFor="let item of tracking">
+       <td>
+        <span [id]="item.id">{{item.action}}</span>
+       </td>
+       <td>
+        <div class="date">
+         <span [id]="item.id" (mouseenter)="showTime($event)" (mouseleave)="showTime($event)">{{item.date}} </span>
+         <span [id]="'date'+item.id" class="date-time d-none">{{item.created_at | date:'EEEE, hh:mm a'}}</span>
         </div>
+       </td>
+       <td>{{item.user.name}}</td>
 
-        <div class="col-md-4 ">
-          <!-- <textarea disabled name="" id="" cols="31" rows="5" [placeholder]="order?.order_notes"></textarea> -->
-            <div class="text-center table-responsive w-100" *ngIf="user != 'Review Management'">
-              <button class="btn bg-main mb-2" (click)="addNote(order?.id)">اضف ملاحظة</button>
-
-              <table class="table w-100 my-0">
-                <thead>
-                    <th>ملحوظة</th>
-                    <th>بواسطة</th>
-                </thead>
-              </table>
-              <div class="content">
-                <table class="table w-100 table-hover">
-                  <tbody>
-                    <ng-container *ngFor="let item of notes">
-                      <ng-container *ngIf="item?.note">
-                        <tr *ngIf="item?.note !='null'" [ngClass]="item?.is_problem ? 'text-danger' : ''">
-                          <td>{{item?.note}}</td>
-                          <td>{{item?.user?.name}}</td>
-                        </tr>
-                      </ng-container>
-                    </ng-container>
-                  </tbody>
-                </table>
-              </div>
-
-            </div>
-            <div class="table-responsive mb-2">
-              <table class="table w-100 my-0 mt-3">
-                <thead class="text-center notification-head">
-                  <th>رقم الاشعار</th>
-                  <th>النوع</th>
-                  <th>المرسل</th>
-                  <th>المرسل اليه</th>
-                  <th>الملاحظة</th>
-                  <th>تاريخ الارسال</th>
-                </thead>
-              </table>
-              <div class="content">
-                <table class="table table-hover w-100">
-                  <tbody class="text-center">
-                    <tr *ngFor="let elm of notifications" [ngClass]="elm?.type=='مرتجع' ? 'text-danger' : ''">
-                      <td>{{elm?.notification_number}}</td>
-                      <td>{{elm?.type}}</td>
-                      <td>{{elm?.sender?.name}}</td>
-                      <td>{{elm?.receiver?.name}}</td>
-                      <td>{{elm?.note}}</td>
-                      <td>{{elm?.created_at | date:'dd/MM/yyyy' }}</td>
-                    </tr>
-                </tbody>
-                </table>
-              </div>
-            </div>
-        </div>
-      </div>
+      </tr>
+     </tbody>
+    </table>
+   </div>
+  </div>
 
 
+ </div>
 
-      <div class="row mb-4 text-center">
+</div> <br>
 
-        <div class="col-md-8 container-fluid table-responsive text-center ">
-          <table class="table table-bordered table-hover w-100">
-            <thead class="thead-dark">
-              <th>مصاريف الشحن</th>
-              <th *ngIf="order?.order_type == 'طلب صيانة'">مصاريف الصيانة</th>
-              <th *ngIf="order?.customer_type == 'شركة'">القيمة المضافة</th>
-              <th>اجمالى الفاتورة</th>
-              <th>مبلغ تحت الحساب </th>
-              <th *ngIf="order?.bank">الخزينة</th>
-              <th>الخصم</th>
-              <th>صافي القيمة</th>
-            </thead>
-            <tbody>
-              <td dir="ltr">{{order?.shipping_cost || 0 | customNumber }}</td>
-              <td *ngIf="order?.order_type == 'طلب صيانة'" dir="ltr">{{order?.order_details?.maintenance_cost || 0 | customNumber }}</td>
-              <td dir="ltr" *ngIf="order?.customer_type == 'شركة'">{{order?.vat || 0 | customNumber }}</td>
-              <td dir="ltr">{{order?.total_invoice || 0 | customNumber}}</td>
-              <td dir="ltr">{{order?.prepaid_amount || 0 | customNumber}}</td>
-              <td *ngIf="order?.bank">{{order?.bank?.name}}</td>
-              <td dir="ltr">{{order?.discount || 0 | customNumber}}</td>
-              <td dir="ltr">{{order?.net_total || 0 | customNumber}}</td>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="col-md-4 table-responsive">
-          <table class="table w-100 my-0 table-hover">
-            <thead>
-                <th>action</th>
-                <th>date</th>
-                <th>user</th>
-            </thead>
-          </table>
-          <div class="content">
-            <table class="table w-100 table-hover">
-              <tbody>
-                <tr *ngFor="let item of tracking">
-                    <td>
-                      <span [id]="item.id">{{item.action}}</span>
-                    </td>
-                    <td>
-                      <div class="date">
-                        <span [id]="item.id"  (mouseenter)="showTime($event)" (mouseleave)="showTime($event)">{{item.date}} </span>
-                        <span [id]="'date'+item.id" class="date-time d-none">{{item.created_at | date:'EEEE, hh:mm a'}}</span>
-                      </div>
-                    </td>
-                    <td>{{item.user.name}}</td>
-
-                </tr>
-            </tbody>
-            </table>
-          </div>
-        </div>
-
-
-      </div>
-
-  </div> <br>
-
-<app-print-invoice class="d-none"  [data]="data"></app-print-invoice>
-<app-sticker class="d-none"  [sticker]="sticker"></app-sticker>
-
+<app-print-invoice class="d-none" [data]="data"></app-print-invoice>
+<app-sticker class="d-none" [sticker]="sticker"></app-sticker>
