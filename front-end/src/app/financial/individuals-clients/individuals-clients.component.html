@@ -4,7 +4,9 @@
       <app-time></app-time>
     </div>
     <div class="col-5">
-      <div><p class="title header w-50 m-auto">العملاء الافراد</p></div>
+      <div>
+        <p class="title header w-50 m-auto">العملاء الافراد</p>
+      </div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
       <!-- <app-time></app-time> -->
@@ -25,8 +27,12 @@
           <label for="">الى تاريخ</label>
           <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        <div class="col-md-4 d-flex align-items-end">
+          <input class="form-control border rounded-pill" type="search" placeholder="البحث..."
+            id="example-search-input">
+          <button class="btn btn-primary rounded-pill mx-2" type="submit">
+            بحث
+          </button>
         </div>
       </div>
     </form>
@@ -59,16 +65,16 @@
             </button>
             <mat-menu #menu="matMenu">
               <button mat-menu-item>
-                <a ><span>تفاصيل  الحساب</span></a>
+                <a><span>تفاصيل الحساب</span></a>
               </button>
               <button mat-menu-item>
-                <a ><span>تحصيل</span></a>
+                <a><span>تحصيل</span></a>
               </button>
               <button mat-menu-item>
-                <a ><span>مرتجع</span></a>
+                <a><span>مرتجع</span></a>
               </button>
               <button mat-menu-item>
-                <a ><span>شحن الطلب</span></a>
+                <a><span>شحن الطلب</span></a>
               </button>
             </mat-menu>
 
@@ -89,4 +95,4 @@
         </tr>
       </tfoot>
     </table>
-</div>
+  </div>

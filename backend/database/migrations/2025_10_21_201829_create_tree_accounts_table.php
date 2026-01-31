@@ -13,18 +13,20 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('tree_accounts', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('code')->unique();
-            $table->foreignId('parent_id')->nullable()->constrained('tree_accounts')->onDelete('cascade');
-            $table->enum('type', ['asset', 'liability', 'equity', 'revenue', 'expense']);
-            $table->tinyInteger('level')->default(1);
-            $table->decimal('balance', 15, 2)->default(0);
-            $table->timestamps();
-            $table->index('parent_id');
-            $table->index('type');
-        });
+        if (!Schema::hasTable('tree_accounts')) {
+            Schema::create('tree_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->string('code')->unique();
+                $table->foreignId('parent_id')->nullable()->constrained('tree_accounts')->onDelete('cascade');
+                $table->enum('type', ['asset', 'liability', 'equity', 'revenue', 'expense']);
+                $table->tinyInteger('level')->default(1);
+                $table->decimal('balance', 15, 2)->default(0);
+                $table->timestamps();
+                $table->index('parent_id');
+                $table->index('type');
+            });
+        }
     }
 
     /**

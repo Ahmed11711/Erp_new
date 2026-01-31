@@ -1,0 +1,135 @@
+.vouchers-container {
+    padding: 20px;
+    background-color: #f8f9fa;
+    min-height: 80vh;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.header-section h2 {
+    margin: 0;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.toolbar-section {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    flex-wrap: wrap;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+}
+
+.search-box i {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+}
+
+.search-box input {
+    padding-right: 40px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    height: 42px;
+}
+
+.vouchers-table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 0;
+}
+
+.vouchers-table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    color: #495057;
+    font-weight: 600;
+    padding: 15px;
+    white-space: nowrap;
+}
+
+.vouchers-table td {
+    padding: 12px 15px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f5;
+    color: #212529;
+}
+
+.code-badge {
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.description {
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.amount {
+    font-family: monospace;
+    font-weight: 600;
+    color: #2e7d32;
+}
+
+.user-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #495057;
+    font-size: 0.9em;
+}
+
+.actions-cell {
+    white-space: nowrap;
+}
+
+.actions-cell .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    margin-right: 4px;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #adb5bd;
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 15px;
+}

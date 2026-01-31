@@ -21,60 +21,60 @@ import { AuthService } from 'src/app/auth/auth.service';
   templateUrl: './add-order.component.html',
   styleUrls: ['./add-order.component.css']
 })
-export class AddOrderComponent implements OnInit{
-  user!:string;
-  shippingWays:any[]=[];
-  orderSources:any[]=[];
-  errormessage:boolean=false;
-  errorText:string='';
-  products:any[]=[];
-  numbers:any[]=[];
-  banksData:any[]=[]
+export class AddOrderComponent implements OnInit {
+  user!: string;
+  shippingWays: any[] = [];
+  orderSources: any[] = [];
+  errormessage: boolean = false;
+  errorText: string = '';
+  products: any[] = [];
+  numbers: any[] = [];
+  banksData: any[] = []
   imgUrl!: string;
-  specialStatus:boolean = false;
+  specialStatus: boolean = false;
 
-  constructor(private orderSource:OrderSourceService ,
-    private shippingWay:ShippingWayService ,
-    private orderService:OrderService ,
+  constructor(private orderSource: OrderSourceService,
+    private shippingWay: ShippingWayService,
+    private orderService: OrderService,
     private datePipe: DatePipe,
-    private bankService:BanksService,
-    private http:HttpClient,
-    private _snackBar:MatSnackBar,
-    private router:Router,
-    private companyService:CompaniesService,
+    private bankService: BanksService,
+    private http: HttpClient,
+    private _snackBar: MatSnackBar,
+    private router: Router,
+    private companyService: CompaniesService,
     private cdr: ChangeDetectorRef,
-    private dialog:MatDialog,
-    private authService:AuthService
-    ){
-      this.imgUrl = environment.imgUrl;
-    }
+    private dialog: MatDialog,
+    private authService: AuthService
+  ) {
+    this.imgUrl = environment.imgUrl;
+  }
 
-  ngOnInit(){
+  ngOnInit() {
     this.user = this.authService.getUser();
-    this.orderSource.data().subscribe(reuslt=>this.orderSources = reuslt);
-    this.orderService.getNumbers().subscribe((reuslt:any)=>this.numbers = reuslt);
-    this.shippingWay.data().subscribe(result=>this.shippingWays = result);
-    this.orderService.getProducts().subscribe((result:any)=>this.products = result);
-    this.bankService.bankSelect().subscribe((result:any)=>this.banksData=result);
+    this.orderSource.data().subscribe(reuslt => this.orderSources = reuslt);
+    this.orderService.getNumbers().subscribe((reuslt: any) => this.numbers = reuslt);
+    this.shippingWay.data().subscribe(result => this.shippingWays = result);
+    this.orderService.getProducts().subscribe((result: any) => this.products = result);
+    this.bankService.bankSelect().subscribe((result: any) => this.banksData = result);
 
-    this.http.get('assets/egypt/governorates.json').subscribe((data:any)=>this.location=data);
-    this.http.get('assets/egypt/cities.json').subscribe((data:any)=>{
-      this.cities = data.filter((elem:any)=>elem.governorate_id == 1);
+    this.http.get('assets/egypt/governorates.json').subscribe((data: any) => this.location = data);
+    this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
+      this.cities = data.filter((elem: any) => elem.governorate_id == 1);
     });
 
     this.form.patchValue({
       customer_type: 'افراد',
-      order_type:'جديد',
-      governorate:'المحافظة',
-      order_source_id:'مصدر الطلب',
-      shipping_method_id:'طريقة الشحن',
-      city:'المدينة'
+      order_type: 'جديد',
+      governorate: 'المحافظة',
+      order_source_id: 'مصدر الطلب',
+      shipping_method_id: 'طريقة الشحن',
+      city: 'المدينة'
 
     });
   }
 
-  customerTypeVal :string = 'افراد';
-  customerType(e:any){
+  customerTypeVal: string = 'افراد';
+  customerType(e: any) {
     this.customerTypeVal = e.target.value;
     if (this.customerTypeVal === 'شركة') {
       this.vatPercent = 14;
@@ -83,8 +83,8 @@ export class AddOrderComponent implements OnInit{
       this.form.get('customer_phone_2')?.reset();
       this.form.get('address')?.reset();
       this.form.patchValue({
-        'governorate' : 'المحافظة',
-        'city' : 'المدينة'
+        'governorate': 'المحافظة',
+        'city': 'المدينة'
       });
       this.getCompanies();
     } else {
@@ -96,8 +96,8 @@ export class AddOrderComponent implements OnInit{
       this.form.get('customer_phone_2')?.reset();
       this.form.get('address')?.reset();
       this.form.patchValue({
-        'governorate' : 'المحافظة',
-        'city' : 'المدينة'
+        'governorate': 'المحافظة',
+        'city': 'المدينة'
       });
       this.governName = false;
     }
@@ -107,22 +107,22 @@ export class AddOrderComponent implements OnInit{
   }
 
   //govern and city
-  location:any[]=[];
-  cities:any[]=[];
-  governName:boolean=false;
+  location: any[] = [];
+  cities: any[] = [];
+  governName: boolean = false;
 
-  govern(event){
+  govern(event) {
     if (event.target.value == "القاهرة") {
       this.governName = true;
-    } else{
+    } else {
       this.governName = false;
     }
   }
   //end
 
   dateSelected = false;
-  date:any;
-  deliveryDate:any;
+  date: any;
+  deliveryDate: any;
 
   myFilter = (d: Date | null): boolean => {
     const today = new Date();
@@ -138,25 +138,25 @@ export class AddOrderComponent implements OnInit{
     return timeDifference <= 0;
   };
 
-  OnDateChange(event){
+  OnDateChange(event) {
     const inputDate = new Date(event);
     this.date = this.datePipe.transform(inputDate, 'yyyy-M-d');
     this.dateSelected = true;
   }
 
-  OnDeliveryDateChange(event){
+  OnDeliveryDateChange(event) {
     const inputDate = new Date(event);
     this.deliveryDate = this.datePipe.transform(inputDate, 'yyyy-M-d');
   }
 
-  imgtext:string="صورة الايصال"
-  fileopend:boolean=false;
+  imgtext: string = "صورة الايصال"
+  fileopend: boolean = false;
 
   openFileInput() {
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
       fileInput.click();
-      this.fileopend=true;
+      this.fileopend = true;
     }
   }
 
@@ -167,41 +167,41 @@ export class AddOrderComponent implements OnInit{
   }
 
 
-  form:FormGroup = new FormGroup({
-    'bank' :new FormControl(null),
-    'productprice' :new FormControl(null ),
-    'productquantity' :new FormControl(null ),
-    'customer_name' :new FormControl(null  , [Validators.required ]),
-    'customer_type' :new FormControl(null , [Validators.required ]),
-    'customer_phone_1' :new FormControl(null , [Validators.required , Validators.pattern('^01\\d{9}$')]),
-    'customer_phone_2' :new FormControl(null , [Validators.pattern('^01\\d{9}$')]),
-    'tel' :new FormControl(null),
-    'governorate' :new FormControl(null , [Validators.required ]),
-    'city' :new FormControl(null ),
-    'address' :new FormControl(null , [Validators.required ]),
-    'order_date' :new FormControl(null , [Validators.required ]),
-    'delivery_date' :new FormControl(null),
-    'shipping_method_id' :new FormControl(null , [Validators.required ]),
-    'order_source_id' :new FormControl(null , [Validators.required ]),
-    'order_notes' :new FormControl(null ),
-    'order_image' :new FormControl(null),
-    'order_type' :new FormControl(null , [Validators.required ]),
-    'total_invoice' :new FormControl(null ),
-    'shipping_cost' :new FormControl(null ),
-    'prepaid_amount' :new FormControl(null ),
-    'discount' :new FormControl(null),
-    'net_total' :new FormControl(null),
-    'name' : new FormControl(null),
-    'vat' : new FormControl(null),
-    'maintenance_cost' : new FormControl(null),
-    'special_details' : new FormControl(null),
+  form: FormGroup = new FormGroup({
+    'bank': new FormControl(null),
+    'productprice': new FormControl(null),
+    'productquantity': new FormControl(null),
+    'customer_name': new FormControl(null, [Validators.required]),
+    'customer_type': new FormControl(null, [Validators.required]),
+    'customer_phone_1': new FormControl(null, [Validators.required, Validators.pattern('^01\\d{9}$')]),
+    'customer_phone_2': new FormControl(null, [Validators.pattern('^01\\d{9}$')]),
+    'tel': new FormControl(null),
+    'governorate': new FormControl(null, [Validators.required]),
+    'city': new FormControl(null),
+    'address': new FormControl(null, [Validators.required]),
+    'order_date': new FormControl(null, [Validators.required]),
+    'delivery_date': new FormControl(null),
+    'shipping_method_id': new FormControl(null, [Validators.required]),
+    'order_source_id': new FormControl(null, [Validators.required]),
+    'order_notes': new FormControl(null),
+    'order_image': new FormControl(null),
+    'order_type': new FormControl(null, [Validators.required]),
+    'total_invoice': new FormControl(null),
+    'shipping_cost': new FormControl(null),
+    'prepaid_amount': new FormControl(null),
+    'discount': new FormControl(null),
+    'net_total': new FormControl(null),
+    'name': new FormControl(null),
+    'vat': new FormControl(null),
+    'maintenance_cost': new FormControl(null),
+    'special_details': new FormControl(null),
   })
 
-  async submitform(){
+  async submitform() {
 
     if (this.form.valid) {
       let data = this.form.value;
-      data.shipping_cost = this.shipping_cost?this.shipping_cost:0;
+      data.shipping_cost = this.shipping_cost ? this.shipping_cost : 0;
       data.total_invoice = this.totalInvoice;
       data.prepaid_amount = this.prepaid_amount || 0;
       data.discount = this.discount || 0;
@@ -241,18 +241,18 @@ export class AddOrderComponent implements OnInit{
       formData.append('discount', data.discount);
       formData.append('net_total', data.net_total);
       // formData.append('order_details', JSON.stringify(this.order_details));
-    const salesTotal = this.order_details.reduce((acc, item) => acc + Number(item.total), 0);
+      const salesTotal = this.order_details.reduce((acc, item) => acc + Number(item.total), 0);
 
       // إضافة التفاصيل والمجموع للفورم داتا
       formData.append('order_details', JSON.stringify(this.order_details));
-      formData.append('Sales', salesTotal.toString()); 
+      formData.append('Sales', salesTotal.toString());
       formData.append('tax_authority', tax_authority.toString());
- 
+
       if (this.selectedFile) {
         formData.append('order_image', this.selectedFile, this.selectedFile.name);
       }
 
-      if (this.companyID !== 0 ) {
+      if (this.companyID !== 0) {
         formData.append('company_id', data.companyID);
       }
 
@@ -285,15 +285,15 @@ export class AddOrderComponent implements OnInit{
               return 'يجب ادخال قيمة'
             }
             if (value !== '') {
-                formData.append('maintenReason', value);
+              formData.append('maintenReason', value);
 
-                this.orderService.postOrder(formData).subscribe(result=>{
-                  console.log(result);
+              this.orderService.postOrder(formData).subscribe(result => {
+                console.log(result);
 
-                  this.router.navigate(['/dashboard/shipping/listorders']);
-                },
-                (error)=>{
-                  this.errormessage=true
+                this.router.navigate(['/dashboard/shipping/listorders']);
+              },
+                (error) => {
+                  this.errormessage = true
                   console.log(error);
                   this.errorText = error;
                 });
@@ -302,16 +302,36 @@ export class AddOrderComponent implements OnInit{
           }
         })
       } else {
-        this.orderService.postOrder(formData).subscribe(result=>{
+        this.orderService.postOrder(formData).subscribe(result => {
           console.log(result);
 
           this.router.navigate(['/dashboard/shipping/listorders']);
         },
-        (error)=>{
-          this.errormessage=true
-          console.log(error);
-          this.errorText = error;
-        });
+          (error) => {
+            this.errormessage = true
+            console.error(error);
+
+            if (error.error && error.error.errors) {
+              // Laravel Validation Errors
+              const errors = error.error.errors;
+              let messages: string[] = [];
+              for (const key in errors) {
+                if (errors.hasOwnProperty(key)) {
+                  messages.push(`${key}: ${errors[key].join(', ')}`);
+                }
+              }
+              this.errorText = messages.join(' | ');
+            } else if (error.error && error.error.message) {
+              // Generic API Error
+              this.errorText = error.error.message;
+            } else if (error.message) {
+              // HTTP Error
+              this.errorText = error.message;
+            } else {
+              // Fallback
+              this.errorText = "حدث خطأ غير معروف";
+            }
+          });
       }
 
     }
@@ -319,7 +339,7 @@ export class AddOrderComponent implements OnInit{
 
 
   getLocation() {
-    fetch('http://api.ipify.org/?format=json').then(result=>result.json()).then(data=>{
+    fetch('http://api.ipify.org/?format=json').then(result => result.json()).then(data => {
       console.log(data.ip);
     })
     if (navigator.geolocation) {
@@ -351,22 +371,22 @@ export class AddOrderComponent implements OnInit{
     }
   }
 
-  showmsg(){
-  const snackBarRef = this._snackBar.openFromComponent(SnackBarComponent, {
+  showmsg() {
+    const snackBarRef = this._snackBar.openFromComponent(SnackBarComponent, {
       duration: 2000,
     });
     snackBarRef.instance.message = 'تم اضافة الصنف بنجاح  ';
   }
 
-  special(){
+  special() {
     this.specialStatus = !this.specialStatus;
     this.form.patchValue({
-      'special_details' : null
+      'special_details': null
     });
   }
 
-  orderStatus:string = 'جديد' ;
-  status(event:any){
+  orderStatus: string = 'جديد';
+  status(event: any) {
     this.orderStatus = event.target.value;
     this.order_details = [];
     this.productsPrice = 0;
@@ -378,13 +398,13 @@ export class AddOrderComponent implements OnInit{
   }
 
   // -----------------------------fill table
-  category_name!:string;
-  category_quantity!:number;
-  category_price!:number;
-  category_image!:string;
-  category_id!:string;
+  category_name!: string;
+  category_quantity!: number;
+  category_price!: number;
+  category_image!: string;
+  category_id!: string;
 
-  order_details:any[]=[];
+  order_details: any[] = [];
 
   catword = 'category_name';
   productChange(event) {
@@ -395,45 +415,45 @@ export class AddOrderComponent implements OnInit{
   }
 
   catword2 = 'name';
-  companies:any[]=[];
-  selectedCompany:boolean=false;
-  companyID:number=0;
-  getCompanies(){
-    this.companyService.data().subscribe(result=>this.companies=result);
+  companies: any[] = [];
+  selectedCompany: boolean = false;
+  companyID: number = 0;
+  getCompanies() {
+    this.companyService.data().subscribe(result => this.companies = result);
   }
   companyChange(event) {
     this.selectedCompany = true;
     this.companyID = event.id;
     if (event.city) {
-      this.governName =true;
+      this.governName = true;
       this.form.patchValue({
-        'city' : event.city,
+        'city': event.city,
       })
     } else {
-      this.governName =false;
+      this.governName = false;
       this.form.patchValue({
-        'city' : 'المدينة',
+        'city': 'المدينة',
       })
     }
     if (event.phone2 !== 'null') {
       this.form.patchValue({
-        'customer_phone_2' : event.phone2,
+        'customer_phone_2': event.phone2,
       })
     }
     if (event.tel !== 'null') {
       this.form.patchValue({
-        'tel' : event.tel,
+        'tel': event.tel,
       })
     }
     this.form.patchValue({
-      'customer_name' : event.name,
-      'customer_phone_1' : event.phone1,
-      'governorate' : event.governorate,
-      'address' : event.address,
+      'customer_name': event.name,
+      'customer_phone_1': event.phone1,
+      'governorate': event.governorate,
+      'address': event.address,
     })
   }
 
-  resetcompany(){
+  resetcompany() {
     this.selectedCompany = false;
     this.companyID = 0;
 
@@ -442,17 +462,17 @@ export class AddOrderComponent implements OnInit{
     this.form.get('customer_phone_2')?.reset();
     this.form.get('address')?.reset();
     this.form.patchValue({
-      'governorate' : 'المحافظة',
-      'city' : 'المدينة'
+      'governorate': 'المحافظة',
+      'city': 'المدينة'
     });
     this.governName = false;
   }
 
   catword3 = 'customer_phone_1';
-  filteredNumbers:any = [];
-  editPhone(phone){
+  filteredNumbers: any = [];
+  editPhone(phone) {
     this.form.patchValue({
-      'customer_phone_1' : phone
+      'customer_phone_1': phone
     });
     if (phone.length > 4) {
       this.filteredNumbers = this.numbers.filter(item =>
@@ -463,36 +483,36 @@ export class AddOrderComponent implements OnInit{
   phoneChange(event) {
     console.log(event);
 
-    if (event.governorate =='القاهرة') {
-      this.governName =true;
+    if (event.governorate == 'القاهرة') {
+      this.governName = true;
       this.form.patchValue({
-        'city' : event.city,
+        'city': event.city,
       })
     } else {
-      this.governName =false;
+      this.governName = false;
       this.form.patchValue({
-        'city' : 'المدينة',
+        'city': 'المدينة',
       })
     }
     this.form.patchValue({
-      'customer_name' : event?.customer_name,
-      'customer_phone_1' : event?.customer_phone_1.replace(/\s+/g, ''),
-      'governorate' : event?.governorate,
-      'address' : event?.address,
+      'customer_name': event?.customer_name,
+      'customer_phone_1': event?.customer_phone_1.replace(/\s+/g, ''),
+      'governorate': event?.governorate,
+      'address': event?.address,
     });
     if (event.customer_phone_2 !== "null") {
       this.form.patchValue({
-        'customer_phone_2' : event.customer_phone_2,
+        'customer_phone_2': event.customer_phone_2,
       });
     }
     if (event.tel !== "null") {
       this.form.patchValue({
-        'tel' : event?.tel,
+        'tel': event?.tel,
       });
     }
   }
 
-  resetphone(){
+  resetphone() {
     this.filteredNumbers = [];
     this.form.get('customer_name')?.reset();
     this.form.get('customer_phone_1')?.reset();
@@ -500,14 +520,14 @@ export class AddOrderComponent implements OnInit{
     this.form.get('tel')?.reset();
     this.form.get('address')?.reset();
     this.form.patchValue({
-      'governorate' : 'المحافظة',
-      'city' : 'المدينة'
+      'governorate': 'المحافظة',
+      'city': 'المدينة'
     });
   }
 
   openDialog(): void {
     const dialogRef = this.dialog.open(DialogAddCompanyComponent, {
-      width: '25%',data: {refreshData: ()=>this.getCompanies()},
+      width: '25%', data: { refreshData: () => this.getCompanies() },
     });
 
     dialogRef.afterClosed().subscribe(result => {
@@ -515,85 +535,85 @@ export class AddOrderComponent implements OnInit{
     });
   }
 
-  changeProductPrice(e:any){
+  changeProductPrice(e: any) {
     this.category_price = e.target.value;
   }
 
-  productsPrice:number=0;
-  addproduct(type:string){
+  productsPrice: number = 0;
+  addproduct(type: string) {
     if (this.category_name && this.category_quantity && this.category_price) {
       let productQuantity = 0;
-      let productTotal =0;
-      if(type=='مرتجع'){
+      let productTotal = 0;
+      if (type == 'مرتجع') {
         productQuantity = -this.category_quantity;
-        productTotal = this.category_price*this.category_quantity*-1;
-      }else if(type=='طلب صيانة'){
+        productTotal = this.category_price * this.category_quantity * -1;
+      } else if (type == 'طلب صيانة') {
         productQuantity = this.category_quantity;
         productTotal = 0;
       }
-      else{
+      else {
         productQuantity = this.category_quantity;
-        productTotal = this.category_price*this.category_quantity;
+        productTotal = this.category_price * this.category_quantity;
       }
       const product = {
         category_id: this.category_id,
         category_name: this.category_name,
-        quantity:productQuantity,
-        price : this.category_price ,
-        imgsrc:this.category_image,
-        total : productTotal,
-        special_details:this.form.value.special_details
+        quantity: productQuantity,
+        price: this.category_price,
+        imgsrc: this.category_image,
+        total: productTotal,
+        special_details: this.form.value.special_details
       }
       this.order_details.push(product);
       this.productsPrice = 0;
-      this.order_details.forEach(elm=>{
+      this.order_details.forEach(elm => {
         this.productsPrice += elm.total
       })
       this.calc(arguments);
     }
   }
 
-  totalInvoice:number=0;
-  net_total:number=0;
-  vat:number=0;
-  vatPercent:number=0;
-  shipping_cost:number=0;
-  prepaid_amount:number=0;
-  maintenanceAmount:number=0;
-  discount:number=0;
-  changedVat:boolean=false;
- 
+  totalInvoice: number = 0;
+  net_total: number = 0;
+  vat: number = 0;
+  vatPercent: number = 0;
+  shipping_cost: number = 0;
+  prepaid_amount: number = 0;
+  maintenanceAmount: number = 0;
+  discount: number = 0;
+  changedVat: boolean = false;
 
-  calc(e:any){
+
+  calc(e: any) {
     // this.totalInvoice = (this.productsPrice + this.shipping_cost) * (1+this.vatPercent/100);
     this.totalInvoice = (this.productsPrice + this.shipping_cost + this.maintenanceAmount);
     if (e?.target?.id == 'vat') {
       this.changedVat = true;
     }
     if (!this.changedVat) {
-      this.vat = this.totalInvoice * this.vatPercent/100;
+      this.vat = this.totalInvoice * this.vatPercent / 100;
     }
     this.totalInvoice = this.totalInvoice + this.vat;
     this.net_total = this.totalInvoice - this.prepaid_amount - this.discount;
   }
-  
-get totalSum(): number {
-  if (!this.order_details) return 0;
 
-   const sum = this.order_details.reduce((acc, product) => acc + product.total, 0);
+  get totalSum(): number {
+    if (!this.order_details) return 0;
 
-   const afterDiscount = sum - (this.discount || 0);
+    const sum = this.order_details.reduce((acc, product) => acc + product.total, 0);
 
-   return afterDiscount * 0.01;
-}
+    const afterDiscount = sum - (this.discount || 0);
 
-
+    return afterDiscount * 0.01;
+  }
 
 
-  removeProduct(i:number){
-    this.order_details.splice(i,1);
+
+
+  removeProduct(i: number) {
+    this.order_details.splice(i, 1);
     this.productsPrice = 0;
-    this.order_details.forEach(elm=>{
+    this.order_details.forEach(elm => {
       this.productsPrice += elm.total
     })
     this.calc(arguments);
@@ -601,7 +621,7 @@ get totalSum(): number {
   //-------------------------------------------------end table
 
 
-  resetInp(){
+  resetInp() {
     this.form.get('productprice')?.reset();
   }
 

@@ -13,14 +13,16 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::table('categories', function (Blueprint $table) {
-                 $table->foreignId('stock_id')
-            ->nullable()
-            ->constrained('stocks')
-            ->nullOnDelete();
-
-
-        });
+        if (Schema::hasTable('categories') && Schema::hasTable('stocks')) {
+            Schema::table('categories', function (Blueprint $table) {
+                if (!Schema::hasColumn('categories', 'stock_id')) {
+                    $table->foreignId('stock_id')
+                        ->nullable()
+                        ->constrained('stocks')
+                        ->nullOnDelete();
+                }
+            });
+        }
     }
 
     /**
@@ -30,8 +32,15 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::table('categories', function (Blueprint $table) {
-            //
-        });
+        if (Schema::hasTable('categories') && Schema::hasColumn('categories', 'stock_id')) {
+            Schema::table('categories', function (Blueprint $table) {
+                try {
+                    $table->dropForeign(['stock_id']);
+                } catch (\Exception $e) {
+                    // Foreign key might not exist, ignore
+                }
+                $table->dropColumn('stock_id');
+            });
+        }
     }
 };

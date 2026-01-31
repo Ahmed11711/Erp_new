@@ -1,0 +1,96 @@
+<div class="container-fluid vouchers-container">
+  <div class="row">
+    <div class="col-12">
+      <!-- Header Section -->
+      <div class="header-section">
+        <h2>{{ title }}</h2>
+        <div class="actions">
+          <button class="btn btn-primary" title="إنشاء سند جديد" (click)="openDialog()">
+            <i class="fas fa-plus"></i> إضافة سند
+          </button>
+          <button class="btn btn-outline-secondary ml-2" (click)="refresh()" title="تحديث">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar Section -->
+      <div class="toolbar-section">
+        <div class="search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" class="form-control" placeholder="بحث برقم السند، الاسم أو الملاحظات..."
+            [(ngModel)]="searchQuery" (input)="filterVouchers()">
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div class="loading-spinner" *ngIf="loading">
+        <div class="spinner-border text-primary" role="status">
+          <span class="sr-only">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="table-responsive" *ngIf="!loading">
+        <table class="table table-hover vouchers-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>رقم السند</th>
+              <th>النوع</th>
+              <th>{{ voucherType === 'client' ? 'العميل' : 'المورد' }}</th>
+              <th>التاريخ</th>
+              <th>المبلغ</th>
+              <th>الملاحظات</th>
+              <th>بواسطة</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let voucher of filteredVouchers">
+              <td>{{ voucher.id }}</td>
+              <td>
+                <span class="code-badge">{{ voucher.reference_number || '-' }}</span>
+              </td>
+              <td>
+                <span class="badge"
+                  [ngClass]="{'badge-success': voucher.type === 'receipt', 'badge-danger': voucher.type === 'payment'}">
+                  {{ voucher.type === 'receipt' ? 'قبض' : 'صرف' }}
+                </span>
+              </td>
+              <td>{{ voucher.client_or_supplier_name || '-' }}</td>
+              <td>{{ voucher.date | date:'yyyy-MM-dd' }}</td>
+              <td class="amount">{{ calculateTotal(voucher) | number:'1.2-2' }}</td>
+              <td class="description">{{ voucher.notes || '-' }}</td>
+              <td>
+                <span class="user-badge">
+                  <i class="fas fa-user-circle"></i>
+                  {{ voucher.user?.name || 'غير معروف' }}
+                </span>
+              </td>
+              <td class="actions-cell">
+                <button class="btn btn-sm btn-info" title="عرض التفاصيل" (click)="viewVoucher(voucher)">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-primary ml-1" title="تعديل" (click)="editVoucher(voucher)">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-secondary ml-1" title="طباعة" (click)="printVoucher(voucher)">
+                  <i class="fas fa-print"></i>
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="filteredVouchers.length === 0" class="empty-row">
+              <td colspan="9">
+                <div class="empty-state">
+                  <i class="fas fa-file-invoice-dollar"></i>
+                  <p>لا توجد سندات تطابق بحثك</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

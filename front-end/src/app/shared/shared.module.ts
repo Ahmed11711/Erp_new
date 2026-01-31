@@ -35,7 +35,8 @@ import { MatDialogModule } from '@angular/material/dialog';
     CustomDatePipe,
     CustomDayNamePipe,
     FixedTimePipe,
-    AngularEditorComponent
+    AngularEditorComponent,
+    MatDialogModule
   ],
 })
 export class SharedModule { }

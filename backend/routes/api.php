@@ -113,6 +113,7 @@ Route::middleware('auth')->group(function () {
   Route::apiResource('expense_kind', App\Http\Controllers\ExpenseKindController::class);
 
   Route::apiResource('assets', App\Http\Controllers\AssetController::class);
+  Route::post('assets/run-depreciation', [App\Http\Controllers\DepreciationController::class, 'runDepreciation']); // New Route
   Route::apiResource('cimmitments', App\Http\Controllers\CimmitmentController::class);
   Route::apiResource('incomes', App\Http\Controllers\IncomeController::class);
  });
@@ -306,6 +307,72 @@ Route::get('transactions/by-customer-order/search', [OrdersController::class, 'a
 Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
 // new
 Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
+
+// Accounting Routes
+Route::prefix('accounting/')->middleware('auth')->group(function () {
+    // Vouchers
+    Route::prefix('vouchers/')->group(function () {
+        Route::get('/', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'store']);
+        Route::get('/{id}', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'destroy']);
+    });
+
+    // Cost Centers
+    Route::prefix('cost-centers/')->group(function () {
+        Route::get('/', [App\Http\Controllers\V2\Accounting\CostCenterController::class, 'index']);
+        Route::get('/tree', [App\Http\Controllers\V2\Accounting\CostCenterController::class, 'tree']);
+        Route::post('/', [App\Http\Controllers\V2\Accounting\CostCenterController::class, 'store']);
+        Route::get('/{id}', [App\Http\Controllers\V2\Accounting\CostCenterController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\V2\Accounting\CostCenterController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\CostCenterController::class, 'destroy']);
+    });
+
+    // Safes
+    Route::prefix('safes/')->group(function () {
+        Route::get('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'store']);
+        Route::post('/transfer', [App\Http\Controllers\V2\Accounting\SafeController::class, 'transfer']);
+        Route::get('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'destroy']);
+    });
+
+    // Daily Entries
+    Route::prefix('daily-entries/')->group(function () {
+        Route::get('/', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'store']);
+        Route::get('/{id}', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'destroy']);
+    });
+
+    // Banks
+    Route::prefix('banks/')->group(function () {
+        Route::get('/', [App\Http\Controllers\V2\Accounting\BankController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\V2\Accounting\BankController::class, 'store']);
+        Route::post('/transfer', [App\Http\Controllers\V2\Accounting\BankController::class, 'transfer']);
+        Route::post('/direct-transaction', [App\Http\Controllers\V2\Accounting\BankController::class, 'directTransaction']);
+        Route::get('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'destroy']);
+    });
+
+    // Capitals
+    Route::prefix('capitals/')->group(function () {
+        Route::get('/', [App\Http\Controllers\V2\Accounting\CapitalController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\V2\Accounting\CapitalController::class, 'store']);
+    });
+
+    // Reports
+    Route::prefix('reports/')->group(function () {
+        Route::get('/daily-ledger', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'dailyLedger']);
+        Route::get('/account-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountBalance']);
+        Route::get('/trial-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'trialBalance']);
+        Route::get('/accounting-tree', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountingTree']);
+    });
+});
 
 Route::prefix('report/')->group(function () {
  Route::get('order', [ReportOrderController::class, 'AllOrder']);

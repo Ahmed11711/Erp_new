@@ -1,0 +1,177 @@
+<div class="banks-container">
+  <div class="header-section">
+    <h2>البنوك</h2>
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="openAddDialog()">
+        <i class="fas fa-plus"></i> إضافة بنك
+      </button>
+      <button class="btn btn-secondary" (click)="openTransferDialog()">
+        <i class="fas fa-exchange-alt"></i> تحويل مالي
+      </button>
+    </div>
+  </div>
+
+  <div class="loading-spinner" *ngIf="loading">
+    <p>جاري التحميل...</p>
+  </div>
+
+  <div class="list-container" *ngIf="!loading">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>اسم البنك</th>
+          <th>النوع</th>
+          <th>الاستخدام</th>
+          <th>الرصيد</th>
+          <th>الحساب المرتبط</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let bank of banks">
+          <td>{{ bank.name }}</td>
+          <td>{{ bank.type }}</td>
+          <td>{{ bank.usage }}</td>
+          <td>{{ bank.balance | number:'1.2-2' }}</td>
+          <td>{{ bank.asset ? bank.asset.name : '-' }}</td>
+          <td>
+            <button class="btn btn-sm btn-info" (click)="openEditDialog(bank)">تعديل</button>
+            <button class="btn btn-sm btn-danger" (click)="deleteBank(bank.id)"
+              [disabled]="bank.balance != 0">حذف</button>
+            <button class="btn btn-sm btn-success" (click)="openTransferDialog(bank)">تحويل</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div *ngIf="banks.length === 0" class="empty-state">
+      <p>لا يوجد بنوك مضافة.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Add Dialog -->
+<div class="modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>إضافة بنك جديد</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>اسم البنك *</label>
+        <input type="text" class="form-control" [(ngModel)]="newBank.name">
+      </div>
+      <!-- <div class="form-group">
+        <label>النوع</label>
+        <input type="text" class="form-control" [(ngModel)]="newBank.type" placeholder="مثال: جاري، توفير">
+      </div> -->
+      <div class="form-group">
+        <label>الوصف/الاستخدام</label>
+        <input type="text" class="form-control" [(ngModel)]="newBank.usage">
+      </div>
+      <div class="form-group">
+        <label>الرصيد الافتتاحي</label>
+        <input type="number" class="form-control" [(ngModel)]="newBank.balance">
+      </div>
+      <div class="form-group">
+        <label>الحساب المرتبط (شجرة الحسابات) *</label>
+        <select class="form-control" [(ngModel)]="newBank.asset_id">
+          <option [ngValue]="null">اختر الحساب</option>
+          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveBank()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Dialog -->
+<div class="modal-overlay" *ngIf="showEditDialog && selectedBank" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>تعديل بيانات البنك</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>اسم البنك *</label>
+        <input type="text" class="form-control" [(ngModel)]="selectedBank.name">
+      </div>
+      <!-- <div class="form-group">
+        <label>النوع</label>
+        <input type="text" class="form-control" [(ngModel)]="selectedBank.type">
+      </div> -->
+      <div class="form-group">
+        <label>الوصف/الاستخدام</label>
+        <input type="text" class="form-control" [(ngModel)]="selectedBank.usage">
+      </div>
+      <div class="form-group">
+        <label>الحساب المرتبط *</label>
+        <select class="form-control" [(ngModel)]="selectedBank.asset_id">
+          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="updateBank()">تحديث</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transfer Dialog -->
+<div class="modal-overlay" *ngIf="showTransferDialog" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>تحويل مالي</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>نوع التحويل</label>
+        <select class="form-control" [(ngModel)]="transferData.type">
+          <option value="transfer_bank_to_bank">من بنك إلى بنك</option>
+          <!-- Safes options will be enabled when we support Safes in dropdown -->
+          <!-- <option value="transfer_bank_to_safe">من بنك إلى خزينة</option>
+                <option value="transfer_safe_to_bank">من خزينة إلى بنك</option> -->
+        </select>
+      </div>
+
+      <div class="form-group" *ngIf="transferData.type == 'transfer_bank_to_bank'">
+        <label>من بنك</label>
+        <select class="form-control" [(ngModel)]="transferData.from_id">
+          <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }} ({{bank.balance}})</option>
+        </select>
+      </div>
+
+      <div class="form-group" *ngIf="transferData.type == 'transfer_bank_to_bank'">
+        <label>إلى بنك</label>
+        <select class="form-control" [(ngModel)]="transferData.to_id">
+          <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }}</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>المبلغ</label>
+        <input type="number" class="form-control" [(ngModel)]="transferData.amount">
+      </div>
+
+      <div class="form-group">
+        <label>التاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="transferData.date">
+      </div>
+
+      <div class="form-group">
+        <label>ملاحظات</label>
+        <textarea class="form-control" [(ngModel)]="transferData.notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-success" (click)="submitTransfer()">إتمام التحويل</button>
+    </div>
+  </div>
+</div>

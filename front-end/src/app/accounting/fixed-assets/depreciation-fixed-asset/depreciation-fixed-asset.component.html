@@ -1,0 +1,24 @@
+<div class="container-fluid">
+    <div class="header mb-4">
+        <h2>إهلاك الأصول الثابتة</h2>
+    </div>
+
+    <div class="card p-4">
+        <div class="alert alert-info">
+            <p>سيقوم هذا الإجراء بحساب وإثبات الإهلاك لجميع الأصول الحالية للشهر الحالي.</p>
+            <p>سيتم إنشاء قيد يومية لكل أصل: من ح/ مصروف الإهلاك إلى ح/ مجمع الإهلاك.</p>
+        </div>
+
+        <button class="btn btn-warning btn-lg" (click)="runDepreciation()" [disabled]="loading">
+            <span *ngIf="loading">جاري التشغيل...</span>
+            <span *ngIf="!loading">تشغيل الإهلاك الآن</span>
+        </button>
+
+        <div *ngIf="logs.length > 0" class="mt-4">
+            <h5>سجل العمليات:</h5>
+            <ul class="list-group">
+                <li *ngFor="let log of logs" class="list-group-item">{{ log }}</li>
+            </ul>
+        </div>
+    </div>
+</div>

@@ -36,12 +36,23 @@ public function store(Request $request): JsonResponse
 {
     $validated = $request->validate([
         'name' => 'required|string',
+        'name_en' => 'nullable|string',
         'parent_id' => 'nullable|exists:tree_accounts,id',
         'type' => 'required|in:asset,liability,equity,revenue,expense',
-        'balance' => 'sometimes'
+        'account_type' => 'nullable|in:رئيسي,فرعي,مستوى أول',
+        'budget_type' => 'nullable|string',
+        'is_trading_account' => 'nullable|boolean',
+        'balance' => 'sometimes|numeric',
+        'debit_balance' => 'sometimes|numeric',
+        'credit_balance' => 'sometimes|numeric',
+        'previous_year_amount' => 'nullable|string',
+        'main_account_id' => 'nullable|exists:tree_accounts,id',
     ]);
 
     $validated['balance'] = $validated['balance'] ?? 0.00;
+    $validated['debit_balance'] = $validated['debit_balance'] ?? 0.00;
+    $validated['credit_balance'] = $validated['credit_balance'] ?? 0.00;
+    $validated['is_trading_account'] = $validated['is_trading_account'] ?? false;
 
     DB::transaction(function () use (&$validated) {
 

@@ -205,46 +205,121 @@ class SupplierController extends Controller
                 'amount' => 'required|numeric|min:0',
             ]);
 
-        $pay = SupplierPay::create([
-            'bank_id' => request('bank'),
-            'amount' => request('amount'),
-            'supplier_id' => $id,
-            'receipt_date' => date('Y-m-d')
-        ]);
+        DB::beginTransaction();
+        try {
+            $pay = SupplierPay::create([
+                'bank_id' => request('bank'),
+                'amount' => request('amount'),
+                'supplier_id' => $id,
+                'receipt_date' => date('Y-m-d')
+            ]);
+    
+            $supplier = Supplier::find($id);
+            $supplier->last_balance = $supplier->balance;
+            $supplier->balance -= $amount;
+            
+            // ---------------------------------------------------------
+            // 1. Ensure Supplier Tree Account Exists
+            // ---------------------------------------------------------
+            if (!$supplier->tree_account_id) {
+                // Auto-create Account
+                $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%الموردين%')->first(); 
+                if (!$parentAccount) {
+                    $parentAccount = \App\Models\TreeAccount::firstOrCreate(
+                        ['name' => 'الموردين'],
+                        ['type' => 'liability', 'balance' => 0, 'code' => '2100'] 
+                    );
+                }
 
+                $newAccount = \App\Models\TreeAccount::create([
+                    'name' => $supplier->supplier_name ?? 'Supplier ' . $supplier->id,
+                    'parent_id' => $parentAccount->id,
+                    'code' => $parentAccount->code . $supplier->id,
+                    'type' => 'liability',
+                    'balance' => 0,
+                    'debit_balance' => 0,
+                    'credit_balance' => 0,
+                ]);
+                
+                $supplier->tree_account_id = $newAccount->id;
+            }
+            $supplier->save(); // Save balance and tree_id
+            
+            // ---------------------------------------------------------
+            // 2. Operational Updates (Legacy)
+            // ---------------------------------------------------------
+            DB::table('supplier_balance')->insert([
+                'supplierpay_id' => $pay->id,
+                'balance_before' => $supplier->last_balance,
+                'balance_after' => $supplier->balance,
+                'user_id'=> auth()->user()->id
+            ]);
+    
+            $bank = Bank::find($bankId);
+            $paid = (double)$amount;
+            $balance =(double) $bank->balance;
+            $bank->balance= $balance- $paid;
+            $bank->save();
+    
+            DB::table('bank_details')->insert([
+                'bank_id' => $bankId,
+                'details' => ' سداد المورد '.$supplier->supplier_name.' بقيمة '.$amount.'ج',
+                'ref' => $pay->pay_number,
+                'type' => "سداد",
+                'amount' => (double)$amount,
+                'balance_before' => $balance,
+                'balance_after' => $bank->balance,
+                'date' => date('Y-m-d'),
+                'created_at' => now(),
+                'user_id'=> auth()->user()->id
+            ]);
 
-        $supplier = Supplier::find($id);
-        $supplier->last_balance = $supplier->balance;
-        $supplier->balance -= $amount;
-        $supplier->save();
+            // ---------------------------------------------------------
+            // 3. Accounting Entries
+            // ---------------------------------------------------------
+            // Debit: Supplier (Liability decrease)
+            // Credit: Bank (Asset decrease)
+            
+            $supplierTreeId = $supplier->tree_account_id;
+            $bankTreeId = $bank->asset_id;
 
-        DB::table('supplier_balance')->insert([
-            'supplierpay_id' => $pay->id,
-            'balance_before' => $supplier->last_balance,
-            'balance_after' => $supplier->balance,
-            'user_id'=> auth()->user()->id
-        ]);
+            if ($bankTreeId) {
+                // Create Debit Entry (Supplier)
+                \App\Models\AccountEntry::create([
+                    'tree_account_id' => $supplierTreeId,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'description' => "سداد مورد - " . $supplier->supplier_name,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $supplierAcc = \App\Models\TreeAccount::find($supplierTreeId);
+                $supplierAcc->increment('debit_balance', $amount);
+                // Liability: Balance = Credit - Debit
+                $supplierAcc->decrement('balance', $amount); 
+                
+                // Create Credit Entry (Bank)
+                \App\Models\AccountEntry::create([
+                    'tree_account_id' => $bankTreeId,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => "سداد مورد - " . $supplier->supplier_name,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $bankAcc = \App\Models\TreeAccount::find($bankTreeId);
+                $bankAcc->increment('credit_balance', $amount);
+                // Asset: Balance = Debit - Credit
+                $bankAcc->decrement('balance', $amount);
+            }
 
-        $bank = Bank::find($bankId);
-        $paid = (double)$amount;
-        $balance =(double) $bank->balance;
-        $bank->balance= $balance- $paid;
-        $bank->save();
+            DB::commit();
+            return response()->json(['message' => 'success'], 200);
 
-        DB::table('bank_details')->insert([
-            'bank_id' => $bankId,
-            'details' => ' سداد المورد '.$supplier->supplier_name.' بقيمة '.$amount.'ج',
-            'ref' => $pay->pay_number,
-            'type' => "سداد",
-            'amount' => (double)$amount,
-            'balance_before' => $balance,
-            'balance_after' => $bank->balance,
-            'date' => date('Y-m-d'),
-            'created_at' => now(),
-            'user_id'=> auth()->user()->id
-        ]);
-
-        return response()->json(['message' => 'success'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
+        }
     }
 
 

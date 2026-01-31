@@ -234,12 +234,7 @@ class OrdersController extends Controller
             }
 
             $action = 'طلب جديد';
-            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                $order->id,
-                $action,
-                $user_id,
-                now()
-            ]);
+            $this->insertTracking($order->id, $action, $user_id, now());
 
             if ($request->customer_type == 'شركة' && $request->has('company_id')) {
                 DB::table('customer_companies')->where('id', $request->company_id)->increment('number_of_orders', 1);
@@ -248,12 +243,7 @@ class OrdersController extends Controller
                     $bankName  = Bank::find($request->bank);
 
                     $action = ' مبلغ تحت الحساب  ' . $request->prepaid_amount . ' في حساب ' . $bankName->name;
-                    DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                        $order->id,
-                        $action,
-                        $user_id,
-                        now()
-                    ]);
+                    $this->insertTracking($order->id, $action, $user_id, now());
 
                     $company_id = $order->company_id;
                     $amount = (float)-$request->prepaid_amount;
@@ -276,13 +266,7 @@ class OrdersController extends Controller
             if ($request->has('order_notes') && $request->order_notes != '') {
                 $note = $request->input('order_notes');
                 $added_from = 'الاضافة';
-                DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                    $order->id,
-                    $user_id,
-                    $note,
-                    $added_from,
-                    now()
-                ]);
+            $this->insertNote($order->id, $user_id, $note, $added_from, now());
             }
 
             if ($request->has('prepaid_amount') && $request->prepaid_amount != '' && $request->prepaid_amount != 0) {
@@ -290,16 +274,10 @@ class OrdersController extends Controller
                 $details = 'مبلغ تحت الحساب';
                 $ref = $order->id;
                 $type = 'الطلبات';
-                DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                    $bank_id,
-                    $amount,
-                    $order->id,
-                    $user_id,
-                    $details,
-                    $ref,
-                    $type,
-                    now()
-                ]);
+                $this->updateBankBalance($bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+
+                // Accounting Logic for Down Payment
+                $this->handleDownPaymentAccounting($order, $amount, $bank_id, $details);
             }
 
             DB::commit();
@@ -414,16 +392,7 @@ class OrdersController extends Controller
                     $details = ' مبلغ تحت الحساب من تعديل الطلب رقم ' . $order->id;
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                        $bank->id,
-                        $amount,
-                        $order->id,
-                        auth()->user()->id,
-                        $details,
-                        $ref,
-                        $type,
-                        now()
-                    ]);
+                    $this->updateBankBalance($bank->id, $amount, $order->id, auth()->user()->id, $details, $ref, $type, now());
                 }
             }
 
@@ -439,23 +408,12 @@ class OrdersController extends Controller
             }
 
             $action = 'تعديل الطلب';
-            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                $id,
-                $action,
-                auth()->user()->id,
-                now()
-            ]);
+            $this->insertTracking($id, $action, auth()->user()->id, now());
 
             if ($request->has('order_notes') && $request->order_notes != '') {
                 $note = $request->order_notes;
                 $added_from = 'تعديل الطلب';
-                DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                    $order->id,
-                    auth()->user()->id,
-                    $note,
-                    $added_from,
-                    now()
-                ]);
+            $this->insertNote($order->id, auth()->user()->id, $note, $added_from, now());
             }
 
             $order_details = OrderDetails::where('order_id', $id)->first();
@@ -515,16 +473,7 @@ class OrdersController extends Controller
                     $details = ' تحصيل من شركة شحن ' . $shipping_company->name . ' لرفض استلام طلب ';
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                        $request->bank,
-                        $amount,
-                        $order->id,
-                        $user_id,
-                        $details,
-                        $ref,
-                        $type,
-                        now()
-                    ]);
+                    $this->updateBankBalance($request->bank, $amount, $order->id, $user_id, $details, $ref, $type, now());
                 }
 
                 if ($request->getorder == 'true') {
@@ -583,23 +532,12 @@ class OrdersController extends Controller
 
 
                 $action = 'رفض استلام';
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {
                     $note = $request->note;
                     $added_from = 'رفض استلام';
-                    DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                        $order->id,
-                        $user_id,
-                        $note,
-                        $added_from,
-                        now()
-                    ]);
+                    $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
 
                 $admin  = User::where('department', 'admin')->first();
@@ -651,12 +589,7 @@ class OrdersController extends Controller
                         $customer = customerCompany::find($order->company_id);
 
                         $action = ' خصم مبلغ ' . $request->amount . ' لالغاء الطلب ';
-                        DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                            $order->id,
-                            $action,
-                            $user_id,
-                            now()
-                        ]);
+                        $this->insertTracking($order->id, $action, $user_id, now());
 
                         $company_id = $order->company_id;
                         $amount = (float)$request->amount;
@@ -682,16 +615,7 @@ class OrdersController extends Controller
                                 $details = ' تحصيل مبلغ الغاء طلب رقم ' . $id . ' من عميل شركة ' . $customer->name;
                                 $ref = $order->id;
                                 $type = 'الطلبات';
-                                DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                                    $bank->id,
-                                    $amount,
-                                    $order->id,
-                                    $user_id,
-                                    $details,
-                                    $ref,
-                                    $type,
-                                    now()
-                                ]);
+                                $this->updateBankBalance($bank->id, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
                                 $company_id = $order->company_id;
                                 $amount = (float)- ($request->amount - $order->prepaid_amount);
@@ -721,16 +645,7 @@ class OrdersController extends Controller
                         $bank = null;
                         if ($request->moneyReturnedStatus === 'approved') {
                             $bank = $request->moneyReturnedBank;
-                            DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                                $bank,
-                                $amount,
-                                $order->id,
-                                $user_id,
-                                $details,
-                                $ref,
-                                $type,
-                                now()
-                            ]);
+                            $this->updateBankBalance($bank, $amount, $order->id, $user_id, $details, $ref, $type, now());
                         } else if ($request->moneyReturnedStatus === 'pending') {
                             $bank = $order->bank_id;
                             PendingBankBalance::create([
@@ -749,12 +664,7 @@ class OrdersController extends Controller
                 $order_details->status_date = date('Y-m-d');
 
                 $action = 'طلب ملغي';
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
                 $admin  = User::where('department', 'admin')->first();
 
                 if (auth()->id() !== $admin->id) {
@@ -771,13 +681,7 @@ class OrdersController extends Controller
                 if ($request->has('note') && $request->note != '') {
                     $note = $request->note;
                     $added_from = 'الغاء الطلب';
-                    DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                        $order->id,
-                        $user_id,
-                        $note,
-                        $added_from,
-                        now()
-                    ]);
+                    $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
             }
 
@@ -872,12 +776,7 @@ class OrdersController extends Controller
                             ]);
 
                             $action = ' خصم مبلغ ' . $request->amount . ' لرفض الاستلام ';
-                            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                                $order->id,
-                                $action,
-                                $user_id,
-                                now()
-                            ]);
+                            $this->insertTracking($order->id, $action, $user_id, now());
 
                             if ($request->bank > 0) {
                                 $bank = Bank::find($request->bank);
@@ -887,16 +786,7 @@ class OrdersController extends Controller
 
                                     $details = ' تحصيل مبلغ رفض استلام طلب رقم ' . $id . ' من عميل شركة ' . $customer->name;
                                     $type = 'الطلبات';
-                                    DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                                        $request->bank,
-                                        $amount,
-                                        $order->id,
-                                        $user_id,
-                                        $details,
-                                        $ref,
-                                        $type,
-                                        now()
-                                    ]);
+                                    $this->updateBankBalance($request->bank, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
                                     $amount = (float)- ($request->amount);
                                     $details = ' تحصيل مبلغ رفض استلام طلب رقم ' . $id . ' في خزينة ' . $bank->name;
@@ -920,23 +810,12 @@ class OrdersController extends Controller
                     $order_details->status_date = date('Y-m-d');
 
                     $action = 'رفض استلام';
-                    DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                        $order->id,
-                        $action,
-                        $user_id,
-                        now()
-                    ]);
+                    $this->insertTracking($order->id, $action, $user_id, now());
 
                     if ($request->has('note') && $request->note != '') {
                         $note = $request->note;
                         $added_from = 'رفض استلام';
-                        DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                            $order->id,
-                            $user_id,
-                            $note,
-                            $added_from,
-                            now()
-                        ]);
+                        $this->insertNote($order->id, $user_id, $note, $added_from, now());
                     }
 
                     $admin  = User::where('department', 'admin')->first();
@@ -1040,23 +919,12 @@ class OrdersController extends Controller
                 $order_details->postponed = $order_details->postponed + 1;
 
                 $action = 'طلب مؤجل';
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {
                     $note = $request->note;
                     $added_from = 'تاجيل الطلب';
-                    DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                        $order->id,
-                        $user_id,
-                        $note,
-                        $added_from,
-                        now()
-                    ]);
+                    $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
             } else if ($request->query('status') == 'archived') {
 
@@ -1074,23 +942,12 @@ class OrdersController extends Controller
                 $order_details->status_date = date('Y-m-d');
 
                 $action = 'طلب مؤرشف';
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {
                     $note = $request->note;
                     $added_from = 'ارشفة الطلب';
-                    DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                        $order->id,
-                        $user_id,
-                        $note,
-                        $added_from,
-                        now()
-                    ]);
+                    $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
             } else if ($request->query('status') == 'renew') {
                 if (!(in_array($order->order_status, ['رفض استلام', 'أرشيف', 'مؤجل', 'ملغي']))) {
@@ -1116,26 +973,12 @@ class OrdersController extends Controller
                     $ref = $order->id;
                     $type = 'الطلبات';
                     $bank_id = $request->renewBankId;
-                    DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                        $bank_id,
-                        $amount,
-                        $order->id,
-                        $user_id,
-                        $details,
-                        $ref,
-                        $type,
-                        now()
-                    ]);
+                    $this->updateBankBalance($bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
                     $bankName  = Bank::find($bank_id);
 
                     $action = ' مبلغ تحت الحساب  ' . $request->renewAmount . ' في حساب ' . $bankName->name . ' من تجديد الطلب ';
-                    DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                        $order->id,
-                        $action,
-                        $user_id,
-                        now()
-                    ]);
+                    $this->insertTracking($order->id, $action, $user_id, now());
 
                     if ($order->customer_type == 'شركة') {
                         $company_id = $order->company_id;
@@ -1161,23 +1004,12 @@ class OrdersController extends Controller
                 $order_details->status_date = date('Y-m-d');
 
                 $action = 'تم تجديد الطلب';
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {
                     $note = $request->note;
                     $added_from = 'تجديد الطلب';
-                    DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                        $order->id,
-                        $user_id,
-                        $note,
-                        $added_from,
-                        now()
-                    ]);
+                    $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
             }
 
@@ -1225,12 +1057,7 @@ class OrdersController extends Controller
             $order->save();
 
             $action = 'تم تاكيد الطلب';
-            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                $order->id,
-                $action,
-                $user_id,
-                now()
-            ]);
+            $this->insertTracking($order->id, $action, $user_id, now());
 
             if ($order->order_type == 'طلب صيانة') {
                 OrderMaintenReason::create([
@@ -1243,13 +1070,7 @@ class OrdersController extends Controller
             if ($request->has('note') && $request->note != '') {
                 $note = $request->note;
                 $added_from = 'تأكيد الطلب';
-                DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                    $order->id,
-                    $user_id,
-                    $note,
-                    $added_from,
-                    now()
-                ]);
+            $this->insertNote($order->id, $user_id, $note, $added_from, now());
             }
 
 
@@ -1429,12 +1250,7 @@ class OrdersController extends Controller
                     }
 
                     $action = 'تم شحن';
-                    DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                        $order->id,
-                        $action,
-                        $user_id,
-                        now()
-                    ]);
+                    $this->insertTracking($order->id, $action, $user_id, now());
 
                     $order->order_status = 'تم شحن';
                     $order->save();
@@ -1494,12 +1310,7 @@ class OrdersController extends Controller
                     }
 
                     $action = 'تم شحن جزء من الطلب';
-                    DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                        $order->id,
-                        $action,
-                        $user_id,
-                        now()
-                    ]);
+                    $this->insertTracking($order->id, $action, $user_id, now());
 
                     $order->order_status = 'شحن جزئي';
                     $order->save();
@@ -1537,12 +1348,7 @@ class OrdersController extends Controller
             if ($order->customer_type != 'شركة' && $order->order_type != 'جديد') {
 
                 $action = 'تم شحن الطلب';
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
 
                 $amount = $order->net_total;
 
@@ -1577,13 +1383,7 @@ class OrdersController extends Controller
             if ($request->has('note') && $request->note != '') {
                 $note = $request->note;
                 $added_from = 'شحن الطلب';
-                DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                    $order->id,
-                    $user_id,
-                    $note,
-                    $added_from,
-                    now()
-                ]);
+            $this->insertNote($order->id, $user_id, $note, $added_from, now());
             }
 
             if ($order->order_type == 'طلب صيانة') {
@@ -1649,13 +1449,7 @@ class OrdersController extends Controller
         $user_id = auth()->user()->id;
         $note = $request->value;
         $added_from = 'تفاصيل الطلب';
-        DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-            $order_id = $id,
-            $user_id,
-            $note,
-            $added_from,
-            now()
-        ]);
+        $this->insertNote($id, $user_id, $note, $added_from, now());
         return response()->json(['message' => 'success'], 200);
     }
 
@@ -1694,23 +1488,12 @@ class OrdersController extends Controller
             $order->save();
 
             $action = 'تم تحصيل الطلب';
-            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                $order->id,
-                $action,
-                $user_id,
-                now()
-            ]);
+            $this->insertTracking($order->id, $action, $user_id, now());
 
             if ($request->has('note') && $request->note != '') {
                 $note = $request->note;
                 $added_from = 'تحصيل الطلب';
-                DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                    $order->id,
-                    $user_id,
-                    $note,
-                    $added_from,
-                    now()
-                ]);
+            $this->insertNote($order->id, $user_id, $note, $added_from, now());
             }
 
             $shippingDetails = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
@@ -1743,16 +1526,7 @@ class OrdersController extends Controller
                     $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                        $request->bank_id,
-                        $amount,
-                        $order->id,
-                        $user_id,
-                        $details,
-                        $ref,
-                        $type,
-                        now()
-                    ]);
+                    $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
                 }
 
                 $company = CustomerCompany::find($order->company_id);
@@ -1761,16 +1535,7 @@ class OrdersController extends Controller
                     $details = ' تحصيل من عميل شركة ' . $company->name;
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                        $request->bank_id,
-                        $amount,
-                        $order->id,
-                        $user_id,
-                        $details,
-                        $ref,
-                        $type,
-                        now()
-                    ]);
+                    $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
                     $bank = Bank::find($request->bank_id);
 
@@ -1826,16 +1591,7 @@ class OrdersController extends Controller
                         $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
                         $ref = $request->id;
                         $type = 'الطلبات';
-                        DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                            $request->bank_id,
-                            $amount,
-                            $order->id,
-                            $user_id,
-                            $details,
-                            $ref,
-                            $type,
-                            now()
-                        ]);
+                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
                     }
                 } else {
                     $shipping_company = ShippingCompany::find($order->order_details->shipping_company_id);
@@ -1885,16 +1641,7 @@ class OrdersController extends Controller
                         $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
                         $ref = $request->id;
                         $type = 'الطلبات';
-                        DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                            $request->bank_id,
-                            $amount,
-                            $order->id,
-                            $user_id,
-                            $details,
-                            $ref,
-                            $type,
-                            now()
-                        ]);
+                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
                     }
                 }
 
@@ -1997,35 +1744,15 @@ class OrdersController extends Controller
                 $details = ' تحصيل جزئي من عميل شركة    ' . $company->name;
                 $ref = $order->id;
                 $type = 'الطلبات';
-                DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                    $request->bank_id,
-                    $amount,
-                    $order->id,
-                    $user_id,
-                    $details,
-                    $ref,
-                    $type,
-                    now()
-                ]);
+                $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
                 $action = ' تحصيل جزئي مبلغ ' . $request->amount . ' في حساب ' . $bank->name;
-                DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                    $order->id,
-                    $action,
-                    $user_id,
-                    now()
-                ]);
+                $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {
                     $note = $request->note;
                     $added_from = 'تحصيل جزئي';
-                    DB::statement('CALL insert_note(?, ?, ?, ?, ?)', [
-                        $order->id,
-                        $user_id,
-                        $note,
-                        $added_from,
-                        now()
-                    ]);
+                    $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
             }
 
@@ -2168,12 +1895,7 @@ class OrdersController extends Controller
             $order->save();
 
             $action = 'تم صيانة الطلب';
-            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                $order->id,
-                $action,
-                auth()->user()->id,
-                now()
-            ]);
+            $this->insertTracking($order->id, $action, auth()->user()->id, now());
 
             $order_details = OrderDetails::where('order_id', $id)->first();
             $order_details->maintenance_cost = $request->maintenance_cost;
@@ -2211,12 +1933,7 @@ class OrdersController extends Controller
             $order->order_status = 'تم الاستلام';
 
             $action = 'تم استلام الطلب';
-            DB::statement('CALL insert_tracking(?, ?, ?, ?)', [
-                $order->id,
-                $action,
-                $user_id,
-                now()
-            ]);
+            $this->insertTracking($order->id, $action, $user_id, now());
 
             $order_details = OrderDetails::where('order_id', $id)->first();
             $order_details->receiving_date = date('Y-m-d');
@@ -2291,16 +2008,7 @@ class OrdersController extends Controller
                 $details = ' تحصيل من شركة شحن ' . $shippingCompany->name . ' مصاريف شحن اوردر للصيانة ';
                 $ref = $id;
                 $type = 'الطلبات';
-                DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                    $request->bank,
-                    $amount,
-                    $order->id,
-                    $user_id,
-                    $details,
-                    $ref,
-                    $type,
-                    now()
-                ]);
+                $this->updateBankBalance($request->bank, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
                 $order->net_total = 0;
             } else {
@@ -2600,4 +2308,189 @@ class OrdersController extends Controller
 }
 
 
+    private function insertTracking($order_id, $action, $user_id, $created_at)
+    {
+        DB::table('trackings')->insert([
+            'order_id' => $order_id,
+            'date' => \Carbon\Carbon::parse($created_at)->toDateString(),
+            'action' => $action,
+            'user_id' => $user_id,
+            'created_at' => $created_at,
+            'updated_at' => $created_at
+        ]);
+    }
+
+    private function insertNote($order_id, $user_id, $note, $added_from, $created_at)
+    {
+        DB::table('notes')->insert([
+            'order_id' => $order_id,
+            'user_id' => $user_id,
+            'note' => $note,
+            'added_from' => $added_from,
+            'created_at' => $created_at,
+            'updated_at' => $created_at
+        ]);
+    }
+    private function updateBankBalance($bank_id, $amount, $order_id, $user_id, $details, $ref, $type, $created_at)
+    {
+        $bank = DB::table('banks')->where('id', $bank_id)->first();
+        if ($bank) {
+            $current_balance = $bank->balance;
+            $new_balance = $current_balance + $amount;
+
+            DB::table('banks')->where('id', $bank_id)->update(['balance' => $new_balance]);
+
+            DB::table('bank_details')->insert([
+                'bank_id' => $bank_id,
+                'details' => $details,
+                'ref' => $ref,
+                'type' => $type,
+                'amount' => $amount,
+                'balance_before' => $current_balance,
+                'balance_after' => $new_balance,
+                'date' => date('Y-m-d'),
+                'created_at' => $created_at,
+                'user_id' => $user_id
+            ]);
+        }
+    }
+
+    private function handleDownPaymentAccounting($order, $amount, $bankId, $note)
+    {
+        // 1. Bank/Safe Tree Account (Debit)
+        $bankTreeId = null;
+        $bank = \App\Models\Bank::find($bankId);
+        if ($bank && $bank->asset_id) {
+             $bankTreeId = $bank->asset_id;
+        } else {
+             $safe = \App\Models\Safe::find($bankId);
+             if ($safe && $safe->account_id) {
+                 $bankTreeId = $safe->account_id;
+             }
+        }
+        
+        if (!$bankTreeId) return;
+
+        // 2. Customer Tree Account (Credit)
+        $customerTreeId = null;
+        if ($order->customer_type == 'شركة' && $order->company_id) {
+            $company = \App\Models\customerCompany::find($order->company_id);
+            if ($company) {
+                if (!$company->tree_account_id) {
+                    // Create Tree Account for Company
+                    $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
+                    if (!$parentAccount) {
+                         $parentAccount = \App\Models\TreeAccount::firstOrCreate(
+                            ['name' => 'العملاء'],
+                            ['type' => 'asset', 'balance' => 0, 'code' => '1100'] 
+                        );
+                    }
+                    $checkCode = \App\Models\TreeAccount::where('code', $parentAccount->code . $company->id)->first();
+                     $newAccount = \App\Models\TreeAccount::create([
+                        'name' => $company->name,
+                        'parent_id' => $parentAccount->id,
+                        'code' => $checkCode ? $parentAccount->code . $company->id . rand(10,99) : $parentAccount->code . $company->id,
+                        'type' => 'asset',
+                        'balance' => 0
+                    ]);
+                    $company->tree_account_id = $newAccount->id;
+                    $company->save();
+                }
+                $customerTreeId = $company->tree_account_id;
+            }
+        } else {
+             // Individual Customer - Use generic "Individual Customers" account or create specific?
+             // Creating specific for every individual might bloat the tree. 
+             // But for consistency:
+             $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%عملاء افراد%')->first(); // Individual Customers
+             if (!$parentAccount) {
+                 $parentMain = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first(); // Customers
+                 if (!$parentMain) {
+                      $parentMain = \App\Models\TreeAccount::create(['name' => 'العملاء', 'type' => 'asset', 'code' => '1100', 'balance'=>0]);
+                 }
+                 $parentAccount = \App\Models\TreeAccount::create([
+                     'name' => 'عملاء افراد',
+                     'parent_id' => $parentMain->id,
+                     'code' => $parentMain->code . '999',
+                     'type' => 'asset',
+                     'balance' => 0
+                 ]);
+             }
+             
+             // Check if specific individual account exists (by phone)
+             // Using phone as identifier
+             $phone = $order->customer_phone_1;
+             $accName = $order->customer_name . ' - ' . $phone;
+             $indAccount = \App\Models\TreeAccount::where('name', $accName)->first();
+             if (!$indAccount) {
+                 $indAccount = \App\Models\TreeAccount::create([
+                     'name' => $accName,
+                     'parent_id' => $parentAccount->id,
+                     'code' => $parentAccount->code . substr($phone, -4) . rand(10,99),
+                     'type' => 'asset',
+                     'balance' => 0
+                 ]);
+             }
+             $customerTreeId = $indAccount->id;
+        }
+
+        if ($customerTreeId) {
+            // Generate Daily Entry
+             $lastEntry = \App\Models\DailyEntry::orderByDesc('entry_number')->first();
+             $entryNumber = $lastEntry ? (int)$lastEntry->entry_number + 1 : 1;
+ 
+             $dailyEntry = \App\Models\DailyEntry::create([
+                 'date' => now(),
+                 'entry_number' => str_pad($entryNumber, 6, '0', STR_PAD_LEFT),
+                 'description' => "دفعة مقدمة - طلب: " . $order->id . " - " . $note,
+                 'user_id' => auth()->id(),
+             ]);
+
+             // Debit Item (Bank/Safe)
+             \App\Models\DailyEntryItem::create([
+                'daily_entry_id' => $dailyEntry->id,
+                'account_id' => $bankTreeId,
+                'debit' => $amount,
+                'credit' => 0,
+                'notes' => "محصل في " . $bank->name ?? 'الخزينة',
+             ]);
+
+             // Credit Item (Customer)
+             \App\Models\DailyEntryItem::create([
+                'daily_entry_id' => $dailyEntry->id,
+                'account_id' => $customerTreeId,
+                'debit' => 0,
+                'credit' => $amount,
+                'notes' => "تحصيل من العميل",
+             ]);
+
+             // Debit AccountEntry
+            \App\Models\AccountEntry::create([
+                'tree_account_id' => $bankTreeId,
+                'debit' => $amount,
+                'credit' => 0,
+                'description' => "دفعة مقدمة - طلب: " . $order->id . " - " . $note,
+                'daily_entry_id' => $dailyEntry->id, // Link to Daily Entry
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $bankAcc = \App\Models\TreeAccount::find($bankTreeId);
+            $bankAcc->increment('debit_balance', $amount);
+            $bankAcc->increment('balance', $amount); // Asset increases
+
+            // Credit AccountEntry
+            \App\Models\AccountEntry::create([
+                'tree_account_id' => $customerTreeId,
+                'debit' => 0,
+                'credit' => $amount,
+                'description' => "دفعة مقدمة - طلب: " . $order->id . " - " . $note,
+                 'daily_entry_id' => $dailyEntry->id, // Link to Daily Entry
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $custAcc = \App\Models\TreeAccount::find($customerTreeId);
+            $custAcc->increment('credit_balance', $amount);
+            $custAcc->decrement('balance', $amount); // Asset decreases
+        }
+    }
 }

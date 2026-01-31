@@ -28,90 +28,125 @@ import { AssetSubCategoryComponent } from './asset-sub-category/asset-sub-catego
 import { AssetSubSubCategoryComponent } from './asset-sub-categoryEnd/asset-sub-category-end.component';
 import { ReportNewOrdersComponent } from './V2/report-new-order/report-new-order.component';
 import { ReportNewOrdersComponentDetails } from './V2/report-new-order-details/report-new-order-details.component';
- 
+
 
 const routes: Routes = [
-  {path:'banks', component:ListBanksComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'banks', component: ListBanksComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'addexpense', component:AddExpenseComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'addexpense', component: AddExpenseComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'editexpense/:id', component:EditexpenseComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'editexpense/:id', component: EditexpenseComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'expenses', component:ExpensesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'expenses', component: ExpensesComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'expenseskind', component:ExpensesKindComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'expenseskind', component: ExpensesKindComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'banks-movements', component:BanksMovementsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'banks-movements', component: BanksMovementsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'income-list', component:IncomeListComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'income-list', component: IncomeListComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'addincome', component:AddIncomeComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'addincome', component: AddIncomeComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'otherincome', component:OtherIncomeComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'otherincome', component: OtherIncomeComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'estates', component:EstatesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'estates', component: EstatesComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'estates/category/:id', component:AssetCategoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'estates/category/:id', component: AssetCategoryComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'estates/sub-category/:id', component:AssetSubCategoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'estates/sub-category/:id', component: AssetSubCategoryComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'estates/sub-category-end/:id', component:AssetSubSubCategoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'estates/sub-category-end/:id', component: AssetSubSubCategoryComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'addestate', component:AddEstateComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'addestate', component: AddEstateComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'discounts', component:DiscountsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'discounts', component: DiscountsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'addcimmitment', component:AddCommitmentComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'addcimmitment', component: AddCommitmentComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'individualsclients', component:IndividualsClientsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'individualsclients', component: IndividualsClientsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'covenant', component:CovenantComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'covenant', component: CovenantComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'addcovenant', component:AddCovenantComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'addcovenant', component: AddCovenantComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
-  {path:'expense_details/:id', component:ExpenseDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'expense_details/:id', component: ExpenseDetailsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'bank_details/:id', component:BankDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'bank_details/:id', component: BankDetailsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'customer-accounts', component:CustomerAccountsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'customer-accounts', component: CustomerAccountsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'report-order-new', component:ReportNewOrdersComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'report-order-new', component: ReportNewOrdersComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-   {path:'report-order-new-details', component:ReportNewOrdersComponentDetails,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'report-order-new-details', component: ReportNewOrdersComponentDetails,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'customer-accounts/customer-account-details', component:CustomerAccountDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'customer-accounts/customer-account-details', component: CustomerAccountDetailsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'supplier-accounts', component:SupplierAccountsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  {
+    path: 'supplier-accounts', component: SupplierAccountsComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   },
-  {path:'pendingBanks', component:PendingComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  {
+    path: 'pendingBanks', component: PendingComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin'] }
   },
+  {
+    path: 'cash',
+    loadChildren: () => import('./cash/cash.module').then(m => m.CashModule)
+  },
+  {
+    path: 'capitals',
+    loadChildren: () => import('./capitals/capitals.module').then(m => m.CapitalsModule)
+  }
 ];
 
 @NgModule({

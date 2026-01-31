@@ -1,0 +1,114 @@
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">تقرير دفتر اليومية</h3>
+        <div class="card-tools">
+          <button type="button" class="btn btn-primary" (click)="print()">
+            <i class="fas fa-print"></i> طباعة
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <!-- Filters -->
+        <form [formGroup]="filterForm" (ngSubmit)="search()">
+          <div class="row mb-4">
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>من تاريخ</label>
+                <input type="date" class="form-control" formControlName="date_from">
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>إلى تاريخ</label>
+                <input type="date" class="form-control" formControlName="date_to">
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-group">
+                <label>الحساب</label>
+                <input type="text" class="form-control" placeholder="بحث باسم الحساب..." [(ngModel)]="accountSearchTerm"
+                  [ngModelOptions]="{standalone: true}" (input)="filterAccounts()" list="accountsList">
+                <datalist id="accountsList">
+                  <option *ngFor="let acc of filteredAccounts" [value]="acc.name"></option>
+                </datalist>
+                <!-- Hidden select to actually bind the ID if needed, or we handle it via selection logic. 
+                                     For simplicity with datalist, we might need a better autocomplete. 
+                                     Let's use a standard select for now or a custom one if available. 
+                                     Reverting to standard select for reliability in this context. -->
+              </div>
+              <!-- Alternative Select -->
+              <select class="form-control" formControlName="account_id">
+                <option value="">كل الحسابات</option>
+                <option *ngFor="let acc of accounts" [value]="acc.id">
+                  {{ acc.code }} - {{ acc.name }}
+                </option>
+              </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button type="submit" class="btn btn-success w-100">
+                <i class="fas fa-search"></i> بحث
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <!-- Data Table -->
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>رقم القيد</th>
+                <th>الحساب</th>
+                <th>الوصف</th>
+                <th>مدين</th>
+                <th>دائن</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngIf="loading">
+                <td colspan="6" class="text-center">جاري التحميل...</td>
+              </tr>
+              <tr *ngFor="let entry of entries">
+                <td>{{ entry.created_at | date:'yyyy-MM-dd' }}</td>
+                <td>{{ entry.daily_entry_id }}</td>
+                <td>{{ entry.account?.name }}</td>
+                <td>{{ entry.description }}</td>
+                <td>{{ entry.debit | number:'1.2-2' }}</td>
+                <td>{{ entry.credit | number:'1.2-2' }}</td>
+              </tr>
+              <tr *ngIf="entries.length === 0 && !loading">
+                <td colspan="6" class="text-center">لا توجد بيانات</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="font-weight-bold bg-light">
+                <td colspan="4" class="text-center">الإجمالي</td>
+                <td>{{ totals.total_debit | number:'1.2-2' }}</td>
+                <td>{{ totals.total_credit | number:'1.2-2' }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <nav *ngIf="totalPages > 1" class="mt-4">
+          <ul class="pagination justify-content-center">
+            <li class="page-item" [class.disabled]="currentPage === 1">
+              <a class="page-link" href="javascript:void(0)" (click)="goToPage(currentPage - 1)">السابق</a>
+            </li>
+            <li class="page-item" *ngFor="let page of [].constructor(totalPages); let i = index"
+              [class.active]="currentPage === i + 1">
+              <a class="page-link" href="javascript:void(0)" (click)="goToPage(i + 1)">{{ i + 1 }}</a>
+            </li>
+            <li class="page-item" [class.disabled]="currentPage === totalPages">
+              <a class="page-link" href="javascript:void(0)" (click)="goToPage(currentPage + 1)">التالي</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>

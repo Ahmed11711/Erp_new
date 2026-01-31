@@ -1,0 +1,166 @@
+.general-accounts-container {
+    padding: 20px;
+    background-color: #f8f9fa;
+    min-height: 80vh;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.header-section h2 {
+    margin: 0;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.toolbar-section {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    flex-wrap: wrap;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+}
+
+.search-box i {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+}
+
+.search-box input {
+    padding-right: 40px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    height: 42px;
+}
+
+.filter-box select {
+    height: 42px;
+    border-radius: 6px;
+    min-width: 150px;
+    border: 1px solid #dee2e6;
+}
+
+.accounts-table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 0;
+}
+
+.accounts-table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    color: #495057;
+    font-weight: 600;
+    padding: 15px;
+    white-space: nowrap;
+}
+
+.accounts-table td {
+    padding: 12px 15px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f5;
+    color: #212529;
+}
+
+.code-badge {
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.account-name {
+    font-weight: 500;
+}
+
+/* Type Badges */
+.type-badge {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.type-asset {
+    background-color: #e3f2fd;
+    color: #1976d2;
+}
+
+.type-liability {
+    background-color: #ffebee;
+    color: #c62828;
+}
+
+.type-equity {
+    background-color: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.type-revenue {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.type-expense {
+    background-color: #fff3e0;
+    color: #ef6c00;
+}
+
+.balance {
+    font-family: monospace;
+    font-weight: 600;
+    color: #2e7d32;
+}
+
+.balance.negative {
+    color: #c62828;
+}
+
+.status-badge.trading {
+    background-color: #fff8e1;
+    color: #ffa000;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #adb5bd;
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 15px;
+}

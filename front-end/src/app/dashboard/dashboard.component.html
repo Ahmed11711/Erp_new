@@ -154,79 +154,327 @@
                     </mat-nav-list>
                 </mat-expansion-panel>
 
+                <!-- المحاسبة -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                <!-- <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="permission && permission.includes('read financial')"> -->
                     <mat-expansion-panel-header>
                     <mat-icon>account_balance</mat-icon>
                         الحسابات
                     </mat-expansion-panel-header>
                     <mat-nav-list>
-                        <a mat-list-item routerLink="/dashboard/financial/addexpense" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>اضافة مصروف</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/expenses" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>المصروفات</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/expenseskind" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>فئات المصروفات</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/banks" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>البنوك والخزينه ووسائل الدفع</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/customer-accounts" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>حسابات العملاء</span>
-                        </a>
+                        <!-- الحسابات العامة -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management'">
+                            <mat-expansion-panel-header>
+                                <span>الحسابات العامة</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <!-- الشجرة المحاسبية -->
+                                <a mat-list-item routerLink="/dashboard/accounting/accounting-tree" routerLinkActive="active">
+                                    <span>الشجرة المحاسبية</span>
+                                </a>
+                                <!-- دليل الحسابات -->
+                                <a mat-list-item routerLink="/dashboard/financial/estates" routerLinkActive="active" *ngIf="user == 'Admin'">
+                                    <span>دليل الحسابات</span>
+                                </a>
+                                <!-- مراكز التكلفة -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>مراكز التكلفة</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/accounting/cost-centers" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management'">
+                                            <span>قائمة مراكز التكلفة</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/accounting/cost-centers/tree" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management'">
+                                            <span>شجرة مراكز التكلفة</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
- <a mat-list-item routerLink="/dashboard/financial/report-order-new" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>  تقرير الاوردرات</span>
-                        </a>
+                        <!-- السندات -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management'">
+                            <mat-expansion-panel-header>
+                                <span>السندات</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <a mat-list-item routerLink="/dashboard/accounting/vouchers/clients" routerLinkActive="active">
+                                    <span>السندات للعملاء</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/vouchers/suppliers" routerLinkActive="active">
+                                    <span>السندات للموردين</span>
+                                </a>
+                                <!-- <a mat-list-item routerLink="/dashboard/accounting/vouchers/electronic-stamp" routerLinkActive="active" *ngIf="user == 'Admin'">
+                                    <span>الختم الإلكتروني</span>
+                                </a> -->
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
+                        <!-- حسابات العملاء والموردين -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            <mat-expansion-panel-header>
+                                <span>حسابات العملاء والموردين</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <!-- حسابات العملاء -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>حسابات العملاء</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/customer-accounts" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>حسابات العملاء</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/individualsclients" routerLinkActive="active" *ngIf="user == 'Admin'">
+                                            <span>العملاء الافراد</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/report-order-new" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>تقرير الاوردرات</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- حسابات الموردين -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>حسابات الموردين</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/supplier-accounts" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>حسابات الموردين</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
+                        <!-- البنوك والخزن -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            <mat-expansion-panel-header>
+                                <span>البنوك والخزن</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <!-- الخزن -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>الخزن</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/accounting/safes" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>قائمة خزائن الشركة</span>
+                                        </a>
+                                        <!-- <a mat-list-item routerLink="/dashboard/accounting/safes/transfer" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>تحويل بين الخزن</span>
+                                        </a> -->
+                                        <a mat-list-item routerLink="/dashboard/financial/banks-movements" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>حركة خزينة المصنع</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- البنوك -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>البنوك</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                    
+                                        <a mat-list-item routerLink="/dashboard/accounting/banks" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>قائمة البنوك الحاليين</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/banks" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>البنوك والخزينه ووسائل الدفع</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/accounting/banks/deposit-withdraw" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>سحب وإيداع نقدي</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/accounting/banks/transfer" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>تحويل بين البنوك</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/accounting/banks/transfer-to-safe" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>تحويل من بنك إلى خزينة</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/accounting/banks/transfer-from-safe" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>تحويل من خزينة إلى بنك</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/pendingBanks" routerLinkActive="active" *ngIf="user == 'Admin'">
+                                            <span>قيد الإنتظار</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
+                        <!-- الماليات -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            <mat-expansion-panel-header>
+                                <span>الماليات</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <!-- المصاريف -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>المصاريف</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/expenses/fixed" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>المصاريف الثابتة</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/addexpense" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>تسجيل مصاريف جديدة</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/expenses" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>عرض المصاريف</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- تسجيل دفع نقدي -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>تسجيل دفع نقدي</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/cash/receive-from-client" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>استلام نقدية من عميل</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/cash/give-to-client" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>إعطاء سلفة إلى عميل</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/cash/pay-to-supplier" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>دفع نقدي إلى مورد</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/cash/receive-from-supplier" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>أخذ سلفة من مورد</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- تسجيل دفع بنكي -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                    <mat-expansion-panel-header>
+                                        <span>تسجيل دفع بنكي</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/bank/receive-from-client" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>دفع بنكي من عميل</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/bank/pay-to-supplier" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>دفع بنكي إلى مورد</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- إدارة رأس المال -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                                    <mat-expansion-panel-header>
+                                        <span>إدارة رأس المال</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/capitals/create" routerLinkActive="active">
+                                            <span>إضافة مبلغ رأس مال</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/capitals" routerLinkActive="active">
+                                            <span>مبالغ رأس المال المضافة</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- الايرادات -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                                    <mat-expansion-panel-header>
+                                        <span>الإيرادات</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/addincome" routerLinkActive="active">
+                                            <span>اضافة ايراد</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/otherincome" routerLinkActive="active">
+                                            <span>الايرادات الاخري</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- الالتزامات والعهد -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                                    <mat-expansion-panel-header>
+                                        <span>الالتزامات والعهد</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/discounts" routerLinkActive="active">
+                                            <span>الخصومات الاتزامات</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/addcimmitment" routerLinkActive="active">
+                                            <span>اضافة التزام</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/covenant" routerLinkActive="active">
+                                            <span>العهد</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/addcovenant" routerLinkActive="active">
+                                            <span>صرف العهد</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                                <!-- دفعات النقدية السابقة -->
+                                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                    <mat-expansion-panel-header>
+                                        <span>دفعات النقدية السابقة</span>
+                                    </mat-expansion-panel-header>
+                                    <mat-nav-list>
+                                        <a mat-list-item routerLink="/dashboard/financial/cash/previous/clients" routerLinkActive="active">
+                                            <span>دفعات نقدية من العملاء</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/financial/cash/previous/suppliers" routerLinkActive="active">
+                                            <span>دفعات نقدية إلى الموردين</span>
+                                        </a>
+                                    </mat-nav-list>
+                                </mat-expansion-panel>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
+                        <!-- الأصول الثابتة -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management'">
+                            <mat-expansion-panel-header>
+                                <span>الأصول الثابتة</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <a mat-list-item routerLink="/dashboard/accounting/fixed-assets" routerLinkActive="active">
+                                    <span>الأصول</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/fixed-assets/create" routerLinkActive="active">
+                                    <span>إضافة أصل</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/fixed-assets/depreciation" routerLinkActive="active">
+                                    <span>الإهلاك</span>
+                                </a>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
+                        <!-- القيود اليومية -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management'">
+                            <mat-expansion-panel-header>
+                                <span>القيود اليومية</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <!-- <a mat-list-item routerLink="/dashboard/accounting/daily-entries/create" routerLinkActive="active">
+                                    <span>إضافة قيد يومية</span>
+                                </a> -->
+                                <a mat-list-item routerLink="/dashboard/accounting/daily-entries" routerLinkActive="active">
+                                    <span>عرض كل القيود اليومية</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/daily-ledger-report" routerLinkActive="active">
+                                    <span>تقرير دفتر اليومية</span>
+                                </a>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
 
-                        <a mat-list-item routerLink="/dashboard/financial/supplier-accounts" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>حسابات الموردين</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/banks-movements" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>حركة خزينة المصنع</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/income-list" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
-                          <span>قائمة الدخل</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/pendingBanks" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>قيد الإنتظار</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/addincome" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>اضافة ايراد</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/otherincome" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>الايرادات الاخري</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/estates" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>دليل الحسابات </span>
-                        </a>
-                        <!-- <a mat-list-item routerLink="/dashboard/financial/addestate" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>اضافة اصل</span>
-                        </a> -->
-                        <a mat-list-item routerLink="/dashboard/financial/discounts" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>الخصومات الاتزامات</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/addcimmitment" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>اضافة التزام</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/individualsclients" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>العملاء الافراد</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/covenant" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>العهد</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/financial/addcovenant" routerLinkActive="active" *ngIf="user == 'Admin'">
-                          <span>صرف العهد</span>
-                        </a>
+                        <!-- التقارير المحاسبية -->
+                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            <mat-expansion-panel-header>
+                                <span>التقارير المحاسبية</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <a mat-list-item routerLink="/dashboard/financial/income-list" routerLinkActive="active" *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                    <span>قائمة الدخل</span>
+                                </a>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
                     </mat-nav-list>
                 </mat-expansion-panel>
+
                 <mat-expansion-panel [class.mat-elevation-z0]="true"  *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Customer Service' || user == 'Account Management' || user == 'Logistics Specialist'">
                     <mat-expansion-panel-header>
                     <mat-icon>local_shipping</mat-icon>

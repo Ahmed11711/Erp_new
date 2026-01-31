@@ -1,0 +1,88 @@
+<div class="container-fluid general-accounts-container">
+  <div class="row">
+    <div class="col-12">
+      <!-- Header Section -->
+      <div class="header-section">
+        <h2>الحسابات العامة</h2>
+        <div class="actions">
+          <button class="btn btn-outline-secondary" (click)="refresh()" title="تحديث">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar Section -->
+      <div class="toolbar-section">
+        <div class="search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" class="form-control" placeholder="بحث باسم الحساب أو الكود..." [(ngModel)]="searchQuery"
+            (input)="filterAccounts()">
+        </div>
+
+        <div class="filter-box">
+          <select class="form-control" [(ngModel)]="selectedType" (change)="filterAccounts()">
+            <option value="">جميع الأنواع</option>
+            <option *ngFor="let type of accountTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div class="loading-spinner" *ngIf="loading">
+        <div class="spinner-border text-primary" role="status">
+          <span class="sr-only">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="table-responsive" *ngIf="!loading">
+        <table class="table table-hover accounts-table">
+          <thead>
+            <tr>
+              <th>الكود</th>
+              <th>اسم الحساب</th>
+              <th>الاسم بالإنجليزية</th>
+              <th>النوع</th>
+              <th>طبيعة الحساب</th>
+              <th>الرصيد</th>
+              <th>حالة الحساب</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let account of filteredAccounts">
+              <td><span class="code-badge">{{ account.code }}</span></td>
+              <td class="account-name">
+                <span [style.padding-right.px]="(account.level || 1) * 10">
+                  {{ account.name }}
+                </span>
+              </td>
+              <td>{{ account.name_en || '-' }}</td>
+              <td>
+                <span class="type-badge" [class]="'type-' + account.type">
+                  {{ getAccountTypeLabel(account.type) }}
+                </span>
+              </td>
+              <td>{{ account.account_type || '-' }}</td>
+              <td class="balance" [class.negative]="(account.balance || 0) < 0">
+                {{ account.balance || 0 | number:'1.2-2' }}
+              </td>
+              <td>
+                <span class="status-badge" [class.trading]="account.is_trading_account">
+                  {{ account.is_trading_account ? 'حساب تداول' : '-' }}
+                </span>
+              </td>
+            </tr>
+            <tr *ngIf="filteredAccounts.length === 0" class="empty-row">
+              <td colspan="7">
+                <div class="empty-state">
+                  <i class="fas fa-search"></i>
+                  <p>لا توجد حسابات تطابق بحثك</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

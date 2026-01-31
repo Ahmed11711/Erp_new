@@ -1,0 +1,196 @@
+<div class="safes-container">
+  <div class="header-section">
+    <h2>الخزن</h2>
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="openAddDialog()">
+        <i class="fas fa-plus"></i> إضافة خزنة
+      </button>
+      <button class="btn btn-secondary" (click)="openTransferDialog()">
+        <i class="fas fa-exchange-alt"></i> تحويل مالي
+      </button>
+    </div>
+  </div>
+
+  <div class="loading-spinner" *ngIf="loading">
+    <p>جاري التحميل...</p>
+  </div>
+
+  <div class="list-container" *ngIf="!loading">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>اسم الخزنة</th>
+          <th>النوع</th>
+          <th>داخل فرع</th>
+          <th>الرصيد</th>
+          <th>الحساب المرتبط</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let safe of safes">
+          <td>{{ safe.name }}</td>
+          <td>{{ safe.type == 'main' ? 'رئيسية' : 'فرعية' }}</td>
+          <td>
+            <span *ngIf="safe.is_inside_branch">نعم - {{ safe.branch_name }}</span>
+            <span *ngIf="!safe.is_inside_branch">لا</span>
+          </td>
+          <td>{{ safe.balance | number:'1.2-2' }}</td>
+          <td>{{ safe.account ? safe.account.name : '-' }}</td>
+          <td>
+            <button class="btn btn-sm btn-info" (click)="openEditDialog(safe)">تعديل</button>
+            <button class="btn btn-sm btn-danger" (click)="deleteSafe(safe.id)"
+              [disabled]="safe.balance != 0">حذف</button>
+            <button class="btn btn-sm btn-success" (click)="openTransferDialog(safe)">تحويل</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div *ngIf="safes.length === 0" class="empty-state">
+      <p>لا يوجد خزن مضافة.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Add Dialog -->
+<div class="modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>إضافة خزنة جديدة</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>اسم الخزنة *</label>
+        <input type="text" class="form-control" [(ngModel)]="newSafe.name">
+      </div>
+      <div class="form-group">
+        <label>النوع *</label>
+        <select class="form-control" [(ngModel)]="newSafe.type">
+          <option value="main">رئيسية</option>
+          <option value="branch">فرع</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" [(ngModel)]="newSafe.is_inside_branch">
+          داخل فرع
+        </label>
+      </div>
+      <div class="form-group" *ngIf="newSafe.is_inside_branch">
+        <label>اسم الفرع</label>
+        <input type="text" class="form-control" [(ngModel)]="newSafe.branch_name">
+      </div>
+      <div class="form-group">
+        <label>الرصيد الافتتاحي</label>
+        <input type="number" class="form-control" [(ngModel)]="newSafe.balance">
+      </div>
+      <div class="form-group">
+        <label>الحساب المرتبط (شجرة الحسابات)</label>
+        <select class="form-control" [(ngModel)]="newSafe.account_id">
+          <option [ngValue]="null">اختر الحساب</option>
+          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveSafe()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Dialog -->
+<div class="modal-overlay" *ngIf="showEditDialog && selectedSafe" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>تعديل بيانات الخزنة</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>اسم الخزنة *</label>
+        <input type="text" class="form-control" [(ngModel)]="selectedSafe.name">
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" [(ngModel)]="selectedSafe.is_inside_branch">
+          داخل فرع
+        </label>
+      </div>
+      <div class="form-group" *ngIf="selectedSafe.is_inside_branch">
+        <label>اسم الفرع</label>
+        <input type="text" class="form-control" [(ngModel)]="selectedSafe.branch_name">
+      </div>
+      <div class="form-group">
+        <label>الحساب المرتبط</label>
+        <select class="form-control" [(ngModel)]="selectedSafe.account_id">
+          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="updateSafe()">تحديث</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transfer Dialog -->
+<div class="modal-overlay" *ngIf="showTransferDialog" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>تحويل مالي</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>نوع التحويل</label>
+        <select class="form-control" [(ngModel)]="transferData.type">
+          <option value="safe_to_safe">من خزينة إلى خزينة</option>
+          <option value="safe_to_bank">من خزينة إلى بنك</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>من خزينة</label>
+        <select class="form-control" [(ngModel)]="transferData.from_id">
+          <option *ngFor="let safe of safes" [value]="safe.id">{{ safe.name }} ({{safe.balance}})</option>
+        </select>
+      </div>
+
+      <div class="form-group" *ngIf="transferData.type == 'safe_to_safe'">
+        <label>إلى خزينة</label>
+        <select class="form-control" [(ngModel)]="transferData.to_id">
+          <option *ngFor="let safe of safes" [value]="safe.id">{{ safe.name }}</option>
+        </select>
+      </div>
+
+      <div class="form-group" *ngIf="transferData.type == 'safe_to_bank'">
+        <label>إلى بنك</label>
+        <select class="form-control" [(ngModel)]="transferData.to_id">
+          <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }}</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>المبلغ</label>
+        <input type="number" class="form-control" [(ngModel)]="transferData.amount">
+      </div>
+
+      <div class="form-group">
+        <label>التاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="transferData.date">
+      </div>
+
+      <div class="form-group">
+        <label>ملاحظات</label>
+        <textarea class="form-control" [(ngModel)]="transferData.notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-success" (click)="submitTransfer()">إتمام التحويل</button>
+    </div>
+  </div>
+</div>

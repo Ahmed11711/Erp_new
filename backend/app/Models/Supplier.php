@@ -18,6 +18,7 @@ class Supplier extends Model
         'price_rate',
         'balance',
         'last_balance',
+        'tree_account_id',
     ];
     public function supplierType(){
         return $this->belongsTo(SupplierType::class, 'supplier_type');

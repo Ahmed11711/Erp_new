@@ -1,0 +1,87 @@
+<div class="container-fluid fixed-assets-container">
+  <div class="row">
+    <div class="col-12">
+      <!-- Header Section -->
+      <div class="header-section">
+        <h2>الأصول الثابتة</h2>
+        <div class="actions">
+          <button class="btn btn-outline-secondary" (click)="refresh()" title="تحديث">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary Card -->
+      <div class="summary-card">
+        <div class="card-icon">
+          <i class="fas fa-boxes"></i>
+        </div>
+        <div class="card-info">
+          <h3>إجمالي قيمة الأصول</h3>
+          <p class="amount" [class.positive]="totalAssetsValue >= 0" [class.negative]="totalAssetsValue < 0">
+            {{ totalAssetsValue | number:'1.2-2' }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Toolbar Section -->
+      <div class="toolbar-section">
+        <div class="search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" class="form-control" placeholder="بحث باسم الأصل أو الكود..." [(ngModel)]="searchQuery"
+            (input)="filterAssets()">
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div class="loading-spinner" *ngIf="loading">
+        <div class="spinner-border text-primary" role="status">
+          <span class="sr-only">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="table-responsive" *ngIf="!loading">
+        <table class="table table-hover assets-table">
+          <thead>
+            <tr>
+              <th>الكود</th>
+              <th>اسم الأصل</th>
+              <th>تاريخ الشراء</th>
+              <th>سعر الشراء</th>
+              <th>القيمة الحالية</th>
+              <th>العمر الافتراضي (سنوات)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let asset of filteredAssets">
+              <td><span class="code-badge">{{ asset.code || '-' }}</span></td>
+              <td class="asset-name">
+                <i class="fas fa-cube text-muted ml-2"></i>
+                {{ asset.name }}
+              </td>
+              <td>{{ asset.purchase_date | date:'yyyy-MM-dd' }}</td>
+              <td class="amount">{{ asset.purchase_price | number:'1.2-2' }}</td>
+              <td class="balance" [class.negative]="(asset.current_value || 0) < 0">
+                {{ asset.current_value | number:'1.2-2' }}
+              </td>
+              <td>
+                <span class="status-badge">
+                  {{ asset.life_span }}
+                </span>
+              </td>
+            </tr>
+            <tr *ngIf="filteredAssets.length === 0" class="empty-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <i class="fas fa-search"></i>
+                  <p>لا توجد أصول مسجلة حتى الآن</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

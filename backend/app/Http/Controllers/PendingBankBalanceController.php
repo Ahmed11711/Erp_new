@@ -33,9 +33,26 @@ class PendingBankBalanceController extends Controller
                 $type = $pendingBank->type;
                 $bank = $request->bank_id;
                 $user_id = $pendingBank->user_id;
-                DB::statement('CALL update_bank_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                    $bank, $amount, $order=$ref, $user_id, $details, $ref, $type, now()
-                ]);
+                $currenct_bank = DB::table('banks')->where('id', $bank)->first();
+                if ($currenct_bank) {
+                    $current_balance = $currenct_bank->balance;
+                    $new_balance = $current_balance + $amount;
+
+                    DB::table('banks')->where('id', $bank)->update(['balance' => $new_balance]);
+
+                    DB::table('bank_details')->insert([
+                        'bank_id' => $bank,
+                        'details' => $details,
+                        'ref' => $ref,
+                        'type' => $type,
+                        'amount' => $amount,
+                        'balance_before' => $current_balance,
+                        'balance_after' => $new_balance,
+                        'date' => date('Y-m-d'),
+                        'created_at' => now(),
+                        'user_id' => $user_id
+                    ]);
+                }
             }
             DB::commit();
             return response()->json(['message'=>'success'], 201);

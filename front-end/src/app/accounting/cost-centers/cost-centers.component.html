@@ -1,0 +1,285 @@
+<div class="container-fluid cost-centers-container">
+  <div class="row">
+    <div class="col-12">
+      <div class="header-section">
+        <h2>مراكز التكلفة</h2>
+        <div class="header-actions">
+          <div class="view-toggle">
+            <button class="btn" [class.btn-primary]="viewMode === 'tree'" [class.btn-outline-secondary]="viewMode !== 'tree'" (click)="switchView('tree')">
+              <i class="fas fa-sitemap"></i> عرض الشجرة
+            </button>
+            <button class="btn" [class.btn-primary]="viewMode === 'list'" [class.btn-outline-secondary]="viewMode !== 'list'" (click)="switchView('list')">
+              <i class="fas fa-list"></i> عرض القائمة
+            </button>
+          </div>
+          <button class="btn btn-primary" (click)="openAddDialog()" [disabled]="loading">
+            <i class="fas fa-plus"></i> إضافة مركز تكلفة رئيسي
+          </button>
+        </div>
+      </div>
+
+      <div class="search-section" *ngIf="viewMode === 'list'">
+        <input type="text" class="form-control" placeholder="بحث..." [(ngModel)]="searchTerm">
+      </div>
+
+      <div class="loading-spinner" *ngIf="loading">
+        <div class="spinner-border text-primary" role="status">
+          <span class="sr-only">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <!-- Tree View -->
+      <div class="tree-container" *ngIf="!loading && viewMode === 'tree'">
+        <div *ngIf="treeData.length === 0" class="empty-state">
+          <p>لا توجد مراكز تكلفة. ابدأ بإضافة مركز تكلفة رئيسي.</p>
+        </div>
+
+        <ul class="tree-list" *ngIf="treeData.length > 0">
+          <li *ngFor="let costCenter of treeData" class="tree-node">
+            <div class="node-content" [style.padding-left.px]="0">
+              <span class="expand-icon" (click)="toggleNode(costCenter.id!)" *ngIf="costCenter.children && costCenter.children.length > 0">
+                <i class="fas" [ngClass]="isExpanded(costCenter.id!) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+              </span>
+              <span class="expand-placeholder" *ngIf="!costCenter.children || costCenter.children.length === 0"></span>
+              
+              <span class="center-code">{{ costCenter.code }}</span>
+              <span class="center-name">{{ costCenter.name }}</span>
+              <span class="center-type-badge" [class]="'type-' + costCenter.type">
+                {{ getTypeLabel(costCenter.type) }}
+              </span>
+              <span class="center-value">{{ costCenter.value || 0 | number:'1.2-2' }}</span>
+              <span class="center-responsible">{{ getEmployeeName(costCenter.responsible_person_id) }}</span>
+              
+              <div class="node-actions">
+                <button class="btn btn-sm btn-success" (click)="openAddDialog(costCenter.id!)" title="إضافة مركز فرعي">
+                  <i class="fas fa-plus"></i>
+                </button>
+                <button class="btn btn-sm btn-info" (click)="openEditDialog(costCenter)" title="تعديل">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger" (click)="deleteCostCenter(costCenter)" title="حذف">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <ul class="children-list" *ngIf="costCenter.children && costCenter.children.length > 0 && isExpanded(costCenter.id!)">
+              <li *ngFor="let child of costCenter.children" class="tree-node child-node">
+                <div class="node-content" [style.padding-left.px]="20">
+                  <span class="expand-icon" (click)="toggleNode(child.id!)" *ngIf="child.children && child.children.length > 0">
+                    <i class="fas" [ngClass]="isExpanded(child.id!) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                  </span>
+                  <span class="expand-placeholder" *ngIf="!child.children || child.children.length === 0"></span>
+                  
+                  <span class="center-code">{{ child.code }}</span>
+                  <span class="center-name">{{ child.name }}</span>
+                  <span class="center-type-badge" [class]="'type-' + child.type">
+                    {{ getTypeLabel(child.type) }}
+                  </span>
+                  <span class="center-value">{{ child.value || 0 | number:'1.2-2' }}</span>
+                  <span class="center-responsible">{{ getEmployeeName(child.responsible_person_id) }}</span>
+                  
+                  <div class="node-actions">
+                    <button class="btn btn-sm btn-success" (click)="openAddDialog(child.id!)" title="إضافة مركز فرعي">
+                      <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="btn btn-sm btn-info" (click)="openEditDialog(child)" title="تعديل">
+                      <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" (click)="deleteCostCenter(child)" title="حذف">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+
+      <!-- List View -->
+      <div class="list-container" *ngIf="!loading && viewMode === 'list'">
+        <div *ngIf="filterCostCenters().length === 0" class="empty-state">
+          <p>لا توجد مراكز تكلفة.</p>
+        </div>
+
+        <div class="table-responsive" *ngIf="filterCostCenters().length > 0">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>الكود</th>
+                <th>الاسم</th>
+                <th>الاسم بالإنجليزية</th>
+                <th>النوع</th>
+                <th>القيمة</th>
+                <th>المسؤول</th>
+                <th>الموقع</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let costCenter of filterCostCenters()">
+                <td>{{ costCenter.code }}</td>
+                <td>{{ costCenter.name }}</td>
+                <td>{{ costCenter.name_en || '-' }}</td>
+                <td>
+                  <span class="center-type-badge" [class]="'type-' + costCenter.type">
+                    {{ getTypeLabel(costCenter.type) }}
+                  </span>
+                </td>
+                <td>{{ costCenter.value || 0 | number:'1.2-2' }}</td>
+                <td>{{ getEmployeeName(costCenter.responsible_person_id) }}</td>
+                <td>{{ costCenter.location || '-' }}</td>
+                <td>
+                  <div class="table-actions">
+                    <button class="btn btn-sm btn-info" (click)="openEditDialog(costCenter)" title="تعديل">
+                      <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" (click)="deleteCostCenter(costCenter)" title="حذف">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Cost Center Dialog -->
+<div class="modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>إضافة مركز تكلفة جديد</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form>
+        <div class="form-group">
+          <label>اسم مركز التكلفة *</label>
+          <input type="text" class="form-control" [(ngModel)]="newCostCenter.name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>اسم مركز التكلفة بالإنجليزية</label>
+          <input type="text" class="form-control" [(ngModel)]="newCostCenter.name_en" name="name_en">
+        </div>
+        <div class="form-group">
+          <label>نوع مركز التكلفة *</label>
+          <select class="form-control" [(ngModel)]="newCostCenter.type" name="type" required>
+            <option *ngFor="let type of costCenterTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+        </div>
+        <div class="form-group" *ngIf="newCostCenter.type === 'sub'">
+          <label>المركز الرئيسي *</label>
+          <select class="form-control" [(ngModel)]="newCostCenter.parent_id" name="parent_id" required>
+            <option value="">اختر المركز الرئيسي</option>
+            <option *ngFor="let cc of getMainCostCenters()" [value]="cc.id">{{ cc.name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>المسؤول</label>
+          <select class="form-control" [(ngModel)]="newCostCenter.responsible_person_id" name="responsible_person_id">
+            <option value="">اختر المسؤول</option>
+            <option *ngFor="let emp of employees" [value]="emp.id">{{ emp.name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الموقع</label>
+          <input type="text" class="form-control" [(ngModel)]="newCostCenter.location" name="location">
+        </div>
+        <div class="form-group">
+          <label>الهاتف</label>
+          <input type="text" class="form-control" [(ngModel)]="newCostCenter.phone" name="phone">
+        </div>
+        <div class="form-group">
+          <label>البريد الإلكتروني</label>
+          <input type="email" class="form-control" [(ngModel)]="newCostCenter.email" name="email">
+        </div>
+        <div class="form-group">
+          <label>تاريخ البدء</label>
+          <input type="date" class="form-control" [(ngModel)]="newCostCenter.start_date" name="start_date">
+        </div>
+        <div class="form-group">
+          <label>تاريخ الانتهاء</label>
+          <input type="date" class="form-control" [(ngModel)]="newCostCenter.end_date" name="end_date">
+        </div>
+        <div class="form-group">
+          <label>المدة</label>
+          <input type="text" class="form-control" [(ngModel)]="newCostCenter.duration" name="duration">
+        </div>
+        <div class="form-group">
+          <label>القيمة</label>
+          <input type="number" class="form-control" [(ngModel)]="newCostCenter.value" name="value" step="0.01">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveCostCenter()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Cost Center Dialog -->
+<div class="modal-overlay" *ngIf="showEditDialog && selectedCostCenter" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>تعديل مركز التكلفة</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form>
+        <div class="form-group">
+          <label>اسم مركز التكلفة *</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedCostCenter.name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>اسم مركز التكلفة بالإنجليزية</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedCostCenter.name_en" name="name_en">
+        </div>
+        <div class="form-group">
+          <label>المسؤول</label>
+          <select class="form-control" [(ngModel)]="selectedCostCenter.responsible_person_id" name="responsible_person_id">
+            <option value="">اختر المسؤول</option>
+            <option *ngFor="let emp of employees" [value]="emp.id">{{ emp.name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الموقع</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedCostCenter.location" name="location">
+        </div>
+        <div class="form-group">
+          <label>الهاتف</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedCostCenter.phone" name="phone">
+        </div>
+        <div class="form-group">
+          <label>البريد الإلكتروني</label>
+          <input type="email" class="form-control" [(ngModel)]="selectedCostCenter.email" name="email">
+        </div>
+        <div class="form-group">
+          <label>تاريخ البدء</label>
+          <input type="date" class="form-control" [(ngModel)]="selectedCostCenter.start_date" name="start_date">
+        </div>
+        <div class="form-group">
+          <label>تاريخ الانتهاء</label>
+          <input type="date" class="form-control" [(ngModel)]="selectedCostCenter.end_date" name="end_date">
+        </div>
+        <div class="form-group">
+          <label>المدة</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedCostCenter.duration" name="duration">
+        </div>
+        <div class="form-group">
+          <label>القيمة</label>
+          <input type="number" class="form-control" [(ngModel)]="selectedCostCenter.value" name="value" step="0.01">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="updateCostCenter()">حفظ التغييرات</button>
+    </div>
+  </div>
+</div>

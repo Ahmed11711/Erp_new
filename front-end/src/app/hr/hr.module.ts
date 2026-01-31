@@ -6,17 +6,17 @@ import { AddEmployeeComponent } from './add-employee/add-employee.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { SharedModule } from '../shared/shared.module';
 import { EmployeeComponent } from './employee/employee.component';
-// import { SalaryCashingComponent } from './salary-cashing/salary-cashing.component';
+import { SalaryCashingComponent } from './salary-cashing/salary-cashing.component';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { PayrollComponent } from './payroll/payroll.component';
-// import { AddMeritComponent } from './add-merit/add-merit.component';
-// import { AddSubtractionComponent } from './add-subtraction/add-subtraction.component';
-// import { AdvancePaymentComponent } from './advance-payment/advance-payment.component';
-// import { AccountStatementComponent } from './account-statement/account-statement.component';
+import { AddMeritComponent } from './add-merit/add-merit.component';
+import { AddSubtractionComponent } from './add-subtraction/add-subtraction.component';
+import { AdvancePaymentComponent } from './advance-payment/advance-payment.component';
+import { AccountStatementComponent } from './account-statement/account-statement.component';
 import { ReviewAbsencesComponent } from './review-absences/review-absences.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -35,12 +35,12 @@ import { WorkingHoursDetailsComponent } from './working-hours-details/working-ho
   declarations: [
     AddEmployeeComponent,
     EmployeeComponent,
-    // SalaryCashingComponent,
+    SalaryCashingComponent,
     PayrollComponent,
-    // AddMeritComponent,
-    // AddSubtractionComponent,
-    // AdvancePaymentComponent,
-    // AccountStatementComponent,
+    AddMeritComponent,
+    AddSubtractionComponent,
+    AdvancePaymentComponent,
+    AccountStatementComponent,
     ReviewAbsencesComponent,
     EditEmployeeComponent,
     EmployeeDetailsComponent,

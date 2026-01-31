@@ -19,5 +19,6 @@ class customerCompany extends Model
         "governorate",
         "city",
         "address",
+        "tree_account_id"
     ];
 }

@@ -17,7 +17,7 @@ class TreeAccountRepository extends BaseRepository implements TreeAccountReposit
 
     public function getAccounts($request)
     {
-        $query = $this->model->newQuery();
+        $query = $this->model->newQuery()->with('children');
  
         if ($request->has('parent')) {
             return $query->whereNull('parent_id')->get();

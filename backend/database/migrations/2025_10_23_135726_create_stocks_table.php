@@ -13,14 +13,16 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('stocks', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->decimal('balance', 15, 4)->default(0);
-            $table->integer('asset_id');
-            $table->boolean('active')->default(true);
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('stocks')) {
+            Schema::create('stocks', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->decimal('balance', 15, 4)->default(0);
+                $table->integer('asset_id');
+                $table->boolean('active')->default(true);
+                $table->timestamps();
+            });
+        }
     }
 
     /**

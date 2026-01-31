@@ -1,0 +1,203 @@
+<div class="container-fluid accounting-tree-container">
+  <div class="row">
+    <div class="col-12">
+      <div class="header-section">
+        <h2>شجرة الحسابات</h2>
+        <button class="btn btn-primary" (click)="openAddDialog()" [disabled]="loading">
+          <i class="fas fa-plus"></i> إضافة حساب رئيسي
+        </button>
+      </div>
+
+      <div class="loading-spinner" *ngIf="loading">
+        <div class="spinner-border text-primary" role="status">
+          <span class="sr-only">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <div class="tree-container" *ngIf="!loading">
+        <div *ngIf="treeData.length === 0" class="empty-state">
+          <p>لا توجد حسابات. ابدأ بإضافة حساب رئيسي.</p>
+        </div>
+
+        <ul class="tree-list" *ngIf="treeData.length > 0">
+          <li *ngFor="let account of treeData" class="tree-node">
+            <div class="node-content" [style.padding-left.px]="0">
+              <span class="expand-icon" (click)="toggleNode(account.id!)" *ngIf="account.children && account.children.length > 0">
+                <i class="fas" [ngClass]="isExpanded(account.id!) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+              </span>
+              <span class="expand-placeholder" *ngIf="!account.children || account.children.length === 0"></span>
+              
+              <span class="account-code">{{ account.code }}</span>
+              <span class="account-name">{{ account.name }}</span>
+              <span class="account-type-badge" [class]="'type-' + account.type">
+                {{ getAccountTypeLabel(account.type) }}
+              </span>
+              <span class="account-balance">{{ account.balance || 0 | number:'1.2-2' }}</span>
+              
+              <div class="node-actions">
+                <button class="btn btn-sm btn-success" (click)="openAddDialog(account.id!)" title="إضافة حساب فرعي">
+                  <i class="fas fa-plus"></i>
+                </button>
+                <button class="btn btn-sm btn-info" (click)="openEditDialog(account)" title="تعديل">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger" (click)="deleteAccount(account)" title="حذف">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <ul class="children-list" *ngIf="account.children && account.children.length > 0 && isExpanded(account.id!)">
+              <li *ngFor="let child of account.children" class="tree-node child-node">
+                <div class="node-content" [style.padding-left.px]="20">
+                  <span class="expand-icon" (click)="toggleNode(child.id!)" *ngIf="child.children && child.children.length > 0">
+                    <i class="fas" [ngClass]="isExpanded(child.id!) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                  </span>
+                  <span class="expand-placeholder" *ngIf="!child.children || child.children.length === 0"></span>
+                  
+                  <span class="account-code">{{ child.code }}</span>
+                  <span class="account-name">{{ child.name }}</span>
+                  <span class="account-type-badge" [class]="'type-' + child.type">
+                    {{ getAccountTypeLabel(child.type) }}
+                  </span>
+                  <span class="account-balance">{{ child.balance || 0 | number:'1.2-2' }}</span>
+                  
+                  <div class="node-actions">
+                    <button class="btn btn-sm btn-success" (click)="openAddDialog(child.id!)" title="إضافة حساب فرعي">
+                      <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="btn btn-sm btn-info" (click)="openEditDialog(child)" title="تعديل">
+                      <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" (click)="deleteAccount(child)" title="حذف">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <ul class="children-list" *ngIf="child.children && child.children.length > 0 && isExpanded(child.id!)">
+                  <li *ngFor="let grandChild of child.children" class="tree-node grandchild-node">
+                    <div class="node-content" [style.padding-left.px]="40">
+                      <span class="expand-placeholder"></span>
+                      <span class="account-code">{{ grandChild.code }}</span>
+                      <span class="account-name">{{ grandChild.name }}</span>
+                      <span class="account-type-badge" [class]="'type-' + grandChild.type">
+                        {{ getAccountTypeLabel(grandChild.type) }}
+                      </span>
+                      <span class="account-balance">{{ grandChild.balance || 0 | number:'1.2-2' }}</span>
+                      
+                      <div class="node-actions">
+                        <button class="btn btn-sm btn-info" (click)="openEditDialog(grandChild)" title="تعديل">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" (click)="deleteAccount(grandChild)" title="حذف">
+                          <i class="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Account Dialog -->
+<div class="modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>إضافة حساب جديد</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form>
+        <div class="form-group">
+          <label>اسم الحساب *</label>
+          <input type="text" class="form-control" [(ngModel)]="newAccount.name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>اسم الحساب بالإنجليزية</label>
+          <input type="text" class="form-control" [(ngModel)]="newAccount.name_en" name="name_en">
+        </div>
+        <div class="form-group">
+          <label>نوع الحساب *</label>
+          <select class="form-control" [(ngModel)]="newAccount.type" name="type" required>
+            <option *ngFor="let type of accountTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>نوع الحساب المحاسبي</label>
+          <select class="form-control" [(ngModel)]="newAccount.account_type" name="account_type">
+            <option *ngFor="let option of accountTypeOptions" [value]="option.value">{{ option.label }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الرصيد الافتتاحي</label>
+          <input type="number" class="form-control" [(ngModel)]="newAccount.balance" name="balance" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" [(ngModel)]="newAccount.is_trading_account" name="is_trading_account">
+            حساب تداول
+          </label>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveAccount()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Account Dialog -->
+<div class="modal-overlay" *ngIf="showEditDialog && selectedAccount" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>تعديل الحساب</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form>
+        <div class="form-group">
+          <label>اسم الحساب *</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedAccount.name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>اسم الحساب بالإنجليزية</label>
+          <input type="text" class="form-control" [(ngModel)]="selectedAccount.name_en" name="name_en">
+        </div>
+        <div class="form-group">
+          <label>نوع الحساب *</label>
+          <select class="form-control" [(ngModel)]="selectedAccount.type" name="type" required>
+            <option *ngFor="let type of accountTypes" [value]="type.value">{{ type.label }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>نوع الحساب المحاسبي</label>
+          <select class="form-control" [(ngModel)]="selectedAccount.account_type" name="account_type">
+            <option *ngFor="let option of accountTypeOptions" [value]="option.value">{{ option.label }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الرصيد الافتتاحي</label>
+          <input type="number" class="form-control" [(ngModel)]="selectedAccount.balance" name="balance" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" [(ngModel)]="selectedAccount.is_trading_account" name="is_trading_account">
+            حساب تداول
+          </label>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
+      <button class="btn btn-primary" (click)="updateAccount()">حفظ التغييرات</button>
+    </div>
+  </div>
+</div>

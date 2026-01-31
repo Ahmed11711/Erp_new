@@ -1,0 +1,109 @@
+<h2 mat-dialog-title>
+    {{ voucherType === 'client' ? 'سند عميل جديد' : 'سند مورد جديد' }}
+</h2>
+
+<mat-dialog-content>
+    <form [formGroup]="form">
+        <div class="row">
+            <!-- Date -->
+            <div class="col-md-6 mb-3">
+                <label>التاريخ</label>
+                <input type="date" class="form-control" formControlName="date">
+            </div>
+
+            <!-- Type -->
+            <div class="col-md-6 mb-3">
+                <label>نوع السند</label>
+                <select class="form-control" formControlName="type">
+                    <option value="receipt">قبض</option>
+                    <option value="payment">صرف</option>
+                </select>
+            </div>
+
+            <!-- Client/Supplier -->
+            <div class="col-md-6 mb-3">
+                <label>{{ voucherType === 'client' ? 'العميل' : 'المورد' }}</label>
+                <select class="form-control" [formControlName]="voucherType === 'client' ? 'client_id' : 'supplier_id'">
+                    <option [ngValue]="null">اختر...</option>
+                    <ng-container *ngIf="voucherType === 'client'">
+                        <option *ngFor="let client of clients" [ngValue]="client.id">
+                            {{ client.name || client.company_name }}
+                        </option>
+                    </ng-container>
+                    <ng-container *ngIf="voucherType === 'supplier'">
+                        <option *ngFor="let supplier of suppliers" [ngValue]="supplier.id">
+                            {{ supplier.supplier_name }}
+                        </option>
+                    </ng-container>
+                </select>
+                <div *ngIf="form.get(voucherType === 'client' ? 'client_id' : 'supplier_id')?.invalid && form.get(voucherType === 'client' ? 'client_id' : 'supplier_id')?.touched"
+                    class="text-danger small">
+                    مطلوب
+                </div>
+            </div>
+
+            <!-- Payment Method -->
+            <div class="col-md-6 mb-3">
+                <label>طريقة الدفع</label>
+                <select class="form-control" formControlName="payment_method">
+                    <option value="cash">نقدي (الصندوق)</option>
+                    <option value="bank">بنكي</option>
+                </select>
+            </div>
+
+            <!-- Account (Safe/Bank) -->
+            <div class="col-md-6 mb-3">
+                <label>الحساب ({{ form.get('payment_method')?.value === 'cash' ? 'الصندوق' : 'البنك' }})</label>
+                <select class="form-control" formControlName="account_id">
+                    <option [ngValue]="null">اختر الحساب...</option>
+                    <option *ngFor="let account of filteredAccounts" [ngValue]="account.id">
+                        {{ account.name }}
+                    </option>
+                </select>
+                <div *ngIf="form.get('account_id')?.invalid && form.get('account_id')?.touched"
+                    class="text-danger small">
+                    مطلوب
+                </div>
+            </div>
+
+            <!-- Amount -->
+            <div class="col-md-6 mb-3">
+                <label>المبلغ</label>
+                <input type="number" class="form-control" formControlName="amount" min="0">
+                <div *ngIf="form.get('amount')?.invalid && form.get('amount')?.touched" class="text-danger small">
+                    مطلوب
+                </div>
+            </div>
+
+            <!-- Reference Number -->
+            <div class="col-md-6 mb-3">
+                <label>رقم مرجعي (اختياري)</label>
+                <input type="text" class="form-control" formControlName="reference_number">
+            </div>
+
+            <!-- Notes -->
+            <div class="col-12 mb-3">
+                <label>ملاحظات</label>
+                <textarea class="form-control" formControlName="notes" rows="3"
+                    placeholder="أدخل تفاصيل العملية..."></textarea>
+            </div>
+
+            <!-- Advance Checkbox (Visual Aid) -->
+            <div class="col-12 mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="isAdvance" (change)="toggleAdvance($event)">
+                    <label class="form-check-label" for="isAdvance">
+                        هل هذه سلفة؟ (سيتم إضافة "سلفة" للملاحظات)
+                    </label>
+                </div>
+            </div>
+        </div>
+    </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+    <button mat-button (click)="close()">إلغاء</button>
+    <button mat-raised-button color="primary" (click)="save()" [disabled]="form.invalid || loading">
+        {{ loading ? 'جاري الحفظ...' : 'حفظ' }}
+    </button>
+</mat-dialog-actions>

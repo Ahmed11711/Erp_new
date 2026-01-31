@@ -17,7 +17,7 @@ class BanksController extends Controller
     {}
 
     public function index(){
-        $banks = Bank::all();
+        $banks = Bank::get();
         return response(BankResource::collection($banks),200);
     }
 
@@ -29,16 +29,41 @@ class BanksController extends Controller
     public function store(Request $request){
         $request->validate([
             'name'=>'required',
-            'type'=>'required',
             'balance'=>'required', //block update
             'usage'=>'required',
             'asset_id'=>'required|exists:tree_accounts,id',
         ]);
 
         $name=$request->name;
-        Bank::create($request->all());
+        $type = 'بنك';
+        Bank::create([
+            'name'=>$name,
+            'type'=>$type,
+            'balance'=>$request->balance,
+            'usage'=>$request->usage,
+            'asset_id'=>$request->asset_id,
+        ]);
         $this->addRecordedService->checkFoundBank($name);
         return response(["message"=>"success"],201);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $bank = Bank::findOrFail($id);
+        $request->validate([
+            'name'=>'required',
+            'usage'=>'required',
+            'asset_id'=>'required|exists:tree_accounts,id',
+        ]);
+        
+        $bank->update([
+            'name' => $request->name,
+            'type' => 'بنك', // Force type to be 'بنك'
+            'usage' => $request->usage,
+            'asset_id' => $request->asset_id
+        ]);
+        
+        return response(["message"=>"success"], 200);
     }
 
 

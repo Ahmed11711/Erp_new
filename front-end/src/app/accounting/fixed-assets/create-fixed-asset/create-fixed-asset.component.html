@@ -1,0 +1,88 @@
+<div class="container-fluid">
+    <div class="header mb-4">
+        <h2>إضافة أصل ثابت</h2>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="bg-white p-4 rounded shadow-sm">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label>اسم الأصل</label>
+                <input type="text" class="form-control" formControlName="name">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>كود الأصل</label>
+                <input type="text" class="form-control" formControlName="code">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>تاريخ الأصل</label>
+                <input type="date" class="form-control" formControlName="asset_date">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label>تاريخ الشراء</label>
+                <input type="date" class="form-control" formControlName="purchase_date">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>سعر الشراء</label>
+                <input type="number" class="form-control" formControlName="purchase_price">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>قيمة الخردة</label>
+                <input type="number" class="form-control" formControlName="scrap_value">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>العمر الافتراضي (سنة)</label>
+                <input type="number" class="form-control" formControlName="life_span">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label>المبلغ المدفوع</label>
+                <input type="number" class="form-control" formControlName="payment_amount">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>حساب الدفع (البنك)</label>
+                <select class="form-control" formControlName="bank_id">
+                    <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }}</option>
+                </select>
+            </div>
+
+
+            <div class="col-md-12 mb-3">
+                <hr>
+                <h5>الحسابات المرتبطة</h5>
+            </div>
+
+            <div class="col-md-4 mb-3">
+                <label>حساب الأصل</label>
+                <select class="form-control" formControlName="asset_account_id">
+                    <option [ngValue]="null">اختر الحساب</option>
+                    <option *ngFor="let acc of accounts" [value]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+                </select>
+            </div>
+
+            <div class="col-md-4 mb-3">
+                <label>حساب مجمع الإهلاك</label>
+                <select class="form-control" formControlName="depreciation_account_id">
+                    <option [ngValue]="null">اختر الحساب</option>
+                    <option *ngFor="let acc of accounts" [value]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+                </select>
+            </div>
+
+            <div class="col-md-4 mb-3">
+                <label>حساب مصروف الإهلاك</label>
+                <select class="form-control" formControlName="expense_account_id">
+                    <option [ngValue]="null">اختر الحساب</option>
+                    <option *ngFor="let acc of accounts" [value]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+                </select>
+            </div>
+
+            <div class="col-md-12">
+                <button type="submit" class="btn btn-primary" [disabled]="form.invalid">حفظ الأصل</button>
+            </div>
+        </div>
+    </form>
+</div>
