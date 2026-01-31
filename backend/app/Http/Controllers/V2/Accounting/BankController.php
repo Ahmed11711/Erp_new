@@ -20,7 +20,7 @@ class BankController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Bank::with('asset')->where('type', 'بنك'); // Assuming 'asset' relation exists as per Model
+        $query = Bank::with('asset')->where('type', 'main'); // Assuming 'asset' relation exists as per Model
 
         if ($request->has('search')) {
             $search = $request->search;
@@ -52,7 +52,7 @@ class BankController extends Controller
 
         $bank = Bank::create([
             'name' => $request->name,
-            'type' => $request->type ?? 'بنك',
+            'type' => $request->type ?? 'main',
             'balance' => $request->balance ?? 0,
             'usage' => $request->usage,
             'asset_id' => $request->asset_id,

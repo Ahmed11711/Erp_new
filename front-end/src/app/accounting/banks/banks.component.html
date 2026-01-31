@@ -36,8 +36,7 @@
           <td>{{ bank.asset ? bank.asset.name : '-' }}</td>
           <td>
             <button class="btn btn-sm btn-info" (click)="openEditDialog(bank)">تعديل</button>
-            <button class="btn btn-sm btn-danger" (click)="deleteBank(bank.id)"
-              [disabled]="bank.balance != 0">حذف</button>
+            <button class="btn btn-sm btn-danger" (click)="deleteBank(bank.id)">حذف</button>
             <button class="btn btn-sm btn-success" (click)="openTransferDialog(bank)">تحويل</button>
           </td>
         </tr>

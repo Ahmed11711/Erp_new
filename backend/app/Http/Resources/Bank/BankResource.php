@@ -22,6 +22,7 @@ class BankResource extends JsonResource
             'usage' => $this->usage,
             'asset_id' => $this->asset_id,
             'asset_name' => $this->asset ? $this->asset->name : null,
+            'asset' => $this->asset,
         ];
     }
 }

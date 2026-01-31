@@ -17,12 +17,12 @@ class BanksController extends Controller
     {}
 
     public function index(){
-        $banks = Bank::where('type', 'بنك')->get();
+        $banks = Bank::where('type', 'main')->get();
         return response(BankResource::collection($banks),200);
     }
 
     public function bankSelect(){
-        $data = Bank::where('type', 'بنك')->select('id', 'name')->get();
+        $data = Bank::where('type', 'main')->select('id', 'name')->get();
         return response()->json($data, 200);
     }
 
@@ -34,16 +34,14 @@ class BanksController extends Controller
             'asset_id'=>'required|exists:tree_accounts,id',
         ]);
 
-        $name=$request->name;
-        $type = 'بنك';
         Bank::create([
-            'name'=>$name,
-            'type'=>$type,
+            'name'=>$request->name,
+            'type'=>'main',
             'balance'=>$request->balance,
             'usage'=>$request->usage,
             'asset_id'=>$request->asset_id,
         ]);
-        $this->addRecordedService->checkFoundBank($name);
+        // $this->addRecordedService->checkFoundBank($name);
         return response(["message"=>"success"],201);
     }
 
@@ -73,6 +71,23 @@ class BanksController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
+    public function destroy($id)
+    {
+        $bank = Bank::find($id);
+
+        if (!$bank) {
+            return response()->json(['message' => 'البنك غير موجود'], 404);
+        }
+
+        if ($bank->balance != 0) {
+            return response()->json(['message' => 'لا يمكن حذف البنك لأن رصيده لا يساوي صفر'], 422);
+        }
+
+        $bank->delete();
+
+        return response()->json(['message' => 'تم حذف البنك بنجاح'], 200);
+    }
+
     public function show(Request $request, $id)
     {
         $itemsPerPage = $request->input('itemsPerPage', 15);

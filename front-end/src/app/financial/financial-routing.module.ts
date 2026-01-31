@@ -146,6 +146,10 @@ const routes: Routes = [
   {
     path: 'capitals',
     loadChildren: () => import('./capitals/capitals.module').then(m => m.CapitalsModule)
+  },
+  {
+    path: 'bank',
+    loadChildren: () => import('./bank/bank.module').then(m => m.BankModule)
   }
 ];
 
