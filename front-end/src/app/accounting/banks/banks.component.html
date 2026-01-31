@@ -20,7 +20,7 @@
       <thead>
         <tr>
           <th>اسم البنك</th>
-          <th>النوع</th>
+          <!-- <th>النوع</th> -->
           <th>الاستخدام</th>
           <th>الرصيد</th>
           <th>الحساب المرتبط</th>
@@ -30,7 +30,7 @@
       <tbody>
         <tr *ngFor="let bank of banks">
           <td>{{ bank.name }}</td>
-          <td>{{ bank.type }}</td>
+          <!-- <td>{{ bank.type }}</td> -->
           <td>{{ bank.usage }}</td>
           <td>{{ bank.balance | number:'1.2-2' }}</td>
           <td>{{ bank.asset ? bank.asset.name : '-' }}</td>

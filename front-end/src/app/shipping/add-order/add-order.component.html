@@ -4,7 +4,9 @@
       <!-- <app-time></app-time> -->
     </div>
     <div class="col-5">
-      <div><p class="title header w-50 m-auto"> اضافة الطلب</p></div>
+      <div>
+        <p class="title header w-50 m-auto"> اضافة الطلب</p>
+      </div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
       <app-time></app-time>
@@ -16,12 +18,12 @@
 
       <div class="row">
         <div class="col-md-2">
-          <select class="form-control type"  formControlName='customer_type' (change)="customerType($event)">
+          <select class="form-control type" formControlName='customer_type' (change)="customerType($event)">
             <option value="افراد" selected>افراد</option>
             <option value="شركة">شركة</option>
           </select>
         </div>
-        <div  class="col-md-2">
+        <div class="col-md-2">
           <select formControlName='order_type' class="form-control type" (change)="status($event)">
             <option value="جديد">جديد</option>
             <option value="طلب استبدال">طلب استبدال</option>
@@ -33,7 +35,7 @@
           <mat-form-field class="w-100">
             <mat-label>تاريخ الطلب</mat-label>
             <input formControlName='order_date' matInput [matDatepickerFilter]="myFilter" [matDatepicker]="picker"
-            (dateInput)="OnDateChange($event.value)">
+              (dateInput)="OnDateChange($event.value)">
             <mat-hint>MM/DD/YYYY</mat-hint>
             <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
             <mat-datepicker #picker></mat-datepicker>
@@ -42,8 +44,8 @@
         <div class="col-md-3 text-center">
           <mat-form-field class="w-100">
             <mat-label>تاريخ التسليم ( حسب العميل )</mat-label>
-            <input formControlName='delivery_date' matInput [matDatepickerFilter]="deliveryDateFilter" [matDatepicker]="picker2"
-            (dateInput)="OnDeliveryDateChange($event.value)">
+            <input formControlName='delivery_date' matInput [matDatepickerFilter]="deliveryDateFilter"
+              [matDatepicker]="picker2" (dateInput)="OnDeliveryDateChange($event.value)">
             <mat-hint>MM/DD/YYYY</mat-hint>
             <mat-datepicker-toggle matIconSuffix [for]="picker2"></mat-datepicker-toggle>
             <mat-datepicker #picker2></mat-datepicker>
@@ -55,13 +57,8 @@
         <div class="col-md-2 d-flex" *ngIf="customerTypeVal === 'شركة'">
 
           <div>
-            <ng-autocomplete
-              [data]="companies"
-              [searchKeyword]="catword2"
-              placeholder="اختر الشركة"
-              (selected)='companyChange($event)'
-              (inputCleared)="resetcompany()"
-              [itemTemplate]="itemTemplates2"
+            <ng-autocomplete [data]="companies" [searchKeyword]="catword2" placeholder="اختر الشركة"
+              (selected)='companyChange($event)' (inputCleared)="resetcompany()" [itemTemplate]="itemTemplates2"
               [notFoundTemplate]="notFoundTemplate2">
             </ng-autocomplete>
 
@@ -77,9 +74,9 @@
         </div>
         <div class="col-md-2" *ngIf="customerTypeVal === 'افراد'">
           <div class="mb-3">
-            <input class="form-control"   placeholder="اسم العميل"
-            [class.is-valid]="form.get('customer_name')?.errors ==null && form.get('customer_name')?.touched"
-            formControlName='customer_name' type="text" class="form-control">
+            <input class="form-control" placeholder="اسم العميل"
+              [class.is-valid]="form.get('customer_name')?.errors ==null && form.get('customer_name')?.touched"
+              formControlName='customer_name' type="text" class="form-control">
             <p *ngIf="form.get('customer_name')?.errors !=null && form.get('customer_name')?.touched"
               class="error mb-0 text-danger">مطلوب</p>
           </div>
@@ -87,29 +84,24 @@
         <div class="col-md-2">
           <div class="mb-3">
             <div *ngIf="customerTypeVal === 'افراد'">
-              <ng-autocomplete
-                [data]="filteredNumbers"
-                [searchKeyword]="catword3"
-                placeholder="رقم الموبيل 1"
-                (inputChanged)="editPhone($event)"
-                (selected)='phoneChange($event)'
-                (inputCleared)="resetphone()"
-                [itemTemplate]="itemTemplates3"
-                [notFoundTemplate]="notFoundTemplate3">
+              <ng-autocomplete [data]="filteredNumbers" [searchKeyword]="catword3" placeholder="رقم الموبيل 1"
+                (inputChanged)="editPhone($event)" (selected)='phoneChange($event)' (inputCleared)="resetphone()"
+                [itemTemplate]="itemTemplates3" [notFoundTemplate]="notFoundTemplate3">
               </ng-autocomplete>
 
               <ng-template #itemTemplates3 let-item>
                 <a [innerHTML]="item.customer_phone_1"></a>
               </ng-template>
 
-              <ng-template #notFoundTemplate3 let-notFound >
+              <ng-template #notFoundTemplate3 let-notFound>
                 <div [innerHTML]="notFound" *ngIf="filteredNumbers.length > 4"></div>
               </ng-template>
             </div>
-            <div >
-              <input class="form-control"   placeholder="رقم الموبيل 1" [ngClass]="customerTypeVal === 'افراد' ? 'd-none' : ''"
-              [class.is-valid]="form.get('customer_phone_1')?.errors ==null && form.get('customer_phone_1')?.touched"
-              formControlName='customer_phone_1' type="text" class="form-control">
+            <div>
+              <input class="form-control" placeholder="رقم الموبيل 1"
+                [ngClass]="customerTypeVal === 'افراد' ? 'd-none' : ''"
+                [class.is-valid]="form.get('customer_phone_1')?.errors ==null && form.get('customer_phone_1')?.touched"
+                formControlName='customer_phone_1' type="text" class="form-control">
               <p *ngIf="form.get('customer_phone_1')?.errors !=null && form.value.customer_phone_1?.length > 0"
                 class="error mb-0 text-danger">رقم غير صحيح</p>
             </div>
@@ -117,51 +109,44 @@
         </div>
         <div class="col-md-2">
           <div class="mb-3">
-            <input class="form-control"   placeholder="رقم الموبيل 2"
-            [class.is-valid]="form.get('customer_phone_2')?.errors ==null &&
+            <input class="form-control" placeholder="رقم الموبيل 2"
+              [class.is-valid]="form.get('customer_phone_2')?.errors ==null &&
             form.get('customer_phone_2')?.value !='' && form.get('customer_phone_2')?.value !=null && form.get('customer_phone_2')?.touched"
-            formControlName='customer_phone_2' type="text" class="form-control">
+              formControlName='customer_phone_2' type="text" class="form-control">
             <p *ngIf="form.get('customer_phone_2')?.errors !=null && form.get('customer_phone_2')?.touched"
               class="error mb-0 text-danger">رقم غير صحيح</p>
           </div>
         </div>
         <div class="col-md-2">
           <div class="mb-3">
-            <input class="form-control"   placeholder="تلفون ارضي"
-            [class.is-valid]="form.get('tel')?.errors ==null &&
+            <input class="form-control" placeholder="تلفون ارضي" [class.is-valid]="form.get('tel')?.errors ==null &&
             form.get('tel')?.value !='' && form.get('tel')?.value !=null && form.get('tel')?.touched"
-            formControlName='tel' type="text" class="form-control">
+              formControlName='tel' type="text" class="form-control">
           </div>
         </div>
         <div class="col-md-2 mb-2">
           <select id="inputState" class="form-control" formControlName='governorate' (change)="govern($event)">
-            <option selected disabled >المحافظة</option>
+            <option selected disabled>المحافظة</option>
             <option *ngFor="let elm of location" [value]="elm.governorate_name_ar">{{elm.governorate_name_ar}}</option>
           </select>
           <select id="inputState" class="form-control" formControlName='city' *ngIf="governName">
-            <option selected disabled >المدينة</option>
+            <option selected disabled>المدينة</option>
             <option *ngFor="let elm of cities" [value]="elm.city_name_ar">{{elm.city_name_ar}}</option>
           </select>
         </div>
         <div class="col-md-2">
           <textarea placeholder="العنوان" name="" id="" cols="20" formControlName='address'
-          [class.is-valid]="form.get('address')?.errors ==null && form.get('address')?.touched"
-          ></textarea>
-          <p *ngIf="form.get('address')?.errors !=null && form.get('address')?.touched"
-              class="error mb-0 text-danger">مطلوب</p>
+            [class.is-valid]="form.get('address')?.errors ==null && form.get('address')?.touched"></textarea>
+          <p *ngIf="form.get('address')?.errors !=null && form.get('address')?.touched" class="error mb-0 text-danger">
+            مطلوب</p>
         </div>
       </div>
 
       <div class="row">
         <div class="col-md-2">
 
-          <ng-autocomplete
-            [data]="products"
-            [searchKeyword]="catword"
-            placeholder="اختر المنتج"
-            (selected)='productChange($event)'
-            (inputCleared)="resetInp()"
-            [itemTemplate]="itemTemplates"
+          <ng-autocomplete [data]="products" [searchKeyword]="catword" placeholder="اختر المنتج"
+            (selected)='productChange($event)' (inputCleared)="resetInp()" [itemTemplate]="itemTemplates"
             [notFoundTemplate]="notFoundTemplate">
           </ng-autocomplete>
 
@@ -184,16 +169,16 @@
         </div>
         <div class="col-md-2">
           <div class="mb-3">
-            <input class="form-control"   placeholder="Price" min="1" [value]="category_price" (keyup)="changeProductPrice($event)"
-                formControlName='productprice' type="number" class="form-control">
+            <input class="form-control" placeholder="Price" min="1" [value]="category_price"
+              (keyup)="changeProductPrice($event)" formControlName='productprice' type="number" class="form-control">
           </div>
         </div>
         <div class="col-md-2 d-flex">
           <div class="mb-3">
-            <input class="form-control"   placeholder="Quantity" min="1" [(ngModel)]="category_quantity"
-                formControlName='productquantity' type="number" class="form-control">
-                <p *ngIf="form.get('productquantity')?.errors !=null && form.get('productquantity')?.touched"
-                  class="error mb-0 text-danger">مطلوب</p>
+            <input class="form-control" placeholder="Quantity" min="1" [(ngModel)]="category_quantity"
+              formControlName='productquantity' type="number" class="form-control">
+            <p *ngIf="form.get('productquantity')?.errors !=null && form.get('productquantity')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
           </div>
           <div>
             <p for="special_details" class="btn bg-main p-0" (click)="special()">خاص</p>
@@ -201,19 +186,20 @@
         </div>
 
         <div class="col-md-2" *ngIf="specialStatus">
-          <textarea class="form-control special-details" placeholder="تفاصيل الطلب الخاص" formControlName='special_details'></textarea>
+          <textarea class="form-control special-details" placeholder="تفاصيل الطلب الخاص"
+            formControlName='special_details'></textarea>
         </div>
 
         <div class="col-md-2">
           <select id="inputState" class="form-control" formControlName='order_source_id'>
-            <option selected disabled >مصدر الطلب</option>
+            <option selected disabled>مصدر الطلب</option>
             <option *ngFor="let elm of orderSources" [value]="elm.id">{{elm.name}}</option>
           </select>
         </div>
 
         <div class="col-md-2">
           <select id="inputState" class="form-control" formControlName='shipping_method_id'>
-            <option selected disabled >طريقة الشحن</option>
+            <option selected disabled>طريقة الشحن</option>
             <option *ngFor="let elm of shippingWays" [value]="elm.id">{{elm.name}}</option>
           </select>
         </div>
@@ -222,8 +208,11 @@
       <div class="row">
         <div class="col-md-9">
           <div class="text-center mb-3">
-            <a *ngIf="orderStatus == 'طلب استبدال' || orderStatus == 'طلب مرتجع'" class="btn btn-add mt-2 mx-1" (click)="addproduct('مرتجع')">اضافة مرتجع<i class="fa-solid fa-trash"></i></a>
-            <a *ngIf="orderStatus == 'جديد' || orderStatus=='طلب استبدال' || orderStatus=='طلب صيانة'" (click)="addproduct(orderStatus)" class="btn btn-add mt-2 mx-1">اضافة صنف<i class="fa-solid fa-plus"></i></a>
+            <a *ngIf="orderStatus == 'طلب استبدال' || orderStatus == 'طلب مرتجع'" class="btn btn-add mt-2 mx-1"
+              (click)="addproduct('مرتجع')">اضافة مرتجع<i class="fa-solid fa-trash"></i></a>
+            <a *ngIf="orderStatus == 'جديد' || orderStatus=='طلب استبدال' || orderStatus=='طلب صيانة'"
+              (click)="addproduct(orderStatus)" class="btn btn-add mt-2 mx-1">اضافة صنف<i
+                class="fa-solid fa-plus"></i></a>
           </div>
           <table class="table m-auto">
             <thead>
@@ -260,45 +249,63 @@
 
       <div class="row mb-4 text-center">
         <div class="col-md-2 d-flex flex-column justify-content-center">
-          <label for="">تكاليف  الشحن</label>
-          <input class="form-control"   min="0" [(ngModel)]="shipping_cost" (keyup)="calc($event)"
-          [class.is-valid]="form.get('shipping_cost')?.errors ==null &&
+          <label for="">تكاليف الشحن</label>
+          <input class="form-control" min="0" [(ngModel)]="shipping_cost" (keyup)="calc($event)" [class.is-valid]="form.get('shipping_cost')?.errors ==null &&
             form.get('shipping_cost')?.value !='' && form.get('shipping_cost')?.value !=null"
-          formControlName='shipping_cost' type="number" class="form-control">
+            formControlName='shipping_cost' type="number" class="form-control">
         </div>
         <div class="col-md-2 d-flex flex-column justify-content-center" *ngIf="customerTypeVal ==='شركة'">
           <label for=""> ضريبة القيمة المضافة</label>
           <div>
-            <input id="vat" class="mx-1 vat"  min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)"
-            [class.is-valid]="form.get('vat')?.errors ==null &&
-              form.get('vat')?.value !='' && form.get('vat')?.value !=null"
-            formControlName='vat' type="number" >
+            <input id="vat" class="mx-1 vat" min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)"
+              [class.is-valid]="form.get('vat')?.errors ==null &&
+              form.get('vat')?.value !='' && form.get('vat')?.value !=null" formControlName='vat' type="number">
           </div>
         </div>
 
 
- <div class="col-md-2 d-flex flex-column justify-content-center">
-  <h3> ا ت ص</h3>
-  <h4>{{ totalSum }}</h4>
-</div>
+        <div class="col-md-2 d-flex flex-column justify-content-center">
+          <h3> ا ت ص</h3>
+          <h4>{{ totalSum }}</h4>
+        </div>
         <div class="col-md-2 d-flex flex-column justify-content-center">
           <h3>اجمالى الفاتورة</h3>
           <h4 dir="ltr">{{totalInvoice | customNumber}}</h4>
         </div>
         <div class="col-md-2">
           <label for="">مبلغ تحت الحساب</label>
-          <input class="form-control"   [(ngModel)]="prepaid_amount" (keyup)="calc($event)"
-          [class.is-valid]="form.get('prepaid_amount')?.errors ==null &&
-            form.get('prepaid_amount')?.value !='' && form.get('prepaid_amount')?.value !=null  && prepaid_amount<=totalInvoice && prepaid_amount>=0"
-          formControlName='prepaid_amount' type="number" class="form-control">
-          <p *ngIf="orderStatus=='جديد' &&prepaid_amount>totalInvoice"class="error mb-0 text-danger">المبلغ المدفوع اكبر من المبلغ المطلوب</p>
-          <p *ngIf="prepaid_amount<0"class="error mb-0 text-danger">قيمة سالبه</p>
+          <input class="form-control" [(ngModel)]="prepaid_amount" (keyup)="calc($event)"
+            [class.is-valid]="form.get('prepaid_amount')?.errors ==null &&
+            form.get('prepaid_amount')?.value !='' && form.get('prepaid_amount')?.value !=null  && prepaid_amount<=totalInvoice && prepaid_amount>=0" formControlName='prepaid_amount' type="number"
+            class="form-control">
+          <p *ngIf="orderStatus=='جديد' &&prepaid_amount>totalInvoice" class="error mb-0 text-danger">المبلغ المدفوع
+            اكبر من المبلغ المطلوب</p>
+          <p *ngIf="prepaid_amount<0" class="error mb-0 text-danger">قيمة سالبه</p>
         </div>
         <div class="col-md-2 d-flex flex-column justify-content-end" *ngIf="prepaid_amount > 0">
           <mat-form-field class="w-100">
-            <mat-label>الخزينة</mat-label>
+            <mat-label>طريقة الدفع</mat-label>
+            <mat-select formControlName='payment_type'>
+              <mat-option value="bank">بنك</mat-option>
+              <mat-option value="safe">خزينة</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="col-md-2 d-flex flex-column justify-content-end"
+          *ngIf="prepaid_amount > 0 && form.get('payment_type')?.value === 'bank'">
+          <mat-form-field class="w-100">
+            <mat-label>البنك</mat-label>
             <mat-select formControlName='bank'>
               <mat-option [value]="elm.id" *ngFor="let elm of banksData">{{elm.name}}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="col-md-2 d-flex flex-column justify-content-end"
+          *ngIf="prepaid_amount > 0 && form.get('payment_type')?.value === 'safe'">
+          <mat-form-field class="w-100">
+            <mat-label>الخزينة</mat-label>
+            <mat-select formControlName='safe_id'>
+              <mat-option [value]="elm.id" *ngFor="let elm of safesData">{{elm.name}}</mat-option>
             </mat-select>
           </mat-form-field>
         </div>
@@ -306,26 +313,26 @@
 
       <div class="row text-center">
 
-        <div class="col-md-2 ml-5 pl-5 d-flex flex-column justify-content-center" *ngIf="!(orderStatus === 'طلب صيانة')">
+        <div class="col-md-2 ml-5 pl-5 d-flex flex-column justify-content-center"
+          *ngIf="!(orderStatus === 'طلب صيانة')">
           <label for="">الخصم</label>
-          <input class="form-control"   min="0" [(ngModel)]="discount" (keyup)="calc($event)"
-          [class.is-valid]="form.get('discount')?.errors ==null &&
+          <input class="form-control" min="0" [(ngModel)]="discount" (keyup)="calc($event)" [class.is-valid]="form.get('discount')?.errors ==null &&
             form.get('discount')?.value !='' && form.get('discount')?.value !=null  && net_total>=0 && discount>=0"
-          formControlName='discount' type="number" class="form-control">
-          <p *ngIf="orderStatus=='جديد' && net_total<0"class="error mb-0 text-danger">الخصم يعطي قيمة سالبة</p>
-          <p *ngIf="discount<0"class="error mb-0 text-danger">قيمة سالبه</p>
+            formControlName='discount' type="number" class="form-control">
+          <p *ngIf="orderStatus=='جديد' && net_total<0" class="error mb-0 text-danger">الخصم يعطي قيمة سالبة</p>
+          <p *ngIf="discount<0" class="error mb-0 text-danger">قيمة سالبه</p>
         </div>
 
         <div class="col-md-2 ml-5 pl-5 d-flex flex-column justify-content-center" *ngIf="orderStatus === 'طلب صيانة'">
           <label for="">مصاريف الصيانة</label>
-          <input class="form-control"   min="0" [(ngModel)]="maintenanceAmount" (keyup)="calc($event)"
-          [class.is-valid]="form.get('maintenance_cost')?.errors ==null && form.get('maintenance_cost')?.touched"
-          formControlName='maintenance_cost' type="number" class="form-control">
+          <input class="form-control" min="0" [(ngModel)]="maintenanceAmount" (keyup)="calc($event)"
+            [class.is-valid]="form.get('maintenance_cost')?.errors ==null && form.get('maintenance_cost')?.touched"
+            formControlName='maintenance_cost' type="number" class="form-control">
           <p *ngIf="form.get('maintenance_cost')?.errors !=null && form.get('maintenance_cost')?.touched"
             class="error mb-0 text-danger">مطلوب</p>
         </div>
 
-        <div class="col-md-2 d-flex flex-column justify-content-center" >
+        <div class="col-md-2 d-flex flex-column justify-content-center">
           <h3>صافي القيمة</h3>
           <h4 dir="ltr">{{net_total | customNumber}}</h4>
         </div>
@@ -336,10 +343,10 @@
         <div class="col-md-2">
           <div class="form-group">
             <div class="element">
-                <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
-                <input type="file" (change)="onFileChanged($event)" name="uploadFile"
-                accept="image/*" id="fileInput"  class="img" formControlName='order_image'>
-              </div>
+              <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
+              <input type="file" (change)="onFileChanged($event)" name="uploadFile" accept="image/*" id="fileInput"
+                class="img" formControlName='order_image'>
+            </div>
           </div>
         </div>
       </div>
@@ -356,9 +363,8 @@
 
         prepaid_amount<0 ||
         discount<0
-          "
-          type="submit" class="btn submit text-white">اضافة</button>
-          <!-- <a class="btn btn-secondary mx-5" (click)="getLocation()">ip</a> -->
+          " type="submit" class="btn submit text-white">اضافة</button>
+        <!-- <a class="btn btn-secondary mx-5" (click)="getLocation()">ip</a> -->
       </div>
 
 
@@ -367,7 +373,7 @@
   </div>
 
 
-<!-- // (net_total<0 && orderStatus == 'جديد') -->
+  <!-- // (net_total<0 && orderStatus == 'جديد') -->
 
 
 

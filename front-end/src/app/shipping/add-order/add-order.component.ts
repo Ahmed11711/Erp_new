@@ -16,6 +16,8 @@ import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { AuthService } from 'src/app/auth/auth.service';
 
+import { SafeService } from 'src/app/accounting/services/safe.service';
+
 @Component({
   selector: 'app-add-order',
   templateUrl: './add-order.component.html',
@@ -29,7 +31,8 @@ export class AddOrderComponent implements OnInit {
   errorText: string = '';
   products: any[] = [];
   numbers: any[] = [];
-  banksData: any[] = []
+  banksData: any[] = [];
+  safesData: any[] = [];
   imgUrl!: string;
   specialStatus: boolean = false;
 
@@ -38,6 +41,7 @@ export class AddOrderComponent implements OnInit {
     private orderService: OrderService,
     private datePipe: DatePipe,
     private bankService: BanksService,
+    private safeService: SafeService,
     private http: HttpClient,
     private _snackBar: MatSnackBar,
     private router: Router,
@@ -61,6 +65,7 @@ export class AddOrderComponent implements OnInit {
     this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
       this.cities = data.filter((elem: any) => elem.governorate_id == 1);
     });
+    this.safeService.getAll().subscribe((result: any) => this.safesData = result.data || result);
 
     this.form.patchValue({
       customer_type: 'افراد',
@@ -195,6 +200,8 @@ export class AddOrderComponent implements OnInit {
     'vat': new FormControl(null),
     'maintenance_cost': new FormControl(null),
     'special_details': new FormControl(null),
+    'payment_type': new FormControl('bank'), // Default to bank
+    'safe_id': new FormControl(null),
   })
 
   async submitform() {
@@ -215,7 +222,12 @@ export class AddOrderComponent implements OnInit {
 
       const formData = new FormData();
       formData.append('customer_name', data.customer_name);
-      formData.append('bank', data.bank);
+      formData.append('payment_type', data.payment_type);
+      if (data.payment_type === 'bank') {
+        formData.append('bank', data.bank);
+      } else if (data.payment_type === 'safe') {
+        formData.append('safe_id', data.safe_id);
+      }
       formData.append('customer_type', data.customer_type);
       formData.append('customer_phone_1', data.customer_phone_1);
       formData.append('customer_phone_2', data.customer_phone_2);

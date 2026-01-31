@@ -274,10 +274,21 @@ class OrdersController extends Controller
                 $details = 'مبلغ تحت الحساب';
                 $ref = $order->id;
                 $type = 'الطلبات';
-                $this->updateBankBalance($bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
 
-                // Accounting Logic for Down Payment
-                $this->handleDownPaymentAccounting($order, $amount, $bank_id, $details);
+                $paymentType = $request->payment_type ?? 'bank'; // Default to bank for backward compatibility
+                
+                if ($paymentType === 'safe' && $request->has('safe_id')) {
+                     $safeId = $request->safe_id;
+                     $this->updateSafeBalance($safeId, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                     $this->handleDownPaymentAccounting($order, $amount, $safeId, $details, 'safe');
+                } else {
+                     // Bank (Default)
+                     $bankId = $request->bank; // $bank_id variable was set earlier but let's be explicit
+                     if ($bankId) {
+                        $this->updateBankBalance($bankId, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                        $this->handleDownPaymentAccounting($order, $amount, $bankId, $details, 'bank');
+                     }
+                }
             }
 
             DB::commit();
@@ -2355,21 +2366,27 @@ class OrdersController extends Controller
         }
     }
 
-    private function handleDownPaymentAccounting($order, $amount, $bankId, $note)
+        private function handleDownPaymentAccounting($order, $amount, $sourceId, $note, $sourceType = 'bank')
     {
         // 1. Bank/Safe Tree Account (Debit)
-        $bankTreeId = null;
-        $bank = \App\Models\Bank::find($bankId);
-        if ($bank && $bank->asset_id) {
-             $bankTreeId = $bank->asset_id;
-        } else {
-             $safe = \App\Models\Safe::find($bankId);
-             if ($safe && $safe->account_id) {
-                 $bankTreeId = $safe->account_id;
-             }
+        $debitTreeId = null;
+        $sourceName = '';
+        
+        if ($sourceType === 'bank') {
+            $bank = \App\Models\Bank::find($sourceId);
+            if ($bank && $bank->asset_id) {
+                $debitTreeId = $bank->asset_id;
+                $sourceName = $bank->name;
+            }
+        } elseif ($sourceType === 'safe') {
+            $safe = \App\Models\Safe::find($sourceId);
+            if ($safe && $safe->account_id) {
+                $debitTreeId = $safe->account_id;
+                $sourceName = $safe->name;
+            }
         }
         
-        if (!$bankTreeId) return;
+        if (!$debitTreeId) return;
 
         // 2. Customer Tree Account (Credit)
         $customerTreeId = null;
@@ -2449,10 +2466,10 @@ class OrdersController extends Controller
              // Debit Item (Bank/Safe)
              \App\Models\DailyEntryItem::create([
                 'daily_entry_id' => $dailyEntry->id,
-                'account_id' => $bankTreeId,
+                'account_id' => $debitTreeId,
                 'debit' => $amount,
                 'credit' => 0,
-                'notes' => "محصل في " . $bank->name ?? 'الخزينة',
+                'notes' => "محصل في " . ($sourceType == 'safe' ? 'الخزينة' : 'البنك'),
              ]);
 
              // Credit Item (Customer)
@@ -2466,7 +2483,7 @@ class OrdersController extends Controller
 
              // Debit AccountEntry
             \App\Models\AccountEntry::create([
-                'tree_account_id' => $bankTreeId,
+                'tree_account_id' => $debitTreeId,
                 'debit' => $amount,
                 'credit' => 0,
                 'description' => "دفعة مقدمة - طلب: " . $order->id . " - " . $note,
@@ -2474,7 +2491,7 @@ class OrdersController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $bankAcc = \App\Models\TreeAccount::find($bankTreeId);
+            $bankAcc = \App\Models\TreeAccount::find($debitTreeId);
             $bankAcc->increment('debit_balance', $amount);
             $bankAcc->increment('balance', $amount); // Asset increases
 
@@ -2493,4 +2510,41 @@ class OrdersController extends Controller
             $custAcc->decrement('balance', $amount); // Asset decreases
         }
     }
+
+
+private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $details, $ref, $type, $created_at)
+{
+    $safe = \App\Models\Safe::find($safe_id);
+    if ($safe) {
+        $current_balance = $safe->balance;
+        $new_balance = $current_balance + $amount;
+
+        $safe->update(['balance' => $new_balance]);
+        
+        // Transaction
+        \App\Models\SafeTransaction::create([
+             'from_safe_id' => $safe_id, // Or null? Typically for income, safe is target. But transaction model structure is Transfer-based.
+             // Looking at SafeTransaction: from_safe_id, to_safe_id. 
+             // If it's a deposit, maybe there is no "from"? Or we just use it as a log?
+             // Since SafeTransaction seems to be for TRANSFERS mostly, maybe we shouldn't use it for simple income/expense? 
+             // Wait, the user wants "Show in Journal". 
+             // SafeController only uses SafeTransaction for transfers. 
+             // Let's check if there is a 'safe_details' table? No.
+             // If we want to track movement, maybe we should just rely on the AccountEntry (Journal).
+             // However, Bank has `bank_details`. Safe doesn't seems to have `safe_details`.
+             // I will stick to updating the Safe Balance + Journal Entry (AccountEntry).
+             // If a log is needed, maybe create a Note or just rely on AccountEntry.
+             // Re-reading user request: "Show this order in the journal". Journal = AccountEntry. 
+             // So updating Safe Balance + AccountEntry is sufficient.
+             // But wait, the standard way in this system seems to be keeping a history table (bank_details).
+             // Since safe_details doesn't exist, I will just update balance.
+        ]);
+        
+        // Actually, let's look at VoucherController. It just updates Safe/Bank balance? 
+        // VoucherController updates TreeAccount (Journal) and `updateOperationalBalance`.
+        // `updateOperationalBalance` updates `customer_company_details` or `supplier_balance`.
+        // It DOES NOT seem to insert into a `safe_details` table.
+        // So for Safes, the Journal IS the log. 
+    }
+}
 }

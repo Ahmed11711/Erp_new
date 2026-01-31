@@ -17,12 +17,12 @@ class BanksController extends Controller
     {}
 
     public function index(){
-        $banks = Bank::get();
+        $banks = Bank::where('type', 'بنك')->get();
         return response(BankResource::collection($banks),200);
     }
 
     public function bankSelect(){
-        $data = Bank::select('id', 'name')->get();
+        $data = Bank::where('type', 'بنك')->select('id', 'name')->get();
         return response()->json($data, 200);
     }
 
