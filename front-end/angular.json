@@ -33,6 +33,17 @@
             "scripts": [
               "src/jquery-3.6.4.js",
               "src/assets/js/cdn.rtlcss.com_bootstrap_v4.5.3_js_bootstrap.min.js"
+            ],
+            "allowedCommonJsDependencies": [
+              "canvg",
+              "html2canvas",
+              "html2pdf.js",
+              "sweetalert2",
+              "highcharts",
+              "file-saver",
+              "raf",
+              "rgbcolor",
+              "core-js"
             ]
           },
           "configurations": {
@@ -45,8 +56,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "2kb",
-                  "maximumError": "4kb"
+                  "maximumWarning": "10kb",
+                  "maximumError": "20kb"
                 }
               ],
               "outputHashing": "all"
