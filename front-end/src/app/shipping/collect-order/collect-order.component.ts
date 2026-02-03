@@ -3,6 +3,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { OrderService } from '../services/order.service';
 import Swal from 'sweetalert2';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service'; // Import
+import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
 
 @Component({
   selector: 'app-collect-order',
@@ -10,37 +12,48 @@ import Swal from 'sweetalert2';
   styleUrls: ['./collect-order.component.css']
 })
 export class CollectOrderComponent {
-line!: string;
-company!: string;
-banks !:any[];
-total_balance !:number;
-order_type !:string;
-collectType:string = 'تحصيل في الخزينة';
-imgtext:string = "صورة الايصال";
-referenceNumber:string = '';
-fileopend:boolean=false;
+  line!: string;
+  company!: string;
+  banks !: any[];
+  safes!: any[]; // Safes
+  serviceAccounts!: any[]; // Service Accounts
+  total_balance !: number;
+  order_type !: string;
+  collectType: string = 'تحصيل في الخزينة';
+  paymentType: string = 'bank'; // Default to bank
+  imgtext: string = "صورة الايصال";
+  referenceNumber: string = '';
+  fileopend: boolean = false;
 
-  constructor(private order:OrderService, private route:ActivatedRoute, private bank:BanksService,
-    private router:Router,
-    ) { }
+  constructor(private order: OrderService, private route: ActivatedRoute, private bank: BanksService,
+    private router: Router,
+    private safeService: SafeService, // Inject
+    private serviceAccountsService: ServiceAccountsService // Inject
+  ) { }
 
   ngOnInit(): void {
-    const  id  = this.route.snapshot.params['id'];
-    this.order.getOrderById(id).subscribe((res:any)=>{
+    const id = this.route.snapshot.params['id'];
+    this.order.getOrderById(id).subscribe((res: any) => {
       this.line = res.order_details.shipping_line.name;
       this.company = res.order_details.shipping_company?.name;
       this.total_balance = res.net_total;
       this.order_type = res.order_type;
     })
 
-    this.bank.bankSelect().subscribe((res:any)=>{
+    this.bank.bankSelect().subscribe((res: any) => {
       this.banks = res;
+    });
+    this.safeService.getAll().subscribe((res: any) => {
+      this.safes = res.data || res;
+    });
+    this.serviceAccountsService.index().subscribe((res: any) => {
+      this.serviceAccounts = res;
     });
   }
 
 
-  collectOrder(form:any){
-    if(this.order_type == 'طلب مرتجع' || this.order_type == 'طلب استبدال'){
+  collectOrder(form: any) {
+    if (this.order_type == 'طلب مرتجع' || this.order_type == 'طلب استبدال') {
       Swal.fire({
         title: 'هل تم استلام المنتج',
         icon: 'warning',
@@ -49,13 +62,13 @@ fileopend:boolean=false;
         cancelButtonText: 'لا',
       }).then((result) => {
 
-        const  id  = this.route.snapshot.params['id'];
-        let body ={amount:this.total_balance , bank_id:form.value.bank , note:form.value.note}
+        const id = this.route.snapshot.params['id'];
+        let body = { amount: this.total_balance, bank_id: form.value.bank, note: form.value.note }
         if (result.isConfirmed) {
           body['receivedOrder'] = true;
-          this.order.collectOrder(id,body).subscribe((res:any)=>{
+          this.order.collectOrder(id, body).subscribe((res: any) => {
             console.log(res);
-            if(res.message == 'success'){
+            if (res.message == 'success') {
               this.router.navigate(['/dashboard/shipping/listorders']);
             }
           })
@@ -63,7 +76,7 @@ fileopend:boolean=false;
         } else if (result.isDismissed) {
           body['receivedOrder'] = false;
           Swal.fire({
-            icon:'info',
+            icon: 'info',
             input: 'text',
             inputPlaceholder: 'السبب',
             showCancelButton: true,
@@ -73,9 +86,9 @@ fileopend:boolean=false;
               }
               if (value !== '') {
                 body['reason'] = value;
-                this.order.collectOrder(id,body).subscribe((res:any)=>{
+                this.order.collectOrder(id, body).subscribe((res: any) => {
                   console.log(res);
-                  if(res.message == 'success'){
+                  if (res.message == 'success') {
                     this.router.navigate(['/dashboard/shipping/listorders']);
                   }
                 })
@@ -87,11 +100,11 @@ fileopend:boolean=false;
           console.log(false);
         }
 
-      console.log(body)
-      return undefined
+        console.log(body)
+        return undefined
       })
-    }else{
-      const  id  = this.route.snapshot.params['id'];
+    } else {
+      const id = this.route.snapshot.params['id'];
       const formData = new FormData();
       formData.append('amount', this.total_balance.toString());
       formData.append('note', form.value.note);
@@ -104,8 +117,8 @@ fileopend:boolean=false;
         formData.append('bank_id', form.value.bank);
       }
 
-      this.order.collectOrder(id,formData).subscribe((res:any)=>{
-        if(res.message == 'success'){
+      this.order.collectOrder(id, formData).subscribe((res: any) => {
+        if (res.message == 'success') {
           this.router.navigate(['/dashboard/shipping/listorders']);
         }
       })
@@ -117,7 +130,7 @@ fileopend:boolean=false;
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
       fileInput.click();
-      this.fileopend=true;
+      this.fileopend = true;
     }
   }
   selectedFile: any;

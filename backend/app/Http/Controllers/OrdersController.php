@@ -281,6 +281,10 @@ class OrdersController extends Controller
                      $safeId = $request->safe_id;
                      $this->updateSafeBalance($safeId, $amount, $order->id, $user_id, $details, $ref, $type, now());
                      $this->handleDownPaymentAccounting($order, $amount, $safeId, $details, 'safe');
+                } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
+                     $serviceAccountId = $request->service_account_id;
+                     $this->updateServiceAccountBalance($serviceAccountId, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                     $this->handleDownPaymentAccounting($order, $amount, $serviceAccountId, $details, 'service_account');
                 } else {
                      // Bank (Default)
                      $bankId = $request->bank; // $bank_id variable was set earlier but let's be explicit
@@ -397,13 +401,22 @@ class OrdersController extends Controller
             }
 
             if ($request->has('prepaid_amount') && $request->prepaid_amount != '' && $request->prepaid_amount != 0) {
-                $bank  = Bank::find($request->bank);
-                if ($bank) {
-                    $amount = (float)$request->prepaid_amount;
-                    $details = ' مبلغ تحت الحساب من تعديل الطلب رقم ' . $order->id;
-                    $ref = $order->id;
-                    $type = 'الطلبات';
-                    $this->updateBankBalance($bank->id, $amount, $order->id, auth()->user()->id, $details, $ref, $type, now());
+                $amount = (float)$request->prepaid_amount;
+                $details = ' مبلغ تحت الحساب من تعديل الطلب رقم ' . $order->id;
+                $ref = $order->id;
+                $type = 'الطلبات';
+                
+                $paymentType = $request->payment_type ?? 'bank';
+
+                if ($paymentType === 'safe' && $request->has('safe_id')) {
+                    $this->updateSafeBalance($request->safe_id, $amount, $order->id, auth()->user()->id, $details, $ref, $type, now());
+                } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
+                    $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, auth()->user()->id, $details, $ref, $type, now());
+                } else {
+                    $bank = Bank::find($request->bank);
+                    if ($bank) {
+                         $this->updateBankBalance($bank->id, $amount, $order->id, auth()->user()->id, $details, $ref, $type, now());
+                    }
                 }
             }
 
@@ -1537,7 +1550,15 @@ class OrdersController extends Controller
                     $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+
+                    $paymentType = $request->payment_type ?? 'bank';
+                    if ($paymentType === 'safe' && $request->has('safe_id')) {
+                        $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
+                        $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    } else {
+                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    }
                 }
 
                 $company = CustomerCompany::find($order->company_id);
@@ -1546,9 +1567,16 @@ class OrdersController extends Controller
                     $details = ' تحصيل من عميل شركة ' . $company->name;
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    
+                    if ($paymentType === 'safe' && $request->has('safe_id')) {
+                        $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
+                        $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    } else {
+                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    }
 
-                    $bank = Bank::find($request->bank_id);
+
 
 
                     $company_id = $order->company_id;
@@ -1556,10 +1584,13 @@ class OrdersController extends Controller
                     $ref = $order->id;
                     $details = ' تحصيل من طلب رقم ' . $order->id;
                     $type = 'الطلبات';
+                    
+                    $bankIdForProc = ($paymentType === 'bank') ? $request->bank_id : null;
+
                     DB::statement('CALL update_customer_company_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
                         $company_id,
                         $amount,
-                        $bank->id,
+                        $bankIdForProc,
                         $ref,
                         $details,
                         $type,
@@ -2384,6 +2415,12 @@ class OrdersController extends Controller
                 $debitTreeId = $safe->account_id;
                 $sourceName = $safe->name;
             }
+        } elseif ($sourceType === 'service_account') {
+            $account = \App\Models\ServiceAccount::find($sourceId);
+            if ($account && $account->account_id) {
+                $debitTreeId = $account->account_id;
+                $sourceName = $account->name;
+            }
         }
         
         if (!$debitTreeId) return;
@@ -2469,7 +2506,7 @@ class OrdersController extends Controller
                 'account_id' => $debitTreeId,
                 'debit' => $amount,
                 'credit' => 0,
-                'notes' => "محصل في " . ($sourceType == 'safe' ? 'الخزينة' : 'البنك'),
+                'notes' => "محصل في " . ($sourceType == 'safe' ? 'الخزينة' : ($sourceType == 'service_account' ? 'حساب خدمي' : 'البنك')),
              ]);
 
              // Credit Item (Customer)
@@ -2547,4 +2584,14 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
         // So for Safes, the Journal IS the log. 
     }
 }
+    private function updateServiceAccountBalance($service_account_id, $amount, $order_id, $user_id, $details, $ref, $type, $created_at)
+    {
+        $account = \App\Models\ServiceAccount::find($service_account_id);
+        if ($account) {
+            $current_balance = $account->balance;
+            $new_balance = $current_balance + $amount;
+
+            $account->update(['balance' => $new_balance]);
+        }
+    }
 }

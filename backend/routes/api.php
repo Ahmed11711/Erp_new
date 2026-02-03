@@ -372,6 +372,14 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/trial-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'trialBalance']);
         Route::get('/accounting-tree', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountingTree']);
     });
+    // Service Accounts
+    Route::prefix('service-accounts/')->group(function () {
+        Route::get('/', [App\Http\Controllers\ServiceAccountsController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\ServiceAccountsController::class, 'store']);
+        Route::post('/transfer', [App\Http\Controllers\ServiceAccountsController::class, 'transfer']);
+        Route::put('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'update']);
+        // Route::delete('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'destroy']);
+    });
 });
 
 Route::prefix('report/')->group(function () {

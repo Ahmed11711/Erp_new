@@ -288,6 +288,16 @@
             <mat-select formControlName='payment_type'>
               <mat-option value="bank">بنك</mat-option>
               <mat-option value="safe">خزينة</mat-option>
+              <mat-option value="service_account">حساب خدمي</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="col-md-2 d-flex flex-column justify-content-end"
+          *ngIf="prepaid_amount > 0 && form.get('payment_type')?.value === 'service_account'">
+          <mat-form-field class="w-100">
+            <mat-label>الحساب الخدمي</mat-label>
+            <mat-select formControlName='service_account_id'>
+              <mat-option [value]="elm.id" *ngFor="let elm of serviceAccountsData">{{elm.name}}</mat-option>
             </mat-select>
           </mat-form-field>
         </div>
@@ -374,8 +384,5 @@
 
 
   <!-- // (net_total<0 && orderStatus == 'جديد') -->
-
-
-
 
 </div>

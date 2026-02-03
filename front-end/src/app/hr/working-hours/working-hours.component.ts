@@ -13,22 +13,22 @@ import { DatePipe } from '@angular/common';
   styleUrls: ['./working-hours.component.css'],
   providers: [DatePipe]
 })
-export class WorkingHoursComponent implements OnInit{
-  sheetData:any[]=[];
-  data:any[]=[];
+export class WorkingHoursComponent implements OnInit {
+  sheetData: any[] = [];
+  data: any[] = [];
   selectedFile: any;
-  employees:any[]=[];
-  days:any[]=[];
-  monthDays:any[]=[];
+  employees: any[] = [];
+  days: any[] = [];
+  monthDays: any[] = [];
 
-  btnShowForm:boolean=false;
+  btnShowForm: boolean = false;
 
-  currentMonthValue!:any
-  previousMonth!:any
-  month!:any
-  year!:any
+  currentMonthValue!: any
+  previousMonth!: any
+  month!: any
+  year!: any
 
-  constructor(private employeeService:EmployeeService , private route:Router, private datePipe: DatePipe , private renderer: Renderer2){
+  constructor(private employeeService: EmployeeService, private route: Router, private datePipe: DatePipe, private renderer: Renderer2) {
     const today = new Date();
     this.year = today.getFullYear();
     this.month = today.getMonth();
@@ -40,7 +40,7 @@ export class WorkingHoursComponent implements OnInit{
     this.getEmpDataPerMonth();
   }
 
-  getEmpDataPerMonth(){
+  getEmpDataPerMonth() {
     this.employeeService.getEmpsDataPerMonth({ month: `${this.currentMonthValue}` }).subscribe(res => {
       res.forEach(elm => {
         elm['month'] = this.currentMonthValue;
@@ -55,7 +55,7 @@ export class WorkingHoursComponent implements OnInit{
               let [hours, minutes] = elm2.hours.split(':').map(Number);
               actualTotalMinutes += hours * 60 + minutes;
               if (elm2.is_overTime_removed) {
-                actualTotalMinutes -= (hours * 60 + minutes )-(60 * hourPerDay);
+                actualTotalMinutes -= (hours * 60 + minutes) - (60 * hourPerDay);
               }
             }
 
@@ -80,8 +80,8 @@ export class WorkingHoursComponent implements OnInit{
           elm['actualTotalHours'] = this.convertMinutesToHours(actualTotalMinutes);
         }
       });
-      res.forEach(elm=>{
-        elm['selected']=false;
+      res.forEach(elm => {
+        elm['selected'] = false;
       })
       this.employees = res;
     });
@@ -109,39 +109,96 @@ export class WorkingHoursComponent implements OnInit{
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const excelData:any = XLSX.utils.sheet_to_json(worksheet, { raw: true });
+        const excelData: any = XLSX.utils.sheet_to_json(worksheet, { raw: true });
 
         if (excelData[0]['AC-No.'] && excelData[0]['Time']) {
-          this.sheetData= excelData.map((item:any) => {
-            let dateTime = new Date(item.Time);
+          this.sheetData = excelData.map((item: any) => {
+            let timeStr = item.Time;
+            let isPM = false;
+            let isAM = false;
+
+            if (typeof timeStr === 'string') {
+              // Check for AM/PM indicators before stripping
+              // 'à' seems to denote PM (based on 06:01 Out vs 09:50 In logic)
+              // 'Q' seems to denote AM
+              if (timeStr.includes('à') || timeStr.toLowerCase().includes('pm') || timeStr.includes('ص')) { // adjusting assumption: à = PM
+                isPM = true;
+              }
+              if (timeStr.includes('Q') || timeStr.toLowerCase().includes('am') || timeStr.includes('ق')) { // Q = AM
+                isAM = true;
+              }
+
+              // Remove non-numeric chars except / : space
+              timeStr = timeStr.replace(/[^\d/:\s]/g, '').trim();
+            }
+
+            // Expected format: "dd/mm/yyyy HH:mm"
+            let dateTime: Date;
+
+            const parts = timeStr.split(' ');
+            if (parts.length >= 2) {
+              const dateParts = parts[0].split('/');
+              const timeParts = parts[1].split(':');
+
+              if (dateParts.length === 3 && timeParts.length >= 2) {
+                const day = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1;
+                const year = parseInt(dateParts[2], 10);
+                let hour = parseInt(timeParts[0], 10);
+                const minute = parseInt(timeParts[1], 10);
+
+                // Adjust 12-hour format to 24-hour if AM/PM detected
+                if (isPM && hour < 12) {
+                  hour += 12;
+                }
+                if (isAM && hour === 12) {
+                  hour = 0;
+                }
+
+                dateTime = new Date(year, month, day, hour, minute);
+              } else {
+                dateTime = new Date(item.Time);
+              }
+            } else {
+              dateTime = new Date(item.Time);
+            }
+
             let time = dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            let fullDate = dateTime.toISOString();
+
+            let yearIso = dateTime.getFullYear();
+            let monthIso = String(dateTime.getMonth() + 1).padStart(2, '0');
+            let dayIso = String(dateTime.getDate()).padStart(2, '0');
+            let hourIso = String(dateTime.getHours()).padStart(2, '0');
+            let minuteIso = String(dateTime.getMinutes()).padStart(2, '0');
+            let secondsIso = String(dateTime.getSeconds()).padStart(2, '0');
+
+            let fullDate = `${yearIso}-${monthIso}-${dayIso}T${hourIso}:${minuteIso}:${secondsIso}.000Z`;
             return {
-                "acc_no": item["AC-No."],
-                "date": fullDate.split('T')[0],
-                "hour": time,
-                "iso_date": fullDate,
-                "state": item['State'],
+              "acc_no": item["AC-No."],
+              "date": fullDate.split('T')[0],
+              "hour": time,
+              "iso_date": fullDate,
+              "state": item['State'],
             };
           });
-          this.days = [...new Set(this.sheetData.map((item:any) => item.date))].sort((a: string, b: string) => new Date(a).getTime() - new Date(b).getTime());
+          this.days = [...new Set(this.sheetData.map((item: any) => item.date))].sort((a: string, b: string) => new Date(a).getTime() - new Date(b).getTime());
           if (this.sheetData[0].date) {
             const year = parseInt(this.sheetData[0].date.split('-')[0]);
             const month = parseInt(this.sheetData[0].date.split('-')[1]);
             const daysInMonth = new Date(year, month, 0).getDate();
             this.monthDays = [];
             for (let day = 1; day <= daysInMonth; day++) {
-                const dayString = day < 10 ? `0${day}` : day;
-                this.monthDays.push(`${year}-${month < 10 ? '0' + month : month}-${dayString}`);
+              const dayString = day < 10 ? `0${day}` : day;
+              this.monthDays.push(`${year}-${month < 10 ? '0' + month : month}-${dayString}`);
             }
           }
         } else {
-          let input:any = document.getElementById('fileInput');
+          let input: any = document.getElementById('fileInput');
           input.value = '';
           this.selectedFile = undefined;
           Swal.fire({
-            icon:'error',
-            title:'ملف غير صحيح'
+            icon: 'error',
+            title: 'ملف غير صحيح'
           });
         }
       };
@@ -149,31 +206,31 @@ export class WorkingHoursComponent implements OnInit{
     }
   }
 
-  async submitform(){
+  async submitform() {
     this.data = [];
     this.sheetData = this.sheetData.filter(elm => this.monthDays.includes(elm.date));
-    await this.days.forEach(item =>{
+    await this.days.forEach(item => {
       this.employees.forEach(elm => {
         let data = {};
-        data['times']=[];
+        data['times'] = [];
         this.sheetData.forEach(elm2 => {
           if (elm2.date == item) {
-            if(elm.acc_no == elm2.acc_no){
+            if (elm.acc_no == elm2.acc_no) {
               data['acc_no'] = elm.acc_no;
               data['employee_id'] = elm.id;
               let editedNight = false;
               if (!data['check_in']) {
                 let night = false;
                 let index;
-                if (elm2.state == 'C/Out' ) {
+                if (elm2.state == 'C/Out') {
                   let dateObj = new Date(elm2.date);
                   dateObj.setDate(dateObj.getDate() - 1);
                   let dateBefore = dateObj.toISOString().split('T')[0];
-                  let emp = this.data.find(elm=> elm.acc_no == elm2.acc_no && elm.date == dateBefore);
-                  index = this.data.findIndex(elm=> elm.acc_no == elm2.acc_no && elm.date == dateBefore);
+                  let emp = this.data.find(elm => elm.acc_no == elm2.acc_no && elm.date == dateBefore);
+                  index = this.data.findIndex(elm => elm.acc_no == elm2.acc_no && elm.date == dateBefore);
                   if (emp) {
-                    const empTimeOut:any = new Date(emp.time_out);
-                    const elm2IsoDate:any = new Date(elm2.iso_date);
+                    const empTimeOut: any = new Date(emp.time_out);
+                    const elm2IsoDate: any = new Date(elm2.iso_date);
                     const diffMin = (elm2IsoDate - empTimeOut) / (1000 * 60);
                     if (emp.check_in == emp.check_out || diffMin < 60) {
                       night = true;
@@ -184,8 +241,8 @@ export class WorkingHoursComponent implements OnInit{
                 if (elm2.state == 'C/Out' && night) {
                   this.data[index].check_out = elm2.hour;
                   this.data[index].time_out = elm2.iso_date;
-                  let startDate:any = new Date(this.data[index].time_in);
-                  let endDate:any = new Date(this.data[index].time_out);
+                  let startDate: any = new Date(this.data[index].time_in);
+                  let endDate: any = new Date(this.data[index].time_out);
                   let differenceInMilliseconds = endDate - startDate;
                   let differenceInMinutes = Math.floor(differenceInMilliseconds / (1000 * 60));
                   let hours = Math.floor(differenceInMinutes / 60);
@@ -222,8 +279,8 @@ export class WorkingHoursComponent implements OnInit{
                   if (!data['times'].includes(elm2.iso_date)) {
                     data['times'].push(elm2.iso_date);
                   }
-                  let startDate:any = new Date(data['time_in']);
-                  let endDate:any = new Date(data['time_out']);
+                  let startDate: any = new Date(data['time_in']);
+                  let endDate: any = new Date(data['time_out']);
                   let differenceInMilliseconds = endDate - startDate;
                   let differenceInMinutes = Math.floor(differenceInMilliseconds / (1000 * 60));
                   let hours = Math.floor(differenceInMinutes / 60);
@@ -242,18 +299,18 @@ export class WorkingHoursComponent implements OnInit{
       })
     });
     await this.monthDays.forEach(elm => {
-      this.employees.forEach(emp =>{
+      this.employees.forEach(emp => {
         let isExist = this.data.find(item => item.employee_id == emp.id && item.date === elm);
         if (!isExist && emp.acc_no) {
           this.data.push({
             "acc_no": emp.acc_no,
             "employee_id": emp.id,
-            "iso_date": elm+"T05:00:00.000Z",
+            "iso_date": elm + "T05:00:00.000Z",
             "date": elm,
             "check_in": "08:00 AM",
-            "time_in": elm+"T05:00:00.000Z",
+            "time_in": elm + "T05:00:00.000Z",
             "check_out": "08:00 AM",
-            "time_out": elm+"T05:00:00.000Z",
+            "time_out": elm + "T05:00:00.000Z",
             "hours": "00:00",
             "times": [],
           });
@@ -263,63 +320,63 @@ export class WorkingHoursComponent implements OnInit{
     await this.data.sort((a, b) => {
       return a.date.localeCompare(b.date);
     });
-    this.data.forEach(elm=>{
+    this.data.forEach(elm => {
       elm.times = JSON.stringify(elm.times);
     })
-    let data = {data:this.data};
+    let data = { data: this.data };
     if (this.data.length > 0) {
       let month = this.monthDays[0].slice(0, 7);
-      await this.employeeService.saveExcelData(data , '').subscribe(res=>{
+      await this.employeeService.saveExcelData(data, '').subscribe(res => {
         if (res) {
           this.getEmpDataPerMonth();
           Swal.fire({
-            icon:'success',
-            timer:1500,
-            showConfirmButton:false
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false
           });
           this.btnShowForm = false;
           this.sheetData = [];
           this.days = [];
           this.data = [];
-          let input:any = document.getElementById('fileInput');
+          let input: any = document.getElementById('fileInput');
           input.value = '';
           this.selectedFile = undefined;
         }
-      } , (error) =>{
+      }, (error) => {
         if (error) {
           Swal.fire({
-            text:'تم رفع بيانات شهر'+month+' من قبل ',
+            text: 'تم رفع بيانات شهر' + month + ' من قبل ',
             showCancelButton: true,
             confirmButtonText: 'overwrite',
             cancelButtonText: 'replace',
-          }).then((result:any) => {
+          }).then((result: any) => {
             console.log(result);
 
             if (result.isConfirmed) {
-              this.employeeService.saveExcelData(data,'overwrite').subscribe(res=>{
+              this.employeeService.saveExcelData(data, 'overwrite').subscribe(res => {
                 console.log(res);
 
-                if(res){
+                if (res) {
                   this.getEmpDataPerMonth();
                   Swal.fire({
-                    icon:'success',
-                    timer:1500,
-                    showConfirmButton:false
+                    icon: 'success',
+                    timer: 1500,
+                    showConfirmButton: false
                   });
                 }
               })
 
             }
             if (result.dismiss == "cancel") {
-              this.employeeService.saveExcelData(data,'replace').subscribe(res=>{
+              this.employeeService.saveExcelData(data, 'replace').subscribe(res => {
                 console.log(res);
 
-                if(res){
+                if (res) {
                   this.getEmpDataPerMonth();
                   Swal.fire({
-                    icon:'success',
-                    timer:1500,
-                    showConfirmButton:false
+                    icon: 'success',
+                    timer: 1500,
+                    showConfirmButton: false
                   });
                   this.isEmpSelected = false;
                 }
@@ -329,7 +386,7 @@ export class WorkingHoursComponent implements OnInit{
             this.sheetData = [];
             this.days = [];
             this.data = [];
-            let input:any = document.getElementById('fileInput');
+            let input: any = document.getElementById('fileInput');
             input.value = '';
             this.selectedFile = undefined;
           })
@@ -349,30 +406,30 @@ export class WorkingHoursComponent implements OnInit{
     this.getEmpDataPerMonth();
   }
 
-  openForm(){
+  openForm() {
     this.btnShowForm = true;
   }
 
-  closeForm(){
+  closeForm() {
     this.btnShowForm = false;
     this.sheetData = [];
     this.days = [];
     this.data = [];
-    let input:any = document.getElementById('fileInput');
+    let input: any = document.getElementById('fileInput');
     input.value = '';
     this.selectedFile = undefined;
   }
 
-  employeeDetails(id:number){
+  employeeDetails(id: number) {
     this.route.navigate([`/dashboard/hr/workinghoursdetails/${id}`]);
   }
 
-  selectVacationBoolean:boolean=false;
-  selectvacationDays(){
+  selectVacationBoolean: boolean = false;
+  selectvacationDays() {
     this.selectVacationBoolean = true;
   }
 
-  reason!:string;
+  reason!: string;
 
   range = new FormGroup({
     start: new FormControl<Date | null>(null),
@@ -402,48 +459,48 @@ export class WorkingHoursComponent implements OnInit{
       }
     }
 
-    let data:any[] =[];
+    let data: any[] = [];
     let employees = this.employees.filter(elm => elm.selected == true);
     selectedDateRanges = selectedDateRanges.filter(date => new Date(date).getDay() !== 5);
-    selectedDateRanges.forEach(date=>{
-      employees.forEach(elm=>{
-        let obj={};
+    selectedDateRanges.forEach(date => {
+      employees.forEach(elm => {
+        let obj = {};
         let dayHour = 8;
         let check_out = `04:00 PM`;
         if (elm.working_hours == 9) {
           dayHour = 9;
           check_out = `05:00 PM`;
         }
-        obj['employee_id']= elm.id,
-        obj['date']= date,
-        obj['check_in']= "08:00 AM",
-        obj['check_out']= check_out ,
-        obj['hours']= `0${dayHour}:00`,
-        obj['iso_date']= `${date}T05:00:00.000Z`,
-        obj['time_in']= `${date}T05:00:00.000Z`,
-        obj['time_out']= `${date}T0${5+dayHour}:00:00.000Z`,
-        obj['vacation']= true,
-        obj['vacation_reason']= this.reason,
-        data.push(obj);
+        obj['employee_id'] = elm.id,
+          obj['date'] = date,
+          obj['check_in'] = "08:00 AM",
+          obj['check_out'] = check_out,
+          obj['hours'] = `0${dayHour}:00`,
+          obj['iso_date'] = `${date}T05:00:00.000Z`,
+          obj['time_in'] = `${date}T05:00:00.000Z`,
+          obj['time_out'] = `${date}T0${5 + dayHour}:00:00.000Z`,
+          obj['vacation'] = true,
+          obj['vacation_reason'] = this.reason,
+          data.push(obj);
       })
     })
     console.log(selectedDateRanges);
 
-    this.employeeService.updateFingerPrintSheet({data}).subscribe(res=>{
+    this.employeeService.updateFingerPrintSheet({ data }).subscribe(res => {
       if (res) {
         this.cancelVac();
         this.getEmpDataPerMonth();
         Swal.fire({
-          icon:'success',
-          timer:1500,
-          showConfirmButton:false
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
         })
       }
     })
   }
 
   getDatesBetween(startDate: Date, endDate: Date): Date[] {
-    const dates:any = [];
+    const dates: any = [];
     let currentDate = new Date(startDate);
 
     while (currentDate <= endDate) {
@@ -455,25 +512,25 @@ export class WorkingHoursComponent implements OnInit{
   }
 
 
-  isEmpSelected:boolean=false;
-  selectEmp(e){
+  isEmpSelected: boolean = false;
+  selectEmp(e) {
     if (e.target.id == 'selectAll') {
-      this.employees.forEach(elm=>{
+      this.employees.forEach(elm => {
         elm.selected = e.target.checked;
       })
     }
     if (Number(e.target.id) >= 0) {
       this.employees[e.target.id].selected = e.target.checked;
     }
-    this.isEmpSelected = this.employees.some(elm=>elm.selected);
+    this.isEmpSelected = this.employees.some(elm => elm.selected);
   }
 
-  cancelVac(){
-    this.isEmpSelected=false;
-    this.selectVacationBoolean=false;
+  cancelVac() {
+    this.isEmpSelected = false;
+    this.selectVacationBoolean = false;
     this.range.value.start = null;
     this.range.value.end = null;
-    this.employees.forEach(elm=>{
+    this.employees.forEach(elm => {
       elm.selected = false;
     })
     const checkbox = document.getElementById('selectAll') as HTMLInputElement;

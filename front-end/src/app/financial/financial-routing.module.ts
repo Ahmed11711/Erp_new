@@ -28,6 +28,7 @@ import { AssetSubCategoryComponent } from './asset-sub-category/asset-sub-catego
 import { AssetSubSubCategoryComponent } from './asset-sub-categoryEnd/asset-sub-category-end.component';
 import { ReportNewOrdersComponent } from './V2/report-new-order/report-new-order.component';
 import { ReportNewOrdersComponentDetails } from './V2/report-new-order-details/report-new-order-details.component';
+import { ServiceAccountsListComponent } from './service-accounts/service-accounts-list/service-accounts-list.component';
 
 
 const routes: Routes = [
@@ -150,6 +151,10 @@ const routes: Routes = [
   {
     path: 'bank',
     loadChildren: () => import('./bank/bank.module').then(m => m.BankModule)
+  },
+  {
+    path: 'service-accounts', component: ServiceAccountsListComponent,
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management'] }
   }
 ];
 

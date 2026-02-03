@@ -39,54 +39,75 @@ import { AssetSubCategoryComponent } from './asset-sub-category/asset-sub-catego
 import { AssetSubSubCategoryComponent } from './asset-sub-categoryEnd/asset-sub-category-end.component';
 import { ReportNewOrdersComponent } from './V2/report-new-order/report-new-order.component';
 import { ReportNewOrdersComponentDetails } from './V2/report-new-order-details/report-new-order-details.component';
-  
+import { ServiceAccountsListComponent } from './service-accounts/service-accounts-list/service-accounts-list.component';
+import { ServiceAccountsCreateComponent } from './service-accounts/service-accounts-create/service-accounts-create.component';
+import { ServiceAccountsTransferComponent } from './service-accounts/service-accounts-transfer/service-accounts-transfer.component';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTableModule } from '@angular/material/table';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+
+
 @NgModule({
-    declarations: [
-      ListBanksComponent,
-      DialogComponent,
-      DialogAssetComponent,
-      AddExpenseComponent,
-      ExpensesComponent,
-      ExpensesKindComponent,
-      AddIncomeComponent,
-      OtherIncomeComponent,
-      EstatesComponent,
-      AddEstateComponent,
-      DiscountsComponent,
-      AddCommitmentComponent,
-      IndividualsClientsComponent,
-      CovenantComponent,
-      AddCovenantComponent,
-      ExpenseDetailsComponent,
-      BankDetailsComponent,
-      EditexpenseComponent,
-      PendingComponent,
-      BanksMovementsComponent,
-      BankMovementDetailsDialogComponent,
-      BankMovementCustodyDialogComponent,
-      IncomeListComponent,
-      CustomerAccountsComponent,
-      SupplierAccountsComponent,
-      CustomerAccountDetailsComponent,
-      AssetCategoryComponent,
-      AssetSubCategoryComponent,
-      AssetSubSubCategoryComponent,
-      ReportNewOrdersComponent,
-      ReportNewOrdersComponentDetails
+  declarations: [
+    ListBanksComponent,
+    DialogComponent,
+    DialogAssetComponent,
+    AddExpenseComponent,
+    ExpensesComponent,
+    ExpensesKindComponent,
+    AddIncomeComponent,
+    OtherIncomeComponent,
+    EstatesComponent,
+    AddEstateComponent,
+    DiscountsComponent,
+    AddCommitmentComponent,
+    IndividualsClientsComponent,
+    CovenantComponent,
+    AddCovenantComponent,
+    ExpenseDetailsComponent,
+    BankDetailsComponent,
+    EditexpenseComponent,
+    PendingComponent,
+    BanksMovementsComponent,
+    BankMovementDetailsDialogComponent,
+    BankMovementCustodyDialogComponent,
+    IncomeListComponent,
+    CustomerAccountsComponent,
+    SupplierAccountsComponent,
+    CustomerAccountDetailsComponent,
+    AssetCategoryComponent,
+    AssetSubCategoryComponent,
+    AssetSubSubCategoryComponent,
+    ReportNewOrdersComponent,
+    ReportNewOrdersComponentDetails,
+    ServiceAccountsListComponent,
+    ServiceAccountsCreateComponent,
+    ServiceAccountsTransferComponent
 
-      
-    ],
-    imports: [
-        CommonModule,
-        FinancialRoutingModule,
-        SharedModule,
-        ReactiveFormsModule,
-        FormsModule,
-        MatIconModule,
-        MatMenuModule,
-        NgxPaginationModule,
-        MatPaginatorModule,
 
-    ]
+  ],
+  imports: [
+    CommonModule,
+    FinancialRoutingModule,
+    SharedModule,
+    ReactiveFormsModule,
+    FormsModule,
+    MatIconModule,
+    MatMenuModule,
+    NgxPaginationModule,
+    MatPaginatorModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatDialogModule,
+    MatButtonModule,
+    MatTableModule,
+    MatSnackBarModule
+
+  ]
 })
 export class FinancialModule { }

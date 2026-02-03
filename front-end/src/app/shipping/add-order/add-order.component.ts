@@ -16,7 +16,9 @@ import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { AuthService } from 'src/app/auth/auth.service';
 
-import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
+
 
 @Component({
   selector: 'app-add-order',
@@ -33,6 +35,7 @@ export class AddOrderComponent implements OnInit {
   numbers: any[] = [];
   banksData: any[] = [];
   safesData: any[] = [];
+  serviceAccountsData: any[] = []; // Service Accounts Data
   imgUrl!: string;
   specialStatus: boolean = false;
 
@@ -42,6 +45,7 @@ export class AddOrderComponent implements OnInit {
     private datePipe: DatePipe,
     private bankService: BanksService,
     private safeService: SafeService,
+    private serviceAccountsService: ServiceAccountsService, // Injected Service
     private http: HttpClient,
     private _snackBar: MatSnackBar,
     private router: Router,
@@ -60,6 +64,7 @@ export class AddOrderComponent implements OnInit {
     this.shippingWay.data().subscribe(result => this.shippingWays = result);
     this.orderService.getProducts().subscribe((result: any) => this.products = result);
     this.bankService.bankSelect().subscribe((result: any) => this.banksData = result);
+    this.serviceAccountsService.index().subscribe((result: any) => this.serviceAccountsData = result); // Fetch Service Accounts
 
     this.http.get('assets/egypt/governorates.json').subscribe((data: any) => this.location = data);
     this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
@@ -74,7 +79,6 @@ export class AddOrderComponent implements OnInit {
       order_source_id: 'مصدر الطلب',
       shipping_method_id: 'طريقة الشحن',
       city: 'المدينة'
-
     });
   }
 
@@ -202,6 +206,7 @@ export class AddOrderComponent implements OnInit {
     'special_details': new FormControl(null),
     'payment_type': new FormControl('bank'), // Default to bank
     'safe_id': new FormControl(null),
+    'service_account_id': new FormControl(null),
   })
 
   async submitform() {
@@ -227,6 +232,8 @@ export class AddOrderComponent implements OnInit {
         formData.append('bank', data.bank);
       } else if (data.payment_type === 'safe') {
         formData.append('safe_id', data.safe_id);
+      } else if (data.payment_type === 'service_account') {
+        formData.append('service_account_id', data.service_account_id);
       }
       formData.append('customer_type', data.customer_type);
       formData.append('customer_phone_1', data.customer_phone_1);
