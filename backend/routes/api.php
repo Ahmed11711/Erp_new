@@ -227,6 +227,7 @@ Route::middleware('auth')->group(function () {
         Route::get('addshippmentnumber/{id}', [OrdersController::class, 'addShippmentNumber']);
     });
 
+    // new role Corparates
     Route::middleware(['department.access:Admin,Shipping Management,Corparates'])->group(function () {
         Route::post('googlesheet/{sheet}', [App\Http\Controllers\GoogleController::class, 'addData']);
 
