@@ -7,13 +7,13 @@ import { LeadDetailsComponent } from './lead-details/lead-details.component';
 
 const routes: Routes = [
   {path:'leads', component:LeadListComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management','Corparates']}
   },
   {path:'leads/:id', component:LeadDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management','Corparates']}
   },
   {path:'add-lead', component:LeadAddEditComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management','Corparates']}
   },
 ];
 
