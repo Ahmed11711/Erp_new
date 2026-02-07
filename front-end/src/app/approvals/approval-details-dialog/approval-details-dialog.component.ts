@@ -67,6 +67,10 @@ export class ApprovalDetailsDialogComponent {
     let totalHours = workingHourPerDay * 60;
     let actualTotalMinutesPerMonth = 0;
     let hourPrice = fixedSalary/30/dayHours
+    
+    // Check if there are any fingerprints
+    const hasFingerPrints = this.tableData && this.tableData.length > 0;
+    
     this.tableData.forEach(elm=>{
       elm.times = JSON.parse(elm.times.replace(/\\/g, ''));
       elm['working_hours'] = workingHourPerDay;
@@ -75,59 +79,63 @@ export class ApprovalDetailsDialogComponent {
       if (holiday) {
         elm['holiday'] = true;
       }
-      let actualTotalMinutes = 0;
-      hour = this.convertMinutesToHours(totalHours);
-      let [hours, minutes] = elm.hours.split(':').map(Number);
-      actualTotalMinutes += hours * 60 + minutes;
-      actualTotalMinutesPerMonth += hours * 60 + minutes;
-      if (elm.is_overTime_removed) {
-        actualTotalMinutesPerMonth -= (hours * 60 + minutes )-(60 * dayHours);
-      }
-
-      if (elm.hours_permission) {
-        let [hours2, minutes2] = elm.hours_permission.split(':').map(Number);
-        actualTotalMinutesPerMonth += hours2 * 60 + minutes2;
-      }
-
-      if (elm.absence_deduction) {
-        actualTotalMinutesPerMonth -= dayHours * 60 * Number(elm.absence_deduction - 1);
-      }
-
-      let hoursDifference = actualTotalMinutes - totalHours;
-
-      let hoursDifferenceStr: string;
-
-      if (hoursDifference >= 0) {
-        hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
-        let salary = hoursDifference/60*hourPrice*1.5;
-        elm['salary_type']=salary;
-        elm['salary_type2']='حافز';
-      } else {
-        hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
-        let salary = hoursDifference/60*hourPrice;
-        if (elm.absence_deduction) {
-          salary = salary * Number(elm.absence_deduction);
+      
+      if (hasFingerPrints) {
+        let actualTotalMinutes = 0;
+        hour = this.convertMinutesToHours(totalHours);
+        let [hours, minutes] = elm.hours.split(':').map(Number);
+        actualTotalMinutes += hours * 60 + minutes;
+        actualTotalMinutesPerMonth += hours * 60 + minutes;
+        if (elm.is_overTime_removed) {
+          actualTotalMinutesPerMonth -= (hours * 60 + minutes )-(60 * dayHours);
         }
+
         if (elm.hours_permission) {
-          let [hours, minutes] = elm.hours_permission.split(':').map(Number);
-          salary += ((hours * 60 + minutes)/60 * hourPrice);
-        }
-        elm['salary_type']=salary * -1;
-        if (salary == 0) {
-          elm['salary_type']=salary;
+          let [hours2, minutes2] = elm.hours_permission.split(':').map(Number);
+          actualTotalMinutesPerMonth += hours2 * 60 + minutes2;
         }
 
-        elm['salary_type2']='خصم';
-        if (holiday && elm.check_in !== elm.check_out) {
-          salary = actualTotalMinutes/60*hourPrice*1.5;
+        if (elm.absence_deduction) {
+          actualTotalMinutesPerMonth -= dayHours * 60 * Number(elm.absence_deduction - 1);
+        }
+
+        let hoursDifference = actualTotalMinutes - totalHours;
+
+        let hoursDifferenceStr: string;
+
+        if (hoursDifference >= 0) {
+          hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
+          let salary = hoursDifference/60*hourPrice*1.5;
           elm['salary_type']=salary;
           elm['salary_type2']='حافز';
+        } else {
+          hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
+          let salary = hoursDifference/60*hourPrice;
+          if (elm.absence_deduction) {
+            salary = salary * Number(elm.absence_deduction);
+          }
+          if (elm.hours_permission) {
+            let [hours, minutes] = elm.hours_permission.split(':').map(Number);
+            salary += ((hours * 60 + minutes)/60 * hourPrice);
+          }
+          elm['salary_type']=salary * -1;
+          if (salary == 0) {
+            elm['salary_type']=salary;
+          }
+
+          elm['salary_type2']='خصم';
+          if (holiday && elm.check_in !== elm.check_out) {
+            salary = actualTotalMinutes/60*hourPrice*1.5;
+            elm['salary_type']=salary;
+            elm['salary_type2']='حافز';
+          }
+        }
+        elm['hoursDifference'] = hoursDifferenceStr;
+        if (holiday && elm.check_in !== elm.check_out) {
+          elm['hoursDifference'] = elm.hours;
         }
       }
-      elm['hoursDifference'] = hoursDifferenceStr;
-      if (holiday && elm.check_in !== elm.check_out) {
-        elm['hoursDifference'] = elm.hours;
-      }
+      
       formatedData.push(elm);
     });
     this.tableData = formatedData

@@ -95,7 +95,7 @@
           <td class="bg-main">{{elm?.total_merit | customNumber}}</td>
           <td (dblclick)="addRival(elm)">{{elm?.rival | customNumber}}</td>
           <td (dblclick)="addAbsence(elm)">{{elm?.absence | customNumber}}</td>
-          <td>{{elm?.absenceDetails?.absenceHours || 0 | customNumber}}</td>
+          <td>{{elm?.noFingerPrints ? '' : (elm?.absenceDetails?.absenceHours || 0) | customNumber}}</td>
           <td>{{elm?.absence_sub | customNumber}}</td>
           <td (dblclick)="advancePayment(elm)">{{elm?.advance_payment | customNumber}}</td>
           <td class="bg-main">{{elm?.total_sub | customNumber}}</td>

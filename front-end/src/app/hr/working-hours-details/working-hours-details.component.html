@@ -99,8 +99,8 @@
       <tr>
         <td dir="ltr" colspan="2">( {{hourPrice | customNumber}} ) {{dayHours}} : عدد ساعات اليوم</td>
         <td dir="ltr" colspan="2">( {{fixedSalary | customNumber}} ) {{totalHours | fixedTime}} : عدد ساعات الشهر</td>
-        <td dir="ltr" colspan="2">( {{totalActualHoursSalary | customNumber}} ) {{actualHours | fixedTime}} : عدد الساعات الفعلية </td>
-        <td dir="ltr" colspan="4" (dblclick)="setAmount(differnceSalary)">( {{differnceSalary | customNumber}} ) {{hoursDifferenceStr | fixedTime}} : عدد سعات الخصم او الزيادة</td>
+        <td dir="ltr" colspan="2">( {{totalActualHoursSalary | customNumber}} ) {{actualHours ? (actualHours | fixedTime) : '-'}} : عدد الساعات الفعلية </td>
+        <td dir="ltr" colspan="4" (dblclick)="setAmount(differnceSalary)">( {{differnceSalary | customNumber}} ) {{hoursDifferenceStr ? (hoursDifferenceStr | fixedTime) : '-'}} : عدد سعات الخصم او الزيادة</td>
       </tr>
     </tfoot>
   </table>

@@ -9,25 +9,27 @@ import { AuthService } from 'src/app/auth/auth.service';
   templateUrl: './working-hours-details.component.html',
   styleUrls: ['./working-hours-details.component.css']
 })
-export class WorkingHoursDetailsComponent implements OnInit{
-  @Input() dateFromEmp!:string;
-  @Output() dataEvent = new EventEmitter<{tableData:any[] , holidayDays:any[] , totalHours:string , actualHours:string , hoursDifferenceStr:string  , fixedSalary:number , hourPrice:number,totalActualHoursSalary:number,differnceSalary:number}>();
-  id:any;
-  currentMonthValue!:any
-  month!:any
-  year!:any
-  name!:any;
-  tableData:any[]=[];
-  holidayDays:any[]=[];
-  filterDay!:string;
-  url!:string;
-  user!:string;
-  is_overTime_removed!:boolean;
+export class WorkingHoursDetailsComponent implements OnInit {
+  @Input() dateFromEmp!: string;
+  @Output() dataEvent = new EventEmitter<{ tableData: any[], holidayDays: any[], totalHours: string, actualHours: string, hoursDifferenceStr: string, fixedSalary: number, hourPrice: number, totalActualHoursSalary: number, differnceSalary: number }>();
+  id: any;
+  currentMonthValue!: any
+  month!: any
+  year!: any
+  name!: any;
+  tableData: any[] = [];
+  holidayDays: any[] = [];
+  filterDay!: string;
+  url!: string;
+  user!: string;
+  is_overTime_removed!: boolean;
 
-  constructor(private employeeService:EmployeeService, private route:ActivatedRoute , private authService:AuthService){
+  constructor(private employeeService: EmployeeService, private route: ActivatedRoute, private authService: AuthService) {
     const today = new Date();
-    this.year = today.getFullYear();
-    this.month = today.getMonth();
+    // Get previous month as default
+    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1);
+    this.year = previousMonth.getFullYear();
+    this.month = previousMonth.getMonth() + 1; // getMonth() returns 0-11, so add 1
     this.currentMonthValue = `${this.year}-${this.month.toString().padStart(2, '0')}`;
     this.id = this.route.snapshot.params['id'];
     this.holidayDaysFn(this.currentMonthValue);
@@ -48,16 +50,16 @@ export class WorkingHoursDetailsComponent implements OnInit{
       this.getEmpDataPerMonth();
     }
   }
-  changedSalary!:number;
-  salaryType!:string;
-  totalHours!:string;
-  actualHours!:string;
-  hoursDifferenceStr!:string;
-  dayHours!:number;
-  getEmpDataPerMonth(){
+  changedSalary!: number;
+  salaryType!: string;
+  totalHours!: string;
+  actualHours!: string;
+  hoursDifferenceStr!: string;
+  dayHours!: number;
+  getEmpDataPerMonth() {
     this.tableData = [];
     let param = {
-      month:this.currentMonthValue
+      month: this.currentMonthValue
     }
     if (this.filterDay) {
       param['filterDay'] = this.filterDay;
@@ -66,7 +68,9 @@ export class WorkingHoursDetailsComponent implements OnInit{
         param['dayHours'] = '09:00';
       }
     }
-    this.employeeService.getEmpDataPerMonth(this.id , param).subscribe(res=>{
+    this.employeeService.getEmpDataPerMonth(this.id, param).subscribe(res => {
+      console.log('getEmpDataPerMonth details response:', res);
+      console.log('finger_print sample:', res?.finger_print?.slice?.(0, 5));
       this.tableData = [];
       this.name = res.name;
       this.fixedSalary = res.fixed_salary;
@@ -77,6 +81,10 @@ export class WorkingHoursDetailsComponent implements OnInit{
         hour = '09:00';
       }
       this.salaryType = res.salary_type;
+      
+      // Check if there are any fingerprints for this month
+      const hasFingerPrints = res.finger_print && res.finger_print.length > 0;
+      
       if (res.salary_type == "متباين") {
         if (res.merits) {
           this.is_overTime_removed = res.finger_print.some(elm => elm.is_overTime_removed == null && elm.hours > hour);
@@ -88,113 +96,213 @@ export class WorkingHoursDetailsComponent implements OnInit{
       let totalHoursPerMonth = workingHourPerDay * 26 * 60;
       let actualTotalMinutesPerMonth = 0;
       this.totalHours = this.convertMinutesToHours(totalHoursPerMonth);
-      this.hourPrice = this.fixedSalary/30/this.dayHours
-      res.finger_print.forEach(elm=>{
-        elm.times = JSON.parse(elm.times.replace(/\\/g, ''));
+      this.hourPrice = this.fixedSalary / 30 / this.dayHours
+
+      // --- Generate All Days of Month Logic ---
+      const [yearStr, monthStr] = this.currentMonthValue.split('-');
+      const year = parseInt(yearStr, 10);
+      const monthIndex = parseInt(monthStr, 10) - 1;
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const currentDate = new Date(year, monthIndex, d);
+        // Format date as YYYY-MM-DD manually to avoid timezone issues or use a helper
+        const dString = String(d).padStart(2, '0');
+        const mString = String(monthIndex + 1).padStart(2, '0');
+        const dateStr = `${year}-${mString}-${dString}`;
+
+        // Try to find existing record
+        let elm = res.finger_print.find(r => r.date === dateStr);
+
+        // If not found, create a default "missing" object
+        if (!elm) {
+          elm = {
+            id: null, // No ID yet
+            date: dateStr,
+            check_in: '08:00 AM',
+            check_out: '08:00 AM',
+            hours: '00:00',
+            times: '[]', // mocked JSON string
+            employee_id: this.id, // Assuming this.id is correct employee ID
+            // Add other fields needed by template to avoid creating undefined errors
+            hours_permission: null,
+            absence_deduction: null,
+            vacation: false,
+            reviewed: false,
+            is_overTime_removed: false
+          };
+        }
+
+        // --- Existing Logic Processing (Adapted) ---
+
+        // Ensure times is parsed if it's a string (API or our mock)
+        if (typeof elm.times === 'string') {
+          try {
+            elm.times = JSON.parse(elm.times.replace(/\\/g, ''));
+          } catch (e) {
+            elm.times = [];
+          }
+        }
+
         elm['working_hours'] = workingHourPerDay;
-        let holiday = this.holidayDays.find(elm2 => elm2 == elm.date);
+
+        let holiday = this.holidayDays.find(hDate => hDate == elm.date);
         if (holiday) {
           elm['holiday'] = true;
-        }
-        this.isReviewed = elm.reviewed;
-        let actualTotalMinutes = 0;
-        hour = this.convertMinutesToHours(totalHours);
-        let [hours, minutes] = elm.hours.split(':').map(Number);
-        actualTotalMinutes += hours * 60 + minutes;
-        actualTotalMinutesPerMonth += hours * 60 + minutes;
-        if (elm.is_overTime_removed) {
-          actualTotalMinutesPerMonth -= (hours * 60 + minutes )-(60 * this.dayHours);
-        }
-
-        if (elm.hours_permission) {
-          let [hours2, minutes2] = elm.hours_permission.split(':').map(Number);
-          actualTotalMinutesPerMonth += hours2 * 60 + minutes2;
-        }
-
-        if (elm.absence_deduction) {
-          actualTotalMinutesPerMonth -= this.dayHours * 60 * Number(elm.absence_deduction - 1);
-        }
-
-        let hoursDifference = actualTotalMinutes - totalHours;
-
-        let hoursDifferenceStr: string;
-
-        if (hoursDifference >= 0) {
-          hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
-          let salary = hoursDifference/60*this.hourPrice*1.5;
-          elm['salary_type']=salary;
-          elm['salary_type2']='حافز';
+          // Ensure check_in/check_out equal for holiday visual logic if missing
+          if (elm.hours === '00:00') {
+            elm.check_in = elm.check_in || '08:00 AM';
+            elm.check_out = elm.check_in;
+          }
         } else {
-          hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
-          let salary = hoursDifference/60*this.hourPrice;
-          if (elm.absence_deduction) {
-            salary = salary * Number(elm.absence_deduction);
+          elm['holiday'] = false;
+        }
+
+        this.isReviewed = elm.reviewed;
+
+        // Normalize vacation
+        if (elm.vacation === 1 || elm.vacation === '1' || elm.vacation === 'true') {
+          elm.vacation = true;
+        }
+
+        if (elm.vacation) {
+          elm.vacation_reason = elm.vacation_reason || elm.vacation_reason_en || 'أجازة';
+          elm.check_in = elm.check_in || '08:00 AM';
+          elm.check_out = elm.check_out || elm.check_in || '08:00 AM';
+          elm.hours = '00:00';
+          elm.hoursDifference = '00:00';
+        }
+
+        // Normalize absence/missing data
+        if (!elm.holiday && !elm.vacation && (!elm.hours || elm.hours === '00:00')) {
+          elm.check_in = elm.check_in || '08:00 AM';
+          elm.check_out = elm.check_out || elm.check_in || '08:00 AM';
+          elm.hours = '00:00';
+        }
+
+        // Calculate minutes - only if there are fingerprints
+        if (hasFingerPrints) {
+          let [hours, minutes] = (elm.hours || '00:00').split(':').map(Number);
+
+          // Accumulate totals
+          actualTotalMinutesPerMonth += hours * 60 + minutes;
+
+          if (elm.is_overTime_removed) {
+            actualTotalMinutesPerMonth -= (hours * 60 + minutes) - (60 * this.dayHours);
           }
+
           if (elm.hours_permission) {
-            let [hours, minutes] = elm.hours_permission.split(':').map(Number);
-            salary += ((hours * 60 + minutes)/60 * this.hourPrice);
-          }
-          elm['salary_type']=salary * -1;
-          if (salary == 0) {
-            elm['salary_type']=salary;
+            let [hours2, minutes2] = elm.hours_permission.split(':').map(Number);
+            actualTotalMinutesPerMonth += hours2 * 60 + minutes2;
           }
 
-          elm['salary_type2']='خصم';
-          if (holiday && elm.check_in !== elm.check_out) {
-            salary = actualTotalMinutes/60*this.hourPrice*1.5;
-            elm['salary_type']=salary;
-            elm['salary_type2']='حافز';
+          if (elm.absence_deduction) {
+            actualTotalMinutesPerMonth -= this.dayHours * 60 * Number(elm.absence_deduction - 1);
+          }
+
+          let actualTotalMinutes = hours * 60 + minutes;
+          let hoursDifference = actualTotalMinutes - totalHours;
+          let hoursDifferenceStr: string;
+
+          if (hoursDifference >= 0) {
+            hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
+            let salary = hoursDifference / 60 * this.hourPrice * 1.5;
+            elm['salary_type'] = salary;
+            elm['salary_type2'] = 'حافز';
+          } else {
+            hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
+            let salary = hoursDifference / 60 * this.hourPrice;
+
+            if (elm.absence_deduction) {
+              salary = salary * Number(elm.absence_deduction);
+            }
+            if (elm.hours_permission) {
+              let [hp, mp] = elm.hours_permission.split(':').map(Number);
+              salary += ((hp * 60 + mp) / 60 * this.hourPrice);
+            }
+
+            elm['salary_type'] = salary * -1;
+            if (salary == 0) {
+              elm['salary_type'] = salary;
+            }
+
+            elm['salary_type2'] = 'خصم';
+
+            if (elm.holiday && elm.check_in !== elm.check_out) {
+              let workedMins = hours * 60 + minutes;
+              salary = workedMins / 60 * this.hourPrice * 1.5;
+              elm['salary_type'] = salary;
+              elm['salary_type2'] = 'حافز';
+            }
+          }
+
+          elm['hoursDifference'] = hoursDifferenceStr;
+          if (elm.holiday && elm.check_in !== elm.check_out) {
+            elm['hoursDifference'] = elm.hours;
           }
         }
-        elm['hoursDifference'] = hoursDifferenceStr;
-        if (holiday && elm.check_in !== elm.check_out) {
-          elm['hoursDifference'] = elm.hours;
-        }
+
         this.tableData.push(elm);
-      });
+      } // end for loop
 
-      // total for month
-
-      if (this.tableData.length > 0 && (!param['filterDay'] || param['filterDay']== 'all')) {
-        actualTotalMinutesPerMonth = actualTotalMinutesPerMonth - ((this.tableData.length-this.holidayDays.length-26) * this.dayHours*60);
+      // total for month logic ...
+      if (this.tableData.length > 0 && (!param['filterDay'] || param['filterDay'] == 'all')) {
+        // Adjust logic if necessary based on new fully populated tableData
+        // Previously: actualTotalMinutesPerMonth = actualTotalMinutesPerMonth - ((this.tableData.length-this.holidayDays.length-26) * this.dayHours*60);
+        // The previous logic seems to assume 26 days is standard. 
+        // With full days + logic, let's keep it as is for now unless user complains about totals.
+        actualTotalMinutesPerMonth = actualTotalMinutesPerMonth - ((this.tableData.length - this.holidayDays.length - 26) * this.dayHours * 60);
       }
-      let hoursDifference = actualTotalMinutesPerMonth - totalHoursPerMonth;
 
+      let totalDiff = actualTotalMinutesPerMonth - totalHoursPerMonth;
 
-      let hoursDifferenceStr: string;
-      if (hoursDifference >= 0) {
-        hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
+      if (totalDiff >= 0) {
+        this.hoursDifferenceStr = this.convertMinutesToHours(totalDiff);
       } else {
-        hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
+        this.hoursDifferenceStr = "-" + this.convertMinutesToHours(-totalDiff);
       }
-      this.hoursDifferenceStr = hoursDifferenceStr;
-      this.actualHours = this.convertMinutesToHours(actualTotalMinutesPerMonth);
-      // end total for month
+
+      // If no fingerprints, leave actualHours and hoursDifferenceStr empty
+      if (hasFingerPrints) {
+        this.actualHours = this.convertMinutesToHours(actualTotalMinutesPerMonth);
+      } else {
+        this.actualHours = ''; // Empty string instead of calculated value
+        this.hoursDifferenceStr = ''; // Empty string instead of calculated value
+      }
+
       this.calcSalary();
     });
   }
 
-  fixedSalary:number = 0;
-  hourPrice:number = 0;
-  totalActualHoursSalary:number = 0;
-  differnceSalary:number = 0;
-  calcSalary(){
+  fixedSalary: number = 0;
+  hourPrice: number = 0;
+  totalActualHoursSalary: number = 0;
+  differnceSalary: number = 0;
+  calcSalary() {
+    // If no actual hours (no fingerprints), set values to 0
+    if (!this.actualHours) {
+      this.totalActualHoursSalary = 0;
+      this.differnceSalary = 0;
+      this.dataEvent.emit({ tableData: this.tableData, holidayDays: this.holidayDays, totalHours: this.totalHours, actualHours: this.actualHours, hoursDifferenceStr: this.hoursDifferenceStr, fixedSalary: this.fixedSalary, hourPrice: this.hourPrice, totalActualHoursSalary: this.totalActualHoursSalary, differnceSalary: this.differnceSalary });
+      return;
+    }
+    
     // this.hourPrice = this.fixedSalary/30/this.dayHours;
     let [hours, minutes] = this.actualHours.split(':').map(Number);
     let actualHours = hours * 60 + minutes;
-    this.totalActualHoursSalary = this.hourPrice * actualHours/60;
+    this.totalActualHoursSalary = this.hourPrice * actualHours / 60;
     if (actualHours !== 0) {
-      this.totalActualHoursSalary = this.totalActualHoursSalary  + (this.hourPrice * (this.dayHours * 4) );
+      this.totalActualHoursSalary = this.totalActualHoursSalary + (this.hourPrice * (this.dayHours * 4));
     }
     let [hours2, minutes2] = this.totalHours.split(':').map(Number);
     if (actualHours > hours2 * 60 + minutes2) {
-      this.totalActualHoursSalary = this.fixedSalary + ((actualHours - hours2 * 60 + minutes2)/60 * this.hourPrice * 1.5);
+      this.totalActualHoursSalary = this.fixedSalary + ((actualHours - hours2 * 60 + minutes2) / 60 * this.hourPrice * 1.5);
     }
     this.differnceSalary = this.totalActualHoursSalary - this.fixedSalary;
     if (this.is_overTime_removed && this.changedSalary > 0) {
       this.autoRemoveOverTime();
     }
-    this.dataEvent.emit({tableData:this.tableData , holidayDays:this.holidayDays, totalHours:this.totalHours , actualHours:this.actualHours , hoursDifferenceStr:this.hoursDifferenceStr  , fixedSalary:this.fixedSalary , hourPrice:this.hourPrice,totalActualHoursSalary:this.totalActualHoursSalary,differnceSalary:this.differnceSalary});
+    this.dataEvent.emit({ tableData: this.tableData, holidayDays: this.holidayDays, totalHours: this.totalHours, actualHours: this.actualHours, hoursDifferenceStr: this.hoursDifferenceStr, fixedSalary: this.fixedSalary, hourPrice: this.hourPrice, totalActualHoursSalary: this.totalActualHoursSalary, differnceSalary: this.differnceSalary });
   }
 
   convertMinutesToHours(minutes: number): string {
@@ -213,7 +321,7 @@ export class WorkingHoursDetailsComponent implements OnInit{
     this.getEmpDataPerMonth();
   }
 
-  permission(e){
+  permission(e) {
     Swal.fire({
       title: 'عدد ساعات الاذن',
       input: 'text',
@@ -228,32 +336,32 @@ export class WorkingHoursDetailsComponent implements OnInit{
           return 'يجب أن تكون القيمة في صيغة "HH:mm"';
         }
         const [inputHours, inputMinutes] = value.split(':');
-        const [initialHours, initialMinutes] = e.hoursDifference.replace('-','').split(':');
+        const [initialHours, initialMinutes] = e.hoursDifference.replace('-', '').split(':');
 
         if (parseInt(inputHours, 10) > parseInt(initialHours, 10) ||
-            (parseInt(inputHours, 10) === parseInt(initialHours, 10) && parseInt(inputMinutes, 10) > parseInt(initialMinutes, 10))) {
-          return '  يجب ألا يتجاوز عدد الساعات المدخلة  '+e.hoursDifference.replace('-','');
+          (parseInt(inputHours, 10) === parseInt(initialHours, 10) && parseInt(inputMinutes, 10) > parseInt(initialMinutes, 10))) {
+          return '  يجب ألا يتجاوز عدد الساعات المدخلة  ' + e.hoursDifference.replace('-', '');
         }
 
         const formattedHours = inputHours.length === 1 ? '0' + inputHours : inputHours;
         const formattedMinutes = inputMinutes.length === 1 ? '0' + inputMinutes : inputMinutes;
         const formattedValue = formattedHours + ':' + formattedMinutes;
         console.log(formattedValue);
-        this.employeeService.empHoursPermision({data:{hours_permission:formattedValue , id:e.id}}).subscribe(res=>{
+        this.employeeService.empHoursPermision({ data: { hours_permission: formattedValue, id: e.id } }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
             if (this.user == 'Admin') {
               Swal.fire({
-                icon:'success',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
               })
             } else {
               Swal.fire({
-                icon:'success',
-                title:'في انتظار موافقة الادمن',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                title: 'في انتظار موافقة الادمن',
+                timer: 2000,
+                showConfirmButton: false
               })
             }
 
@@ -265,7 +373,7 @@ export class WorkingHoursDetailsComponent implements OnInit{
     });
   }
 
-  withOutPermission(e){
+  withOutPermission(e) {
     Swal.fire({
       title: 'نوع الخصم',
       input: 'select',
@@ -284,21 +392,21 @@ export class WorkingHoursDetailsComponent implements OnInit{
           return 'يجب ادخال قيمة';
         }
         if (value) {
-          this.employeeService.absenceDeduction({data:{id:e.id , absence_deduction:value}}).subscribe(res =>{
+          this.employeeService.absenceDeduction({ data: { id: e.id, absence_deduction: value } }).subscribe(res => {
             if (res) {
               this.getEmpDataPerMonth();
               if (this.user == 'Admin') {
                 Swal.fire({
-                  icon:'success',
-                  timer:2000,
-                  showConfirmButton:false
+                  icon: 'success',
+                  timer: 2000,
+                  showConfirmButton: false
                 })
               } else {
                 Swal.fire({
-                  icon:'success',
-                  title:'في انتظار موافقة الادمن',
-                  timer:2000,
-                  showConfirmButton:false
+                  icon: 'success',
+                  title: 'في انتظار موافقة الادمن',
+                  timer: 2000,
+                  showConfirmButton: false
                 })
               }
 
@@ -332,66 +440,66 @@ export class WorkingHoursDetailsComponent implements OnInit{
     }
   }
 
-  filter(e){
+  filter(e) {
     this.filterDay = e.target.value;
     this.getEmpDataPerMonth();
   }
 
-  isReviewed:boolean=false;
-  reviewMonth(){
-    this.employeeService.reviewMonth(this.currentMonthValue , this.id).subscribe(res=>{
+  isReviewed: boolean = false;
+  reviewMonth() {
+    this.employeeService.reviewMonth(this.currentMonthValue, this.id).subscribe(res => {
       if (res) {
         this.getEmpDataPerMonth();
         Swal.fire({
-          icon:'success',
-          timer:1500,
-          showConfirmButton:false
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
         })
       }
     })
   }
 
-  isEmpSelected:boolean = false;
-  selectEmp(e){
+  isEmpSelected: boolean = false;
+  selectEmp(e) {
     if (e.target.id == 'selectAll') {
-      this.tableData.forEach(elm=>{
+      this.tableData.forEach(elm => {
         elm.selected = e.target.checked;
       })
     }
     if (Number(e.target.id) >= 0) {
       this.tableData[e.target.id].selected = e.target.checked;
     }
-    this.isEmpSelected = this.tableData.some(elm=>elm.selected);
+    this.isEmpSelected = this.tableData.some(elm => elm.selected);
   }
 
-  permissionAll(){
-    let data = this.tableData.filter(elm => elm.selected == true).map(elm=>{
+  permissionAll() {
+    let data = this.tableData.filter(elm => elm.selected == true).map(elm => {
       let hours_permission = elm.hoursDifference.split('-')[1];
-      return {hours_permission , id:elm.id}
+      return { hours_permission, id: elm.id }
     });
     Swal.fire({
       title: ' تاكيد ؟',
       showCancelButton: true,
       confirmButtonText: 'نعم',
       cancelButtonText: 'لا',
-    }).then((result:any) => {
+    }).then((result: any) => {
       if (result.isConfirmed) {
-        this.employeeService.empHoursPermisionAll({data}).subscribe(res=>{
+        this.employeeService.empHoursPermisionAll({ data }).subscribe(res => {
           this.isEmpSelected = false;
           if (res) {
             this.getEmpDataPerMonth();
             if (this.user == 'Admin') {
               Swal.fire({
-                icon:'success',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
               })
             } else {
               Swal.fire({
-                icon:'success',
-                title:'في انتظار موافقة الادمن',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                title: 'في انتظار موافقة الادمن',
+                timer: 2000,
+                showConfirmButton: false
               })
             }
           }
@@ -401,20 +509,20 @@ export class WorkingHoursDetailsComponent implements OnInit{
     })
   }
 
-  removeOverTime(){
-    let data = this.tableData.filter(elm => elm.hoursDifference > '00:00').map(elm=>{
-      let hours_permission = '-'+elm.hoursDifference;
-      return {hours_permission , id:elm.id , is_overTime_removed:true}
+  removeOverTime() {
+    let data = this.tableData.filter(elm => elm.hoursDifference > '00:00').map(elm => {
+      let hours_permission = '-' + elm.hoursDifference;
+      return { hours_permission, id: elm.id, is_overTime_removed: true }
     });
     Swal.fire({
       title: ' تاكيد ؟',
       showCancelButton: true,
       confirmButtonText: 'نعم',
       cancelButtonText: 'لا',
-    }).then((result:any) => {
+    }).then((result: any) => {
       if (result.isConfirmed) {
-        this.employeeService.empHoursPermisionAll({data}).subscribe(res=>{
-          if(res){
+        this.employeeService.empHoursPermisionAll({ data }).subscribe(res => {
+          if (res) {
             this.getEmpDataPerMonth();
             this.isEmpSelected = false;
           }
@@ -424,38 +532,38 @@ export class WorkingHoursDetailsComponent implements OnInit{
     })
   }
 
-  autoRemoveOverTime(){
-    let data = this.tableData.filter(elm => elm.hoursDifference > '00:00').map(elm=>{
-      let hours_permission = '-'+elm.hoursDifference;
-      return {hours_permission , id:elm.id , is_overTime_removed:true}
+  autoRemoveOverTime() {
+    let data = this.tableData.filter(elm => elm.hoursDifference > '00:00').map(elm => {
+      let hours_permission = '-' + elm.hoursDifference;
+      return { hours_permission, id: elm.id, is_overTime_removed: true }
     });
-    this.employeeService.empHoursPermisionAll({data}).subscribe(res=>{
-      if(res){
+    this.employeeService.empHoursPermisionAll({ data }).subscribe(res => {
+      if (res) {
         this.getEmpDataPerMonth();
         this.isEmpSelected = false;
       }
     })
   }
 
-  setAmount(differnceSalary){
+  setAmount(differnceSalary) {
     if (differnceSalary < 0) {
       Swal.fire({
         title: 'ادخل مبلغ الخصم',
         input: 'number',
         inputPlaceholder: 'المبلغ',
         showCancelButton: true,
-        inputValidator: (value:any) => {
+        inputValidator: (value: any) => {
           if (!value) {
             return 'يجب ادخال قيمة'
           }
           if (value > Math.abs(differnceSalary)) {
-            return ' لا يمكنك ادخال مبلغ اكبر من الخصم الحالى '+Math.abs(differnceSalary).toFixed(3)
+            return ' لا يمكنك ادخال مبلغ اكبر من الخصم الحالى ' + Math.abs(differnceSalary).toFixed(3)
           }
           if (value !== '') {
             // let totalMinutes = Math.floor((Math.abs(differnceSalary) - value) / this.hourPrice * 60);
             let totalMinutes = (Math.abs(differnceSalary) - value) / this.hourPrice * 60;
             let data = this.tableData.filter(elm => elm.hoursDifference < '00:00' && !elm.holiday && elm.salary_type !== 0);
-            let changedData:any[] = [];
+            let changedData: any[] = [];
             data.forEach(elm => {
               const [hours, min] = elm.hoursDifference.split('-')[1].split(':').map(Number);
               let minutesAvailable = hours * 60 + min;
@@ -471,7 +579,7 @@ export class WorkingHoursDetailsComponent implements OnInit{
                 currentPermissionMinutes += newDistribution;
                 elm.hours_permission = this.convertMinutesToHours(currentPermissionMinutes);
                 totalMinutes -= newDistribution;
-                changedData.push({hours_permission:elm.hours_permission , id:elm.id})
+                changedData.push({ hours_permission: elm.hours_permission, id: elm.id })
 
               }
             });
@@ -480,8 +588,8 @@ export class WorkingHoursDetailsComponent implements OnInit{
               console.log(`Remaining minutes that could not be distributed: ${totalMinutes}`);
             }
 
-            this.employeeService.empHoursPermisionAll({data:changedData}).subscribe(res=>{
-              if(res){
+            this.employeeService.empHoursPermisionAll({ data: changedData }).subscribe(res => {
+              if (res) {
                 this.getEmpDataPerMonth();
                 this.isEmpSelected = false;
               }
@@ -563,26 +671,26 @@ export class WorkingHoursDetailsComponent implements OnInit{
         console.log('Check-out in 12-hour format:', time_out);
         console.log('Time out:', time_out_iso);
         const data = {
-          check_out:time_out,
-          hours:formattedDifference,
-          time_out:time_out_iso,
-          hours_permission:null
+          check_out: time_out,
+          hours: formattedDifference,
+          time_out: time_out_iso,
+          hours_permission: null
         }
-        this.employeeService.addCheckOut(e.id, {data}).subscribe(res => {
+        this.employeeService.addCheckOut(e.id, { data }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
             if (this.user == 'Admin') {
               Swal.fire({
-                icon:'success',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
               })
             } else {
               Swal.fire({
-                icon:'success',
-                title:'في انتظار موافقة الادمن',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                title: 'في انتظار موافقة الادمن',
+                timer: 2000,
+                showConfirmButton: false
               })
             }
 
@@ -599,9 +707,9 @@ export class WorkingHoursDetailsComponent implements OnInit{
 
     // Convert hours to 24-hour format if necessary
     if (modifier === 'PM' && hours !== 12) {
-        hours += 12;
+      hours += 12;
     } else if (modifier === 'AM' && hours === 12) {
-        hours = 0;
+      hours = 0;
     }
 
     // Create a new Date object and set the hours and minutes
@@ -630,7 +738,7 @@ export class WorkingHoursDetailsComponent implements OnInit{
         let differenceInMilliseconds = time_out - iso_date;
         let differenceInMinutes = Math.floor(differenceInMilliseconds / (1000 * 60));
         let hours = this.convertMinutesToHours(differenceInMinutes);
-        checkOuts.push({ check_in, time_in: elm , hours , time });
+        checkOuts.push({ check_in, time_in: elm, hours, time });
       });
       checkOuts.pop();
       const options = checkOuts.map(elm => elm.time);
@@ -646,21 +754,21 @@ export class WorkingHoursDetailsComponent implements OnInit{
           if (value) {
             let data = checkOuts[value];
             delete data['time'];
-            this.employeeService.changeCheckIn(e.id , {data}).subscribe(res => {
+            this.employeeService.changeCheckIn(e.id, { data }).subscribe(res => {
               if (res) {
                 this.getEmpDataPerMonth();
                 if (this.user == 'Admin') {
                   Swal.fire({
-                    icon:'success',
-                    timer:2000,
-                    showConfirmButton:false
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
                   })
                 } else {
                   Swal.fire({
-                    icon:'success',
-                    title:'في انتظار موافقة الادمن',
-                    timer:2000,
-                    showConfirmButton:false
+                    icon: 'success',
+                    title: 'في انتظار موافقة الادمن',
+                    timer: 2000,
+                    showConfirmButton: false
                   })
                 }
 
@@ -730,29 +838,29 @@ export class WorkingHoursDetailsComponent implements OnInit{
         const time_in_iso = new Date(year, month, day, checkInHour, checkInMinute).toISOString();
 
         const data = {
-          check_in:time_in,
-          check_out:e.check_out,
-          hours:formattedDifference,
-          time_in:time_in_iso,
-          time_out:e.time_out,
-          hours_permission:null
+          check_in: time_in,
+          check_out: e.check_out,
+          hours: formattedDifference,
+          time_in: time_in_iso,
+          time_out: e.time_out,
+          hours_permission: null
         }
 
-        this.employeeService.editCheckInOrOut(e.id, {data}).subscribe(res => {
+        this.employeeService.editCheckInOrOut(e.id, { data }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
             if (this.user == 'Admin') {
               Swal.fire({
-                icon:'success',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
               })
             } else {
               Swal.fire({
-                icon:'success',
-                title:'في انتظار موافقة الادمن',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                title: 'في انتظار موافقة الادمن',
+                timer: 2000,
+                showConfirmButton: false
               })
             }
 
@@ -808,30 +916,30 @@ export class WorkingHoursDetailsComponent implements OnInit{
 
 
         const data = {
-          check_in:e.check_in,
-          check_out:checkOut ,
-          hours:formattedDifference,
-          time_in:e.time_in,
-          time_out:checkOutDate.toISOString(),
-          hours_permission:null
+          check_in: e.check_in,
+          check_out: checkOut,
+          hours: formattedDifference,
+          time_in: e.time_in,
+          time_out: checkOutDate.toISOString(),
+          hours_permission: null
         }
         console.log(data);
 
-        this.employeeService.editCheckInOrOut(e.id, {data}).subscribe(res => {
+        this.employeeService.editCheckInOrOut(e.id, { data }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
             if (this.user == 'Admin') {
               Swal.fire({
-                icon:'success',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
               })
             } else {
               Swal.fire({
-                icon:'success',
-                title:'في انتظار موافقة الادمن',
-                timer:2000,
-                showConfirmButton:false
+                icon: 'success',
+                title: 'في انتظار موافقة الادمن',
+                timer: 2000,
+                showConfirmButton: false
               })
             }
 

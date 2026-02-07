@@ -31,8 +31,10 @@ export class PayrollComponent implements OnInit{
   constructor(private empService:EmployeeService , private authService:AuthService , private bankService:BanksService){
     this.user = this.authService.getUser();
     const today = new Date();
-    this.year = today.getFullYear();
-    this.month = today.getMonth();
+    // Get previous month as default
+    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1);
+    this.year = previousMonth.getFullYear();
+    this.month = previousMonth.getMonth() + 1; // getMonth() returns 0-11, so add 1
     this.currentMonthValue = `${this.year}-${this.month.toString().padStart(2, '0')}`;
     this.form.patchValue({
       type:'نوع الراتب'
@@ -162,6 +164,7 @@ export class PayrollComponent implements OnInit{
         }
 
         obj['extraHours'] = 0;
+        obj['noFingerPrints'] = false; // Flag to indicate no fingerprints in month
         if (elm.finger_print.length > 0) {
           let fingerSheet = this.fingerSheet(elm);
           if (fingerSheet.calcSalary.differnceSalary <= 0) {
@@ -174,6 +177,9 @@ export class PayrollComponent implements OnInit{
           if (obj['absenceDetails'].absenceDaysCount) {
             obj['absence'] = obj['absenceDetails'].absenceDaysCount;
           }
+        } else {
+          obj['noFingerPrints'] = true; // No fingerprints for this month
+          obj['absenceDetails'] = {}; // Empty details
         }
 
         if (elm.advance_payment.length > 0) {
