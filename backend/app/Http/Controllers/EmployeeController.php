@@ -290,7 +290,17 @@ class EmployeeController extends Controller
 
         }
 
-        DB::table('employee_finger_print_sheets')->insert($data);
+        try {
+            // Add timestamps to data if needed, or rely on DB defaults for new inserts.
+            // For updates, we explicitly update the fields.
+            DB::table('employee_finger_print_sheets')->upsert(
+                $data,
+                ['employee_id', 'date'], // Unique constraints
+                ['acc_no', 'check_in', 'check_out', 'hours', 'iso_date', 'time_in', 'time_out', 'times'] // Columns to update if exists
+            );
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error saving data: ' . $e->getMessage()], 500);
+        }
         return response()->json('success', 200);
     }
 
