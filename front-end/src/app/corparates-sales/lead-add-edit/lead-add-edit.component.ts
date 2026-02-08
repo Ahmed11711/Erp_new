@@ -77,23 +77,22 @@ export class LeadAddEditComponent {
       ]),
 
       company_facebook: new FormControl(null, [
-        Validators.required,
+        // Validators.required,
         Validators.pattern(/^https?:\/\/(www\.)?facebook\.com\/[A-Za-z0-9.\-_]+\/?$/)
       ]),
 
       company_instagram: new FormControl(null, [
-        Validators.required,
+        // Validators.required,
         Validators.pattern(/^https?:\/\/(www\.)?instagram\.com\/[A-Za-z0-9.\-_]+\/?$/)
       ]),
 
       company_website: new FormControl(null, [
-        Validators.required,
+        // Validators.required,
         Validators.pattern(/^(https?:\/\/)?(www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}(\/\S*)?$/)
       ]),
 
       company_linkedin: new FormControl(null, [
-        Validators.required,
-        Validators.pattern(/^(https?:\/\/)?(www\.)?linkedin\.com\/.*$/)
+         Validators.pattern(/^(https?:\/\/)?(www\.)?linkedin\.com\/.*$/)
       ]),
 
       notes: new FormControl(null, [
@@ -120,7 +119,7 @@ export class LeadAddEditComponent {
   createContactFormGroup(): FormGroup {
     return new FormGroup({
       contact_name: new FormControl(null, [Validators.required]),
-      contact_linkedin: new FormControl(null, [Validators.required, Validators.pattern(/^(https?:\/\/)?(www\.)?linkedin\.com\/.*$/)]),
+      contact_linkedin: new FormControl(null, [Validators.pattern(/^(https?:\/\/)?(www\.)?linkedin\.com\/.*$/)]),
       phones: new FormArray([this.createPhoneFormGroup()]),
       emails: new FormArray([this.createEmailFormControl()])
     });
@@ -142,7 +141,7 @@ export class LeadAddEditComponent {
 
   createEmailFormControl(): FormControl {
     return new FormControl(null, [
-      Validators.required,
+      // Validators.required,
       Validators.email
     ]);
   }
@@ -168,7 +167,7 @@ export class LeadAddEditComponent {
     }
     return new FormGroup({
       dial_code: new FormControl(dial_code, [Validators.required]),
-      contact_number: new FormControl(null, [Validators.required,Validators.pattern(/^\d{7,15}$/)]),
+      contact_number: new FormControl(null, [Validators.pattern(/^\d{7,15}$/)]),
     });
   }
 
