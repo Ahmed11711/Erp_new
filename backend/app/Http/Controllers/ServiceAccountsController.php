@@ -55,7 +55,7 @@ class ServiceAccountsController extends Controller
             'description' => 'nullable|string',
             'other_info' => 'nullable|string',
             'img' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
-            'account_id' => 'exists:tree_accounts,id',
+            'account_id' => 'required|exists:tree_accounts,id',
             'balance' => 'numeric',
         ]);
 
@@ -85,7 +85,7 @@ class ServiceAccountsController extends Controller
         $validator = Validator::make($request->all(), [
             'from_account_id' => 'required|exists:service_accounts,id',
             'to_account_id' => 'required|exists:service_accounts,id|different:from_account_id',
-            'amount' => 'required|numeric|min:0',
+            'amount' => 'required|numeric|min:0.01',
             'notes' => 'nullable|string',
         ]);
 
@@ -123,6 +123,7 @@ class ServiceAccountsController extends Controller
                     } else {
                         $fromTree->increment('balance', $request->amount);
                     }
+                    $fromTree->save();
                 }
             }
 
@@ -142,11 +143,147 @@ class ServiceAccountsController extends Controller
                     } else {
                         $toTree->decrement('balance', $request->amount);
                     }
+                    $toTree->save();
                 }
             }
 
             DB::commit();
             return response()->json(['message' => 'تم التحويل بنجاح'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Handle Direct Deposit/Withdraw (Receipt/Payment)
+     */
+    public function directTransaction(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'service_account_id' => 'required|exists:service_accounts,id',
+            'type' => 'required|in:receipt,payment',
+            'counter_account_id' => 'required|exists:tree_accounts,id',
+            'amount' => 'required|numeric|min:0.01',
+            'date' => 'required|date',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $serviceAccount = ServiceAccount::find($request->service_account_id);
+            $counterAccount = TreeAccount::find($request->counter_account_id);
+            $amount = $request->amount;
+            $type = $request->type;
+            $date = $request->date;
+            $notes = $request->notes;
+
+            // Ensure Service Account has a linked Tree Account
+            if (!$serviceAccount->account_id) {
+                return response()->json(['message' => 'الحساب الخدمي غير مرتبط بحساب شجري'], 422);
+            }
+            $serviceAccountId = $serviceAccount->account_id;
+
+            // Check Balance for Withdrawal (Payment)
+            if ($type === 'payment' && $serviceAccount->balance < $amount) {
+                return response()->json(['message' => 'رصيد الحساب الخدمي غير كافي'], 422);
+            }
+
+            // Note: ServiceAccounts don't have a transaction history table yet. 
+            // We rely on AccountEntry for history.
+
+            if ($type === 'receipt') {
+                // 1. Debit Service Account (Money In)
+                AccountEntry::create([
+                    'tree_account_id' => $serviceAccountId,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'description' => "إيداع حساب خدمي - " . $notes,
+                    'created_at' => $date,
+                    'updated_at' => $date
+                ]);
+                
+                // 2. Credit Counter Account (Source)
+                AccountEntry::create([
+                    'tree_account_id' => $counterAccount->id,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => "إيداع حساب خدمي - " . $notes,
+                    'created_at' => $date,
+                    'updated_at' => $date
+                ]);
+
+                // Update Balances
+                $serviceAccount->increment('balance', $amount);
+
+                $serviceTree = TreeAccount::find($serviceAccountId);
+                $serviceTree->increment('debit_balance', $amount);
+                if (in_array($serviceTree->type, ['asset', 'expense'])) {
+                     $serviceTree->increment('balance', $amount);
+                } else {
+                     $serviceTree->decrement('balance', $amount);
+                }
+                $serviceTree->save();
+
+                $counterTree = TreeAccount::find($counterAccount->id);
+                $counterTree->increment('credit_balance', $amount);
+                if (in_array($counterTree->type, ['asset', 'expense'])) {
+                     $counterTree->decrement('balance', $amount);
+                } else {
+                     $counterTree->increment('balance', $amount);
+                }
+                $counterTree->save();
+
+            } else { // payment
+                // 1. Credit Service Account (Money Out)
+                AccountEntry::create([
+                    'tree_account_id' => $serviceAccountId,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => "صرف حساب خدمي - " . $notes,
+                    'created_at' => $date,
+                    'updated_at' => $date
+                ]);
+
+                // 2. Debit Counter Account (Destination)
+                AccountEntry::create([
+                    'tree_account_id' => $counterAccount->id,
+                     'debit' => $amount,
+                    'credit' => 0,
+                    'description' => "صرف حساب خدمي - " . $notes,
+                    'created_at' => $date,
+                    'updated_at' => $date
+                ]);
+
+                // Update Balances
+                $serviceAccount->decrement('balance', $amount);
+
+                $serviceTree = TreeAccount::find($serviceAccountId);
+                $serviceTree->increment('credit_balance', $amount);
+                 if (in_array($serviceTree->type, ['asset', 'expense'])) {
+                     $serviceTree->decrement('balance', $amount);
+                } else {
+                     $serviceTree->increment('balance', $amount);
+                }
+                $serviceTree->save();
+
+                $counterTree = TreeAccount::find($counterAccount->id);
+                $counterTree->increment('debit_balance', $amount);
+                 if (in_array($counterTree->type, ['asset', 'expense'])) {
+                     $counterTree->increment('balance', $amount);
+                } else {
+                     $counterTree->decrement('balance', $amount);
+                }
+                $counterTree->save();
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'تمت العملية بنجاح'], 200);
+
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);

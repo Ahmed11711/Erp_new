@@ -13,12 +13,12 @@ return new class extends Migration
      */
     public function up()
     {
-        // Schema::table('banks', function (Blueprint $table) {
-        //           $table->foreignId('asset_id')
-        //     ->nullable()
-        //     ->constrained('tree_accounts')
-        //     ->nullOnDelete();
-        // });
+        Schema::table('banks', function (Blueprint $table) {
+            $table->foreignId('asset_id')
+                ->nullable()
+                ->constrained('tree_accounts')
+                ->nullOnDelete();
+        });
     }
 
     /**
