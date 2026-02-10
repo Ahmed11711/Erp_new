@@ -4,51 +4,107 @@
       <app-time></app-time>
     </div>
     <div class="col-5">
-      <div><p class="title header w-50 m-auto">قائمة المركز المالي</p></div>
+      <div>
+        <p class="title header w-50 m-auto">كشف حساب تفصيلي</p>
+      </div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
 
   <div class="container-fluid">
 
+    <form class="my-5 border p-3 rounded" [formGroup]="form" (ngSubmit)="submitform()">
+      <div class="row align-items-end">
+        <div class="col-md-2">
+          <label>نوع الحساب</label>
+          <select class="form-control" formControlName="type">
+            <option value="safe">خزينة</option>
+            <option value="bank">بنك</option>
+            <option value="account">حساب خدمي</option>
+          </select>
+        </div>
 
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
+        <div class="col-md-3">
+          <label>اسم الحساب</label>
+          <select class="form-control" formControlName="entity_id">
+            <ng-container *ngIf="form.get('type')?.value == 'safe'">
+              <option *ngFor="let item of safes" [value]="item.id">{{ item.name }}</option>
+            </ng-container>
+            <ng-container *ngIf="form.get('type')?.value == 'bank'">
+              <option *ngFor="let item of banks" [value]="item.id">{{ item.name }}</option>
+            </ng-container>
+            <ng-container *ngIf="form.get('type')?.value == 'account'">
+              <option *ngFor="let item of accounts" [value]="item.id">{{ item.name }}</option>
+            </ng-container>
+          </select>
+        </div>
+
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label>من تاريخ</label>
+          <input class="form-control" type="date" formControlName="date_from" (change)="onDateFromChange($event)">
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label>الى تاريخ</label>
+          <input class="form-control" type="date" formControlName="date_to" (change)="onDateToChange($event)">
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100" type="submit">عرض التقرير</button>
         </div>
       </div>
     </form>
 
 
-    <table class="table table-bordered w-25 m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th class="w-75">البيان</th>
-        <th>رصيد</th>
-      </thead>
-      <tbody>
-        <tr >
-          <td></td>
-          <td>0</td>
-        </tr>
-      </tbody>
-      <tfoot>
-        <tr>
-          <td>الاجمالى الالتزامات</td>
-          <td>0</td>
-        </tr>
-      </tfoot>
-    </table>
+    <div *ngIf="details" class="card mb-4">
+      <div class="card-header bg-info text-white">
+        <h5 class="mb-0">ملخص الحساب: {{ details.account?.name }} ({{ details.account?.code }})</h5>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col-md-3 border-end">
+            <h6>الرصيد الافتتاحي</h6>
+            <h4 class="text-primary">{{ details.opening_balance | number:'1.2-2' }}</h4>
+          </div>
+          <div class="col-md-3 border-end">
+            <h6>إجمالي مدين (وارد)</h6>
+            <h4 class="text-success">{{ totals?.debit | number:'1.2-2' }}</h4>
+          </div>
+          <div class="col-md-3 border-end">
+            <h6>إجمالي دائن (صادر)</h6>
+            <h4 class="text-danger">{{ totals?.credit | number:'1.2-2' }}</h4>
+          </div>
+          <div class="col-md-3">
+            <h6>الرصيد الختامي</h6>
+            <h4 class="text-primary">{{ details.closing_balance | number:'1.2-2' }}</h4>
+          </div>
+        </div>
+      </div>
+    </div>
 
-</div>
+    <div *ngIf="data.length > 0" class="table-responsive">
+      <table class="table table-bordered table-striped text-center">
+        <thead class="bg-dark text-white">
+          <th>التاريخ</th>
+          <th>البيان / الشرح</th>
+          <th class="text-success">مدين</th>
+          <th class="text-danger">دائن</th>
+          <th>الرصيد المتحرك</th>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of data">
+            <td>{{ item.created_at | date:'yyyy-MM-dd HH:mm' }}</td>
+            <td>{{ item.description }}</td>
+            <td class="text-success">{{ item.debit > 0 ? (item.debit | number:'1.2-2') : '-' }}</td>
+            <td class="text-danger">{{ item.credit > 0 ? (item.credit | number:'1.2-2') : '-' }}</td>
+            <td style="direction: ltr;">{{ item.running_balance | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="details && data.length == 0" class="alert alert-warning text-center">
+      لا توجد حركات في الفترة المحددة
+    </div>
+
+  </div>

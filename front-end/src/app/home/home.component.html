@@ -9,7 +9,39 @@
       </div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-     </div>
+    </div>
+  </div>
+
+  <!-- Financial Overview Section -->
+  <div class="row mb-4" *ngIf="user == 'Admin' || user == 'Account Management'">
+    <div class="col-md-4">
+      <div class="card text-white bg-success mb-3" style="cursor: pointer;" routerLink="/dashboard/accounting/safes">
+        <div class="card-header">إجمالي الخزن</div>
+        <div class="card-body">
+          <h3 class="card-title">{{ totalSafeBalance | number:'1.2-2' }}</h3>
+          <p class="card-text">رصيد جميع الخزائن</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-primary mb-3" style="cursor: pointer;" routerLink="/dashboard/accounting/banks">
+        <div class="card-header">إجمالي البنوك</div>
+        <div class="card-body">
+          <h3 class="card-title">{{ totalBankBalance | number:'1.2-2' }}</h3>
+          <p class="card-text">رصيد جميع البنوك</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-secondary mb-3" style="cursor: pointer;"
+        routerLink="/dashboard/reports/financialstatement">
+        <div class="card-header">كشف حساب تفصيلي</div>
+        <div class="card-body">
+          <h3 class="card-title"><i class="fa fa-list-alt"></i></h3>
+          <p class="card-text">عرض حركات الحسابات</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div *ngFor="let notification of notifications">

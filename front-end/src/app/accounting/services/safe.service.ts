@@ -42,4 +42,8 @@ export class SafeService {
     transfer(data: any): Observable<any> {
         return this.http.post<any>(`${this.apiUrl}/transfer`, data);
     }
+
+    directTransaction(data: any): Observable<any> {
+        return this.http.post<any>(`${this.apiUrl}/direct-transaction`, data);
+    }
 }

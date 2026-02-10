@@ -372,6 +372,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/account-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountBalance']);
         Route::get('/trial-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'trialBalance']);
         Route::get('/accounting-tree', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountingTree']);
+        Route::get('/account-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountStatement']);
     });
     // Service Accounts
     Route::prefix('service-accounts/')->group(function () {

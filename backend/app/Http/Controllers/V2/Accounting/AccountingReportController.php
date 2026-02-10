@@ -157,5 +157,80 @@ class AccountingReportController extends Controller
 
         return response()->json($accounts, 200);
     }
+    /**
+     * Account Statement Report
+     */
+    public function accountStatement(Request $request)
+    {
+        $request->validate([
+            'account_id' => 'required|exists:tree_accounts,id',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+        ]);
+
+        $accountId = $request->input('account_id');
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
+        $account = TreeAccount::find($accountId);
+
+        // 1. Calculate Opening Balance
+        $openingBalance = 0;
+        
+        // Define balance type multiplier based on account type
+        // Asset/Expense: Debit is positive (+), Credit is negative (-)
+        // Liability/Income/Equity: Credit is positive (+), Debit is negative (-)
+        $isDebitNature = in_array($account->type, ['asset', 'expense']);
+
+        if ($dateFrom) {
+            $openingQuery = AccountEntry::where('tree_account_id', $accountId)
+                ->where('created_at', '<', $dateFrom . ' 00:00:00');
+            
+            $totalDebit = $openingQuery->sum('debit');
+            $totalCredit = $openingQuery->sum('credit');
+
+            if ($isDebitNature) {
+                $openingBalance = $totalDebit - $totalCredit;
+            } else {
+                $openingBalance = $totalCredit - $totalDebit;
+            }
+        }
+
+        // 2. Fetch Entries
+        $query = AccountEntry::with(['voucher', 'dailyEntry'])
+            ->where('tree_account_id', $accountId);
+
+        if ($dateFrom) {
+            $query->where('created_at', '>=', $dateFrom . ' 00:00:00');
+        }
+        if ($dateTo) {
+            $query->where('created_at', '<=', $dateTo . ' 23:59:59');
+        }
+
+        $entries = $query->orderBy('created_at', 'asc')->get();
+
+        // 3. Calculate Running Balance
+        $runningBalance = $openingBalance;
+        $processedEntries = $entries->map(function ($entry) use (&$runningBalance, $isDebitNature) {
+            if ($isDebitNature) {
+                $change = $entry->debit - $entry->credit;
+            } else {
+                $change = $entry->credit - $entry->debit;
+            }
+            $runningBalance += $change;
+            
+            $entry->running_balance = $runningBalance;
+            return $entry;
+        });
+
+        return response()->json([
+            'account' => $account,
+            'opening_balance' => $openingBalance,
+            'closing_balance' => $runningBalance,
+            'entries' => $processedEntries,
+            'total_debit' => $entries->sum('debit'),
+            'total_credit' => $entries->sum('credit'),
+        ], 200);
+    }
 }
 
