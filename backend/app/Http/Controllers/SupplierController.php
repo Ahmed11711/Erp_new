@@ -47,6 +47,36 @@ class SupplierController extends Controller
             'last_balance' => 0,
         ]);
 
+        // Auto-link to Tree Account
+        // 1. Get Parent Account from Settings
+        $settingKey = 'supplier_type_' . request('supplier_type') . '_parent_id';
+        $parentAccountId = \App\Models\Setting::where('key', $settingKey)->value('value');
+        
+        // 2. If not in settings, try general supplier parent
+        if (!$parentAccountId) {
+             $parentAccountId = \App\Models\Setting::where('key', 'supplier_general_parent_id')->value('value');
+        }
+
+        // 3. Create Tree Account
+        if ($parentAccountId) {
+            $parentAccount = \App\Models\TreeAccount::find($parentAccountId);
+             if ($parentAccount) {
+                $lastChildCode = \App\Models\TreeAccount::where('parent_id', $parentAccount->id)->max('code');
+                $newCode = $lastChildCode ? $lastChildCode + 1 : $parentAccount->code . '001'; // Simplified code gen
+
+                $treeAccount = \App\Models\TreeAccount::create([
+                    'name' => request('supplier_name'),
+                    'parent_id' => $parentAccount->id,
+                    'code' => $newCode,
+                    'type' => $parentAccount->type,
+                    'balance' => 0
+                ]);
+                
+                $supplier->tree_account_id = $treeAccount->id;
+                $supplier->save();
+             }
+        }
+
         return response()->json(["success"=>true], 201);
     }
 

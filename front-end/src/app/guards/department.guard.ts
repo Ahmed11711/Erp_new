@@ -7,7 +7,10 @@ export const departmentGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
   const allowedDepartments: string[] = route.data['allowedDepartments'];
   const user = authService.getUser();
-  if (allowedDepartments.includes(user)) {
+
+  console.log('DepartmentGuard Check:', { user, allowedDepartments });
+
+  if (allowedDepartments.includes(user) || allowedDepartments.some(d => d.trim() === user?.toString().trim())) {
     return true;
   }
   router.navigate(['/dashboard']);

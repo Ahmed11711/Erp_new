@@ -12,9 +12,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { FollowUsersComponent } from './follow-users/follow-users.component';
+import { SettingsComponent } from './settings/settings.component';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatCardModule } from '@angular/material/card';
+import { MatSelectModule } from '@angular/material/select';
+import { MatButtonModule } from '@angular/material/button';
 
 
 @NgModule({
@@ -22,7 +26,8 @@ import { MatMenuModule } from '@angular/material/menu';
     AddUserComponent,
     UsersComponent,
     PowersComponent,
-    FollowUsersComponent
+    FollowUsersComponent,
+    SettingsComponent
   ],
   imports: [
     CommonModule,
@@ -37,6 +42,9 @@ import { MatMenuModule } from '@angular/material/menu';
     MatDatepickerModule,
     MatIconModule,
     MatMenuModule,
+    MatCardModule,
+    MatSelectModule,
+    MatButtonModule,
   ],
   providers: [
     DatePipe

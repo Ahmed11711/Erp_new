@@ -382,6 +382,11 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::put('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'update']);
         // Route::delete('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'destroy']);
     });
+
+    // Settings
+    Route::get('/settings', [App\Http\Controllers\SettingController::class, 'getSettings']);
+    Route::post('/settings', [App\Http\Controllers\SettingController::class, 'updateSettings']);
+    Route::post('/settings/update-existing', [App\Http\Controllers\SettingController::class, 'updateExistingEntities']);
 });
 
 Route::prefix('report/')->group(function () {

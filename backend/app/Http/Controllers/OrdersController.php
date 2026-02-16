@@ -2432,13 +2432,23 @@ class OrdersController extends Controller
             if ($company) {
                 if (!$company->tree_account_id) {
                     // Create Tree Account for Company
-                    $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
-                    if (!$parentAccount) {
-                         $parentAccount = \App\Models\TreeAccount::firstOrCreate(
-                            ['name' => 'العملاء'],
-                            ['type' => 'asset', 'balance' => 0, 'code' => '1100'] 
-                        );
+                    $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
+                    
+                    $parentAccount = null;
+                    if ($parentAccountId) {
+                        $parentAccount = \App\Models\TreeAccount::find($parentAccountId);
                     }
+                    
+                    if (!$parentAccountId || !$parentAccount) {
+                        $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
+                        if (!$parentAccount) {
+                             $parentAccount = \App\Models\TreeAccount::firstOrCreate(
+                                ['name' => 'العملاء'],
+                                ['type' => 'asset', 'balance' => 0, 'code' => '1100'] 
+                            );
+                        }
+                    }
+
                     $checkCode = \App\Models\TreeAccount::where('code', $parentAccount->code . $company->id)->first();
                      $newAccount = \App\Models\TreeAccount::create([
                         'name' => $company->name,
@@ -2453,30 +2463,41 @@ class OrdersController extends Controller
                 $customerTreeId = $company->tree_account_id;
             }
         } else {
-             // Individual Customer - Use generic "Individual Customers" account or create specific?
-             // Creating specific for every individual might bloat the tree. 
-             // But for consistency:
-             $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%عملاء افراد%')->first(); // Individual Customers
-             if (!$parentAccount) {
-                 $parentMain = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first(); // Customers
-                 if (!$parentMain) {
-                      $parentMain = \App\Models\TreeAccount::create(['name' => 'العملاء', 'type' => 'asset', 'code' => '1100', 'balance'=>0]);
-                 }
-                 $parentAccount = \App\Models\TreeAccount::create([
-                     'name' => 'عملاء افراد',
-                     'parent_id' => $parentMain->id,
-                     'code' => $parentMain->code . '999',
-                     'type' => 'asset',
-                     'balance' => 0
-                 ]);
-             }
-             
-             // Check if specific individual account exists (by phone)
-             // Using phone as identifier
+             // Individual Customer
              $phone = $order->customer_phone_1;
              $accName = $order->customer_name . ' - ' . $phone;
+             
+             // Check if account already exists
              $indAccount = \App\Models\TreeAccount::where('name', $accName)->first();
-             if (!$indAccount) {
+             
+             if ($indAccount) {
+                 $customerTreeId = $indAccount->id;
+             } else {
+                 // Create new account
+                 $parentAccountId = \App\Models\Setting::where('key', 'customer_individual_parent_account_id')->value('value');
+                 
+                 $parentAccount = null;
+                 if ($parentAccountId) {
+                     $parentAccount = \App\Models\TreeAccount::find($parentAccountId);
+                 }
+                 
+                 if (!$parentAccountId || !$parentAccount) {
+                     $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%عملاء افراد%')->first();
+                     if (!$parentAccount) {
+                         $parentMain = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
+                         if (!$parentMain) {
+                              $parentMain = \App\Models\TreeAccount::create(['name' => 'العملاء', 'type' => 'asset', 'code' => '1100', 'balance'=>0]);
+                         }
+                         $parentAccount = \App\Models\TreeAccount::create([
+                             'name' => 'عملاء افراد',
+                             'parent_id' => $parentMain->id,
+                             'code' => $parentMain->code . '999',
+                             'type' => 'asset',
+                             'balance' => 0
+                         ]);
+                     }
+                 }
+
                  $indAccount = \App\Models\TreeAccount::create([
                      'name' => $accName,
                      'parent_id' => $parentAccount->id,
@@ -2484,8 +2505,8 @@ class OrdersController extends Controller
                      'type' => 'asset',
                      'balance' => 0
                  ]);
+                 $customerTreeId = $indAccount->id;
              }
-             $customerTreeId = $indAccount->id;
         }
 
         if ($customerTreeId) {

@@ -12,6 +12,7 @@ use App\Models\CorporateSalesProgress;
 use App\Models\CorporateSalesTracking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CorporateSalesLeadController extends Controller
 {
@@ -187,8 +188,13 @@ class CorporateSalesLeadController extends Controller
             DB::commit();
             return response()->json(['message'=>'success'], 201);
 
+        }catch(\Illuminate\Validation\ValidationException $e){
+             DB::rollback();
+             return response()->json(['message' => $e->validator->errors()->first()], 422);
         }catch(\Exception $e){
             DB::rollback();
+            Log::error('Error in CorporateSalesLeadController@store: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
             return response()->json(['message'=>$e->getMessage()], 500);
         }
     }
@@ -547,6 +553,8 @@ class CorporateSalesLeadController extends Controller
 
         }catch(\Exception $e){
             DB::rollback();
+            Log::error('Error in CorporateSalesLeadController@edit: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
             return response()->json(['message'=>$e->getMessage()], 500);
         }
     }

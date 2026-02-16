@@ -58,7 +58,10 @@ class CustomerCompanyController extends Controller
             'city' => $request->city,
             'address' => $request->address,
         ]);
-        $this->addAsset->Addcustomer($request->name,'شركة');
+        // Fetch parent account from settings
+        $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
+        
+        $this->addAsset->Addcustomer($request->name,'شركة', $parentAccountId);
         return response()->json(['message'=>'success'], 200);
     }
 

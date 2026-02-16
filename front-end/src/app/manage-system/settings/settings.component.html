@@ -1,0 +1,102 @@
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-2xl font-bold">اعدادات ربط الحسابات</h2>
+        <button mat-raised-button color="primary" (click)="saveSettings()" [disabled]="loading">
+            <mat-icon>save</mat-icon> حفظ الاعدادات
+        </button>
+    </div>
+
+    <mat-card class="mb-4">
+        <mat-card-header>
+            <mat-card-title>حسابات العملاء (شركات)</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="p-3">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <mat-form-field appearance="outline" class="w-100">
+                        <mat-label>الحساب الرئيسي لعملاء الشركات</mat-label>
+                        <mat-select [(ngModel)]="settings.customer_corporate_parent_account_id">
+                            <mat-option>-- اختر حساب --</mat-option>
+                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
+                                {{ acc.name }} ({{ acc.code }})
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                </div>
+                <div class="col-md-3">
+                    <button mat-stroked-button color="warn"
+                        (click)="updateExisting('customer', 'corporate', settings.customer_corporate_parent_account_id)"
+                        [disabled]="!settings.customer_corporate_parent_account_id || loading">
+                        تحديث العملاء الحاليين
+                    </button>
+                </div>
+            </div>
+            <hr>
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <mat-form-field appearance="outline" class="w-100">
+                        <mat-label>الحساب الرئيسي لعملاء الأفراد</mat-label>
+                        <mat-select [(ngModel)]="settings.customer_individual_parent_account_id">
+                            <mat-option>-- اختر حساب --</mat-option>
+                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
+                                {{ acc.name }} ({{ acc.code }})
+                            </mat-option>
+                        </mat-select>
+                        <mat-hint>سيتم إنشاء حسابات فرعية للعملاء الأفراد تحت هذا الحساب تلقائياً عند الدفع.</mat-hint>
+                    </mat-form-field>
+                </div>
+                <!-- Batch update for individuals is complex/not supported yet as they are not in a separate table -->
+            </div>
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="mb-4">
+        <mat-card-header>
+            <mat-card-title>حسابات الموردين</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="p-3">
+            <!-- General Supplier Default -->
+            <div class="row align-items-center mb-3">
+                <div class="col-md-6">
+                    <mat-form-field appearance="outline" class="w-100">
+                        <mat-label>الحساب الرئيسي الافتراضي للموردين</mat-label>
+                        <mat-select [(ngModel)]="settings.supplier_general_parent_id">
+                            <mat-option>-- اختر حساب --</mat-option>
+                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
+                                {{ acc.name }} ({{ acc.code }})
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                </div>
+            </div>
+
+            <hr>
+            <h3 class="h6 text-muted mb-3">تخصيص حسب فئة المورد</h3>
+
+            <div class="row align-items-center mb-3" *ngFor="let type of supplierTypes">
+                <div class="col-md-3">
+                    <span class="font-weight-bold">{{ type.supplier_type }}</span>
+                </div>
+                <div class="col-md-6">
+                    <mat-form-field appearance="outline" class="w-100">
+                        <mat-label>الحساب الرئيسي</mat-label>
+                        <mat-select [(ngModel)]="settings['supplier_type_' + type.id + '_parent_id']">
+                            <mat-option>-- اختر حساب --</mat-option>
+                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
+                                {{ acc.name }} ({{ acc.code }})
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                </div>
+                <div class="col-md-3">
+                    <button mat-stroked-button color="warn"
+                        (click)="updateExisting('supplier', type.id, settings['supplier_type_' + type.id + '_parent_id'])"
+                        [disabled]="!settings['supplier_type_' + type.id + '_parent_id'] || loading">
+                        تحديث الموردين الحاليين
+                    </button>
+                </div>
+            </div>
+
+        </mat-card-content>
+    </mat-card>
+</div>

@@ -1,5 +1,10 @@
 [
 {
+"name": "Egypt",
+"dial_code": "+20",
+"code": "EG"
+},
+{
 "name": "Afghanistan",
 "dial_code": "+93",
 "code": "AF"
@@ -308,11 +313,6 @@
 "name": "Ecuador",
 "dial_code": "+593",
 "code": "EC"
-},
-{
-"name": "Egypt",
-"dial_code": "+20",
-"code": "EG"
 },
 {
 "name": "El Salvador",
