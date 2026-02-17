@@ -96,52 +96,132 @@ class AccountingReportController extends Controller
     }
 
     /**
-     * Trial Balance Report
+     * Trial Balance Report - Enhanced Version
+     * Supports date ranges, opening balance, movement, and closing balance
      */
     public function trialBalance(Request $request)
     {
-        $date = $request->date ?? now()->format('Y-m-d');
+        // Validate request parameters
+        $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+            'account_type' => 'nullable|string',
+            'level' => 'nullable|integer',
+            'search' => 'nullable|string',
+        ]);
 
-        $accounts = TreeAccount::whereNotNull('parent_id')
-            ->with(['parent'])
-            ->orderBy('code')
-            ->get();
+        $dateFrom = $request->date_from;
+        $dateTo = $request->date_to ?? now()->format('Y-m-d');
+        
+        // Build accounts query
+        $accountsQuery = TreeAccount::whereNotNull('parent_id')
+            ->with(['parent']);
+
+        // Apply filters
+        if ($request->has('account_type')) {
+            $accountsQuery->where('type', $request->account_type);
+        }
+
+        if ($request->has('level')) {
+            $accountsQuery->where('level', $request->level);
+        }
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $accountsQuery->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('name_en', 'like', "%{$search}%")
+                  ->orWhere('code', 'like', "%{$search}%");
+            });
+        }
+
+        $accounts = $accountsQuery->orderBy('code')->get();
 
         $trialBalance = [];
 
         foreach ($accounts as $account) {
-            $debit = AccountEntry::where('tree_account_id', $account->id)
-                ->whereDate('created_at', '<=', $date)
-                ->sum('debit');
+            // Calculate opening balance (before date_from)
+            $openingDebit = 0;
+            $openingCredit = 0;
+            
+            if ($dateFrom) {
+                $openingDebit = AccountEntry::where('tree_account_id', $account->id)
+                    ->where('created_at', '<', $dateFrom . ' 00:00:00')
+                    ->sum('debit');
 
-            $credit = AccountEntry::where('tree_account_id', $account->id)
-                ->whereDate('created_at', '<=', $date)
+                $openingCredit = AccountEntry::where('tree_account_id', $account->id)
+                    ->where('created_at', '<', $dateFrom . ' 00:00:00')
+                    ->sum('credit');
+            }
+
+            $openingBalance = $openingDebit - $openingCredit;
+
+            // Calculate movement (between date_from and date_to)
+            $movementQuery = AccountEntry::where('tree_account_id', $account->id);
+            
+            if ($dateFrom) {
+                $movementQuery->where('created_at', '>=', $dateFrom . ' 00:00:00');
+            }
+            
+            $movementQuery->where('created_at', '<=', $dateTo . ' 23:59:59');
+
+            $movementDebit = $movementQuery->sum('debit');
+            $movementCredit = AccountEntry::where('tree_account_id', $account->id)
+                ->when($dateFrom, function($q) use ($dateFrom) {
+                    return $q->where('created_at', '>=', $dateFrom . ' 00:00:00');
+                })
+                ->where('created_at', '<=', $dateTo . ' 23:59:59')
                 ->sum('credit');
 
-            $balance = $debit - $credit;
+            // Calculate closing balance
+            $closingBalance = $openingBalance + ($movementDebit - $movementCredit);
 
-            if ($balance != 0) {
+            // Only include accounts with activity
+            if ($openingBalance != 0 || $movementDebit != 0 || $movementCredit != 0 || $closingBalance != 0) {
                 $trialBalance[] = [
+                    'account_id' => $account->id,
                     'account_code' => $account->code,
                     'account_name' => $account->name,
+                    'account_name_en' => $account->name_en,
                     'account_type' => $account->type,
-                    'debit' => $balance > 0 ? abs($balance) : 0,
-                    'credit' => $balance < 0 ? abs($balance) : 0,
+                    'level' => $account->level,
+                    'parent_name' => $account->parent ? $account->parent->name : null,
+                    
+                    // Opening Balance
+                    'opening_debit' => $openingBalance > 0 ? abs($openingBalance) : 0,
+                    'opening_credit' => $openingBalance < 0 ? abs($openingBalance) : 0,
+                    
+                    // Movement
+                    'movement_debit' => $movementDebit,
+                    'movement_credit' => $movementCredit,
+                    
+                    // Closing Balance
+                    'closing_debit' => $closingBalance > 0 ? abs($closingBalance) : 0,
+                    'closing_credit' => $closingBalance < 0 ? abs($closingBalance) : 0,
                 ];
             }
         }
 
-        $totalDebit = collect($trialBalance)->sum('debit');
-        $totalCredit = collect($trialBalance)->sum('credit');
+        // Calculate totals
+        $totals = [
+            'opening_debit' => collect($trialBalance)->sum('opening_debit'),
+            'opening_credit' => collect($trialBalance)->sum('opening_credit'),
+            'movement_debit' => collect($trialBalance)->sum('movement_debit'),
+            'movement_credit' => collect($trialBalance)->sum('movement_credit'),
+            'closing_debit' => collect($trialBalance)->sum('closing_debit'),
+            'closing_credit' => collect($trialBalance)->sum('closing_credit'),
+        ];
+
+        $totals['opening_difference'] = abs($totals['opening_debit'] - $totals['opening_credit']);
+        $totals['movement_difference'] = abs($totals['movement_debit'] - $totals['movement_credit']);
+        $totals['closing_difference'] = abs($totals['closing_debit'] - $totals['closing_credit']);
 
         return response()->json([
-            'date' => $date,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
             'data' => $trialBalance,
-            'totals' => [
-                'total_debit' => $totalDebit,
-                'total_credit' => $totalCredit,
-                'difference' => abs($totalDebit - $totalCredit),
-            ]
+            'totals' => $totals,
+            'count' => count($trialBalance),
         ], 200);
     }
 

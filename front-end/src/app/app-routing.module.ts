@@ -23,6 +23,7 @@ const routes: Routes = [
     {path: 'permissions', loadChildren: () => import('./permissions/permissions.module').then(m => m.PermissionsModule)},
     {path: 'admin', loadChildren: () => import('./admin/admin.module').then(m => m.AdminModule)},
     {path: 'notification', loadChildren: () => import('./notification/notification.module').then(m => m.NotificationModule)},
+    {path: 'whatsapp', loadChildren: () => import('./whatsapp/whatsapp.module').then(m => m.WhatsAppModule)},
     {path: 'approvals', loadChildren: () => import('./approvals/approvals.module').then(m => m.ApprovalsModule)},
     {path: 'corparates-sales', loadChildren: () => import('./corparates-sales/corparates-sales.module').then(m => m.CorparatesSalesModule)},
   ]

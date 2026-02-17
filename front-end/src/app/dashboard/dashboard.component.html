@@ -61,6 +61,10 @@
                 <span class="d-flex"><mat-icon class="mx-2">dashboard</mat-icon>الصفحة الرئيسية</span>
             </mat-list-item>
 
+            <mat-list-item routerLink="/dashboard/whatsapp/chat" *ngIf="user == 'Admin' || user == 'Customer Service' || user == 'Shipping Management'">
+                <span class="d-flex"><mat-icon class="mx-2">chat</mat-icon>محادثات واتساب</span>
+            </mat-list-item>
+
             <mat-accordion>
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
                     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
@@ -567,6 +571,11 @@
                                 <span>التقارير المحاسبية</span>
                             </mat-expansion-panel-header>
                             <mat-nav-list>
+                                <a mat-list-item routerLink="/dashboard/accounting/trial-balance"
+                                    routerLinkActive="active"
+                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                    <span>ميزان المراجعة</span>
+                                </a>
                                 <a mat-list-item routerLink="/dashboard/financial/income-list" routerLinkActive="active"
                                     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
                                     <span>قائمة الدخل</span>
@@ -575,6 +584,43 @@
                         </mat-expansion-panel>
                     </mat-nav-list>
                 </mat-expansion-panel>
+
+                <!-- الإعدادات -->
+                 
+                <!-- <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                    <mat-expansion-panel-header>
+                        <mat-icon>settings</mat-icon>
+                        الإعدادات
+                    </mat-expansion-panel-header>
+                    <mat-nav-list>
+                        
+                        <mat-expansion-panel [class.mat-elevation-z0]="true">
+                            <mat-expansion-panel-header>
+                                <span>إعدادات الحسابات</span>
+                            </mat-expansion-panel-header>
+                            <mat-nav-list>
+                                <a mat-list-item routerLink="/dashboard/financial/customer-accounts"
+                                    routerLinkActive="active">
+                                    <span>العملاء</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/financial/supplier-accounts"
+                                    routerLinkActive="active">
+                                    <span>الموردين</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/financial/service-accounts"
+                                    routerLinkActive="active">
+                                    <span>حسابات الخدمات</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/banks" routerLinkActive="active">
+                                    <span>البنوك</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/safes" routerLinkActive="active">
+                                    <span>الخزن</span>
+                                </a>
+                            </mat-nav-list>
+                        </mat-expansion-panel>
+                    </mat-nav-list>
+                </mat-expansion-panel> -->
 
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
                     *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Customer Service' || user == 'Account Management' || user == 'Logistics Specialist'">
@@ -679,9 +725,6 @@
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/reports/incomelist" routerLinkActive="active">
                             <span>قائمة الدخل</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/reports/trialbalance" routerLinkActive="active">
-                            <span>ميزان المراجعة</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/reports/financialstatement" routerLinkActive="active">
                             <span>كشف حساب تفصيلي</span>

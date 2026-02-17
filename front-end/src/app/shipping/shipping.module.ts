@@ -38,6 +38,7 @@ import { CustomerCompanyDetailsComponent } from './customer-company-details/cust
 import { DialogNotificationNoteComponent } from './dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from './dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from './dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CustomerCompanyBalanceComponent } from './customer-company-balance/customer-company-balance.component';
 import { DialogCollectFromCustomerCompanyComponent } from './dialog-collect-from-customer-company/dialog-collect-from-customer-company.component';
 import { PrintInvoiceComponent } from './print-invoice/print-invoice.component';
@@ -96,7 +97,8 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     AutocompleteLibModule,
     NgxPaginationModule,
     MatPaginatorModule,
-    FullCalendarModule
+    FullCalendarModule,
+    WhatsAppModule
   ],
   providers: [
     DatePipe

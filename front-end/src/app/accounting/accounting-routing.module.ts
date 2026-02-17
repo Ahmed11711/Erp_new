@@ -56,6 +56,12 @@ const routes: Routes = [
     loadChildren: () => import('./daily-ledger-report/daily-ledger-report.module').then(m => m.DailyLedgerReportModule),
     canActivate: [departmentGuard],
     data: { allowedDepartments: ['Admin', 'Account Management'] }
+  },
+  {
+    path: 'trial-balance',
+    loadChildren: () => import('./trial-balance/trial-balance.module').then(m => m.TrialBalanceModule),
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
   }
 ];
 

@@ -6,6 +6,12 @@
       <div class="col-11 col-md-2 offset-md-2">
         <div><p class="title header"> الطلبات</p></div>
       </div>
+      <div class="col-md-2 d-flex align-items-center justify-content-end">
+        <button mat-raised-button color="primary" [routerLink]="['/dashboard/whatsapp/chat']" class="me-2">
+          <mat-icon>chat</mat-icon>
+          <span class="ms-1">المحادثات</span>
+        </button>
+      </div>
       <div id="menuoption" dir="ltr" class="col-1 col-md-1 offset-md-4 text-right pt-4">
         <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
           <mat-icon>more_vert</mat-icon>
@@ -334,10 +340,14 @@
                     <span>اتصال</span>
                     <i class="fa-solid text-success fa-phone mx-2"></i>
                   </a>
-                  <a dir="rtl" mat-menu-item [href]="'https://api.whatsapp.com/send?phone=2'+item.customer_phone_1"  target="_blank">
-                    <span>واتساب</span>
+                  <button dir="rtl" mat-menu-item (click)="sendWhatsAppMessage(item)">
+                    <span>إرسال رسالة</span>
                     <i class="fa-brands mx-2 text-success fa-whatsapp"></i>
-                  </a>
+                  </button>
+                  <button dir="rtl" mat-menu-item (click)="openChatWithCustomer(item)">
+                    <span>فتح المحادثة</span>
+                    <mat-icon class="mx-2">chat</mat-icon>
+                  </button>
                 </mat-menu>
               </span>
             </div>
@@ -519,6 +529,11 @@
                 </button>
               </ng-container>
 
+              <ng-container>
+                <button class="d-flex justify-content-end" mat-menu-item (click)="sendOrder(item); sendWhatsAppMessage(item)">
+                  <span>إرسال واتساب</span>
+                </button>
+              </ng-container>
               <ng-container>
                 <button class="d-flex justify-content-end" mat-menu-item [matMenuTriggerFor]="users" (click)="sendOrder(item)" (mouseenter)="sendOrder(item)">
                   <span>ارسال الي</span>

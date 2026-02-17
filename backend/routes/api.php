@@ -32,6 +32,28 @@ use Illuminate\Support\Facades\Log;
 |
 */
 
+Route::get('/meta-test', function () {
+    return app(\App\Services\MetaWhatsAppService::class)
+        ->sendMessage('201068704455', 'Test from server');
+});
+
+Route::get('/test', function () {
+    return response()->json(['status' => 'ok']);
+});
+
+
+// Route::get('/meta/webhook', function () {
+//     $verify_token = 'K9xT2pLm8QwZ4rNs7VbY1cHd6EfG3uJk';
+//     if (request()->get('hub_verify_token') === $verify_token) {
+//         return response(request()->get('hub_challenge'), 200);
+//     }
+//     return response('Error, wrong token', 403);
+// });
+
+Route::get('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'verify']);
+Route::post('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'handle']);
+
+
 Route::group(['middleware' => 'api', 'prefix' => 'auth'], function ($router) {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout']);
@@ -53,6 +75,17 @@ Route::middleware('auth')->group(function () {
     Route::get('sentnotification', [App\Http\Controllers\NotificationController::class, 'sentNotifiy']);
     Route::get('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readNotify']);
     Route::post('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readOrderNotify']);
+
+    // WhatsApp Messaging Routes
+    Route::prefix('whatsapp/')->group(function () {
+        Route::post('send', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessage']);
+        Route::post('send-template', [App\Http\Controllers\WhatsAppMessageController::class, 'sendTemplateMessage']);
+        Route::post('send-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessageFromOrder']);
+        Route::get('chat/{customerId}', [App\Http\Controllers\WhatsAppMessageController::class, 'getChatMessages']);
+        Route::get('customers', [App\Http\Controllers\WhatsAppMessageController::class, 'getCustomers']);
+        Route::get('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getTemplates']);
+        Route::post('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'createTemplate']);
+    });
 
     Route::get('order_source', [OrderSourceController::class, 'index']);
     Route::get('shipping_methods', [ShippingMethodsController::class, 'index']);
