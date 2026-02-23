@@ -19,11 +19,13 @@ public function rules(): array
 
     return [
         'name' => 'sometimes|string|max:255',
-         'parent_id' => 'nullable|integer|exists:tree_accounts,id',
+        'parent_id' => 'nullable|integer|exists:tree_accounts,id',
         'type' => 'nullable|in:asset,liability,equity,revenue,expense',
-        'balance'=>'nullable'
-
-     ];
+        'balance' => 'nullable',
+        'budget_type' => 'nullable|string',
+        'budget_amount' => 'nullable|numeric|min:0',
+        'budget_period' => 'nullable|in:yearly,monthly',
+    ];
 }
 
 

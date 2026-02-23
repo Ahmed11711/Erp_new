@@ -1769,10 +1769,12 @@ class OrdersController extends Controller
                 $ref = $order->id;
                 $details = ' تحصيل جزئي من طلب رقم ' . $order->id;
                 $type = 'الطلبات';
+                $paymentType = $request->payment_type ?? 'bank';
+                $bankIdForProc = ($paymentType === 'bank') ? $request->bank_id : null;
                 DB::statement('CALL update_customer_company_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
                     $company_id,
                     $amount,
-                    $request->bank_id,
+                    $bankIdForProc,
                     $ref,
                     $details,
                     $type,
@@ -1780,15 +1782,26 @@ class OrdersController extends Controller
                     now()
                 ]);
 
-                $bank = Bank::find($request->bank_id);
-
                 $amount = (float)$request->amount;
                 $details = ' تحصيل جزئي من عميل شركة    ' . $company->name;
                 $ref = $order->id;
                 $type = 'الطلبات';
-                $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                $sourceName = '';
+                if ($paymentType === 'safe' && $request->has('safe_id')) {
+                    $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    $safe = \App\Models\Safe::find($request->safe_id);
+                    $sourceName = $safe ? $safe->name : 'خزينة';
+                } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
+                    $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    $svc = \App\Models\ServiceAccount::find($request->service_account_id);
+                    $sourceName = $svc ? $svc->name : 'حساب خدمي';
+                } else {
+                    $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    $bank = Bank::find($request->bank_id);
+                    $sourceName = $bank ? $bank->name : 'بنك';
+                }
 
-                $action = ' تحصيل جزئي مبلغ ' . $request->amount . ' في حساب ' . $bank->name;
+                $action = ' تحصيل جزئي مبلغ ' . $request->amount . ' في حساب ' . $sourceName;
                 $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {

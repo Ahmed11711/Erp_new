@@ -41,6 +41,8 @@ public function store(Request $request): JsonResponse
         'type' => 'required|in:asset,liability,equity,revenue,expense',
         'account_type' => 'nullable|in:رئيسي,فرعي,مستوى أول',
         'budget_type' => 'nullable|string',
+        'budget_amount' => 'nullable|numeric|min:0',
+        'budget_period' => 'nullable|in:yearly,monthly',
         'is_trading_account' => 'nullable|boolean',
         'balance' => 'sometimes|numeric',
         'debit_balance' => 'sometimes|numeric',
@@ -102,17 +104,11 @@ public function store(Request $request): JsonResponse
                     break;
 
       case 3:
-    // LEVEL 4 → أبناء المستوى الثالث
-    if (!$lastChild) {
-        // الأب كوده أي رقم → نضيف "00" ثم رقم الابن (1)
-        $validated['code'] = (int)($parent->code . '100' . 1);
-    } else {
-        // لو في أولاد سابقين → نضيف 1 على آخر ابن
-        $validated['code'] = $lastChild->code + 1;
-    }
-    $validated['level'] = 4;
-    break;
-}
+                    // LEVEL 4 → أبناء المستوى الثالث (نفس منطق المستوى 2 و 3)
+                    $validated['code'] = $lastChild ? $lastChild->code + 1 : ($parent->code * 10 + 1);
+                    $validated['level'] = 4;
+                    break;
+            }
         }
 
         // إنشاء الحساب

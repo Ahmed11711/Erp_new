@@ -179,8 +179,7 @@ private function sendStaticReply($to)
 
     private function assignToAgent(): ?int
     {
-        $agent = User::where('role', 'agent')
-            ->withCount('customers')
+        $agent = User::withCount('customers')
             ->orderBy('customers_count', 'asc')
             ->first();
 

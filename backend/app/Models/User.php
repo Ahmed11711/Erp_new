@@ -54,4 +54,12 @@ class User extends Authenticatable implements JWTSubject{
     {
         return [];
     }
+
+    /**
+     * Customers assigned to this user (agent) for WhatsApp chat.
+     */
+    public function customers()
+    {
+        return $this->hasMany(Customer::class, 'assigned_agent_id');
+    }
 }

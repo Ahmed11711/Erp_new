@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Voucher;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\BudgetReviewService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -268,6 +269,20 @@ class VoucherController extends Controller
                 // Payment: Debit Partner, Credit Safe/Bank
                 $debitAccountId = $partnerTreeAccountId;
                 $creditAccountId = $request->account_id;
+            }
+
+            // Budget review
+            $budgetService = app(BudgetReviewService::class);
+            $budgetResult = $budgetService->checkBudget([
+                ['tree_account_id' => $debitAccountId, 'debit' => $request->amount, 'credit' => 0],
+                ['tree_account_id' => $creditAccountId, 'debit' => 0, 'credit' => $request->amount],
+            ], $request->date);
+            if (!$budgetResult['valid']) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => $budgetResult['message'],
+                    'violations' => $budgetResult['violations'],
+                ], 422);
             }
 
             // 3. Create Debit Entry

@@ -114,7 +114,15 @@ export class CollectOrderComponent {
           formData.append('reference_image', this.selectedFile, this.selectedFile.name);
         }
       } else {
-        formData.append('bank_id', form.value.bank);
+        const paymentType = form.value.paymentType || 'bank';
+        formData.append('payment_type', paymentType);
+        if (paymentType === 'safe') {
+          formData.append('safe_id', form.value.safe);
+        } else if (paymentType === 'service_account') {
+          formData.append('service_account_id', form.value.service_account);
+        } else {
+          formData.append('bank_id', form.value.bank);
+        }
       }
 
       this.order.collectOrder(id, formData).subscribe((res: any) => {

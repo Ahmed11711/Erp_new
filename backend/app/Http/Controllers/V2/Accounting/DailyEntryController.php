@@ -7,6 +7,7 @@ use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\BudgetReviewService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -69,6 +70,21 @@ class DailyEntryController extends Controller
             ], 422);
         }
 
+        // Budget review: respect budget restrictions
+        $budgetService = app(BudgetReviewService::class);
+        $itemsForBudget = array_map(fn($i) => [
+            'tree_account_id' => $i['account_id'],
+            'debit' => $i['debit'] ?? 0,
+            'credit' => $i['credit'] ?? 0,
+        ], $request->items);
+        $budgetResult = $budgetService->checkBudget($itemsForBudget, $request->date);
+        if (!$budgetResult['valid']) {
+            return response()->json([
+                'message' => $budgetResult['message'],
+                'violations' => $budgetResult['violations'],
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             // Generate entry number
@@ -105,12 +121,14 @@ class DailyEntryController extends Controller
                 $account = TreeAccount::find($item['account_id']);
                 $balanceChange = ($item['debit'] ?? 0) - ($item['credit'] ?? 0);
                 $account->increment('balance', $balanceChange);
-                
-                if ($item['debit'] ?? 0 > 0) {
-                    $account->increment('debit_balance', $item['debit']);
+
+                $debit = (float)($item['debit'] ?? 0);
+                $credit = (float)($item['credit'] ?? 0);
+                if ($debit > 0) {
+                    $account->increment('debit_balance', $debit);
                 }
-                if ($item['credit'] ?? 0 > 0) {
-                    $account->increment('credit_balance', $item['credit']);
+                if ($credit > 0) {
+                    $account->increment('credit_balance', $credit);
                 }
             }
 

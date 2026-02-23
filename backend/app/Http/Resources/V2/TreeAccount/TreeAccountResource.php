@@ -16,8 +16,11 @@ class TreeAccountResource extends JsonResource
             'type' => $this->type,
             'account_type' => $this->account_type,
             'budget_type' => $this->budget_type,
+            'budget_amount' => $this->budget_amount ?? null,
+            'budget_period' => $this->budget_period ?? null,
             'is_trading_account' => $this->is_trading_account,
             'level' => $this->level,
+            'parent_id' => $this->parent_id,
             'balance' => $this->balance,
             'debit_balance' => $this->debit_balance,
             'credit_balance' => $this->credit_balance,
@@ -28,6 +31,7 @@ class TreeAccountResource extends JsonResource
                     'id' => $this->parent->id,
                     'name' => $this->parent->name,
                     'code' => $this->parent->code,
+                    'level' => $this->parent->level,
                 ];
             }),
             'main_account' => $this->whenLoaded('mainAccount', function () {

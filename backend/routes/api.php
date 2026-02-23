@@ -399,6 +399,9 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::post('/', [App\Http\Controllers\V2\Accounting\CapitalController::class, 'store']);
     });
 
+    // Payment sources (unified: safes, banks, service accounts) for payment follow-up
+    Route::get('payment-sources', [App\Http\Controllers\V2\Accounting\PaymentSourcesController::class, 'index']);
+
     // Reports
     Route::prefix('reports/')->group(function () {
         Route::get('/daily-ledger', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'dailyLedger']);
