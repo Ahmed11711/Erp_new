@@ -1,0 +1,110 @@
+.container-fluid {
+  padding: 20px;
+}
+
+.card {
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  border: none;
+  border-radius: 8px;
+}
+
+.card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem 1.5rem;
+}
+
+.table th {
+  color: #f8f9fa;
+  border-top: none;
+  font-weight: 600;
+  color: #495057;
+}
+
+.color-preview {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.btn-group-sm > .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.modal {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-dialog {
+  max-width: 500px;
+}
+
+.modal-content {
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem 1.5rem;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  border-top: 1px solid #dee2e6;
+  padding: 1rem 1.5rem;
+}
+
+.form-control-color {
+  width: 50px;
+  height: 38px;
+  padding: 0.125rem 0.25rem;
+}
+
+.badge {
+  font-size: 0.75em;
+  padding: 0.375em 0.75em;
+}
+
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+.text-muted {
+  color: #6c757d !important;
+}
+
+.btn-outline-primary:hover {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.btn-outline-danger:hover {
+  background-color: #dc3545;
+  border-color: #dc3545;
+}
+
+.btn-outline-secondary:hover {
+  background-color: #6c757d;
+  border-color: #6c757d;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .container-fluid {
+    padding: 10px;
+  }
+  
+  .modal-dialog {
+    margin: 1rem;
+  }
+  
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+}

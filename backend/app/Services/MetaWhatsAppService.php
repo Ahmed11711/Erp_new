@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\WhatsAppAssignment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -11,14 +12,120 @@ class MetaWhatsAppService
     private ?string $accessToken = null;
     private string $metaVersion = 'v21.0';
 
-    public function __construct()
+    public function __construct(?string $userPhoneNumberId = null)
     {
-        $this->phoneNumberId = env('META_PHONE_NUMBER_ID');
-        $this->accessToken = env('META_ACCESS_TOKEN');
+        $this->phoneNumberId = $this->getPhoneNumberId($userPhoneNumberId);
+        $this->accessToken = $this->getAccessToken($userPhoneNumberId);
         
         if (empty($this->phoneNumberId) || empty($this->accessToken)) {
-            Log::warning('Meta WhatsApp credentials are missing.');
+            Log::warning('Meta WhatsApp credentials are missing.', [
+                'phone_number_id' => $userPhoneNumberId
+            ]);
         }
+    }
+
+    /**
+     * Get phone number ID based on user assignment
+     */
+    private function getPhoneNumberId(?string $userPhoneNumberId): ?string
+    {
+        if ($userPhoneNumberId) {
+            // Check if it matches any configured phone number
+            $configuredNumbers = $this->getConfiguredPhoneNumbers();
+            return $configuredNumbers[$userPhoneNumberId] ?? null;
+        }
+        
+        // Default to first phone number
+        return env('META_PHONE_NUMBER_ID');
+    }
+
+    /**
+     * Get access token based on phone number ID
+     */
+    private function getAccessToken(?string $userPhoneNumberId): ?string
+    {
+        if ($userPhoneNumberId) {
+            // Return corresponding token for the phone number
+            if ($userPhoneNumberId === env('META_PHONE_NUMBER_ID_2')) {
+                return env('META_ACCESS_TOKEN_2');
+            }
+        }
+        
+        // Default to first token
+        return env('META_ACCESS_TOKEN');
+    }
+
+    /**
+     * Get all configured phone numbers
+     */
+    private function getConfiguredPhoneNumbers(): array
+    {
+        return [
+            env('META_PHONE_NUMBER_ID') => env('META_PHONE_NUMBER_ID'),
+            env('META_PHONE_NUMBER_ID_2') => env('META_PHONE_NUMBER_ID_2'),
+        ];
+    }
+
+    /**
+     * Get available phone numbers for assignment
+     */
+    public static function getAvailablePhoneNumbers(): array
+    {
+        return [
+            [
+                'id' => env('META_PHONE_NUMBER_ID'),
+                'name' => 'WhatsApp Number 1',
+                'is_configured' => !empty(env('META_PHONE_NUMBER_ID')) && !empty(env('META_ACCESS_TOKEN'))
+            ],
+            [
+                'id' => env('META_PHONE_NUMBER_ID_2'),
+                'name' => 'WhatsApp Number 2',
+                'is_configured' => !empty(env('META_PHONE_NUMBER_ID_2')) && !empty(env('META_ACCESS_TOKEN_2'))
+            ],
+        ];
+    }
+
+    /**
+     * Get WhatsApp numbers available for current user
+     */
+    public static function getUserAvailablePhoneNumbers(int $userId): array
+    {
+        $assignedPhoneNumbers = WhatsAppAssignment::getPhoneNumbersByUserId($userId);
+        $availableNumbers = self::getAvailablePhoneNumbers();
+        
+        return array_filter($availableNumbers, function($number) use ($assignedPhoneNumbers) {
+            return in_array($number['id'], $assignedPhoneNumbers);
+        });
+    }
+
+    /**
+     * Get all assignments with user details
+     */
+    public static function getAllAssignments(): array
+    {
+        $assignments = WhatsAppAssignment::getAllWithPhoneNumberDetails();
+        $availableNumbers = self::getAvailablePhoneNumbers();
+        
+        $result = [];
+        foreach ($assignments as $phoneNumberId => $assignmentGroup) {
+            $phoneNumber = collect($availableNumbers)->firstWhere('id', $phoneNumberId);
+            
+            $result[] = [
+                'phone_number_id' => $phoneNumberId,
+                'phone_number_name' => $phoneNumber['name'] ?? 'Unknown',
+                'is_configured' => $phoneNumber['is_configured'] ?? false,
+                'assigned_users' => $assignmentGroup->map(function($assignment) {
+                    return [
+                        'id' => $assignment->user->id,
+                        'name' => $assignment->user->name,
+                        'email' => $assignment->user->email,
+                        'is_active' => $assignment->is_active,
+                    ];
+                })->toArray()
+            ];
+        }
+        
+        return $result;
     }
 
     /**

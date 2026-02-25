@@ -126,11 +126,13 @@
           </div>
         </div>
 
-        <div class="col-md-12 mb-2" dir="ltr" style="text-align: start;">
-          <label for="">Note</label>
+        <div class="col-md-12 mb-2 arabic-container pdf-arabic-fix">
+          <label for="" class="arabic-label">ملاحظات</label>
           <textarea
-            class="form-control "
+            class="form-control arabic-textarea arabic-note pdf-arabic-fix"
             [(ngModel)]="note"
+            style="direction: rtl; text-align: right; unicode-bidi: embed; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting'; writing-mode: horizontal-tb; text-orientation: mixed;"
+            dir="rtl"
           ></textarea>
         </div>
 

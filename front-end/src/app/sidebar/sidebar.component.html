@@ -86,4 +86,34 @@ dd
       <!-- <li routerLinkActive="active"><a routerLink="/dashboard/financial/service-accounts/transfer"> تحويل بين الحسابات</a></li> -->
     </ul>
   </mat-expansion-panel>
+  <mat-expansion-panel (opened)="panelOpenState = true" (closed)="panelOpenState = false" class="mat-elevation-z0">
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        إدارة المبيعات المؤسسية
+      </mat-panel-title>
+    </mat-expansion-panel-header>
+    <ul class="">
+      <li routerLinkActive="active">
+        <a routerLink="/dashboard/corparates-sales/leads"> العملاء المحتملون</a>
+      </li>
+      <li routerLinkActive="active">
+        <a routerLink="/dashboard/corparates-sales/add-lead"> إضافة عميل محتمل</a>
+      </li>
+    </ul>
+  </mat-expansion-panel>
+  <mat-expansion-panel (opened)="panelOpenState = true" (closed)="panelOpenState = false" class="mat-elevation-z0">
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        إدارة حالات العملاء
+      </mat-panel-title>
+    </mat-expansion-panel-header>
+    <ul class="">
+      <li routerLinkActive="active">
+        <a routerLink="/dashboard/corparates-sales/lead-status-management"> إدارة الحالات</a>
+      </li>
+      <li routerLinkActive="active">
+        <a routerLink="/dashboard/corparates-sales/follow-up-leads"> العملاء المتابعين</a>
+      </li>
+    </ul>
+  </mat-expansion-panel>
 </mat-accordion>

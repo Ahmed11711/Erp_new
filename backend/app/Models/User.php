@@ -21,6 +21,7 @@ class User extends Authenticatable implements JWTSubject{
     protected $fillable = [
         'name',
         'email',
+        'whatsapp_phone_number_id',
         'department',
         'role',
         'password',

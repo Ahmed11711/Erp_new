@@ -15,9 +15,53 @@ class WhatsAppMessageController extends Controller
 {
     protected $whatsappService;
 
-    public function __construct(MetaWhatsAppService $whatsappService)
+    public function __construct()
     {
-        $this->whatsappService = $whatsappService;
+        // Initialize with user's assigned WhatsApp numbers
+        $this->whatsappService = null; // Will be initialized per request
+    }
+
+    /**
+     * Initialize WhatsApp service with specific phone number
+     */
+    private function initializeWhatsAppService(?string $phoneNumberId = null)
+    {
+        if (!$phoneNumberId) {
+            // Get user's available WhatsApp numbers
+            $userId = auth()->id();
+            $availableNumbers = \App\Services\MetaWhatsAppService::getUserAvailablePhoneNumbers($userId);
+            
+            if (empty($availableNumbers)) {
+                return null;
+            }
+            
+            // Use first available number
+            $phoneNumberId = $availableNumbers[0]['id'];
+        }
+        
+        $this->whatsappService = new \App\Services\MetaWhatsAppService($phoneNumberId);
+        return $this->whatsappService;
+    }
+
+    /**
+     * Get user's available WhatsApp numbers
+     */
+    public function getUserPhoneNumbers()
+    {
+        try {
+            $userId = auth()->id();
+            $availableNumbers = \App\Services\MetaWhatsAppService::getUserAvailablePhoneNumbers($userId);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $availableNumbers,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch user WhatsApp numbers',
+            ], 500);
+        }
     }
 
     /**
@@ -29,6 +73,7 @@ class WhatsAppMessageController extends Controller
             'customer_phone' => 'required|string',
             'message' => 'required|string',
             'order_id' => 'nullable|exists:orders,id',
+            'phone_number_id' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -39,6 +84,16 @@ class WhatsAppMessageController extends Controller
             $phone = $request->customer_phone;
             $messageContent = $request->message;
             $orderId = $request->order_id;
+            $phoneNumberId = $request->phone_number_id;
+
+            // Initialize WhatsApp service with selected or default phone number
+            $whatsappService = $this->initializeWhatsAppService($phoneNumberId);
+            if (!$whatsappService) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No WhatsApp number available for this user',
+                ], 422);
+            }
 
             // Format phone number (ensure it starts with country code)
             if (!str_starts_with($phone, '+')) {
@@ -60,7 +115,7 @@ class WhatsAppMessageController extends Controller
             );
 
             // Send message via Meta WhatsApp
-            $result = $this->whatsappService->sendMessage($phone, $messageContent);
+            $result = $whatsappService->sendMessage($phone, $messageContent);
 
             if ($result['success']) {
                 // Store message in database
@@ -78,6 +133,7 @@ class WhatsAppMessageController extends Controller
                     'customer_id' => $customer->id,
                     'message_id' => $message->id,
                     'phone' => $phone,
+                    'phone_number_id' => $phoneNumberId,
                 ]);
 
                 return response()->json([
@@ -385,6 +441,132 @@ class WhatsAppMessageController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'An error occurred while sending the message',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get available WhatsApp numbers for assignment
+     */
+    public function getAvailablePhoneNumbers()
+    {
+        try {
+            $phoneNumbers = \App\Services\MetaWhatsAppService::getAvailablePhoneNumbers();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $phoneNumbers,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch available phone numbers',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all WhatsApp assignments
+     */
+    public function getAllAssignments()
+    {
+        try {
+            $assignments = \App\Services\MetaWhatsAppService::getAllAssignments();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $assignments,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch assignments',
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign multiple users to WhatsApp number
+     */
+    public function assignUsersToPhoneNumber(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone_number_id' => 'required|string',
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 422);
+        }
+
+        try {
+            $phoneNumberId = $request->phone_number_id;
+            $userIds = $request->user_ids;
+
+            // Verify the phone number is available
+            $availableNumbers = \App\Services\MetaWhatsAppService::getAvailablePhoneNumbers();
+            $isValidNumber = collect($availableNumbers)->pluck('id')->contains($phoneNumberId);
+            
+            if (!$isValidNumber) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid WhatsApp phone number ID',
+                ], 422);
+            }
+
+            \App\Models\WhatsAppAssignment::assignUsersToPhoneNumber($phoneNumberId, $userIds);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Users assigned to WhatsApp number successfully',
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error assigning users to WhatsApp number', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'An error occurred while assigning users to WhatsApp number',
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove user assignment from WhatsApp number
+     */
+    public function removeUserAssignment(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone_number_id' => 'required|string',
+            'user_id' => 'required|exists:users,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 422);
+        }
+
+        try {
+            $phoneNumberId = $request->phone_number_id;
+            $userId = $request->user_id;
+
+            \App\Models\WhatsAppAssignment::where('phone_number_id', $phoneNumberId)
+                ->where('user_id', $userId)
+                ->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User assignment removed successfully',
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error removing user assignment', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'An error occurred while removing user assignment',
             ], 500);
         }
     }

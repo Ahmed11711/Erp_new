@@ -96,9 +96,26 @@ class CorporateSalesLeadController extends Controller
                 'company_website' => $request->company_website,
                 'country_name' => $request->country,
                 'date' => $request->date,
+                'contact_title' => $request->contact_title,
+                'contact_department' => $request->contact_department,
                 'corporate_sales_industry_id' => $corporate_sales_industry_id,
                 'corporate_sales_lead_source_id' => $request->lead_source,
                 'corporate_sales_lead_tool_id' => $request->lead_tool,
+                'lead_status_id' => $request->lead_status_id,
+                'company_size' => $request->company_size,
+                'annual_revenue' => $request->annual_revenue,
+                'industry_sector' => $request->industry_sector,
+                'geographic_region' => $request->geographic_region,
+                'main_competitors' => $request->main_competitors,
+                'lead_priority' => $request->lead_priority,
+                'required_products' => $request->required_products,
+                'expected_budget' => $request->expected_budget,
+                'project_timeline' => $request->project_timeline,
+                'decision_maker' => $request->decision_maker,
+                'notes' => $request->notes,
+                'next_action_type' => $request->next_action_type,
+                'next_action_date' => $request->next_action_date,
+                'next_action_notes' => $request->next_action_notes,
                 'user_id' => auth()->user()->id
             ]);
 
@@ -510,6 +527,50 @@ class CorporateSalesLeadController extends Controller
                 $oldValue = $find->company_instagram;
 
                 $find->company_instagram = $value;
+                $find->user_id = auth()->user()->id;
+
+                CorporateSalesTracking::create([
+                    'type' => 'edit',
+                    'old_value' => $oldValue,
+                    'new_value' => $value,
+                    'details' => $type,
+                    'corporate_sales_lead_id' => $request->lead_id,
+                    'user_id' => auth()->user()->id,
+                ]);
+
+                $find->save();
+            }
+
+            if ($type === 'edit Contact Title') {
+                $id = $request->lead_id;
+
+                $find = CorporateSalesLead::find($id);
+
+                $oldValue = $find->contact_title;
+
+                $find->contact_title = $value;
+                $find->user_id = auth()->user()->id;
+
+                CorporateSalesTracking::create([
+                    'type' => 'edit',
+                    'old_value' => $oldValue,
+                    'new_value' => $value,
+                    'details' => $type,
+                    'corporate_sales_lead_id' => $request->lead_id,
+                    'user_id' => auth()->user()->id,
+                ]);
+
+                $find->save();
+            }
+
+            if ($type === 'edit Contact Department') {
+                $id = $request->lead_id;
+
+                $find = CorporateSalesLead::find($id);
+
+                $oldValue = $find->contact_department;
+
+                $find->contact_department = $value;
                 $find->user_id = auth()->user()->id;
 
                 CorporateSalesTracking::create([

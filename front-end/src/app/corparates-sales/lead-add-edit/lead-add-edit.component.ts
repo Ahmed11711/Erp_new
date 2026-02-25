@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { FormGroup, FormControl, Validators, FormArray } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import Swal from 'sweetalert2';
+import { LeadStatusService } from '../../services/lead-status.service';
 
 @Component({
   selector: 'app-lead-add-edit',
@@ -16,6 +17,7 @@ export class LeadAddEditComponent {
   leadSource: any[] = [];
   leadTools: any[] = [];
   leadIndustry: any[] = [];
+  leadStatuses: any[] = [];
   form!: FormGroup;
   initialCountry: string = '';
 
@@ -27,7 +29,7 @@ export class LeadAddEditComponent {
   imgtext: string = "Image"
   fileopend: boolean = false;
 
-  constructor(private CorparatesSalesService: CorparatesSalesService, private route: Router, private http: HttpClient, private cd: ChangeDetectorRef) {
+  constructor(private CorparatesSalesService: CorparatesSalesService, private route: Router, private http: HttpClient, private cd: ChangeDetectorRef, private leadStatusService: LeadStatusService) {
   }
 
 
@@ -35,6 +37,7 @@ export class LeadAddEditComponent {
     this.getLeadSource();
     this.getLeadTool();
     this.getLeadIndustry();
+    this.getLeadStatuses();
     this.http.get('assets/country/CountryCodes.json').subscribe((data: any) => {
       this.countries = data;
       this.loadForm();
@@ -72,10 +75,31 @@ export class LeadAddEditComponent {
     this.CorparatesSalesService.getLeadIndustry().subscribe((data: any) => this.leadIndustry = data);
   }
 
+  getSelectedStatus() {
+    const statusId = this.form.get('lead_status_id')?.value;
+    return this.leadStatuses.find(s => s.id === statusId);
+  }
+
+  getLeadStatuses() {
+    this.leadStatusService.getAllStatuses().subscribe((data: any) => {
+      this.leadStatuses = data.sort((a, b) => a.order - b.order);
+      // Set default status to "New Lead" if available
+      const newLeadStatus = this.leadStatuses.find(s => s.name === 'New Lead');
+      if (newLeadStatus && this.form) {
+        this.form.patchValue({
+          lead_status_id: newLeadStatus.id
+        });
+      }
+    });
+  }
+
   loadForm() {
     this.form = new FormGroup({
       industry: new FormControl(null),
       country: new FormControl(null),
+      lead_status_id: new FormControl(null, [Validators.required]),
+      contact_title: new FormControl(null),
+      contact_department: new FormControl(null),
 
       company_name: new FormControl(null, [
         Validators.required,
@@ -108,6 +132,23 @@ export class LeadAddEditComponent {
       ]),
       lead_source: new FormControl(0, [Validators.required, Validators.min(1)]),
       lead_tool: new FormControl(0, [Validators.required, Validators.min(1)]),
+      
+      // Additional Details Fields
+      company_size: new FormControl(null),
+      annual_revenue: new FormControl(null),
+      industry_sector: new FormControl(null),
+      geographic_region: new FormControl(null),
+      main_competitors: new FormControl(null),
+      lead_priority: new FormControl(null),
+      required_products: new FormControl(null, [Validators.maxLength(500)]),
+      expected_budget: new FormControl(null, [Validators.maxLength(100)]),
+      project_timeline: new FormControl(null),
+      decision_maker: new FormControl(null),
+      
+      // Next action fields for Follow-Up status
+      next_action_type: new FormControl(null),
+      next_action_date: new FormControl(null),
+      next_action_notes: new FormControl(null),
 
       contacts: new FormArray([
         this.createContactFormGroup()
@@ -125,6 +166,8 @@ export class LeadAddEditComponent {
   createContactFormGroup(): FormGroup {
     return new FormGroup({
       contact_name: new FormControl(null, [Validators.required]),
+      contact_title: new FormControl(null),
+      contact_department: new FormControl(null),
       contact_linkedin: new FormControl(null, [Validators.pattern(/^(https?:\/\/)?(www\.)?linkedin\.com\/.*$/)]),
       phones: new FormArray([this.createPhoneFormGroup()]),
       emails: new FormArray([this.createEmailFormControl()])
@@ -314,6 +357,9 @@ export class LeadAddEditComponent {
   submitform() {
     this.form.markAllAsTouched();
     if (this.form.valid) {
+      // Log form data to check if contact_title and contact_department are included
+      console.log('Form data being sent:', this.form.value);
+      
       this.CorparatesSalesService.addLead(this.form.value).subscribe({
         next: (res: any) => {
           if (res.message === "success") {
@@ -327,7 +373,7 @@ export class LeadAddEditComponent {
           }
         },
         error: (err: any) => {
-          console.error(err);
+          console.error('Error adding lead:', err);
           Swal.fire({
             title: 'Error',
             text: err.error.message || 'An error occurred while adding lead',

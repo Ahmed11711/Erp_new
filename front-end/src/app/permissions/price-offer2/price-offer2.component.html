@@ -22,14 +22,14 @@
 
       <div id="capture" class="row m-5 ">
         <div class=" col-md-12">
-          <h4 style="text-align: end;">
+          <h4 style="text-align: right; direction: rtl;">
             <img width="200px" src="assets/images/logoo.png" alt="">
           </h4>
           <div class="mx-4 mt-5">
-            <h4 style="text-align: end;"><input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"> : Date </h4>
-            <h4 style="text-align: end;"><input type="date" (change)="onDateToChange($event)" [value]="dateTo"> :  Valid till </h4>
-            <h4 style="text-align: end;"> <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote" type="text" placeholder="..........."> : Quote for </h4>
-            <h4 style="text-align: end;"><input name="title" autocomplete="off"  class="quote" type="text" [(ngModel)]="title"  placeholder="......"> This quotation for   </h4>
+            <h4 style="text-align: right; direction: rtl;"><input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"> : Date </h4>
+            <h4 style="text-align: right; direction: rtl;"><input type="date" (change)="onDateToChange($event)" [value]="dateTo"> :  Valid till </h4>
+            <h4 style="text-align: right; direction: rtl;"> <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote" type="text" placeholder="..........." style="unicode-bidi: embed;"> : <span class="arabic-text">عرض سعر لـ</span> </h4>
+            <h4 style="text-align: right; direction: rtl;"><input name="title" autocomplete="off"  class="quote" type="text" [(ngModel)]="title"  placeholder="......"> This quotation for   </h4>
           </div>
 
           <div dir="ltr" class="col-md-12">
@@ -139,21 +139,23 @@
             </table>
           </div>
 
-          <div class="col-md-12 mb-2" dir="ltr" style="text-align: start;">
-            <label for="">Note</label>
+          <div class="col-md-12 mb-2 arabic-container pdf-arabic-fix">
+            <label for="" class="arabic-label">ملاحظات</label>
             <textarea
-              class="form-control "
+              class="form-control arabic-textarea arabic-note pdf-arabic-fix"
               [(ngModel)]="note"
+              style="direction: rtl; text-align: right; unicode-bidi: embed; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting'; writing-mode: horizontal-tb; text-orientation: mixed;"
+              dir="rtl"
           ></textarea>
           </div>
 
           <div class="w-75 m-auto">
-            <h2 style="text-align: end;">Payment</h2>
+            <h2 style="text-align: right; direction: rtl;">Payment</h2>
             <p class="mb-5" style="text-align: start;" dir="ltr"> <span>   50% </span>on advance through the bank Account </p>
 
             <div style="border: solid 1px black;">
               <div class="my-4 mx-2">
-                <table class="table" style="text-align: end;">
+                <table class="table" style="text-align: right; direction: rtl;">
                   <tr>
                     <td style="border: solid 1px black !important;"> MAGALIS FURNITURE TRADING
                     </td>
@@ -178,9 +180,9 @@
 
             <div>
               <h2 class="my-5" style="text-align: start;" dir="ltr">50% on delivery  </h2>
-              <p style="text-align: end;">.We hope you are satisfied with your purchase. Thank you for putting your trust and confidence in our company ➢</p>
-              <p style="text-align: end;" class="d-flex justify-content-end align-items-center"><input style="border: none; text-align: end;" name="email" class="form-control w-50" type="text" [(ngModel)]="email"> For more information, email us on ➢</p>
-              <p style="text-align: end;">This quotation without delivery fees ➢</p>
+              <p style="text-align: right; direction: rtl;">.We hope you are satisfied with your purchase. Thank you for putting your trust and confidence in our company ➢</p>
+              <p style="text-align: right; direction: rtl;" class="d-flex justify-content-end align-items-center"><input style="border: none; text-align: right; direction: rtl;" name="email" class="form-control w-50" type="text" [(ngModel)]="email"> For more information, email us on ➢</p>
+              <p style="text-align: right; direction: rtl;">This quotation without delivery fees ➢</p>
             </div>
           </div>
         </div>

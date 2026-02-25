@@ -95,3 +95,62 @@ ul {
   background-color: #82225e;
   border-radius: 3px;
 }
+
+/* Status Badge Styles */
+.status-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  display: inline-block;
+  min-width: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Status Color Classes */
+.status-new {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+
+.status-pending {
+  background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+  color: #212529;
+}
+
+.status-follow-up {
+  background: linear-gradient(135deg, #17a2b8 0%, #007bff 100%);
+  color: white;
+}
+
+.status-qualified {
+  background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+  color: white;
+}
+
+.status-conversion {
+  background: linear-gradient(135deg, #25c16a 0%, #198754 100%);
+  color: white;
+}
+
+.status-closed-won {
+  background: linear-gradient(135deg, #198754 0%, #145732 100%);
+  color: white;
+}
+
+.status-closed-lost {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+}
+
+.status-not-interested {
+  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+  color: white;
+}
+
+.status-default {
+  background: linear-gradient(135deg, #82225e 0%, #6a1a4a 100%);
+  color: white;
+}

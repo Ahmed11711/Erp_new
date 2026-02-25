@@ -1,0 +1,90 @@
+.container-fluid {
+  padding: 20px;
+}
+
+.card {
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  border: none;
+  border-radius: 8px;
+}
+
+.card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem 1.5rem;
+}
+
+.table th {
+  background-color: #f8f9fa;
+  border-top: none;
+  font-weight: 600;
+  color: #495057;
+}
+
+.btn-group-sm > .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.badge {
+  font-size: 0.75em;
+  padding: 0.375em 0.75em;
+}
+
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+.text-muted {
+  color: #6c757d !important;
+}
+
+.btn-outline-primary:hover {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.btn-outline-success:hover {
+  background-color: #28a745;
+  border-color: #28a745;
+}
+
+.btn-outline-warning:hover {
+  background-color: #ffc107;
+  border-color: #ffc107;
+}
+
+/* Priority indicators */
+.bg-danger {
+  background-color: #dc3545 !important;
+}
+
+.bg-warning {
+  background-color: #ffc107 !important;
+  color: #212529 !important;
+}
+
+.bg-info {
+  background-color: #17a2b8 !important;
+}
+
+.bg-secondary {
+  background-color: #6c757d !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .container-fluid {
+    padding: 10px;
+  }
+  
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+  
+  .btn-group-sm > .btn {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+  }
+}

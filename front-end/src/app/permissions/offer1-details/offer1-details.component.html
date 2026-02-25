@@ -1,4 +1,4 @@
-<div class="container-fluid">
+<div class="container-fluid" style="width: 100% !important;">
   <div class="row py-3">
     <div class="col-4 d-flex align-items-center">
       <app-time></app-time>
@@ -82,15 +82,16 @@
       </div>
     </div>
 
-    <div *ngIf="offer?.note" class="col-md-12 mb-2" dir="ltr" style="text-align: start; border: solid 1px black;">
+    <div *ngIf="offer?.note" class="col-md-12 mb-5" dir="ltr" style="text-align: start; border: solid 0.5px #ccc;">
       <h3 style="font-size: 16px;">Note : </h3>
       <p style="font-size: 14px;">{{offer?.note}}</p>
     </div>
 
-    <div class="col-md-12 mt-3 bank bg-main py-3 text-white" style="padding: 0 5rem;">
+    <div class="col-md-12 mt-3 bank bg-main py-5 text-white" style="padding: 0 10rem;">
       <h3 class="foot" [ngClass]="font">Thank you for considering our products. please let us know if you have any questions or if there is anything else we can do to assist you. We look
         forward to working with you soon.
       </h3>
+      <br>
       <div class="row">
         <div class="col-md-4">
           <h2 [ngClass]="font" class="my-0"><i class="fa-solid fa-globe" [ngClass]="font"></i> Website</h2>

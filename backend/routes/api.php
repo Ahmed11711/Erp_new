@@ -85,6 +85,13 @@ Route::middleware('auth')->group(function () {
         Route::get('customers', [App\Http\Controllers\WhatsAppMessageController::class, 'getCustomers']);
         Route::get('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getTemplates']);
         Route::post('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'createTemplate']);
+        
+        // WhatsApp Number Assignment Routes
+        Route::get('phone-numbers', [App\Http\Controllers\WhatsAppMessageController::class, 'getAvailablePhoneNumbers']);
+        Route::get('assignments', [App\Http\Controllers\WhatsAppMessageController::class, 'getAllAssignments']);
+        Route::get('user-phone-numbers', [App\Http\Controllers\WhatsAppMessageController::class, 'getUserPhoneNumbers']);
+        Route::post('assign-users', [App\Http\Controllers\WhatsAppMessageController::class, 'assignUsersToPhoneNumber']);
+        Route::delete('remove-assignment', [App\Http\Controllers\WhatsAppMessageController::class, 'removeUserAssignment']);
     });
 
     Route::get('order_source', [OrderSourceController::class, 'index']);
@@ -269,6 +276,14 @@ Route::middleware('auth')->group(function () {
         Route::apiResource('lead-source', App\Http\Controllers\CorporateSalesLeadSourceController::class);
         Route::apiResource('lead-tool', App\Http\Controllers\CorporateSalesLeadToolController::class);
         Route::apiResource('lead-industry', App\Http\Controllers\CorporateSalesIndustryController::class);
+        
+        // Lead Status Management Routes
+        Route::apiResource('lead-statuses', App\Http\Controllers\LeadStatusController::class);
+        Route::get('lead-statuses/active', [App\Http\Controllers\LeadStatusController::class, 'getActive']);
+        Route::get('lead-statuses/closed-won', [App\Http\Controllers\LeadStatusController::class, 'getClosedWon']);
+        Route::get('lead-statuses/closed-lost', [App\Http\Controllers\LeadStatusController::class, 'getClosedLost']);
+        Route::get('lead-statuses/follow-up-leads', [App\Http\Controllers\LeadStatusController::class, 'getFollowUpLeads']);
+        Route::put('lead-statuses/lead/{lead}', [App\Http\Controllers\LeadStatusController::class, 'updateLeadStatus']);
     });
 
     Route::middleware(['department.access:Admin,Data Entry'])->group(function () {

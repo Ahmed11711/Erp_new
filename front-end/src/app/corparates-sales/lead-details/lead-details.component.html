@@ -18,28 +18,39 @@
     <div class="col-md-12">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Company Details</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تفاصيل الشركة</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
             <table dir="ltr" class="table table-bordered table-hover text-center mb-0">
               <thead   class="text-white">
                 <tr>
-                  <th>Company Name</th>
-                  <th>Country</th>
-                  <th>Industry</th>
-                  <th>Source</th>
-                  <th>Tool</th>
+                  <th>اسم الشركة</th>
+                  <th>حالة العميل</th>
+                  <th>المنصب</th>
+                  <th>القسم</th>
+                  <th>الدولة</th>
+                  <th>الصناعة</th>
+                  <th>المصدر</th>
+                  <th>الأداة</th>
                   <th>LinkedIn</th>
-                  <th>Website</th>
+                  <th>الموقع الإلكتروني</th>
                   <th>Facebook</th>
                   <th>Instagram</th>
-                  <th>Created By</th>
+                  <th>أضافه بواسطة</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td>{{ data?.company_name }} <i class="mx-2 fa-solid fa-pen" (click)="editCompanyName(data?.company_name)"></i></td>
+                  <td>
+                    <span class="status-badge" [ngClass]="getStatusClass(getStatusDisplay(data))">
+                      {{ getStatusDisplay(data) }}
+                    </span>
+                    <i class="mx-2 fa-solid fa-pen" (click)="editLeadStatus(data?.lead_status?.id || data?.status?.id || data?.lead_status_id, data?.lead_status?.name || data?.status?.name || data?.lead_status?.status_name || data?.status?.status_name)"></i>
+                  </td>
+                  <td>{{ data?.contact_title || '-' }} <i class="mx-2 fa-solid fa-pen" (click)="editContactTitle(data?.contact_title)"></i></td>
+                  <td>{{ data?.contact_department || '-' }} <i class="mx-2 fa-solid fa-pen" (click)="editContactDepartment(data?.contact_department)"></i></td>
                   <td>{{ data?.country_name }}</td>
                   <td>{{ data?.industry?.name || '-' }}</td>
                   <td>{{ data?.source?.name || '-' }}</td>
@@ -77,10 +88,85 @@
       </div>
     </div>
 
+    <!-- Additional Details Section -->
+    <!-- <div class="col-md-12">
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header d-flex justify-content-end" >
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تفاصيل إضافية</h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table dir="ltr" class="table table-bordered table-hover text-center mb-0">
+              <thead class="text-white">
+                <tr>
+                  <th>حجم الشركة</th>
+                  <th>الإيرادات السنوية</th>
+                  <th>القطاع الصناعي</th>
+                  <th>المنطقة الجغرافية</th>
+                  <th>المنافسون الرئيسيون</th>
+                  <th>أولوية العميل</th>
+                  <th>المنتجات/الخدمات المطلوبة</th>
+                  <th>الميزانية المتوقعة</th>
+                  <th>الإطار الزمني للمشروع</th>
+                  <th>صانع القرار</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    {{ getCompanySizeDisplay(data?.company_size) || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editCompanySize(data?.company_size)"></i>
+                  </td>
+                  <td>
+                    {{ getRevenueDisplay(data?.annual_revenue) || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editAnnualRevenue(data?.annual_revenue)"></i>
+                  </td>
+                  <td>
+                    {{ getIndustrySectorDisplay(data?.industry_sector) || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editIndustrySector(data?.industry_sector)"></i>
+                  </td>
+                  <td>
+                    {{ data?.geographic_region || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editGeographicRegion(data?.geographic_region)"></i>
+                  </td>
+                  <td>
+                    {{ data?.main_competitors || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editMainCompetitors(data?.main_competitors)"></i>
+                  </td>
+                  <td>
+                    <span class="badge" [ngClass]="getPriorityClass(data?.lead_priority)">
+                      {{ getPriorityDisplay(data?.lead_priority) || '-' }}
+                    </span>
+                    <i class="mx-2 fa-solid fa-pen" (click)="editLeadPriority(data?.lead_priority)"></i>
+                  </td>
+                  <td>
+                    {{ data?.required_products || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editRequiredProducts(data?.required_products)"></i>
+                  </td>
+                  <td>
+                    {{ data?.expected_budget || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editExpectedBudget(data?.expected_budget)"></i>
+                  </td>
+                  <td>
+                    {{ getTimelineDisplay(data?.project_timeline) || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editProjectTimeline(data?.project_timeline)"></i>
+                  </td>
+                  <td>
+                    {{ getDecisionMakerDisplay(data?.decision_maker) || '-' }}
+                    <i class="mx-2 fa-solid fa-pen" (click)="editDecisionMaker(data?.decision_maker)"></i>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div> -->
+
     <div class="col-md-12">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Contact Details</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تفاصيل جهة الاتصال</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
@@ -88,11 +174,11 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>Name</th>
+                  <th>الاسم</th>
                   <th>LinkedIn</th>
-                  <th>Emails</th>
-                  <th>Phones</th>
-                  <th>Created By</th>
+                  <th>البريد الإلكتروني</th>
+                  <th>أرقام الهاتف</th>
+                  <th>أضافه بواسطة</th>
                 </tr>
               </thead>
               <tbody>
@@ -113,7 +199,7 @@
                         <i class="mx-2 fa-solid fa-pen" (click)="editEmail(email)"></i>
                       </li>
                     </ul>
-                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addEmailToContact(contact.id)">Add Email</button>
+                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addEmailToContact(contact.id)">إضافة بريد إلكتروني</button>
                   </td>
                   <td>
                     <ul class="list-unstyled mb-0 text-start">
@@ -123,7 +209,7 @@
                         <i class="mx-2 fa-solid fa-pen" (click)="editPhone(phone.id, phone.dial_code,phone.contact_number)"></i>
                       </li>
                     </ul>
-                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addPhoneToContact(contact.id)">Add Phone</button>
+                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addPhoneToContact(contact.id)">إضافة هاتف</button>
                   </td>
                   <td>{{ contact.user?.name }}</td>
                 </tr>
@@ -131,7 +217,7 @@
             </table>
           </div>
           <div class="d-flex flex-column align-items-end" style="margin-inline-end: 10px;">
-            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addContact()">Add Contact</button>
+            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addContact()">إضافة جهة اتصال</button>
           </div>
         </div>
       </div>
@@ -141,7 +227,7 @@
     <div class="col-md-6">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end">
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Tracking</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">التتبع</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive" style="max-height: 1000px;">
@@ -149,10 +235,10 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>Details</th>
-                  <th>Value</th>
-                  <th>By</th>
-                  <th>Date</th>
+                  <th>التفاصيل</th>
+                  <th>القيمة</th>
+                  <th>بواسطة</th>
+                  <th>التاريخ</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,7 +276,7 @@
     <div class="col-md-6">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Notes</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">الملاحظات</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive" style="max-height: 400px;">
@@ -198,9 +284,9 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>Note</th>
-                  <th>By</th>
-                  <th>Date</th>
+                  <th>الملاحظة</th>
+                  <th>بواسطة</th>
+                  <th>التاريخ</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,13 +300,13 @@
             </table>
           </div>
           <div class="d-flex flex-column align-items-end" style="margin-inline-end: 10px;">
-            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('note', 'add Note')">Add Note</button>
+            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('note', 'add Note')">إضافة ملاحظة</button>
         </div>
         </div>
       </div>
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Progress</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">التقدم</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive" style="max-height: 400px;">
@@ -228,10 +314,10 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>Progress</th>
-                  <th>File</th>
-                  <th>By</th>
-                  <th>Date</th>
+                  <th>التقدم</th>
+                  <th>الملف</th>
+                  <th>بواسطة</th>
+                  <th>التاريخ</th>
                 </tr>
               </thead>
               <tbody>
@@ -250,8 +336,8 @@
           </div>
         </div>
         <div class="d-flex flex-column align-items-end" style="margin-inline-end: 10px;">
-          <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('progress', 'add Progress')">Add Progress</button>
-          <button class="btn bg-main mb-2" style="width: fit-content;" (click)="openFileInput()">Upload Photo</button>
+            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('progress', 'add Progress')">إضافة تقدم</button>
+          <button class="btn bg-main mb-2" style="width: fit-content;" (click)="openFileInput()">رفع صورة</button>
           <input type="file" (change)="onFileChanged($event)" name="uploadFile"  accept="image/*" id="fileInput" #uploadFile="ngModel" ngModel class="img d-none">
         </div>
       </div>
