@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { forkJoin } from 'rxjs';
 import { environment } from 'src/env/env';
 
 @Component({
@@ -17,6 +18,8 @@ export class SettingsComponent implements OnInit {
         customer_corporate_parent_account_id: null,
         customer_individual_parent_account_id: null,
         supplier_general_parent_id: null,
+        commitment_liability_parent_account_id: null,
+        commitment_expense_parent_account_id: null,
     };
 
     loading = false;
@@ -31,11 +34,11 @@ export class SettingsComponent implements OnInit {
         this.loading = true;
 
         // Load existing settings
-        this.http.get(environment.Url + '/settings').subscribe((res: any) => {
+        this.http.get(environment.Url + '/accounting/settings').subscribe((res: any) => {
             this.settings = res;
-            // Ensure all keys exist in object for binding
             this.initSettingsKeys();
-        });
+            this.loading = false;
+        }, () => { this.loading = false; });
 
         // Load Supplier Types
         this.http.get(environment.Url + '/suppliers/getAllSupplierTypes').subscribe((res: any) => {
@@ -43,11 +46,8 @@ export class SettingsComponent implements OnInit {
             this.initSettingsKeys();
         });
 
-        // Load Tree Accounts (Leaf nodes or allowable parents)
-        // Assuming we want to allow selecting any liability/asset account 
-        // Ideally should filter by type, but for now fetching all or a subset
+        // Load Tree Accounts
         this.http.get(environment.Url + '/tree_accounts').subscribe((res: any) => {
-            // Adjust based on actual API response structure for tree_accounts
             this.treeAccounts = res.data || res;
         });
     }
@@ -59,6 +59,8 @@ export class SettingsComponent implements OnInit {
         if (!this.settings['customer_corporate_parent_account_id']) this.settings['customer_corporate_parent_account_id'] = null;
         if (!this.settings['customer_individual_parent_account_id']) this.settings['customer_individual_parent_account_id'] = null;
         if (!this.settings['supplier_general_parent_id']) this.settings['supplier_general_parent_id'] = null;
+        if (!this.settings['commitment_liability_parent_account_id']) this.settings['commitment_liability_parent_account_id'] = null;
+        if (!this.settings['commitment_expense_parent_account_id']) this.settings['commitment_expense_parent_account_id'] = null;
 
         // Supplier Type keys
         this.supplierTypes.forEach(type => {
@@ -69,7 +71,7 @@ export class SettingsComponent implements OnInit {
 
     saveSettings() {
         this.loading = true;
-        this.http.post(environment.Url + '/settings', this.settings).subscribe(
+        this.http.post(environment.Url + '/accounting/settings', this.settings).subscribe(
             () => {
                 this.snackBar.open('Settings saved successfully', 'Close', { duration: 3000 });
                 this.loading = false;
@@ -93,7 +95,7 @@ export class SettingsComponent implements OnInit {
 
         console.log(body);
 
-        this.http.post(environment.Url + '/settings/update-existing', body).subscribe(
+        this.http.post(environment.Url + '/accounting/settings/update-existing', body).subscribe(
             (res: any) => {
                 this.snackBar.open(res.message, 'Close', { duration: 3000 });
                 this.loading = false;

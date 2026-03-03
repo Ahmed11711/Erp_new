@@ -16,6 +16,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatSelectModule } from '@angular/material/select';
 import { SharedModule } from '../shared/shared.module';
 import { PurchaseDetailsComponent } from './purchase-details/purchase-details.component';
 // import { FormsModule } from '@angular/forms';
@@ -41,6 +42,7 @@ import { PurchaseDetailsComponent } from './purchase-details/purchase-details.co
     MatDialogModule,
     MatMenuModule,
     MatIconModule,
+    MatSelectModule,
     SharedModule
   ],
   providers: [DatePipe],

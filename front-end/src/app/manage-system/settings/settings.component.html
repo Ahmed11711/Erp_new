@@ -11,6 +11,7 @@
             <mat-card-title>حسابات العملاء (شركات)</mat-card-title>
         </mat-card-header>
         <mat-card-content class="p-3">
+            <p class="text-muted small mb-3">سيتم ربط كل عميل شركة جديد تلقائياً بحساب فرعي تحت الحساب المحدد.</p>
             <div class="row align-items-center">
                 <div class="col-md-6">
                     <mat-form-field appearance="outline" class="w-100">
@@ -42,7 +43,7 @@
                                 {{ acc.name }} ({{ acc.code }})
                             </mat-option>
                         </mat-select>
-                        <mat-hint>سيتم إنشاء حسابات فرعية للعملاء الأفراد تحت هذا الحساب تلقائياً عند الدفع.</mat-hint>
+                        <mat-hint>سيتم إنشاء حسابات فرعية للعملاء الأفراد تحت هذا الحساب تلقائياً عند إنشاء الطلبات أو الدفع.</mat-hint>
                     </mat-form-field>
                 </div>
                 <!-- Batch update for individuals is complex/not supported yet as they are not in a separate table -->
@@ -55,6 +56,7 @@
             <mat-card-title>حسابات الموردين</mat-card-title>
         </mat-card-header>
         <mat-card-content class="p-3">
+            <p class="text-muted small mb-3">سيتم ربط كل مورد جديد تلقائياً بحساب فرعي تحت الحساب المحدد (حسب نوع المورد أو الافتراضي).</p>
             <!-- General Supplier Default -->
             <div class="row align-items-center mb-3">
                 <div class="col-md-6">
@@ -97,6 +99,43 @@
                 </div>
             </div>
 
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="mb-4">
+        <mat-card-header>
+            <mat-card-title>حسابات الالتزامات</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="p-3">
+            <p class="text-muted small mb-3">سيتم استخدام هذه الحسابات عند إضافة التزامات جديدة (جهة أخرى غير المورد).</p>
+            <div class="row align-items-center mb-3">
+                <div class="col-md-6">
+                    <mat-form-field appearance="outline" class="w-100">
+                        <mat-label>حساب الالتزامات الافتراضي</mat-label>
+                        <mat-select [(ngModel)]="settings.commitment_liability_parent_account_id">
+                            <mat-option>-- اختر حساب --</mat-option>
+                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
+                                {{ acc.name }} ({{ acc.code }})
+                            </mat-option>
+                        </mat-select>
+                        <mat-hint>حساب الالتزامات (دائن)</mat-hint>
+                    </mat-form-field>
+                </div>
+            </div>
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <mat-form-field appearance="outline" class="w-100">
+                        <mat-label>حساب المصروفات الافتراضي للالتزامات</mat-label>
+                        <mat-select [(ngModel)]="settings.commitment_expense_parent_account_id">
+                            <mat-option>-- اختر حساب --</mat-option>
+                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
+                                {{ acc.name }} ({{ acc.code }})
+                            </mat-option>
+                        </mat-select>
+                        <mat-hint>حساب المصروفات (مدين)</mat-hint>
+                    </mat-form-field>
+                </div>
+            </div>
         </mat-card-content>
     </mat-card>
 </div>

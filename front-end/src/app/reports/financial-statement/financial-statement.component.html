@@ -29,6 +29,7 @@
         <div class="col-md-3">
           <label>اسم الحساب</label>
           <select class="form-control" formControlName="entity_id">
+            <option [ngValue]="null">-- اختر الحساب --</option>
             <ng-container *ngIf="form.get('type')?.value == 'safe'">
               <option *ngFor="let item of safes" [value]="item.id">{{ item.name }}</option>
             </ng-container>
@@ -50,8 +51,13 @@
           <input class="form-control" type="date" formControlName="date_to" (change)="onDateToChange($event)">
         </div>
         <div class="col-md-2">
-          <button class="btn btn-primary w-100" type="submit">عرض التقرير</button>
+          <button class="btn btn-primary w-100" type="submit" [disabled]="loading">
+            {{ loading ? 'جاري التحميل...' : 'عرض التقرير' }}
+          </button>
         </div>
+      </div>
+      <div *ngIf="errorMessage" class="alert alert-danger mt-2 mb-0">
+        {{ errorMessage }}
       </div>
     </form>
 

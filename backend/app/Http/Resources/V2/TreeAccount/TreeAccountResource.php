@@ -41,21 +41,11 @@ class TreeAccountResource extends JsonResource
                     'code' => $this->mainAccount->code,
                 ];
             }),
-            'children' => $this->whenLoaded('children', function () {
-                return $this->children->map(function ($child) {
-                    return [
-                        'id' => $child->id,
-                        'name' => $child->name,
-                        'name_en' => $child->name_en,
-                        'code' => $child->code,
-                        'type' => $child->type,
-                        'level' => $child->level,
-                        'balance' => $child->balance,
-                        'debit_balance' => $child->debit_balance,
-                        'credit_balance' => $child->credit_balance,
-                    ];
-                });
-            }),
+            // Always return children as full nested resources when available,
+            // whether they were loaded via relation or built manually (repository tree).
+            'children' => $this->children && $this->children->count() > 0
+                ? self::collection($this->children)
+                : [],
             'created_at' => $this->created_at->format('Y-m-d H:i') ?? null,
             'updated_at' => $this->updated_at->format('Y-m-d H:i') ?? null,
         ];

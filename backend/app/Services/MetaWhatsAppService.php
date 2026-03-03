@@ -71,16 +71,35 @@ class MetaWhatsAppService
      */
     public static function getAvailablePhoneNumbers(): array
     {
+        $phone1Id = env('META_PHONE_NUMBER_ID');
+        $phone2Id = env('META_PHONE_NUMBER_ID_2');
+        
+        // If no phone numbers are configured, provide mock numbers for testing
+        if (empty($phone1Id) && empty($phone2Id)) {
+            return [
+                [
+                    'id' => 'mock_phone_1',
+                    'name' => 'WhatsApp Number 1 (Test)',
+                    'is_configured' => false
+                ],
+                [
+                    'id' => 'mock_phone_2', 
+                    'name' => 'WhatsApp Number 2 (Test)',
+                    'is_configured' => false
+                ],
+            ];
+        }
+        
         return [
             [
-                'id' => env('META_PHONE_NUMBER_ID'),
+                'id' => $phone1Id ?: 'mock_phone_1',
                 'name' => 'WhatsApp Number 1',
-                'is_configured' => !empty(env('META_PHONE_NUMBER_ID')) && !empty(env('META_ACCESS_TOKEN'))
+                'is_configured' => !empty($phone1Id) && !empty(env('META_ACCESS_TOKEN'))
             ],
             [
-                'id' => env('META_PHONE_NUMBER_ID_2'),
-                'name' => 'WhatsApp Number 2',
-                'is_configured' => !empty(env('META_PHONE_NUMBER_ID_2')) && !empty(env('META_ACCESS_TOKEN_2'))
+                'id' => $phone2Id ?: 'mock_phone_2',
+                'name' => 'WhatsApp Number 2', 
+                'is_configured' => !empty($phone2Id) && !empty(env('META_ACCESS_TOKEN_2'))
             ],
         ];
     }
@@ -99,29 +118,37 @@ class MetaWhatsAppService
     }
 
     /**
-     * Get all assignments with user details
+     * Get all assignments with user details (one entry per available phone number)
      */
     public static function getAllAssignments(): array
     {
-        $assignments = WhatsAppAssignment::getAllWithPhoneNumberDetails();
+        $assignmentsByPhone = WhatsAppAssignment::getAllWithPhoneNumberDetails();
         $availableNumbers = self::getAvailablePhoneNumbers();
         
         $result = [];
-        foreach ($assignments as $phoneNumberId => $assignmentGroup) {
-            $phoneNumber = collect($availableNumbers)->firstWhere('id', $phoneNumberId);
+        foreach ($availableNumbers as $phoneNumber) {
+            $phoneNumberId = (string) ($phoneNumber['id'] ?? '');
+            $assignmentGroup = $assignmentsByPhone->get($phoneNumberId);
+            
+            $assignedUsers = [];
+            if ($assignmentGroup) {
+                foreach ($assignmentGroup as $assignment) {
+                    if ($assignment->user) {
+                        $assignedUsers[] = [
+                            'id' => $assignment->user->id,
+                            'name' => $assignment->user->name,
+                            'email' => $assignment->user->email,
+                            'is_active' => $assignment->is_active,
+                        ];
+                    }
+                }
+            }
             
             $result[] = [
                 'phone_number_id' => $phoneNumberId,
                 'phone_number_name' => $phoneNumber['name'] ?? 'Unknown',
                 'is_configured' => $phoneNumber['is_configured'] ?? false,
-                'assigned_users' => $assignmentGroup->map(function($assignment) {
-                    return [
-                        'id' => $assignment->user->id,
-                        'name' => $assignment->user->name,
-                        'email' => $assignment->user->email,
-                        'is_active' => $assignment->is_active,
-                    ];
-                })->toArray()
+                'assigned_users' => $assignedUsers,
             ];
         }
         

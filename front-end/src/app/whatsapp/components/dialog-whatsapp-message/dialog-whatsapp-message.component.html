@@ -5,7 +5,7 @@
   <form dir="rtl" class="text-first w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
     
     <div class="form-group" *ngIf="templates.length > 0">
-      <label>استخدام قالب</label>
+      <label>استخدام قالب (نص حر)</label>
       <select class="form-control" formControlName="template_id" (change)="useTemplate($any($event.target).value)">
         <option [value]="null">اختر قالب (اختياري)</option>
         <option *ngFor="let template of templates" [value]="template.id">{{template.name}}</option>

@@ -9,6 +9,11 @@ class WhatsAppAssignment extends Model
 {
     use HasFactory;
 
+    /**
+     * The table associated with the model.
+     */
+    protected $table = 'whatsapp_assignments';
+
     protected $fillable = [
         'phone_number_id',
         'user_id',

@@ -7,33 +7,47 @@
       <div><p class="title header w-50 m-auto">الخصوم والالتزامات</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
-
 
   <div class="container text-center">
     <table class="table w-75 m-auto">
       <thead class="bg-dark text-white">
-        <th>-</th>
-        <th> الالتزام</th>
-        <th>القيمة</th>
+        <tr>
+          <th>-</th>
+          <th>اسم الالتزام</th>
+          <th>الجهة المسددة</th>
+          <th>المبلغ المستحق</th>
+          <th>المدفوع</th>
+          <th>المتبقي</th>
+          <th>الحالة</th>
+        </tr>
       </thead>
       <tbody>
         <tr *ngFor="let elm of data; let i = index">
-          <td>{{i+1}}</td>
-          <td>{{elm.name}}</td>
-          <td>{{elm.deserved_amount}}</td>
+          <td>{{ i + 1 }}</td>
+          <td>{{ elm.name }}</td>
+          <td>{{ elm.payee_display_name || elm.payee_name || (elm.supplier?.supplier_name) || '-' }}</td>
+          <td>{{ elm.deserved_amount }}</td>
+          <td>{{ elm.paid_amount || 0 }}</td>
+          <td>{{ elm.remaining_amount ?? (elm.deserved_amount - (elm.paid_amount || 0)) }}</td>
+          <td>
+            <span *ngIf="elm.status === 'paid'" class="badge bg-success">مدفوع</span>
+            <span *ngIf="elm.status === 'partial'" class="badge bg-warning">جزئي</span>
+            <span *ngIf="elm.status === 'pending' || !elm.status" class="badge bg-secondary">معلق</span>
+          </td>
         </tr>
       </tbody>
       <tfoot>
         <tr>
-          <td>الاجمالي</td>
-          <td colspan="2">{{total}}</td>
+          <td colspan="2"><strong>الإجمالي</strong></td>
+          <td></td>
+          <td><strong>{{ totalDeserved }}</strong></td>
+          <td><strong>{{ totalPaid }}</strong></td>
+          <td><strong>{{ totalRemaining }}</strong></td>
+          <td></td>
         </tr>
       </tfoot>
     </table>
   </div>
-
-
 </div>

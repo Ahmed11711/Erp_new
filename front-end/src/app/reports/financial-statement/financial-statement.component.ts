@@ -19,6 +19,9 @@ export class FinancialStatementComponent implements OnInit {
   dateFrom!: string;
   dateTo!: string;
 
+  loading = false;
+  errorMessage: string | null = null;
+
   // Lists for Dropdowns
   safes: any[] = [];
   banks: any[] = [];
@@ -61,30 +64,47 @@ export class FinancialStatementComponent implements OnInit {
     this.loadAccounts();
 
     // Subscribe to type changes to reset entity selection
-    this.form.get('type')?.valueChanges.subscribe(val => {
+    this.form.get('type')?.valueChanges.subscribe(() => {
       this.form.patchValue({ entity_id: null });
       this.data = [];
       this.details = null;
+      this.errorMessage = null;
     });
   }
 
   loadSafes() {
-    this.safeService.getAll().subscribe((res: any) => {
-      this.safes = res.data || res;
+    this.safeService.getAll().subscribe({
+      next: (res: any) => {
+        this.safes = res?.data || res || [];
+      },
+      error: (err) => {
+        console.error('خطأ في تحميل الخزائن:', err);
+        this.safes = [];
+      }
     });
   }
 
   loadBanks() {
-    this.bankService.getAll().subscribe((res: any) => {
-      this.banks = res.data || res;
+    this.bankService.getAll().subscribe({
+      next: (res: any) => {
+        this.banks = res?.data || res || [];
+      },
+      error: (err) => {
+        console.error('خطأ في تحميل البنوك:', err);
+        this.banks = [];
+      }
     });
   }
 
   loadAccounts() {
-    // Fetch General Accounts (Service Accounts or others?)
-    // Currently using ServiceAccountsService as a placeholder for general accounts
-    this.serviceAccountsService.index().subscribe((res: any) => {
-      this.accounts = res;
+    this.serviceAccountsService.index().subscribe({
+      next: (res: any) => {
+        this.accounts = res?.data || res || [];
+      },
+      error: (err) => {
+        console.error('خطأ في تحميل الحسابات الخدمية:', err);
+        this.accounts = [];
+      }
     });
   }
 
@@ -111,21 +131,38 @@ export class FinancialStatementComponent implements OnInit {
     }
 
     if (!treeAccountId) {
-      alert('الحساب المالي غير مرتبط بهذا العنصر');
+      this.errorMessage = 'الحساب المالي غير مرتبط بهذا العنصر';
       return;
     }
 
-    this.reportsService.getAccountStatement(treeAccountId, from, to).subscribe((res: any) => {
-      this.data = res.entries;
-      this.details = {
-        opening_balance: res.opening_balance,
-        closing_balance: res.closing_balance,
-        account: res.account
-      };
-      this.totals = {
-        debit: res.total_debit,
-        credit: res.total_credit
-      };
+    this.loading = true;
+    this.errorMessage = null;
+    this.data = [];
+    this.details = null;
+
+    this.reportsService.getAccountStatement(treeAccountId, from, to).subscribe({
+      next: (res: any) => {
+        this.loading = false;
+        this.data = res?.entries || [];
+        this.details = {
+          opening_balance: res?.opening_balance ?? 0,
+          closing_balance: res?.closing_balance ?? 0,
+          account: res?.account
+        };
+        this.totals = {
+          debit: res?.total_debit ?? 0,
+          credit: res?.total_credit ?? 0
+        };
+      },
+      error: (err) => {
+        this.loading = false;
+        const errBody = err?.error;
+        this.errorMessage = errBody?.message
+          || (errBody?.errors && typeof errBody.errors === 'object' ? Object.values(errBody.errors).flat().join(', ') : null)
+          || err?.message
+          || 'حدث خطأ أثناء جلب التقرير. تأكد من تشغيل الخادم والاتصال بالإنترنت.';
+        console.error('خطأ في تقرير كشف الحساب:', err);
+      }
     });
   }
 

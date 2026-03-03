@@ -27,4 +27,9 @@ class Supplier extends Model
     public function purchases(){
         return $this->hasMany(Purchase::class, 'supplier_id');
     }
+
+    public function treeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
+    }
 }

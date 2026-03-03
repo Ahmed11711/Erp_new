@@ -6,7 +6,7 @@
       <div class="col-11 col-md-2 offset-md-2">
         <div><p class="title header"> الطلبات</p></div>
       </div>
-      <div class="col-md-2 d-flex align-items-center justify-content-end">
+      <div class="col-md-2 d-flex align-items-center justify-content-end" *ngIf="hasWhatsAppAccess || user == 'Admin'">
         <button mat-raised-button color="primary" [routerLink]="['/dashboard/whatsapp/chat']" class="me-2">
           <mat-icon>chat</mat-icon>
           <span class="ms-1">المحادثات</span>
@@ -340,11 +340,11 @@
                     <span>اتصال</span>
                     <i class="fa-solid text-success fa-phone mx-2"></i>
                   </a>
-                  <button dir="rtl" mat-menu-item (click)="sendWhatsAppMessage(item)">
+                  <button dir="rtl" mat-menu-item (click)="sendWhatsAppMessage(item)" *ngIf="hasWhatsAppAccess || user == 'Admin'">
                     <span>إرسال رسالة</span>
                     <i class="fa-brands mx-2 text-success fa-whatsapp"></i>
                   </button>
-                  <button dir="rtl" mat-menu-item (click)="openChatWithCustomer(item)">
+                  <button dir="rtl" mat-menu-item (click)="openChatWithCustomer(item)" *ngIf="hasWhatsAppAccess || user == 'Admin'">
                     <span>فتح المحادثة</span>
                     <mat-icon class="mx-2">chat</mat-icon>
                   </button>
@@ -529,7 +529,7 @@
                 </button>
               </ng-container>
 
-              <ng-container>
+              <ng-container *ngIf="hasWhatsAppAccess || user == 'Admin'">
                 <button class="d-flex justify-content-end" mat-menu-item (click)="sendOrder(item); sendWhatsAppMessage(item)">
                   <span>إرسال واتساب</span>
                 </button>

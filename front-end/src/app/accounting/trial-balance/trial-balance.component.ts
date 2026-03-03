@@ -12,8 +12,10 @@ export class TrialBalanceComponent implements OnInit {
 
     trialBalanceData: any[] = [];
     totals: any = {};
+    validation: any = {};
     loading: boolean = false;
     error: string = '';
+    showValidation: boolean = false;
 
     filterForm: FormGroup = new FormGroup({
         date_from: new FormControl(null),
@@ -99,7 +101,9 @@ export class TrialBalanceComponent implements OnInit {
             next: (response: any) => {
                 this.trialBalanceData = response.data || [];
                 this.totals = response.totals || {};
+                this.validation = response.validation || {};
                 this.loading = false;
+                this.showValidation = true;
             },
             error: (err) => {
                 console.error('Error loading trial balance:', err);
@@ -162,5 +166,67 @@ export class TrialBalanceComponent implements OnInit {
 
     formatNumber(num: number): string {
         return num ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+    }
+
+    updateHierarchyBalances(): void {
+        this.loading = true;
+        this.accountingReportService.updateHierarchyBalances(0).subscribe({
+            next: (response: any) => {
+                if (response.success) {
+                    this.loadTrialBalance(); // Reload data after update
+                } else {
+                    this.error = response.message;
+                    this.loading = false;
+                }
+            },
+            error: (err) => {
+                this.error = 'فشل تحديث الأرصدة الهرمية';
+                this.loading = false;
+            }
+        });
+    }
+
+    validateIncomeStructure(): void {
+        this.loading = true;
+        this.accountingReportService.validateIncomeStructure().subscribe({
+            next: (response: any) => {
+                if (!response.is_valid) {
+                    console.warn('Income structure issues found:', response.issues);
+                }
+                this.loading = false;
+            },
+            error: (err) => {
+                this.error = 'فشل التحقق من هيكل الإيرادات';
+                this.loading = false;
+            }
+        });
+    }
+
+    processCashTransaction(): void {
+        // This would typically open a modal or navigate to a form
+        // For now, showing a basic implementation
+        const transactionData = {
+            cash_account_id: 1, // Would be selected by user
+            account_id: 2, // Would be selected by user
+            amount: 1000,
+            description: 'Test transaction',
+            transaction_type: 'cash_out'
+        };
+
+        this.loading = true;
+        this.accountingReportService.processCashTransaction(transactionData).subscribe({
+            next: (response: any) => {
+                if (response.success) {
+                    this.loadTrialBalance(); // Reload to show updated balances
+                } else {
+                    this.error = response.message;
+                    this.loading = false;
+                }
+            },
+            error: (err) => {
+                this.error = 'فشل عملية الدفع';
+                this.loading = false;
+            }
+        });
     }
 }

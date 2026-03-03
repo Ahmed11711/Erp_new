@@ -52,8 +52,8 @@ class CustomerCompanyController extends Controller
             'address' => 'required',
         ]);
 
- 
-        customerCompany::create([
+        // إنشاء سجل الشركة
+        $company = customerCompany::create([
             'name' => $request->name,
             'phone1' => $request->phone1,
             'phone2' => $request->phone2,
@@ -64,11 +64,17 @@ class CustomerCompanyController extends Controller
             'city' => $request->city,
             'address' => $request->address,
         ]);
-        // Fetch parent account from settings
+
+        // جلب الحساب الأب من الإعدادات وربط العميل به في شجرة الحسابات
         $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
-        
-        $this->addAsset->Addcustomer($request->name,'شركة', $parentAccountId);
-        return response()->json(['message'=>'success'], 200);
+        $account = $this->addAsset->Addcustomer($request->name, 'شركة', $parentAccountId);
+
+        if ($account) {
+            $company->tree_account_id = $account->id;
+            $company->save();
+        }
+
+        return response()->json(['message' => 'success'], 200);
     }
 
     /**
@@ -212,32 +218,9 @@ class CustomerCompanyController extends Controller
             }
         }
 
-        // Ensure company has tree account (for accounting entry)
-        if (!$company->tree_account_id) {
-            $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
-            $parentAccount = $parentAccountId ? TreeAccount::find($parentAccountId) : null;
-            if (!$parentAccount) {
-                $parentAccount = TreeAccount::where('name', 'like', '%العملاء%')->first();
-                if (!$parentAccount) {
-                    $parentAccount = TreeAccount::firstOrCreate(
-                        ['name' => 'العملاء'],
-                        ['type' => 'asset', 'balance' => 0, 'code' => 1100, 'level' => 1]
-                    );
-                }
-            }
-            $newAccount = TreeAccount::create([
-                'name' => $company->name,
-                'parent_id' => $parentAccount->id,
-                'code' => $parentAccount->code . $company->id,
-                'type' => 'asset',
-                'balance' => 0,
-                'debit_balance' => 0,
-                'credit_balance' => 0,
-                'level' => $parentAccount->level + 1,
-            ]);
-            $company->tree_account_id = $newAccount->id;
-        }
-        $customerTreeId = $company->tree_account_id;
+        // ربط تلقائي بحساب شجرة الحسابات من إعدادات ربط الحسابات (للعملاء القدامى بدون حساب)
+        $account = app(\App\Services\Accounting\AccountLinkingService::class)->ensureCustomerCompanyAccount($company);
+        $customerTreeId = $account?->id;
 
         $companyBalanceBefore = (float) $company->balance;
         $company->balance = $company->balance - $amount;

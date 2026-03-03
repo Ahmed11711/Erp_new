@@ -49,7 +49,7 @@ export class WhatsappManagementComponent implements OnInit {
     this.loading = true;
     this.whatsappService.getAllAssignments().subscribe({
       next: (response) => {
-        this.assignments = response.data || [];
+        this.assignments = response.data || response || [];
         this.initializeSelectedUsers();
         this.loading = false;
       },
@@ -118,6 +118,7 @@ export class WhatsappManagementComponent implements OnInit {
       user_ids: selectedUserIds
     }).subscribe({
       next: (response) => {
+        console.log('Assignment successful:', response);
         this.snackBar.open('تم تعيين المستخدمين بنجاح', 'إغلاق', {
           duration: 3000,
           panelClass: ['success-snackbar']
@@ -127,8 +128,21 @@ export class WhatsappManagementComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error assigning users:', error);
-        this.snackBar.open('فشل في تعيين المستخدمين', 'إغلاق', {
-          duration: 3000,
+        let errorMessage = 'فشل في تعيين المستخدمين';
+        
+        if (error.error && error.error.error) {
+          // Handle specific error messages from backend
+          if (typeof error.error.error === 'string') {
+            errorMessage = error.error.error;
+          } else if (error.error.error.message) {
+            errorMessage = error.error.error.message;
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        this.snackBar.open(errorMessage, 'إغلاق', {
+          duration: 5000,
           panelClass: ['error-snackbar']
         });
         this.loading = false;
@@ -162,8 +176,9 @@ export class WhatsappManagementComponent implements OnInit {
   }
 
   getAssignedUsersForPhoneNumber(phoneNumberId: string): any[] {
-    const assignment = this.assignments.find(a => a.phone_number_id === phoneNumberId);
-    return assignment ? assignment.assigned_users : [];
+    const id = String(phoneNumberId ?? '');
+    const assignment = this.assignments.find((a: any) => String(a?.phone_number_id ?? '') === id);
+    return assignment?.assigned_users ?? [];
   }
 
   getUnassignedUsersForPhoneNumber(phoneNumberId: string): any[] {

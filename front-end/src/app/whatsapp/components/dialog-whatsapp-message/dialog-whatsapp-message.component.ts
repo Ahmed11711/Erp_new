@@ -17,7 +17,10 @@ export class DialogWhatsAppMessageComponent implements OnInit {
   });
 
   templates: any[] = [];
+  metaTemplates: any[] = [];
+  selectedMetaTemplate: any = null;
   loading = false;
+  sendingMeta = false;
 
   constructor(
     public dialogRef: MatDialogRef<DialogWhatsAppMessageComponent>,
@@ -27,12 +30,22 @@ export class DialogWhatsAppMessageComponent implements OnInit {
 
   ngOnInit() {
     this.loadTemplates();
+    this.loadMetaTemplates();
     
     // If order data is provided, set default message
     if (this.data.order && this.data.order.customer_phone_1) {
       const defaultMessage = `مرحباً ${this.data.order.customer_name}، رقم الطلب: ${this.data.order.id}`;
       this.form.patchValue({ message: defaultMessage });
     }
+  }
+
+  loadMetaTemplates() {
+    this.whatsappService.getMetaTemplates().subscribe({
+      next: (res: any) => {
+        this.metaTemplates = res?.data ?? res ?? [];
+      },
+      error: () => { this.metaTemplates = []; }
+    });
   }
 
   loadTemplates() {
@@ -67,6 +80,38 @@ export class DialogWhatsAppMessageComponent implements OnInit {
       
       this.form.patchValue({ message: content });
     }
+  }
+
+  sendMetaTemplate() {
+    const order = this.data.order || this.data.orders?.[0];
+    if (!order?.customer_phone_1 || !this.selectedMetaTemplate?.name) {
+      Swal.fire({ icon: 'warning', title: 'تحذير', text: 'اختر قالب ميتا و تأكد من وجود الطلب' });
+      return;
+    }
+    this.sendingMeta = true;
+    const keys = this.selectedMetaTemplate.body_param_keys || [];
+    const bodyParameters = keys.map((key: string) => String(order[key] ?? ''));
+    this.whatsappService.sendMetaTemplateFromOrder({
+      order_id: order.id,
+      template_name: this.selectedMetaTemplate.name,
+      language_code: this.selectedMetaTemplate.language || 'ar',
+      body_parameters: bodyParameters,
+    }).subscribe({
+      next: (res: any) => {
+        this.sendingMeta = false;
+        if (res.success) {
+          this.onCloseClick();
+          Swal.fire({ icon: 'success', title: 'تم إرسال القالب بنجاح', timer: 1500, showConfirmButton: false });
+          if (this.data.refreshData) this.data.refreshData();
+        } else {
+          Swal.fire({ icon: 'error', title: 'خطأ', text: res.error || 'فشل إرسال القالب' });
+        }
+      },
+      error: (err) => {
+        this.sendingMeta = false;
+        Swal.fire({ icon: 'error', title: 'خطأ', text: err.error?.error || 'حدث خطأ أثناء الإرسال' });
+      }
+    });
   }
 
   submitform() {

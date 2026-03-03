@@ -3,14 +3,23 @@
 namespace App\Http\Controllers\V2\Accounting;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\V2\TreeAccount\TreeAccountResource;
 use App\Models\AccountEntry;
 use App\Models\DailyEntry;
 use App\Models\TreeAccount;
+use App\Services\Accounting\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class AccountingReportController extends Controller
 {
+    protected $accountingService;
+
+    public function __construct(AccountingService $accountingService)
+    {
+        $this->accountingService = $accountingService;
+    }
+
     /**
      * Daily Ledger Report
      */
@@ -216,13 +225,92 @@ class AccountingReportController extends Controller
         $totals['movement_difference'] = abs($totals['movement_debit'] - $totals['movement_credit']);
         $totals['closing_difference'] = abs($totals['closing_debit'] - $totals['closing_credit']);
 
+        // Validate trial balance equality
+        $validation = $this->accountingService->validateTrialBalance($trialBalance);
+
+        // Update account hierarchy balances if requested
+        if ($request->get('update_hierarchy', false)) {
+            foreach ($accounts as $account) {
+                $this->accountingService->updateAccountHierarchyBalances($account->id);
+            }
+        }
+
         return response()->json([
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
             'data' => $trialBalance,
             'totals' => $totals,
+            'validation' => $validation,
             'count' => count($trialBalance),
         ], 200);
+    }
+
+    /**
+     * Process Cash Transaction
+     */
+    public function processCashTransaction(Request $request)
+    {
+        $request->validate([
+            'cash_account_id' => 'required|exists:tree_accounts,id',
+            'account_id' => 'required|exists:tree_accounts,id',
+            'amount' => 'required|numeric|min:0.01',
+            'description' => 'required|string|max:255',
+            'transaction_type' => 'required|in:cash_in,cash_out',
+            'voucher_id' => 'nullable|exists:vouchers,id',
+            'daily_entry_id' => 'nullable|exists:daily_entries,id'
+        ]);
+
+        $result = $this->accountingService->processCashTransaction($request->all());
+
+        return response()->json($result, $result['success'] ? 200 : 400);
+    }
+
+    /**
+     * Get Account Hierarchy with Balances
+     */
+    public function getAccountHierarchy(Request $request)
+    {
+        $dateFrom = $request->get('date_from');
+        $dateTo = $request->get('date_to');
+
+        $hierarchy = $this->accountingService->getAccountHierarchyWithBalances($dateFrom, $dateTo);
+
+        return response()->json($hierarchy, 200);
+    }
+
+    /**
+     * Update Account Hierarchy Balances
+     */
+    public function updateHierarchyBalances(Request $request)
+    {
+        $request->validate([
+            'account_id' => 'required|exists:tree_accounts,id'
+        ]);
+
+        try {
+            $this->accountingService->updateAccountHierarchyBalances($request->account_id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تحديث أرصدة التسلسل الهرمي بنجاح'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل تحديث الأرصدة: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * Validate Income Structure
+     */
+    public function validateIncomeStructure(Request $request)
+    {
+        $validation = $this->accountingService->validateIncomeStructure();
+
+        return response()->json($validation, 200);
     }
 
     /**
@@ -230,12 +318,20 @@ class AccountingReportController extends Controller
      */
     public function accountingTree(Request $request)
     {
-        $accounts = TreeAccount::with(['children', 'parent', 'mainAccount'])
+        $accounts = TreeAccount::with([
+                // Load nested children up to reasonable depth for the UI tree
+                'children.children.children.children',
+                'parent',
+                'mainAccount',
+            ])
             ->whereNull('parent_id')
             ->orderBy('code')
             ->get();
 
-        return response()->json($accounts, 200);
+        return response()->json(
+            TreeAccountResource::collection($accounts),
+            200
+        );
     }
     /**
      * Account Statement Report

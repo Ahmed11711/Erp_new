@@ -161,11 +161,34 @@
         <div class="form-group">
           <input type="file" (change)="chooseImg($event)" name="uploadFile"  accept="image/*"  #uploadFile="ngModel" ngModel class="img">
         </div>
-        <div class="form-group">
-          <div class="form-group col-md-5">
-            <select id="bank" class="form-control" name="bank" ngModel required #bank="ngModel" (change)="bankChange($event)">
-              <option selected disabled value=""> الخزينة</option>
-              <option *ngFor="let item of banks" value="{{item.id}}">{{item.name}}</option>
+        <div class="form-group row" *ngIf="paidamount > 0">
+          <div class="form-group col-md-3">
+            <label>طريقة الدفع</label>
+            <select id="payment_type" class="form-control" name="payment_type" [(ngModel)]="paymentType" (change)="paymentTypeChange()">
+              <option value="bank">بنك</option>
+              <option value="safe">خزينة</option>
+              <option value="service_account">حساب خدمي</option>
+            </select>
+          </div>
+          <div class="form-group col-md-3" *ngIf="paymentType === 'bank'">
+            <label>البنك</label>
+            <select id="bank" class="form-control" name="bank" [(ngModel)]="bankId" #bank="ngModel">
+              <option [ngValue]="null" disabled>اختر البنك</option>
+              <option *ngFor="let item of banks" [ngValue]="item.id">{{item.name}}</option>
+            </select>
+          </div>
+          <div class="form-group col-md-3" *ngIf="paymentType === 'safe'">
+            <label>الخزينة</label>
+            <select id="safe" class="form-control" name="safe_id" [(ngModel)]="safeId" #safe="ngModel">
+              <option [ngValue]="null" disabled>اختر الخزينة</option>
+              <option *ngFor="let item of safes" [ngValue]="item.id">{{item.name}}</option>
+            </select>
+          </div>
+          <div class="form-group col-md-3" *ngIf="paymentType === 'service_account'">
+            <label>الحساب الخدمي</label>
+            <select id="service_account" class="form-control" name="service_account_id" [(ngModel)]="serviceAccountId" #svc="ngModel">
+              <option [ngValue]="null" disabled>اختر الحساب الخدمي</option>
+              <option *ngFor="let item of serviceAccounts" [ngValue]="item.id">{{item.name}}</option>
             </select>
           </div>
         </div>
@@ -231,7 +254,7 @@
 
 
 
-      <button type="submit" [disabled]="!date || !suplierSelected || !dateSelected || products.length==0 || !status || !bankId"
+      <button type="submit" [disabled]="!date || !suplierSelected || !dateSelected || products.length==0 || !status || !hasValidPaymentSource()"
         class="btn btn-primary">
         {{!invoiceId ? 'اضف' : 'تعديل'}}
       </button>

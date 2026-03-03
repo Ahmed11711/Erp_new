@@ -2440,85 +2440,25 @@ class OrdersController extends Controller
 
         // 2. Customer Tree Account (Credit)
         $customerTreeId = null;
+        $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+
         if ($order->customer_type == 'شركة' && $order->company_id) {
             $company = \App\Models\customerCompany::find($order->company_id);
             if ($company) {
-                if (!$company->tree_account_id) {
-                    // Create Tree Account for Company
-                    $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
-                    
-                    $parentAccount = null;
-                    if ($parentAccountId) {
-                        $parentAccount = \App\Models\TreeAccount::find($parentAccountId);
-                    }
-                    
-                    if (!$parentAccountId || !$parentAccount) {
-                        $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
-                        if (!$parentAccount) {
-                             $parentAccount = \App\Models\TreeAccount::firstOrCreate(
-                                ['name' => 'العملاء'],
-                                ['type' => 'asset', 'balance' => 0, 'code' => '1100'] 
-                            );
-                        }
-                    }
-
-                    $checkCode = \App\Models\TreeAccount::where('code', $parentAccount->code . $company->id)->first();
-                     $newAccount = \App\Models\TreeAccount::create([
-                        'name' => $company->name,
-                        'parent_id' => $parentAccount->id,
-                        'code' => $checkCode ? $parentAccount->code . $company->id . rand(10,99) : $parentAccount->code . $company->id,
-                        'type' => 'asset',
-                        'balance' => 0
-                    ]);
-                    $company->tree_account_id = $newAccount->id;
-                    $company->save();
-                }
-                $customerTreeId = $company->tree_account_id;
+                $account = $accountLinkingService->ensureCustomerCompanyAccount($company);
+                $customerTreeId = $account?->id;
             }
         } else {
-             // Individual Customer
-             $phone = $order->customer_phone_1;
-             $accName = $order->customer_name . ' - ' . $phone;
+             // Individual Customer - إنشاء حساب تحت إعدادات عملاء الأفراد
+             $phone = $order->customer_phone_1 ?? '';
+             $accName = $order->customer_name . ($phone ? ' - ' . $phone : '');
              
-             // Check if account already exists
              $indAccount = \App\Models\TreeAccount::where('name', $accName)->first();
-             
              if ($indAccount) {
                  $customerTreeId = $indAccount->id;
              } else {
-                 // Create new account
-                 $parentAccountId = \App\Models\Setting::where('key', 'customer_individual_parent_account_id')->value('value');
-                 
-                 $parentAccount = null;
-                 if ($parentAccountId) {
-                     $parentAccount = \App\Models\TreeAccount::find($parentAccountId);
-                 }
-                 
-                 if (!$parentAccountId || !$parentAccount) {
-                     $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%عملاء افراد%')->first();
-                     if (!$parentAccount) {
-                         $parentMain = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
-                         if (!$parentMain) {
-                              $parentMain = \App\Models\TreeAccount::create(['name' => 'العملاء', 'type' => 'asset', 'code' => '1100', 'balance'=>0]);
-                         }
-                         $parentAccount = \App\Models\TreeAccount::create([
-                             'name' => 'عملاء افراد',
-                             'parent_id' => $parentMain->id,
-                             'code' => $parentMain->code . '999',
-                             'type' => 'asset',
-                             'balance' => 0
-                         ]);
-                     }
-                 }
-
-                 $indAccount = \App\Models\TreeAccount::create([
-                     'name' => $accName,
-                     'parent_id' => $parentAccount->id,
-                     'code' => $parentAccount->code . substr($phone, -4) . rand(10,99),
-                     'type' => 'asset',
-                     'balance' => 0
-                 ]);
-                 $customerTreeId = $indAccount->id;
+                 $indAccount = $accountLinkingService->createCustomerAccount($accName, 'فرد', null);
+                 $customerTreeId = $indAccount?->id;
              }
         }
 

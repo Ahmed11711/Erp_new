@@ -1,0 +1,29 @@
+.header{
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+}
+
+thead{
+  font-size: 1.5rem;
+}
+
+.submit , .submit:hover{
+  background-color: black !important;
+  font-size: 1.2rem;
+  padding: 0.4rem 1.5rem !important;
+  color: white;
+}
+
+select , select:focus{
+  background-color: #82225e;
+  color: white;
+  font-size: 1.1rem;
+}
+
+input{
+  font-size: 1.1rem;
+}
+

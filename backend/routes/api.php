@@ -81,6 +81,8 @@ Route::middleware('auth')->group(function () {
         Route::post('send', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessage']);
         Route::post('send-template', [App\Http\Controllers\WhatsAppMessageController::class, 'sendTemplateMessage']);
         Route::post('send-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessageFromOrder']);
+        Route::get('meta-templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getMetaTemplatesList']);
+        Route::post('send-meta-template-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMetaTemplateFromOrder']);
         Route::get('chat/{customerId}', [App\Http\Controllers\WhatsAppMessageController::class, 'getChatMessages']);
         Route::get('customers', [App\Http\Controllers\WhatsAppMessageController::class, 'getCustomers']);
         Route::get('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getTemplates']);
@@ -154,6 +156,7 @@ Route::middleware('auth')->group(function () {
 
         Route::apiResource('assets', App\Http\Controllers\AssetController::class);
         Route::post('assets/run-depreciation', [App\Http\Controllers\DepreciationController::class, 'runDepreciation']); // New Route
+        Route::post('cimmitments/{id}/pay', [App\Http\Controllers\CimmitmentController::class, 'pay']);
         Route::apiResource('cimmitments', App\Http\Controllers\CimmitmentController::class);
         Route::apiResource('incomes', App\Http\Controllers\IncomeController::class);
     });
@@ -424,6 +427,14 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/trial-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'trialBalance']);
         Route::get('/accounting-tree', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountingTree']);
         Route::get('/account-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountStatement']);
+        Route::get('/account-hierarchy', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'getAccountHierarchy']);
+        Route::get('/validate-income-structure', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'validateIncomeStructure']);
+    });
+
+    // Accounting Transactions
+    Route::prefix('accounting/')->group(function () {
+        Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
+        Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
     });
     // Service Accounts
     Route::prefix('service-accounts/')->group(function () {

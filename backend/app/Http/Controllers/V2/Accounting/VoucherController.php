@@ -202,59 +202,17 @@ class VoucherController extends Controller
             // 1. Get or Create the Partner's Tree Account (Client or Supplier)
             $partnerTreeAccountId = null;
             
+            $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+
             if ($request->voucher_type === 'client') {
                 $client = \App\Models\customerCompany::find($request->client_id);
-                if (!$client->tree_account_id) {
-                    // Auto-create Account
-                    $parentAccount = TreeAccount::where('name', 'like', '%العملاء%')->first(); 
-                    if (!$parentAccount) {
-                        $parentAccount = TreeAccount::firstOrCreate(
-                            ['name' => 'العملاء'],
-                            ['type' => 'asset', 'balance' => 0, 'code' => '1200'] 
-                        );
-                    }
-
-                    $newAccount = TreeAccount::create([
-                        'name' => $client->name ?? $client->company_name ?? 'Client ' . $client->id,
-                        'parent_id' => $parentAccount->id,
-                        'code' => $parentAccount->code . $client->id, 
-                        'type' => 'asset', 
-                        'balance' => 0,
-                        'debit_balance' => 0,
-                        'credit_balance' => 0,
-                    ]);
-                    
-                    $client->tree_account_id = $newAccount->id;
-                    $client->save();
-                }
-                $partnerTreeAccountId = $client->tree_account_id;
+                $account = $accountLinkingService->ensureCustomerCompanyAccount($client);
+                $partnerTreeAccountId = $account?->id;
 
             } else {
                 $supplier = \App\Models\Supplier::find($request->supplier_id);
-                 if (!$supplier->tree_account_id) {
-                     // Auto-create Account
-                    $parentAccount = TreeAccount::where('name', 'like', '%الموردين%')->first(); 
-                     if (!$parentAccount) {
-                        $parentAccount = TreeAccount::firstOrCreate(
-                            ['name' => 'الموردين'],
-                            ['type' => 'liability', 'balance' => 0, 'code' => '2100'] 
-                        );
-                    }
-
-                     $newAccount = TreeAccount::create([
-                        'name' => $supplier->supplier_name ?? 'Supplier ' . $supplier->id,
-                        'parent_id' => $parentAccount->id,
-                        'code' => $parentAccount->code . $supplier->id,
-                        'type' => 'liability',
-                        'balance' => 0,
-                        'debit_balance' => 0,
-                        'credit_balance' => 0,
-                    ]);
-                    
-                    $supplier->tree_account_id = $newAccount->id;
-                    $supplier->save();
-                 }
-                $partnerTreeAccountId = $supplier->tree_account_id;
+                $account = $accountLinkingService->ensureSupplierAccount($supplier);
+                $partnerTreeAccountId = $account?->id;
             }
 
             // 2. Identify Debit and Credit Accounts

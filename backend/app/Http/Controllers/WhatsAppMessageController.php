@@ -398,6 +398,14 @@ class WhatsAppMessageController extends Controller
                 }
             }
 
+            $whatsappService = $this->initializeWhatsAppService();
+            if (!$whatsappService) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No WhatsApp number available for this user',
+                ], 422);
+            }
+
             // Find or create customer
             $customer = Customer::firstOrCreate(
                 ['phone' => $phone],
@@ -408,7 +416,7 @@ class WhatsAppMessageController extends Controller
             );
 
             // Send message
-            $result = $this->whatsappService->sendMessage($phone, $messageContent);
+            $result = $whatsappService->sendMessage($phone, $messageContent);
 
             if ($result['success']) {
                 // Store message
@@ -441,6 +449,139 @@ class WhatsAppMessageController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'An error occurred while sending the message',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get list of Meta WhatsApp templates (from config) for use when sending from order
+     */
+    public function getMetaTemplatesList()
+    {
+        try {
+            $templates = config('whatsapp_meta_templates.templates', []);
+            return response()->json([
+                'success' => true,
+                'data' => $templates,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching Meta templates list', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch templates',
+            ], 500);
+        }
+    }
+
+    /**
+     * Send Meta WhatsApp template message from order (for 24h session / first contact)
+     */
+    public function sendMetaTemplateFromOrder(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'order_id' => 'required|exists:orders,id',
+            'template_name' => 'required|string',
+            'language_code' => 'nullable|string|max:10',
+            'body_parameters' => 'nullable|array',
+            'body_parameters.*' => 'string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 422);
+        }
+
+        try {
+            $order = Order::findOrFail($request->order_id);
+            $phone = $order->customer_phone_1;
+            if (!$phone) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Customer phone number not found',
+                ], 422);
+            }
+
+            if (!str_starts_with($phone, '+')) {
+                $phone = str_starts_with($phone, '0') ? '+2' . substr($phone, 1) : '+2' . $phone;
+            }
+
+            $whatsappService = $this->initializeWhatsAppService();
+            if (!$whatsappService) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No WhatsApp number available for this user',
+                ], 422);
+            }
+
+            $templateName = $request->template_name;
+            $languageCode = $request->language_code ?? 'ar';
+            $bodyParams = $request->body_parameters;
+
+            $templatesConfig = config('whatsapp_meta_templates.templates', []);
+            $templateConfig = collect($templatesConfig)->firstWhere('name', $templateName);
+            if (!$templateConfig) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Template not found or not configured. Add it in config/whatsapp_meta_templates.php',
+                ], 422);
+            }
+
+            if ($bodyParams === null || $bodyParams === []) {
+                $keys = $templateConfig['body_param_keys'] ?? [];
+                $bodyParams = [];
+                foreach ($keys as $key) {
+                    $bodyParams[] = (string) ($order->{$key} ?? '');
+                }
+            }
+
+            $components = [];
+            if (!empty($bodyParams)) {
+                $parameters = [];
+                foreach ($bodyParams as $val) {
+                    $parameters[] = ['type' => 'text', 'text' => (string) $val];
+                }
+                $components[] = ['type' => 'body', 'parameters' => $parameters];
+            }
+
+            $result = $whatsappService->sendTemplateMessage(
+                $phone,
+                $templateName,
+                $languageCode,
+                $components
+            );
+
+            if ($result['success']) {
+                $customer = Customer::firstOrCreate(
+                    ['phone' => $phone],
+                    ['name' => $order->customer_name, 'assigned_agent_id' => auth()->id()]
+                );
+                $messageContent = sprintf('[Meta Template: %s]', $templateName);
+                Message::create([
+                    'customer_id' => $customer->id,
+                    'sender_id' => auth()->id(),
+                    'receiver_id' => null,
+                    'content' => $messageContent,
+                    'direction' => 'outbound',
+                    'status' => 'sent',
+                    'twilio_message_sid' => $result['message_sid'] ?? null,
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Template sent successfully',
+                ], 200);
+            }
+
+            return response()->json([
+                'success' => false,
+                'error' => $result['error'] ?? 'Failed to send template',
+            ], 500);
+        } catch (\Exception $e) {
+            Log::error('Error sending Meta template from order', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'error' => 'An error occurred while sending the template: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -492,11 +633,15 @@ class WhatsAppMessageController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'phone_number_id' => 'required|string',
-            'user_ids' => 'required|array',
+            'user_ids' => 'required|array|min:1',
             'user_ids.*' => 'exists:users,id',
         ]);
 
         if ($validator->fails()) {
+            Log::warning('WhatsApp assignment validation failed', [
+                'errors' => $validator->errors()->toArray(),
+                'request_data' => $request->all()
+            ]);
             return response()->json(['error' => $validator->errors()], 422);
         }
 
@@ -504,31 +649,70 @@ class WhatsAppMessageController extends Controller
             $phoneNumberId = $request->phone_number_id;
             $userIds = $request->user_ids;
 
-            // Verify the phone number is available
+            // Verify the phone number is available (allow unconfigured for testing)
             $availableNumbers = \App\Services\MetaWhatsAppService::getAvailablePhoneNumbers();
             $isValidNumber = collect($availableNumbers)->pluck('id')->contains($phoneNumberId);
             
             if (!$isValidNumber) {
+                Log::warning('Invalid WhatsApp phone number ID', [
+                    'phone_number_id' => $phoneNumberId,
+                    'available_numbers' => array_column($availableNumbers, 'id')
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'Invalid WhatsApp phone number ID',
                 ], 422);
             }
 
-            \App\Models\WhatsAppAssignment::assignUsersToPhoneNumber($phoneNumberId, $userIds);
+            // Check if phone number is configured (optional warning)
+            $phoneNumber = collect($availableNumbers)->firstWhere('id', $phoneNumberId);
+            if (!$phoneNumber['is_configured']) {
+                Log::info('Assigning users to unconfigured WhatsApp phone number', [
+                    'phone_number_id' => $phoneNumberId,
+                    'phone_number_name' => $phoneNumber['name']
+                ]);
+            }
+
+            // Verify users exist
+            $validUsers = \App\Models\User::whereIn('id', $userIds)->pluck('id')->toArray();
+            if (count($validUsers) !== count($userIds)) {
+                $invalidUserIds = array_diff($userIds, $validUsers);
+                Log::warning('Some users are invalid', [
+                    'invalid_user_ids' => $invalidUserIds,
+                    'requested_user_ids' => $userIds
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Some users are invalid or do not exist: ' . implode(', ', $invalidUserIds),
+                ], 422);
+            }
+
+            $result = \App\Models\WhatsAppAssignment::assignUsersToPhoneNumber($phoneNumberId, $validUsers);
+
+            Log::info('Users assigned to WhatsApp number successfully', [
+                'phone_number_id' => $phoneNumberId,
+                'user_ids' => $validUsers,
+                'result' => $result
+            ]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Users assigned to WhatsApp number successfully',
+                'data' => [
+                    'phone_number_id' => $phoneNumberId,
+                    'assigned_users_count' => count($validUsers)
+                ]
             ], 200);
         } catch (\Exception $e) {
             Log::error('Error assigning users to WhatsApp number', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => 'An error occurred while assigning users to WhatsApp number',
+                'error' => 'An error occurred while assigning users to WhatsApp number: ' . $e->getMessage(),
             ], 500);
         }
     }

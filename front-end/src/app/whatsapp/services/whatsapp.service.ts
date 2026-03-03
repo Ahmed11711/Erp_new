@@ -21,6 +21,21 @@ export class WhatsAppService {
     return this.http.post<any>(`${environment.Url}/whatsapp/send-from-order`, data);
   }
 
+  /** List of Meta-approved templates (from backend config) */
+  getMetaTemplates(): Observable<any> {
+    return this.http.get<any>(`${environment.Url}/whatsapp/meta-templates`);
+  }
+
+  /** Send Meta WhatsApp template from order (for 24h window / first contact) */
+  sendMetaTemplateFromOrder(data: {
+    order_id: number;
+    template_name: string;
+    language_code?: string;
+    body_parameters?: string[];
+  }): Observable<any> {
+    return this.http.post<any>(`${environment.Url}/whatsapp/send-meta-template-from-order`, data);
+  }
+
   getChatMessages(customerId: number): Observable<any> {
     return this.http.get<any>(`${environment.Url}/whatsapp/chat/${customerId}`);
   }

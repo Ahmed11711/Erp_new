@@ -1,0 +1,155 @@
+<div class="service-transaction-container">
+    <div class="card">
+        <div class="card-header">
+            <h4 class="card-title">معاملة حساب خدمي</h4>
+        </div>
+        <div class="card-body">
+            <!-- Success Message -->
+            <div *ngIf="success" class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ success }}
+                <button type="button" class="btn-close" (click)="success = ''"></button>
+            </div>
+
+            <!-- Error Message -->
+            <div *ngIf="error" class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ error }}
+                <button type="button" class="btn-close" (click)="error = ''"></button>
+            </div>
+
+            <form [formGroup]="serviceTransactionForm" (ngSubmit)="onSubmit()">
+                <div class="row">
+                    <!-- Transaction Type -->
+                    <div class="col-md-6 mb-3">
+                        <label for="transaction_type" class="form-label">نوع المعاملة</label>
+                        <select 
+                            class="form-select" 
+                            id="transaction_type" 
+                            formControlName="transaction_type">
+                            <option *ngFor="let type of transactionTypes" [value]="type.value">
+                                {{ type.label }}
+                            </option>
+                        </select>
+                        <div *ngIf="serviceTransactionForm.get('transaction_type')?.invalid && serviceTransactionForm.get('transaction_type')?.touched" 
+                             class="text-danger small mt-1">
+                            هذا الحقل مطلوب
+                        </div>
+                    </div>
+
+                    <!-- Service Account -->
+                    <div class="col-md-6 mb-3">
+                        <label for="service_account_id" class="form-label">حساب الخدمة</label>
+                        <select 
+                            class="form-select" 
+                            id="service_account_id" 
+                            formControlName="service_account_id">
+                            <option value="">اختر حساب الخدمة</option>
+                            <option *ngFor="let account of serviceAccounts" [value]="account.id">
+                                {{ account.code }} - {{ account.name }}
+                            </option>
+                        </select>
+                        <div *ngIf="serviceTransactionForm.get('service_account_id')?.invalid && serviceTransactionForm.get('service_account_id')?.touched" 
+                             class="text-danger small mt-1">
+                            هذا الحقل مطلوب
+                        </div>
+                    </div>
+
+                    <!-- Target Account -->
+                    <div class="col-md-6 mb-3">
+                        <label for="account_id" class="form-label">الحساب المستهدف</label>
+                        <select 
+                            class="form-select" 
+                            id="account_id" 
+                            formControlName="account_id">
+                            <option value="">اختر الحساب المستهدف</option>
+                            <option *ngFor="let account of targetAccounts" [value]="account.id">
+                                {{ account.code }} - {{ account.name }}
+                            </option>
+                        </select>
+                        <div *ngIf="serviceTransactionForm.get('account_id')?.invalid && serviceTransactionForm.get('account_id')?.touched" 
+                             class="text-danger small mt-1">
+                            هذا الحقل مطلوب
+                        </div>
+                    </div>
+
+                    <!-- Amount -->
+                    <div class="col-md-6 mb-3">
+                        <label for="amount" class="form-label">المبلغ</label>
+                        <input 
+                            type="number" 
+                            class="form-control" 
+                            id="amount" 
+                            formControlName="amount"
+                            step="0.01"
+                            min="0.01"
+                            placeholder="0.00">
+                        <div *ngIf="serviceTransactionForm.get('amount')?.invalid && serviceTransactionForm.get('amount')?.touched" 
+                             class="text-danger small mt-1">
+                            <span *ngIf="serviceTransactionForm.get('amount')?.errors?.['required']">هذا الحقل مطلوب</span>
+                            <span *ngIf="serviceTransactionForm.get('amount')?.errors?.['min']">المبلغ يجب أن يكون أكبر من صفر</span>
+                        </div>
+                    </div>
+
+                    <!-- Service Date -->
+                    <div class="col-md-6 mb-3">
+                        <label for="service_date" class="form-label">تاريخ الخدمة</label>
+                        <input 
+                            type="date" 
+                            class="form-control" 
+                            id="service_date" 
+                            formControlName="service_date">
+                        <div *ngIf="serviceTransactionForm.get('service_date')?.invalid && serviceTransactionForm.get('service_date')?.touched" 
+                             class="text-danger small mt-1">
+                            هذا الحقل مطلوب
+                        </div>
+                    </div>
+
+                    <!-- Invoice Number -->
+                    <div class="col-md-6 mb-3">
+                        <label for="invoice_number" class="form-label">رقم الفاتورة</label>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="invoice_number" 
+                            formControlName="invoice_number"
+                            placeholder="اختياري">
+                    </div>
+
+                    <!-- Description -->
+                    <div class="col-12 mb-3">
+                        <label for="description" class="form-label">الوصف</label>
+                        <textarea 
+                            class="form-control" 
+                            id="description" 
+                            formControlName="description"
+                            rows="3"
+                            placeholder="أدخل وصف الخدمة"></textarea>
+                        <div *ngIf="serviceTransactionForm.get('description')?.invalid && serviceTransactionForm.get('description')?.touched" 
+                             class="text-danger small mt-1">
+                            هذا الحقل مطلوب
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="row">
+                    <div class="col-12">
+                        <button 
+                            type="submit" 
+                            class="btn btn-primary me-2" 
+                            [disabled]="loading || serviceTransactionForm.invalid">
+                            <span *ngIf="loading" class="spinner-border spinner-border-sm me-2"></span>
+                            {{ loading ? 'جاري التنفيذ...' : 'تنفيذ المعاملة' }}
+                        </button>
+                        <button 
+                            type="button" 
+                            class="btn btn-secondary" 
+                            (click)="resetForm()"
+                            [disabled]="loading">
+                            إعادة تعيين
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,12 +1,14 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../env/env';
 
 @Injectable({
   providedIn: 'root'
 })
 export class LeadStatusService {
-  private apiUrl = 'http://localhost:8000/api/lead-statuses';
+  
+  private apiUrl = `${environment.Url}/lead-statuses`;
 
   constructor(private http: HttpClient) { }
 

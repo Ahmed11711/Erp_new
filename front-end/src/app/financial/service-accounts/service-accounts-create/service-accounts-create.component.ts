@@ -33,12 +33,13 @@ export class ServiceAccountsCreateComponent implements OnInit {
             }
         });
 
+        const accountId = this.data ? (this.data.account_id ?? this.data.account?.id) : '';
         this.form = new FormGroup({
             name: new FormControl(this.data ? this.data.name : '', [Validators.required]),
             account_number: new FormControl(this.data ? this.data.account_number : ''),
             description: new FormControl(this.data ? this.data.description : ''),
             other_info: new FormControl(this.data ? this.data.other_info : ''),
-            account_id: new FormControl(this.data ? this.data.account_id : '', [Validators.required]),
+            account_id: new FormControl(accountId, [Validators.required]),
             balance: new FormControl(this.data ? this.data.balance : 0),
         });
 
@@ -62,7 +63,8 @@ export class ServiceAccountsCreateComponent implements OnInit {
         if (this.form.valid) {
             const formData = new FormData();
             Object.keys(this.form.controls).forEach(key => {
-                formData.append(key, this.form.get(key)?.value);
+                const val = this.form.get(key)?.value;
+                formData.append(key, val != null ? String(val) : '');
             });
 
             if (this.selectedFile) {

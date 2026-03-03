@@ -4,6 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { th } from 'date-fns/locale';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 import { SuppliersService } from 'src/app/suppliers/services/suppliers.service';
 import { InvoiceService } from '../service/invoice.service';
 
@@ -18,10 +20,25 @@ export class AddInvoiceComponent {
   products:any[] = [];
   categories : any[] = [];
   suppliers : any[] = [];
-  banks : any[] = [];
+  banks: any[] = [];
+  safes: any[] = [];
+  serviceAccounts: any[] = [];
+  paymentType: 'bank' | 'safe' | 'service_account' = 'bank';
+  safeId: number | null = null;
+  serviceAccountId: number | null = null;
   keyword = 'supplier_name';
   catword = 'category_name';
-  constructor(private bank:BanksService,private router: Router ,private datePipe: DatePipe, private invoice:InvoiceService, private supplier:SuppliersService, private cat : CategoryService, private activeRoute:ActivatedRoute) { }
+  constructor(
+    private bank: BanksService,
+    private safeService: SafeService,
+    private serviceAccountsService: ServiceAccountsService,
+    private router: Router,
+    private datePipe: DatePipe,
+    private invoice: InvoiceService,
+    private supplier: SuppliersService,
+    private cat: CategoryService,
+    private activeRoute: ActivatedRoute
+  ) { }
 
   ngOnInit(): void {
     // this.invoiceId = this.activeRoute.snapshot.queryParams['invoiceId'];
@@ -34,8 +51,14 @@ export class AddInvoiceComponent {
       this.categories = res;
     })
 
-    this.bank.bankSelect().subscribe((res:any)=>{
+    this.bank.bankSelect().subscribe((res: any) => {
       this.banks = res;
+    });
+    this.safeService.getAll({ per_page: 500 }).subscribe((res: any) => {
+      this.safes = res.data || res || [];
+    });
+    this.serviceAccountsService.index().subscribe((res: any) => {
+      this.serviceAccounts = res || [];
     });
 
     if (this.invoiceId) {
@@ -50,9 +73,10 @@ export class AddInvoiceComponent {
         this.paidamount = res['invoice'].paid_amount;
         this.dueamount = res['invoice'].due_amount;
         this.transportcost = res['invoice'].transport_cost;
-        let bank:any = document.getElementById('bank');
-        bank.value = res['invoice'].bank_id;
+        this.paymentType = res['invoice'].payment_type || 'bank';
         this.bankId = res['invoice'].bank_id;
+        this.safeId = res['invoice'].safe_id;
+        this.serviceAccountId = res['invoice'].service_account_id;
         let receipt_date:any = document.getElementById('receipt_date');
         receipt_date.value = res['invoice'].receipt_date;
         this.date = res['invoice'].receipt_date;
@@ -125,8 +149,18 @@ export class AddInvoiceComponent {
     this.status = e.target.value;
     this.calc();
   }
-  bankChange(e){
-    this.bankId = e.target.value;
+  paymentTypeChange() {
+    this.bankId = null;
+    this.safeId = null;
+    this.serviceAccountId = null;
+  }
+
+  hasValidPaymentSource(): boolean {
+    if (this.paidamount <= 0) return true;
+    if (this.paymentType === 'bank') return !!this.bankId;
+    if (this.paymentType === 'safe') return !!this.safeId;
+    if (this.paymentType === 'service_account') return !!this.serviceAccountId;
+    return false;
   }
 
   productname = '';
@@ -202,7 +236,16 @@ export class AddInvoiceComponent {
     invoice.append('due_amount', this.dueamount.toString());
     invoice.append('transport_cost', this.transportcost.toString());
     invoice.append('price_edited', this.invoicePriceEdited.toString());
-    invoice.append('bank_id', this.bankId);
+    invoice.append('payment_type', this.paymentType);
+    if (this.paymentType === 'bank' && this.bankId) {
+      invoice.append('bank_id', this.bankId.toString());
+    }
+    if (this.paymentType === 'safe' && this.safeId) {
+      invoice.append('safe_id', this.safeId.toString());
+    }
+    if (this.paymentType === 'service_account' && this.serviceAccountId) {
+      invoice.append('service_account_id', this.serviceAccountId.toString());
+    }
     if(this.selectedImg){
       invoice.append('invoice_image', this.selectedImg, this.selectedImg.name);
     }
