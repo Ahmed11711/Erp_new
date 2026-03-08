@@ -29,8 +29,16 @@ export class CorparatesSalesService {
     return this.http.post(`${environment.Url}/lead-tool`, data);
   }
 
-  getLeads(params={}){
+  getLeads(params: any = {}){
     return this.http.get(`${environment.Url}/lead` , {params});
+  }
+
+  getLeadTeamUsers(){
+    return this.http.get(`${environment.Url}/lead/team-users`);
+  }
+
+  getLeadActivityStats(params: any = {}){
+    return this.http.get(`${environment.Url}/lead/activity-stats`, {params});
   }
 
   getLeadsById(id:any){
@@ -43,6 +51,18 @@ export class CorparatesSalesService {
 
   addToLead(formData:any){
     return this.http.post(`${environment.Url}/edit-lead` , formData);
+  }
+
+  getPendingRecommenders(params?: { userId?: number; from_date?: string }) {
+    return this.http.get(`${environment.Url}/lead/recommenders/pending`, { params: params || {} });
+  }
+
+  deleteRecommender(id: number) {
+    return this.http.delete(`${environment.Url}/lead/recommenders/${id}`);
+  }
+
+  toggleRecommenderDone(id: number) {
+    return this.http.patch(`${environment.Url}/lead/recommenders/${id}/toggle-done`, {});
   }
 
 }

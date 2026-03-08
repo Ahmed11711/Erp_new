@@ -13,7 +13,7 @@ export class IncomeListService {
 
   get(params):Observable<any>
   {
-    return this.http.get<any>(`${environment.Url}/incomelist`, {params})
+    return this.http.get<any>(`${environment.Url}/accounting/reports/income-statement`, {params})
   }
 
   add(formData:any):Observable<any>

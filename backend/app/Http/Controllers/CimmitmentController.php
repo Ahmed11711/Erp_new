@@ -117,6 +117,8 @@ class CimmitmentController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:0',
             'cash_account_id' => 'required|exists:tree_accounts,id',
+            'payment_source_type' => 'required|in:safe,bank,service_account',
+            'payment_source_id' => 'required|integer|min:1',
             'description' => 'nullable|string',
         ]);
 
@@ -131,7 +133,9 @@ class CimmitmentController extends Controller
                 $commitment,
                 (float) $request->amount,
                 (int) $request->cash_account_id,
-                $request->description
+                $request->description,
+                $request->payment_source_type,
+                (int) $request->payment_source_id
             );
             return response()->json([
                 'message' => 'تم تسجيل السداد بنجاح',

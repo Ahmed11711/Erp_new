@@ -86,6 +86,11 @@ class CorporateSalesLead extends Model
         return $this->belongsTo(LeadStatus::class, 'lead_status_id');
     }
 
+    public function recommenders()
+    {
+        return $this->hasMany(CorporateSalesLeadRecommender::class);
+    }
+
     /**
      * Scope to get leads by status.
      */

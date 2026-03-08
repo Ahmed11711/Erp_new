@@ -16,66 +16,78 @@ import { IncomeListService } from '../services/income-list.service';
 })
 export class IncomeListComponent implements OnInit{
   month;
+  dateFrom: string | null = null;
+  dateTo: string | null = null;
 
   data: any = {};
-  incomeSales!:number;
-  costSales!:number;
-  totalWin!:number;
-  totalWinBeforeVat!:number;
+  incomeSales: number = 0;
+  costSales: number = 0;
+  totalWin: number = 0;
+  totalWinBeforeVat: number = 0;
+  grossMarginPercent: number = 0;
+  netMarginPercent: number = 0;
+  otherExpensesTotal: number = 0;
 
-  user!:string;
+  user!: string;
   constructor( private IncomeListService:IncomeListService , private authService:AuthService,
     private pdfService:PdfService, private excelService:ExcelService, private dialog:MatDialog
   ){}
 
   ngOnInit(): void {
-    this.month = new Date().toISOString().slice(0, 7);
-    this.filter['month'] = this.month
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    this.dateFrom = `${y}-${m}-01`;
+    this.dateTo = `${y}-${m}-${d}`;
+    this.filter['date_from'] = this.dateFrom;
+    this.filter['date_to'] = this.dateTo;
     this.getData();
     this.user = this.authService.getUser();
   }
   filter = {}
   onDateFromChange(event: Event) {
     const target = event.target as HTMLInputElement;
-    this.filter['month'] = target.value;
-    this.month = target.value;
+    this.dateFrom = target.value;
+    delete this.filter['month'];
+    this.filter['date_from'] = this.dateFrom;
+    if (this.dateTo) {
+      this.filter['date_to'] = this.dateTo;
+    }
+    this.getData();
+  }
+  onDateToChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.dateTo = target.value;
+    delete this.filter['month'];
+    if (this.dateFrom) {
+      this.filter['date_from'] = this.dateFrom;
+    }
+    this.filter['date_to'] = this.dateTo;
     this.getData();
   }
 
-  getData(){
-    this.IncomeListService.get(this.filter).subscribe((data:any)=>{
-      this.data = data;
-      this.incomeSales = 0;
-      this.costSales = 0;
-      this.totalWin = 0;
-      this.totalWinBeforeVat = 0;
-      if (data.sales) {
-        this.incomeSales = data?.sales   - data?.sales_returns  ;
-
-        this.costSales = (
-            data?.opening_raw_materials   +
-            data?.opening_under_processing   +
-            data?.opening_finished_goods   +
-            data?.purchases   +
-            data?.purchase_expenses   +
-            data?.operating_expenses   +
-            data?.sales_expenses
-          ) -
-          (
-            data?.closing_raw_materials   +
-            data?.closing_under_processing   +
-            data?.closing_finished_goods   +
-            data?.last_storage
-          )
-
-        this.totalWin = this.incomeSales - this.costSales;
-
-
-        this.totalWinBeforeVat = this.totalWin + data?.other_revenues   - (data?.setup_expenses + data?.depreciation + data?.admin_expenses + data?.depreciation_reserves) ;
-      }
-
-
+  getData() {
+    this.IncomeListService.get(this.filter).subscribe((res: any) => {
+      this.data = res || {};
+      this.incomeSales = res?.net_sales ?? 0;
+      this.costSales = res?.cogs ?? 0;
+      this.totalWin = res?.gross_profit ?? 0;
+      this.totalWinBeforeVat = res?.net_profit_before_tax ?? 0;
+      this.grossMarginPercent = res?.gross_margin_percent ?? 0;
+      this.netMarginPercent = res?.profit_margin_percent ?? 0;
+      this.otherExpensesTotal = res?.other_expenses_total ?? 0;
     });
+  }
+
+  formatNumber(val: number | undefined | null): string {
+    if (val == null || val === undefined) return '0.00';
+    return Number(val).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  get isProfit(): boolean {
+    const val = this.totalWinBeforeVat ?? 0;
+    return val >= 0;
   }
 
 

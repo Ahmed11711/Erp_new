@@ -27,3 +27,49 @@ tr td:first-child{
 table th, table td{
   letter-spacing: 0 !important;
 }
+
+/* قائمة الدخل - معايير محاسبية */
+.income-statement .section-header td {
+  background-color: #f0f4f8;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  text-align: start;
+}
+
+.income-statement .subtotal-row td {
+  font-weight: 600;
+  background-color: #f8f9fa;
+}
+
+.income-statement .highlight-row td {
+  font-weight: bold;
+  background-color: #e8f4f8;
+}
+
+.income-statement .highlight-row.result-loss td {
+  background-color: #fce8e8;
+}
+
+.income-statement .result-row td {
+  font-weight: bold;
+  font-size: 1.2em;
+  background-color: #d4edda;
+}
+
+.income-statement .result-row.result-loss td {
+  background-color: #f8d7da;
+}
+
+.text-profit {
+  color: #155724;
+}
+
+.text-loss {
+  color: #721c24;
+}
+
+.margin-badge {
+  font-size: 0.85em;
+  opacity: 0.9;
+  margin-right: 4px;
+}

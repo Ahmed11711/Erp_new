@@ -115,8 +115,9 @@ class LeadStatusController extends Controller
             'next_action_notes' => 'nullable|string',
         ]);
 
-        $oldStatus = $lead->lead_status_id;
+        $oldStatusId = $lead->lead_status_id;
         $newStatus = $request->lead_status_id;
+        $oldStatusName = $lead->status?->name ?? 'N/A';
 
         // Update lead status and next action
         $lead->update([
@@ -127,11 +128,11 @@ class LeadStatusController extends Controller
         ]);
 
         // Create tracking record
-        $status = LeadStatus::find($newStatus);
+        $newStatusModel = LeadStatus::find($newStatus);
         \App\Models\CorporateSalesTracking::create([
             'type' => 'status_change',
-            'details' => "Status changed from {$lead->status->name} to {$status->name}",
-            'old_value' => $oldStatus,
+            'details' => "Status changed from {$oldStatusName} to {$newStatusModel->name}",
+            'old_value' => $oldStatusId,
             'new_value' => $newStatus,
             'corporate_sales_lead_id' => $lead->id,
             'user_id' => auth()->id(),

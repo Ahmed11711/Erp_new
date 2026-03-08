@@ -408,5 +408,323 @@ class AccountingReportController extends Controller
             'total_credit' => $entries->sum('credit'),
         ], 200);
     }
-}
 
+    /**
+     * Income Statement
+     * Computes revenues, COGS, expenses and margins from accounting entries
+     * Inputs: month=YYYY-MM or date_from/date_to
+     */
+    public function incomeStatement(Request $request)
+    {
+        $request->validate([
+            'month' => 'nullable|date_format:Y-m',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        if ($request->filled('month')) {
+            $start = $request->month . '-01';
+            $end = date('Y-m-t', strtotime($start));
+        } else {
+            $start = $request->date_from ?: date('Y-m-01');
+            $end = $request->date_to ?: date('Y-m-t', strtotime($start));
+        }
+
+        // Helper to constrain by period
+        $withinPeriod = function ($q) use ($start, $end) {
+            return $q->where('created_at', '>=', $start . ' 00:00:00')
+                     ->where('created_at', '<=', $end . ' 23:59:59');
+        };
+
+        // Load all accounts once
+        $accounts = TreeAccount::select('id', 'name', 'name_en', 'type', 'detail_type')->get()->keyBy('id');
+
+        // Query sums by account id
+        $entrySums = AccountEntry::select('tree_account_id',
+                DB::raw('SUM(debit) as total_debit'),
+                DB::raw('SUM(credit) as total_credit')
+            )
+            ->when(true, $withinPeriod)
+            ->groupBy('tree_account_id')
+            ->get()
+            ->mapWithKeys(function ($row) {
+                return [$row->tree_account_id => [
+                    'debit' => (float)$row->total_debit,
+                    'credit' => (float)$row->total_credit
+                ]];
+            });
+
+        // Helper to net amount by nature
+        $netByNature = function ($acc, $sum) {
+            if (!$sum) return 0.0;
+            $type = $acc->type ?? null;
+            if (in_array($type, ['revenue', 'income', 'liability', 'equity'])) {
+                return (float)$sum['credit'] - (float)$sum['debit'];
+            }
+            return (float)$sum['debit'] - (float)$sum['credit'];
+        };
+
+        // Pattern helpers
+        $hasKeyword = function ($name, array $patterns) {
+            $n = mb_strtolower($name ?? '');
+            foreach ($patterns as $p) {
+                if (str_contains($n, mb_strtolower($p))) return true;
+            }
+            return false;
+        };
+
+        // Buckets
+        $sales = 0.0;
+        $salesReturns = 0.0;
+        $cogs = 0.0;
+        $operatingExpenses = 0.0;
+        $salesExpenses = 0.0;
+        $adminExpenses = 0.0;
+        $purchaseExpenses = 0.0;
+        $depreciation = 0.0;
+        $otherRevenues = 0.0;
+        $capitalGains = 0.0;
+
+        foreach ($entrySums as $accId => $sum) {
+            $acc = $accounts->get($accId);
+            if (!$acc) continue;
+
+            $net = $netByNature($acc, $sum);
+            $name = $acc->name . ' ' . $acc->name_en;
+            $detail = $acc->detail_type;
+
+            if (in_array($acc->type, ['revenue', 'income'])) {
+                if ($detail === 'sales' || $hasKeyword($name, ['مبيعات', 'sales'])) {
+                    $sales += $net;
+                } elseif ($detail === 'sales_returns' || $hasKeyword($name, ['مرتجع', 'مردود', 'returns'])) {
+                    $salesReturns += abs($net);
+                } elseif ($detail === 'capital_gain' || $hasKeyword($name, ['رأس مالية', 'capital gain'])) {
+                    $capitalGains += $net;
+                } else {
+                    $otherRevenues += $net;
+                }
+            } elseif ($acc->type === 'expense') {
+                if ($detail === 'cogs' || $hasKeyword($name, ['تكلفة المبيعات', 'cost of sales', 'COGS'])) {
+                    $cogs += $net;
+                } elseif ($detail === 'sales_expense' || $hasKeyword($name, ['مصاريف مبيعات'])) {
+                    $salesExpenses += $net;
+                } elseif ($detail === 'admin' || $hasKeyword($name, ['عمومية', 'إدارية', 'إداري', 'general & admin', 'g&a'])) {
+                    $adminExpenses += $net;
+                } elseif ($detail === 'purchase_expense' || $hasKeyword($name, ['مصروف مشتريات', 'شحن مشتريات', 'توريد'])) {
+                    $purchaseExpenses += $net;
+                } elseif ($detail === 'depreciation' || $hasKeyword($name, ['اهلاك', 'استهلاك', 'depreciation', 'amortization'])) {
+                    $depreciation += $net;
+                } else {
+                    $operatingExpenses += $net;
+                }
+            }
+        }
+
+        // Get inventory balances (opening at start, closing at end)
+        $inventoryAcc = TreeAccount::where('detail_type', 'inventory')->first();
+        if (!$inventoryAcc) {
+            $inventoryAcc = TreeAccount::where('type', 'asset')->where('name', 'like', '%مخزون%')->first();
+        }
+
+        $openingInventory = 0.0;
+        $closingInventory = 0.0;
+        if ($inventoryAcc) {
+            $openingSums = AccountEntry::where('tree_account_id', $inventoryAcc->id)
+                ->where('created_at', '<', $start . ' 00:00:00')
+                ->selectRaw('COALESCE(SUM(debit),0) as d, COALESCE(SUM(credit),0) as c')
+                ->first();
+            $openingInventory = max(0, (float)($openingSums->d ?? 0) - (float)($openingSums->c ?? 0));
+
+            $closingSums = AccountEntry::where('tree_account_id', $inventoryAcc->id)
+                ->where('created_at', '<=', $end . ' 23:59:59')
+                ->selectRaw('COALESCE(SUM(debit),0) as d, COALESCE(SUM(credit),0) as c')
+                ->first();
+            $closingInventory = max(0, (float)($closingSums->d ?? 0) - (float)($closingSums->c ?? 0));
+        }
+
+        $netSales = $sales - $salesReturns;
+        $grossProfit = $netSales - $cogs;
+        $otherIncomeTotal = $capitalGains + $otherRevenues;
+        $otherExpensesTotal = $purchaseExpenses + $adminExpenses + $depreciation + $salesExpenses;
+        $operatingExpensesTotal = $operatingExpenses + $salesExpenses + $adminExpenses + $depreciation + $purchaseExpenses;
+        $netProfitBeforeTax = $grossProfit + $otherIncomeTotal - $otherExpensesTotal;
+
+        // Margins
+        $grossMarginPercent = $netSales != 0 ? round(($grossProfit / $netSales) * 100, 2) : 0;
+        $netMarginPercent = $netSales != 0 ? round(($netProfitBeforeTax / $netSales) * 100, 2) : 0;
+
+        return response()->json([
+            'date_from' => $start,
+            'date_to' => $end,
+            'sales' => round($sales, 2),
+            'sales_returns' => round($salesReturns, 2),
+            'net_sales' => round($netSales, 2),
+            'opening_inventory' => round($openingInventory, 2),
+            'closing_inventory' => round($closingInventory, 2),
+            'cogs' => round($cogs, 2),
+            'operating_expenses' => round($operatingExpenses, 2),
+            'sales_expenses' => round($salesExpenses, 2),
+            'admin_expenses' => round($adminExpenses, 2),
+            'purchase_expenses' => round($purchaseExpenses, 2),
+            'depreciation' => round($depreciation, 2),
+            'capital_gains' => round($capitalGains, 2),
+            'other_revenues' => round($otherRevenues, 2),
+            'gross_profit' => round($grossProfit, 2),
+            'gross_margin_percent' => $grossMarginPercent,
+            'other_income_total' => round($otherIncomeTotal, 2),
+            'other_expenses_total' => round($otherExpensesTotal, 2),
+            'operating_expenses_total' => round($operatingExpensesTotal, 2),
+            'net_profit_before_tax' => round($netProfitBeforeTax, 2),
+            'profit_margin_percent' => $netMarginPercent
+        ], 200);
+    }
+
+    /**
+     * Product Performance Report
+     * Per product: sales qty/amount, returns qty/amount, net sales, allocated COGS and gross profit
+     * Inputs: date_from/date_to (optional). If none provided, current month to-date.
+     */
+    public function productPerformance(Request $request)
+    {
+        $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        $start = $request->date_from ?: date('Y-m-01');
+        $end = $request->date_to ?: date('Y-m-d');
+
+        // Helper closures
+        $withinPeriod = function ($q) use ($start, $end) {
+            return $q->where('created_at', '>=', $start . ' 00:00:00')
+                     ->where('created_at', '<=', $end . ' 23:59:59');
+        };
+
+        // 1) Load movements from categories_balance within period
+        // Shipments by order and category (to allocate COGS)
+        $shipments = DB::table('categories_balance')
+            ->select('invoice_number', 'category_id',
+                DB::raw('SUM(quantity) as qty'),
+                DB::raw('SUM(total_price) as amount'))
+            ->where('type', 'شحن طلب')
+            ->when(true, $withinPeriod)
+            ->groupBy('invoice_number', 'category_id')
+            ->get();
+
+        // Returns per category
+        $returns = DB::table('categories_balance')
+            ->select('category_id',
+                DB::raw('SUM(quantity) as qty'),
+                DB::raw('SUM(total_price) as amount'))
+            ->where('type', 'رفض استلام طلب')
+            ->when(true, $withinPeriod)
+            ->groupBy('category_id')
+            ->get()
+            ->keyBy('category_id');
+
+        // Aggregate shipments per category (sales)
+        $salesByCategory = [];
+        foreach ($shipments as $row) {
+            $cid = (int)$row->category_id;
+            if (!isset($salesByCategory[$cid])) {
+                $salesByCategory[$cid] = ['qty' => 0.0, 'amount' => 0.0];
+            }
+            $salesByCategory[$cid]['qty'] += (float)$row->qty;
+            $salesByCategory[$cid]['amount'] += (float)$row->amount;
+        }
+
+        // 2) Fetch COGS entries per order within the period and allocate across categories by sales weight
+        $cogsByOrder = [];
+        $cogsEntries = AccountEntry::select('description', 'debit', 'credit', 'created_at')
+            ->when(true, $withinPeriod)
+            ->get();
+
+        foreach ($cogsEntries as $entry) {
+            if (!$entry->description) continue;
+            if (mb_strpos($entry->description, 'تكلفة البضاعة المباعة للطلب رقم') !== false) {
+                if (preg_match('/الطلب رقم\s+(\d+)/u', $entry->description, $m)) {
+                    $orderId = $m[1];
+                    $amount = (float)$entry->debit - (float)$entry->credit;
+                    $cogsByOrder[$orderId] = ($cogsByOrder[$orderId] ?? 0.0) + $amount;
+                }
+            }
+        }
+
+        // Total sales per order (for weights)
+        $salesByOrder = [];
+        foreach ($shipments as $row) {
+            $orderId = $row->invoice_number;
+            $salesByOrder[$orderId] = ($salesByOrder[$orderId] ?? 0.0) + (float)$row->amount;
+        }
+
+        // Allocate COGS to categories
+        $allocatedCogs = []; // category_id => cogs
+        foreach ($shipments as $row) {
+            $orderId = $row->invoice_number;
+            $orderCogs = $cogsByOrder[$orderId] ?? 0.0;
+            $orderSales = $salesByOrder[$orderId] ?? 0.0;
+            if ($orderCogs <= 0 || $orderSales <= 0) continue;
+
+            $cid = (int)$row->category_id;
+            $weight = (float)$row->amount / $orderSales;
+            $allocatedCogs[$cid] = ($allocatedCogs[$cid] ?? 0.0) + ($orderCogs * $weight);
+        }
+
+        // 3) Build per-product rows
+        $categoryNames = DB::table('categories')->select('id', 'category_name', 'category_code')->get()->keyBy('id');
+
+        $productRows = [];
+        $categoryIds = array_unique(array_merge(array_keys($salesByCategory), array_keys($returns->toArray()), array_keys($allocatedCogs)));
+        foreach ($categoryIds as $cid) {
+            $sales = $salesByCategory[$cid]['amount'] ?? 0.0;
+            $salesQty = $salesByCategory[$cid]['qty'] ?? 0.0;
+            $ret = $returns->get($cid);
+            $retQty = $ret->qty ?? 0.0;
+            $retAmount = $ret->amount ?? 0.0;
+            $netSales = $sales - $retAmount;
+            $cogs = $allocatedCogs[$cid] ?? 0.0;
+            $gross = $netSales - $cogs;
+            $name = optional($categoryNames->get($cid))->category_name ?? ('#' . $cid);
+            $code = optional($categoryNames->get($cid))->category_code ?? null;
+
+            $productRows[] = [
+                'category_id' => $cid,
+                'category_code' => $code,
+                'category_name' => $name,
+                'sales_qty' => round($salesQty, 3),
+                'sales_amount' => round($sales, 2),
+                'returns_qty' => round($retQty, 3),
+                'returns_amount' => round($retAmount, 2),
+                'net_sales' => round($netSales, 2),
+                'cogs' => round($cogs, 2),
+                'gross_profit' => round($gross, 2),
+                'gross_margin_percent' => $netSales != 0 ? round(($gross / $netSales) * 100, 2) : 0,
+            ];
+        }
+
+        // Totals
+        $totals = [
+            'sales_qty' => round(array_sum(array_column($productRows, 'sales_qty')), 3),
+            'sales_amount' => round(array_sum(array_column($productRows, 'sales_amount')), 2),
+            'returns_qty' => round(array_sum(array_column($productRows, 'returns_qty')), 3),
+            'returns_amount' => round(array_sum(array_column($productRows, 'returns_amount')), 2),
+            'net_sales' => round(array_sum(array_column($productRows, 'net_sales')), 2),
+            'cogs' => round(array_sum(array_column($productRows, 'cogs')), 2),
+            'gross_profit' => round(array_sum(array_column($productRows, 'gross_profit')), 2),
+            'gross_margin_percent' => 0, // computed below
+        ];
+        $totals['gross_margin_percent'] = $totals['net_sales'] != 0
+            ? round(($totals['gross_profit'] / $totals['net_sales']) * 100, 2)
+            : 0;
+
+        // Sort by net sales desc for UI
+        usort($productRows, fn($a, $b) => $b['net_sales'] <=> $a['net_sales']);
+
+        return response()->json([
+            'date_from' => $start,
+            'date_to' => $end,
+            'totals' => $totals,
+            'data' => $productRows
+        ], 200);
+    }
+}

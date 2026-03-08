@@ -154,3 +154,22 @@ ul {
   background: linear-gradient(135deg, #82225e 0%, #6a1a4a 100%);
   color: white;
 }
+
+/* تذاكر المتابعة - أيقونات الحالة */
+.recommender-status-icon {
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.recommender-status-icon:hover {
+  transform: scale(1.15);
+}
+
+.recommender-done {
+  color: #198754 !important;
+}
+
+.recommender-pending {
+  color: #dc3545 !important;
+}

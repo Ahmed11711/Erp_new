@@ -21,6 +21,7 @@
           <th>المدفوع</th>
           <th>المتبقي</th>
           <th>الحالة</th>
+          <th>إجراء</th>
         </tr>
       </thead>
       <tbody>
@@ -36,6 +37,12 @@
             <span *ngIf="elm.status === 'partial'" class="badge bg-warning">جزئي</span>
             <span *ngIf="elm.status === 'pending' || !elm.status" class="badge bg-secondary">معلق</span>
           </td>
+          <td>
+            <button *ngIf="elm.status !== 'paid'" type="button" class="btn btn-sm btn-add" (click)="openPay(elm)">
+              <i class="fa-solid fa-money-bill-transfer"></i> دفع
+            </button>
+            <span *ngIf="elm.status === 'paid'" class="text-muted">-</span>
+          </td>
         </tr>
       </tbody>
       <tfoot>
@@ -46,8 +53,52 @@
           <td><strong>{{ totalPaid }}</strong></td>
           <td><strong>{{ totalRemaining }}</strong></td>
           <td></td>
+          <td></td>
         </tr>
       </tfoot>
     </table>
+  </div>
+
+  <!-- نافذة تسجيل الدفع -->
+  <div *ngIf="selectedCommitment" class="payment-overlay" (click)="closePay()">
+    <div class="payment-modal" (click)="$event.stopPropagation()">
+      <div class="payment-header">
+        <h5>تسجيل دفع - {{ selectedCommitment.name }}</h5>
+        <button type="button" class="btn-close-modal" (click)="closePay()">&times;</button>
+      </div>
+      <div class="payment-body">
+        <p class="mb-2"><strong>المتبقي:</strong> {{ selectedCommitment.remaining_amount ?? (selectedCommitment.deserved_amount - (selectedCommitment.paid_amount || 0)) }}</p>
+        <div *ngIf="errorMsg" class="alert alert-danger">{{ errorMsg }}</div>
+        <div class="mb-3">
+          <label class="form-label">مبلغ الدفع</label>
+          <input type="number" class="form-control" [(ngModel)]="payAmount" min="0" step="0.01" placeholder="المبلغ">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">نوع مصدر الدفع</label>
+          <select class="form-control" [(ngModel)]="payType" (ngModelChange)="paySourceId = null">
+            <option value="safe">خزينة</option>
+            <option value="bank">بنك</option>
+            <option value="service_account">حساب خدمي</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">مصدر الدفع</label>
+          <select class="form-control" [(ngModel)]="paySourceId">
+            <option [ngValue]="null">-- اختر --</option>
+            <option *ngFor="let s of currentSources" [ngValue]="s.id">{{ s.label }}: {{ s.name }}</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">ملاحظة (اختياري)</label>
+          <input type="text" class="form-control" [(ngModel)]="payDesc" placeholder="ملاحظة">
+        </div>
+      </div>
+      <div class="payment-footer">
+        <button type="button" class="btn btn-secondary" (click)="closePay()">إلغاء</button>
+        <button type="button" class="btn btn-add" (click)="submitPay()" [disabled]="loadingPay">
+          {{ loadingPay ? 'جاري...' : 'تسجيل الدفع' }}
+        </button>
+      </div>
+    </div>
   </div>
 </div>

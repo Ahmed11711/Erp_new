@@ -275,6 +275,11 @@ Route::middleware('auth')->group(function () {
         Route::post('googlesheet/{sheet}', [App\Http\Controllers\GoogleController::class, 'addData']);
 
         Route::post('edit-lead', [CorporateSalesLeadController::class, 'edit']);
+        Route::get('lead/team-users', [CorporateSalesLeadController::class, 'getLeadTeamUsers']);
+        Route::get('lead/activity-stats', [CorporateSalesLeadController::class, 'getLeadActivityStats']);
+        Route::get('lead/recommenders/pending', [CorporateSalesLeadController::class, 'getPendingRecommenders']);
+        Route::delete('lead/recommenders/{id}', [CorporateSalesLeadController::class, 'deleteRecommender']);
+        Route::patch('lead/recommenders/{id}/toggle-done', [CorporateSalesLeadController::class, 'toggleRecommenderDone']);
         Route::apiResource('lead', App\Http\Controllers\CorporateSalesLeadController::class);
         Route::apiResource('lead-source', App\Http\Controllers\CorporateSalesLeadSourceController::class);
         Route::apiResource('lead-tool', App\Http\Controllers\CorporateSalesLeadToolController::class);
@@ -429,6 +434,8 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/account-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountStatement']);
         Route::get('/account-hierarchy', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'getAccountHierarchy']);
         Route::get('/validate-income-structure', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'validateIncomeStructure']);
+        Route::get('/income-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'incomeStatement']);
+        Route::get('/product-performance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'productPerformance']);
     });
 
     // Accounting Transactions

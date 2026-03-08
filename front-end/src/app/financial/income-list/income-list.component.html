@@ -10,170 +10,143 @@
 
   <div class="row m-2">
     <div class="col-md-3">
-      <label for="">التاريخ</label>
-      <input class="form-control" type="month" [value]="month" (change)="onDateFromChange($event)">
+      <label>من تاريخ</label>
+      <input class="form-control" type="date" [value]="dateFrom" (change)="onDateFromChange($event)">
+    </div>
+    <div class="col-md-3">
+      <label>إلى تاريخ</label>
+      <input class="form-control" type="date" [value]="dateTo" (change)="onDateToChange($event)">
     </div>
   </div>
 
   <div class="container">
-    <table id="capture" class="table table-bordered table-hover text-center">
+    <table id="capture" class="table table-bordered table-hover text-center income-statement">
       <thead class="bg-dark text-white">
         <tr>
-          <th>بيان</th>
+          <th class="w-50">البيان</th>
           <th>جزئي</th>
           <th>كلي</th>
         </tr>
       </thead>
       <tbody>
+        <!-- إيرادات المبيعات -->
+        <tr class="section-header">
+          <td colspan="3"><strong>أولاً: إيرادات المبيعات</strong></td>
+        </tr>
         <tr>
           <td>المبيعات</td>
-          <td (dblclick)="editAmount('sales', data?.sales)">{{ data?.sales }}</td>
+          <td dir="ltr">{{ formatNumber(data?.sales) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>مردودات المبيعات</td>
-          <td (dblclick)="editAmount('sales_returns', data?.sales_returns)">{{ data?.sales_returns }}</td>
+          <td>(-) مردودات المبيعات</td>
+          <td dir="ltr">{{ formatNumber(data?.sales_returns) }}</td>
+          <td></td>
+        </tr>
+        <tr class="subtotal-row">
+          <td><strong>صافي إيراد المبيعات</strong></td>
+          <td></td>
+          <td dir="ltr">{{ formatNumber(incomeSales) }}</td>
+        </tr>
+
+        <!-- تكلفة المبيعات والمخزون -->
+        <tr class="section-header">
+          <td colspan="3"><strong>ثانياً: تكلفة المبيعات (من المخزون)</strong></td>
+        </tr>
+        <tr>
+          <td>بداية المخزون</td>
+          <td dir="ltr">{{ formatNumber(data?.opening_inventory) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>صافي ايراد المبيعات</td>
-          <td></td>
-          <td dir="ltr">{{ incomeSales }}</td>
-        </tr>
-        <tr>
-          <td>تكاليف المبيعات</td>
-          <td></td>
+          <td>(-) نهاية المخزون</td>
+          <td dir="ltr">{{ formatNumber(data?.closing_inventory) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>مخزون المواد الخام اول المدة</td>
-          <td (dblclick)="editAmount('opening_raw_materials', data?.opening_raw_materials)">{{ data?.opening_raw_materials }}</td>
+          <td>تكلفة المبيعات (من القيود)</td>
+          <td dir="ltr">{{ formatNumber(costSales) }}</td>
+          <td></td>
+        </tr>
+        <tr class="subtotal-row">
+          <td><strong>إجمالي تكلفة المبيعات</strong></td>
+          <td></td>
+          <td dir="ltr">{{ formatNumber(costSales) }}</td>
+        </tr>
+
+        <!-- مجمل الربح/الخسارة -->
+        <tr class="highlight-row" [class.result-loss]="(totalWin ?? 0) < 0">
+          <td><strong>مجمل الربح / (الخسارة)</strong></td>
+          <td></td>
+          <td dir="ltr" [class.text-profit]="(totalWin ?? 0) >= 0" [class.text-loss]="(totalWin ?? 0) < 0">
+            {{ formatNumber(totalWin) }}
+            <span *ngIf="grossMarginPercent != null" class="margin-badge">({{ grossMarginPercent }}%)</span>
+          </td>
+        </tr>
+
+        <!-- الإيرادات الأخرى -->
+        <tr class="section-header">
+          <td colspan="3"><strong>ثالثاً: إيرادات أخرى</strong></td>
+        </tr>
+        <tr>
+          <td>أرباح رأس مالية</td>
+          <td dir="ltr">{{ formatNumber(data?.capital_gains) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>بضاعة تحت التجهيز</td>
-          <td (dblclick)="editAmount('opening_under_processing', data?.opening_under_processing)">{{ data?.opening_under_processing }}</td>
+          <td>إيرادات أخرى</td>
+          <td dir="ltr">{{ formatNumber(data?.other_revenues) }}</td>
           <td></td>
         </tr>
-        <tr>
-          <td>بضاعة تامة التصنيع</td>
-          <td (dblclick)="editAmount('opening_finished_goods', data?.opening_finished_goods)">{{ data?.opening_finished_goods }}</td>
+        <tr class="subtotal-row">
+          <td><strong>إجمالي الإيرادات الأخرى</strong></td>
           <td></td>
+          <td dir="ltr">{{ formatNumber((data?.capital_gains || 0) + (data?.other_revenues || 0)) }}</td>
         </tr>
-        <tr>
-          <td>مخزون أول المدة</td>
-          <td (dblclick)="editAmount('opening_storage', data?.opening_storage)">{{ data?.opening_storage }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>مشتريات</td>
-          <td (dblclick)="editAmount('purchases', data?.purchases)">{{ data.purchases }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>مصروف المشتريات</td>
-          <td (dblclick)="editAmount('purchase_expenses', data?.purchase_expenses)">{{ data.purchase_expenses }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>مردود المشتريات</td>
-          <td (dblclick)="editAmount('purchase_returns', data?.purchase_returns)">{{ data.purchase_returns }}</td>
-          <td></td>
+
+        <!-- المصروفات -->
+        <tr class="section-header">
+          <td colspan="3"><strong>رابعاً: المصروفات</strong></td>
         </tr>
         <tr>
           <td>مصاريف النشاط</td>
-          <td (dblclick)="editAmount('operating_expenses', data?.operating_expenses)">{{ data.operating_expenses }}</td>
+          <td dir="ltr">{{ formatNumber(data?.operating_expenses) }}</td>
           <td></td>
         </tr>
         <tr>
           <td>مصاريف المبيعات</td>
-          <td (dblclick)="editAmount('sales_expenses', data?.sales_expenses)">{{ data.sales_expenses }}</td>
+          <td dir="ltr">{{ formatNumber(data?.sales_expenses) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>مخزون المواد الخام اخر المده</td>
-          <td (dblclick)="editAmount('closing_raw_materials', data?.closing_raw_materials)">{{ data.closing_raw_materials }}</td>
+          <td>مصروفات مشتريات</td>
+          <td dir="ltr">{{ formatNumber(data?.purchase_expenses) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>بضاعة تحت التجهيز اخر المدة</td>
-          <td (dblclick)="editAmount('closing_under_processing', data?.closing_under_processing)">{{ data.closing_under_processing }}</td>
+          <td>مصروفات عمومية وإدارية</td>
+          <td dir="ltr">{{ formatNumber(data?.admin_expenses) }}</td>
           <td></td>
         </tr>
         <tr>
-          <td>بضاعة تامة الصنع</td>
-          <td (dblclick)="editAmount('closing_finished_goods', data?.closing_finished_goods)">{{ data.closing_finished_goods }}</td>
+          <td>الإهلاك</td>
+          <td dir="ltr">{{ formatNumber(data?.depreciation) }}</td>
           <td></td>
         </tr>
-        <tr>
-          <td>مخزون اخر المدة</td>
-          <td (dblclick)="editAmount('last_storage', data?.last_storage)">{{ data.last_storage }}</td>
+        <tr class="subtotal-row">
+          <td><strong>إجمالي المصروفات</strong></td>
           <td></td>
+          <td dir="ltr">{{ formatNumber(otherExpensesTotal) }}</td>
         </tr>
-        <tr>
-          <td>اجمالي نكاليف المبيعات</td>
+
+        <!-- صافي الربح/الخسارة -->
+        <tr class="result-row" [class.result-loss]="!isProfit">
+          <td><strong>{{ isProfit ? 'صافي الربح' : 'صافي الخسارة' }} قبل الضريبة</strong></td>
           <td></td>
-          <td dir="ltr">{{ costSales }}</td>
-        </tr>
-        <tr>
-          <td>مجمل الربح</td>
-          <td></td>
-          <td dir="ltr">{{ totalWin }}</td>
-        </tr>
-        <tr>
-          <td>يضاف الايرادات الاخري</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>ارباح رأس مالية</td>
-          <td (dblclick)="editAmount('capital_gains', data?.capital_gains)">{{ data.capital_gains }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>ايرادات اخري</td>
-          <td (dblclick)="editAmount('other_revenues', data?.other_revenues)">{{ data.other_revenues }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>اجمالي الايرادات الاخري</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>يخصم المصروفات الاخري</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>مصروفات التاسيس</td>
-          <td (dblclick)="editAmount('setup_expenses', data?.setup_expenses)">{{ data.setup_expenses }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>م.عمومية وادارية</td>
-          <td (dblclick)="editAmount('admin_expenses', data?.admin_expenses)">{{ data.admin_expenses }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>الاهلاك</td>
-          <td (dblclick)="editAmount('depreciation', data?.depreciation)">{{ data.depreciation }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>مخصومات بخلاف الاهلاك</td>
-          <td (dblclick)="editAmount('depreciation_reserves', data?.depreciation_reserves)">{{ data.depreciation_reserves }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>اجمالي المصروفات الاخري</td>
-          <td></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>صافي الربح قبل الضريبة</td>
-          <td></td>
-          <td dir="ltr">{{ totalWinBeforeVat }}</td>
+          <td dir="ltr" [class.text-profit]="isProfit" [class.text-loss]="!isProfit">
+            {{ formatNumber(totalWinBeforeVat) }}
+            <span *ngIf="netMarginPercent != null" class="margin-badge">({{ netMarginPercent }}%)</span>
+          </td>
         </tr>
       </tbody>
     </table>

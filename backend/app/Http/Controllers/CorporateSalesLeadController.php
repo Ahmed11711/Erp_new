@@ -7,9 +7,11 @@ use App\Models\CorporateSalesContactEmail;
 use App\Models\CorporateSalesContactNumber;
 use App\Models\CorporateSalesIndustry;
 use App\Models\CorporateSalesLead;
+use App\Models\CorporateSalesLeadRecommender;
 use App\Models\CorporateSalesNotes;
 use App\Models\CorporateSalesProgress;
 use App\Models\CorporateSalesTracking;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +22,8 @@ class CorporateSalesLeadController extends Controller
     public function index()
     {
         $itemsPerPage = request('itemsPerPage') ?? 10;
+        $sortBy = request('sortBy') ?? 'id';
+        $sortOrder = request('sortOrder') ?? 'desc';
 
         $query = CorporateSalesLead::query();
 
@@ -39,6 +43,59 @@ class CorporateSalesLeadController extends Controller
             $query->where('country_name', $country);
         }
 
+        if ($statusId = request('statusId')) {
+            $query->where('lead_status_id', $statusId);
+        }
+
+        // Filter by user (lead owner or user who did activity)
+        if ($userId = request('userId')) {
+            $query->where(function ($q) use ($userId) {
+                $q->where('user_id', $userId)
+                    ->orWhereHas('tracking', function ($tq) use ($userId) {
+                        $tq->where('user_id', $userId);
+                    });
+            });
+        }
+
+        // Filter by activity date (leads with activity in date range)
+        $activityDateFrom = request('activityDateFrom');
+        $activityDateTo = request('activityDateTo');
+        if ($activityDateFrom || $activityDateTo) {
+            $query->where(function ($q) use ($activityDateFrom, $activityDateTo) {
+                // Lead created in range
+                $q->where(function ($sub) use ($activityDateFrom, $activityDateTo) {
+                    if ($activityDateFrom) {
+                        $sub->whereDate('corporate_sales_leads.created_at', '>=', $activityDateFrom);
+                    }
+                    if ($activityDateTo) {
+                        $sub->whereDate('corporate_sales_leads.created_at', '<=', $activityDateTo);
+                    }
+                });
+                // OR has tracking in range
+                $q->orWhereHas('tracking', function ($tq) use ($activityDateFrom, $activityDateTo) {
+                    if ($activityDateFrom) {
+                        $tq->whereDate('created_at', '>=', $activityDateFrom);
+                    }
+                    if ($activityDateTo) {
+                        $tq->whereDate('created_at', '<=', $activityDateTo);
+                    }
+                });
+            });
+        }
+
+        // Sort by last activity, date, or id
+        if ($sortBy === 'last_activity') {
+            $query->selectRaw('corporate_sales_leads.*, COALESCE(
+                (SELECT MAX(created_at) FROM corporate_sales_trackings WHERE corporate_sales_lead_id = corporate_sales_leads.id),
+                corporate_sales_leads.created_at
+            ) as last_activity_at')
+                ->orderBy('last_activity_at', $sortOrder);
+        } elseif ($sortBy === 'date') {
+            $query->orderBy('date', $sortOrder);
+        } else {
+            $query->orderBy('id', $sortOrder);
+        }
+
         $data = $query->with([
             'contact.emails.user:id,name',
             'contact.phones.user:id,name',
@@ -46,11 +103,13 @@ class CorporateSalesLeadController extends Controller
             'tracking.user:id,name',
             'progress.user:id,name',
             'notes.user:id,name',
+            'recommenders.user:id,name',
             'industry',
             'source',
             'tool',
             'user:id,name',
-        ])->orderBy('id', 'desc')->paginate($itemsPerPage);
+            'status',
+        ])->paginate($itemsPerPage);
 
         return response()->json($data);
     }
@@ -65,10 +124,12 @@ class CorporateSalesLeadController extends Controller
             'tracking.user:id,name',
             'progress.user:id,name',
             'notes.user:id,name',
+            'recommenders.user:id,name',
             'industry',
             'source',
             'tool',
             'user:id,name',
+            'status',
         ])->first();
 
         return response()->json($data, 200);
@@ -585,6 +646,24 @@ class CorporateSalesLeadController extends Controller
                 $find->save();
             }
 
+            if ($type === 'recommender') {
+                CorporateSalesLeadRecommender::create([
+                    'corporate_sales_lead_id' => $request->lead_id,
+                    'reminder_date' => $request->reminder_date,
+                    'notes' => $request->notes ?? null,
+                    'user_id' => auth()->user()->id,
+                ]);
+
+                CorporateSalesTracking::create([
+                    'type' => 'add',
+                    'old_value' => null,
+                    'new_value' => 'تذكرة متابعة: ' . $request->reminder_date,
+                    'details' => 'add Recommender',
+                    'corporate_sales_lead_id' => $request->lead_id,
+                    'user_id' => auth()->user()->id,
+                ]);
+            }
+
             if ($type === 'edit Phone') {
                 $phoneId = $request->phoneId;
 
@@ -618,6 +697,154 @@ class CorporateSalesLeadController extends Controller
             Log::error($e->getTraceAsString());
             return response()->json(['message'=>$e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Get users for filter dropdown: users with lead activity + department users.
+     * Ensures the dropdown is never empty for Corparates/Shipping Management.
+     */
+    public function getLeadTeamUsers()
+    {
+        $userIds = CorporateSalesLead::pluck('user_id')
+            ->merge(CorporateSalesTracking::pluck('user_id'))
+            ->unique()
+            ->filter();
+
+        $users = User::where(function ($q) use ($userIds) {
+            if ($userIds->isNotEmpty()) {
+                $q->whereIn('id', $userIds);
+            }
+            $q->orWhereIn('department', ['Corparates', 'Shipping Management', 'Admin', 'Corporate', 'Corporate Sales']);
+        })
+            ->select('id', 'name')
+            ->orderBy('name')
+            ->get()
+            ->unique('id')
+            ->values();
+
+        if ($users->isEmpty()) {
+            $users = User::select('id', 'name')->orderBy('name')->get();
+        }
+
+        return response()->json($users);
+    }
+
+    /**
+     * Get activity stats per user (who's working, activity count).
+     */
+    public function getLeadActivityStats(Request $request)
+    {
+        $activityDateFrom = $request->activityDateFrom;
+        $activityDateTo = $request->activityDateTo;
+        $userId = $request->userId;
+
+        $trackingQuery = CorporateSalesTracking::query();
+        if ($activityDateFrom) {
+            $trackingQuery->whereDate('created_at', '>=', $activityDateFrom);
+        }
+        if ($activityDateTo) {
+            $trackingQuery->whereDate('created_at', '<=', $activityDateTo);
+        }
+        if ($userId) {
+            $trackingQuery->where('user_id', $userId);
+        }
+
+        $leadQuery = CorporateSalesLead::query();
+        if ($activityDateFrom) {
+            $leadQuery->whereDate('created_at', '>=', $activityDateFrom);
+        }
+        if ($activityDateTo) {
+            $leadQuery->whereDate('created_at', '<=', $activityDateTo);
+        }
+        if ($userId) {
+            $leadQuery->where('user_id', $userId);
+        }
+
+        $trackingCounts = (clone $trackingQuery)
+            ->select('user_id', DB::raw('COUNT(*) as activity_count'), DB::raw('MAX(created_at) as last_activity_at'))
+            ->groupBy('user_id')
+            ->get()
+            ->keyBy('user_id');
+
+        $leadCounts = (clone $leadQuery)
+            ->select('user_id', DB::raw('COUNT(*) as lead_count'))
+            ->groupBy('user_id')
+            ->get()
+            ->keyBy('user_id');
+
+        $userIds = $trackingCounts->keys()->merge($leadCounts->keys())->unique()->filter();
+        $users = User::whereIn('id', $userIds)->select('id', 'name')->get()->keyBy('id');
+
+        $stats = [];
+        foreach ($userIds as $userId) {
+            $tracking = $trackingCounts->get($userId);
+            $lead = $leadCounts->get($userId);
+            $activityCount = ($tracking->activity_count ?? 0) + ($lead->lead_count ?? 0);
+
+            $lastActivity = $tracking->last_activity_at ?? null;
+            if (!$lastActivity && $lead && ($lead->lead_count ?? 0) > 0) {
+                $lastActivity = CorporateSalesLead::where('user_id', $userId)
+                    ->when($activityDateFrom, fn($q) => $q->whereDate('created_at', '>=', $activityDateFrom))
+                    ->when($activityDateTo, fn($q) => $q->whereDate('created_at', '<=', $activityDateTo))
+                    ->max('created_at');
+            }
+
+            $stats[] = [
+                'user_id' => $userId,
+                'user_name' => $users->get($userId)?->name ?? 'Unknown',
+                'activity_count' => (int) $activityCount,
+                'last_activity_at' => $lastActivity,
+            ];
+        }
+
+        usort($stats, fn($a, $b) => $b['activity_count'] <=> $a['activity_count']);
+
+        return response()->json(['stats' => $stats]);
+    }
+
+    /**
+     * Get pending recommenders (reminders) for the current user.
+     * Returns leads with recommenders where reminder_date >= today.
+     */
+    public function getPendingRecommenders(Request $request)
+    {
+        $userId = $request->userId ?? auth()->id();
+        $fromDate = $request->from_date ?? now()->format('Y-m-d');
+
+        $recommenders = CorporateSalesLeadRecommender::where('user_id', $userId)
+            ->where('is_done', false)
+            ->whereDate('reminder_date', '>=', $fromDate)
+            ->with(['lead:id,company_name', 'user:id,name'])
+            ->orderBy('reminder_date')
+            ->get();
+
+        $count = $recommenders->count();
+
+        return response()->json([
+            'count' => $count,
+            'recommenders' => $recommenders,
+        ]);
+    }
+
+    /**
+     * Delete a recommender.
+     */
+    public function deleteRecommender($id)
+    {
+        $recommender = CorporateSalesLeadRecommender::findOrFail($id);
+        $recommender->delete();
+        return response()->json(['message' => 'success'], 200);
+    }
+
+    /**
+     * Toggle recommender done status.
+     */
+    public function toggleRecommenderDone($id)
+    {
+        $recommender = CorporateSalesLeadRecommender::findOrFail($id);
+        $recommender->is_done = !$recommender->is_done;
+        $recommender->save();
+        return response()->json(['message' => 'success', 'is_done' => $recommender->is_done], 200);
     }
 
 }

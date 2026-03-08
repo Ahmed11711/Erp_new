@@ -224,6 +224,52 @@
     </div>
 
 
+    <div class="col-md-12">
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تذاكر المتابعة</h5>
+          <button class="btn bg-main btn-sm" (click)="addRecommender()">
+            <i class="fa-solid fa-bell me-1"></i> إضافة تذكرة
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table dir="ltr" class="table table-bordered table-hover text-center mb-0">
+              <thead class="text-white">
+                <tr>
+                  <th>#</th>
+                  <th>التاريخ</th>
+                  <th>الملاحظة</th>
+                  <th>الحالة</th>
+                  <th>بواسطة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let rec of data?.recommenders; let i = index">
+                  <td>{{ i + 1 }}</td>
+                  <td>{{ rec.reminder_date | date: 'yyyy-MM-dd' }}</td>
+                  <td class="text-start">{{ rec.notes || '-' }}</td>
+                  <td>
+                    <i class="fa-solid recommender-status-icon" [ngClass]="rec.is_done ? 'fa-circle-check recommender-done' : 'fa-circle-xmark recommender-pending'" (click)="toggleRecommenderDone(rec)" [title]="rec.is_done ? 'تم - اضغط للتغيير' : 'لم يتم - اضغط للتغيير'"></i>
+                  </td>
+                  <td>{{ rec.user?.name || '-' }}</td>
+                  <td>
+                    <button class="btn btn-sm btn-outline-danger" (click)="deleteRecommender(rec.id)" title="حذف">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+                <tr *ngIf="!data?.recommenders?.length">
+                  <td colspan="6" class="text-muted">لا توجد تذاكر متابعة</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="col-md-6">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end">

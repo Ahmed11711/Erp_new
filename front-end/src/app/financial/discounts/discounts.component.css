@@ -45,3 +45,49 @@ tfoot{
   color: white;
   font-size: 1.5rem;
 }
+
+/* نافذة تسجيل الدفع */
+.payment-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+.payment-modal {
+  background: white;
+  border-radius: 8px;
+  min-width: 400px;
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.payment-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.payment-header h5 { margin: 0; font-size: 1.3rem; }
+.btn-close-modal {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  cursor: pointer;
+  color: #666;
+  line-height: 1;
+}
+.btn-close-modal:hover { color: #333; }
+.payment-body { padding: 1.5rem; }
+.payment-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

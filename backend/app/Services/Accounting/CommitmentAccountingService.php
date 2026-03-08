@@ -6,6 +6,9 @@ use App\Models\Cimmitment;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
 use App\Models\Setting;
+use App\Models\Safe;
+use App\Models\Bank;
+use App\Models\ServiceAccount;
 use App\Services\Accounting\AccountLinkingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -84,12 +87,15 @@ class CommitmentAccountingService
      * تسجيل قيد السداد عند دفع جزء أو كل الالتزام
      * مدين: حساب الالتزام
      * دائن: حساب الخزينة/البنك
+     * مع خصم المبلغ من رصيد مصدر الدفع (خزينة/بنك/حساب خدمي)
      */
     public function recordPaymentEntry(
         Cimmitment $commitment,
         float $amount,
         int $cashAccountId,
-        string $description = null
+        string $description = null,
+        ?string $paymentSourceType = null,
+        ?int $paymentSourceId = null
     ): array {
         try {
             DB::beginTransaction();
@@ -103,6 +109,9 @@ class CommitmentAccountingService
             }
 
             $desc = $description ?? "سداد التزام: {$commitment->name}";
+
+            // خصم المبلغ من رصيد مصدر الدفع (خزينة / بنك / حساب خدمي)
+            $this->decrementPaymentSourceBalance($paymentSourceType, $paymentSourceId, $amount, $cashAccountId);
 
             // قيد السداد: مدين الالتزام / دائن الخزينة
             $liabilityEntry = AccountEntry::create([
@@ -143,6 +152,45 @@ class CommitmentAccountingService
                 'error' => $e->getMessage(),
             ]);
             throw $e;
+        }
+    }
+
+    /**
+     * خصم المبلغ من رصيد مصدر الدفع (خزينة / بنك / حساب خدمي)
+     */
+    private function decrementPaymentSourceBalance(?string $type, ?int $sourceId, float $amount, int $cashAccountId): void
+    {
+        if (!$type || !$sourceId) {
+            return;
+        }
+
+        if ($type === 'safe') {
+            $safe = Safe::findOrFail($sourceId);
+            if ($safe->account_id != $cashAccountId) {
+                throw new \Exception('حساب الخزينة لا يتطابق مع مصدر الدفع');
+            }
+            if ((float) $safe->balance < $amount) {
+                throw new \Exception('رصيد الخزينة غير كافٍ');
+            }
+            $safe->decrement('balance', $amount);
+        } elseif ($type === 'bank') {
+            $bank = Bank::findOrFail($sourceId);
+            if ($bank->asset_id != $cashAccountId) {
+                throw new \Exception('حساب البنك لا يتطابق مع مصدر الدفع');
+            }
+            if ((float) $bank->balance < $amount) {
+                throw new \Exception('رصيد البنك غير كافٍ');
+            }
+            $bank->decrement('balance', $amount);
+        } elseif ($type === 'service_account') {
+            $svc = ServiceAccount::findOrFail($sourceId);
+            if ($svc->account_id != $cashAccountId) {
+                throw new \Exception('الحساب الخدمي لا يتطابق مع مصدر الدفع');
+            }
+            if ((float) $svc->balance < $amount) {
+                throw new \Exception('رصيد الحساب الخدمي غير كافٍ');
+            }
+            $svc->decrement('balance', $amount);
         }
     }
 

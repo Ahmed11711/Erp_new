@@ -107,6 +107,122 @@ export class LeadDetailsComponent {
     })
   }
 
+  addRecommender() {
+    Swal.fire({
+      title: 'إضافة تذكرة متابعة',
+      html: `
+        <div class="recommender-modal-body">
+          <div class="recommender-field">
+            <label class="recommender-label"><i class="fa-solid fa-calendar-days me-2"></i>التاريخ</label>
+            <input type="date" id="recommender-date" class="recommender-input" required>
+          </div>
+          <div class="recommender-field">
+            <label class="recommender-label"><i class="fa-solid fa-note-sticky me-2"></i>ملاحظة (اختياري)</label>
+            <textarea id="recommender-notes" class="recommender-textarea" rows="4" placeholder="أضف ملاحظة للتذكرة..."></textarea>
+          </div>
+        </div>
+      `,
+      customClass: {
+        popup: 'recommender-modal-popup',
+        title: 'recommender-modal-title-wrap',
+        htmlContainer: 'recommender-modal-html',
+        confirmButton: 'recommender-confirm-btn',
+        cancelButton: 'recommender-cancel-btn',
+        actions: 'recommender-modal-actions'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'إضافة',
+      cancelButtonText: 'إلغاء',
+      width: '420px',
+      padding: '1.5rem',
+      preConfirm: () => {
+        const dateInput = document.getElementById('recommender-date') as HTMLInputElement;
+        const notesInput = document.getElementById('recommender-notes') as HTMLTextAreaElement;
+        const dateValue = dateInput?.value;
+        if (!dateValue) {
+          Swal.showValidationMessage('يرجى تحديد التاريخ');
+          return false;
+        }
+        return { reminder_date: dateValue, notes: notesInput?.value?.trim() || '' };
+      }
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        const data = {
+          lead_id: this.id,
+          type: 'recommender',
+          reminder_date: result.value.reminder_date,
+          notes: result.value.notes || null
+        };
+        this.CorparatesSalesService.addToLead(data).subscribe({
+          next: () => {
+            Swal.fire({
+              title: 'تمت إضافة التذكرة',
+              icon: 'success',
+              timer: 2000,
+              showConfirmButton: false
+            });
+            this.getLead();
+          },
+          error: () => {
+            Swal.fire({
+              title: 'خطأ',
+              text: 'فشل في إضافة التذكرة',
+              icon: 'error', confirmButtonText: 'موافق'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  toggleRecommenderDone(rec: any) {
+    this.CorparatesSalesService.toggleRecommenderDone(rec.id).subscribe({
+      next: (res: any) => {
+        rec.is_done = res?.is_done ?? !rec.is_done;
+      },
+      error: () => {
+        Swal.fire({
+          title: 'خطأ',
+          text: 'فشل في تحديث الحالة',
+          icon: 'error',
+          confirmButtonText: 'موافق'
+        });
+      }
+    });
+  }
+
+  deleteRecommender(id: number) {
+    Swal.fire({
+      title: 'حذف التذكرة؟',
+      text: 'هل أنت متأكد من حذف هذه التذكرة؟',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'نعم، احذف',
+      cancelButtonText: 'إلغاء'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.CorparatesSalesService.deleteRecommender(id).subscribe({
+          next: () => {
+            Swal.fire({
+              title: 'تم الحذف',
+              icon: 'success',
+              timer: 2000,
+              showConfirmButton: false
+            });
+            this.getLead();
+          },
+          error: () => {
+            Swal.fire({
+              title: 'خطأ',
+              text: 'فشل في إزالة التذكرة',
+              icon: 'error', confirmButtonText: 'موافق'
+            });
+          }
+        });
+      }
+    });
+  }
+
   addEmailToContact(contactId) {
     Swal.fire({
       title: 'Add Email',
@@ -1205,8 +1321,14 @@ export class LeadDetailsComponent {
 
   // Lead Status Methods
   getLeadStatuses() {
-    this.leadStatusService.getAllStatuses().subscribe((data: any) => {
-      this.leadStatuses = data.sort((a, b) => a.order - b.order);
+    this.leadStatusService.getAllStatuses().subscribe({
+      next: (data: any) => {
+        const arr = Array.isArray(data) ? data : (data?.data || []);
+        this.leadStatuses = arr.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+      },
+      error: () => {
+        this.leadStatuses = [];
+      }
     });
   }
 
@@ -1267,9 +1389,19 @@ export class LeadDetailsComponent {
   }
 
   editLeadStatus(currentStatusId?: number, currentStatusName?: string) {
+    if (!this.leadStatuses?.length) {
+      Swal.fire({
+        title: 'خطأ',
+        text: 'لم يتم تحميل الحالات. يرجى تحديث الصفحة والمحاولة مرة أخرى.',
+        icon: 'error',
+        confirmButtonText: 'موافق'
+      });
+      return;
+    }
+
     const statusOptions: any = {};
     this.leadStatuses.forEach(status => {
-      statusOptions[status.id] = status.name;
+      statusOptions[status.id] = status.name || status.status_name || `حالة #${status.id}`;
     });
 
     Swal.fire({
@@ -1281,92 +1413,68 @@ export class LeadDetailsComponent {
       confirmButtonText: 'تحديث الحالة',
       cancelButtonText: 'إلغاء',
       inputValidator: (newStatusId) => {
-        if (!newStatusId) {
-          return 'يرجى اختيار حالة';
-        }
-        if (newStatusId != currentStatusId?.toString()) {
-          const newStatus = this.leadStatuses.find(s => s.id == newStatusId);
-          
-          // Check if status requires a date (follow-up, meeting, etc.)
-          const statusName = newStatus?.name?.toLowerCase() || '';
-          const requiresDate = statusName.includes('follow') || statusName.includes('متابعة') || 
-                             statusName.includes('meeting') || statusName.includes('اجتماع') ||
-                             statusName.includes('call') || statusName.includes('مكالمة');
-          
-          if (requiresDate) {
-            // Show date picker for statuses that require dates
-            Swal.fire({
-              title: 'تحديد التاريخ',
-              html: '<input type="date" id="status-date" class="swal2-input" placeholder="يرجى تحديد تاريخ للمتابعة">',
-              showCancelButton: true,
-              confirmButtonText: 'حفظ',
-              cancelButtonText: 'إلغاء',
-              preConfirm: () => {
-                const dateInput = document.getElementById('status-date') as HTMLInputElement;
-                const dateValue = dateInput.value;
-                if (!dateValue) {
-                  Swal.showValidationMessage('يرجى تحديد التاريخ');
-                  return false;
-                }
-                
-                const data = {
-                  lead_id: this.id,
-                  value: newStatusId,
-                  type: 'edit Lead Status',
-                  next_action_date: dateValue
-                };
+        if (!newStatusId) return 'يرجى اختيار حالة';
+        return undefined;
+      }
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        const newStatusId = +result.value;
+        if (newStatusId === currentStatusId) return;
+        const newStatus = this.leadStatuses.find(s => s.id == newStatusId);
+        const statusName = newStatus?.name?.toLowerCase() || '';
+        const requiresDate = statusName.includes('follow') || statusName.includes('متابعة') ||
+          statusName.includes('meeting') || statusName.includes('اجتماع') ||
+          statusName.includes('call') || statusName.includes('مكالمة');
 
-                return this.CorparatesSalesService.addToLead(data).subscribe(res => {
-                  if (res) {
-                    Swal.fire({
-                      title: 'تم تحديث الحالة',
-                      text: `تم تغيير الحالة إلى: ${newStatus?.name}`,
-                      icon: 'success',
-                      timer: 2000,
-                      showConfirmButton: false
-                    });
-                    this.getLead();
-                  }
-                }, error => {
-                  Swal.fire({
-                    title: 'خطأ',
-                    text: 'فشل في تحديث الحالة',
-                    icon: 'error',
-                    confirmButtonText: 'موافق'
-                  });
-                });
-              }
-            });
-          } else {
-            // Update status without date
-            const data = {
-              lead_id: this.id,
-              value: newStatusId,
-              type: 'edit Lead Status'
-            };
-
-            this.CorparatesSalesService.addToLead(data).subscribe(res => {
-              if (res) {
-                Swal.fire({
-                  title: 'تم تحديث الحالة',
-                  text: `تم تغيير الحالة إلى: ${newStatus?.name}`,
-                  icon: 'success',
-                  timer: 2000,
-                  showConfirmButton: false
-                });
-                this.getLead();
-              }
-            }, error => {
+        const doUpdate = (nextActionDate?: string) => {
+          const data: any = { lead_status_id: newStatusId };
+          if (nextActionDate) data.next_action_date = nextActionDate;
+          this.leadStatusService.updateLeadStatus(this.id, data).subscribe({
+            next: () => {
+              Swal.fire({
+                title: 'تم تحديث الحالة',
+                text: `تم تغيير الحالة إلى: ${newStatus?.name}`,
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+              });
+              this.getLead();
+            },
+            error: () => {
               Swal.fire({
                 title: 'خطأ',
                 text: 'فشل في تحديث الحالة',
                 icon: 'error',
                 confirmButtonText: 'موافق'
               });
-            });
-          }
+            }
+          });
+        };
+
+        if (requiresDate) {
+          Swal.fire({
+            title: 'تحديد التاريخ',
+            html: '<input type="date" id="status-date" class="swal2-input" placeholder="يرجى تحديد تاريخ للمتابعة">',
+            showCancelButton: true,
+            confirmButtonText: 'حفظ',
+            cancelButtonText: 'إلغاء',
+            preConfirm: () => {
+              const dateInput = document.getElementById('status-date') as HTMLInputElement;
+              const dateValue = dateInput?.value;
+              if (!dateValue) {
+                Swal.showValidationMessage('يرجى تحديد التاريخ');
+                return false;
+              }
+              return dateValue;
+            }
+          }).then((dateResult) => {
+            if (dateResult.isConfirmed && dateResult.value) {
+              doUpdate(dateResult.value);
+            }
+          });
+        } else {
+          doUpdate();
         }
-        return undefined;
       }
     });
   }

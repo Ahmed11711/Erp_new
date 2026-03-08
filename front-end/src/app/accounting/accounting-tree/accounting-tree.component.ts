@@ -47,21 +47,33 @@ export class AccountingTreeComponent implements OnInit {
 
   loadAccounts(): void {
     this.loading = true;
-    this.treeAccountService.getAll().subscribe({
-      next: (response) => {
-        if (response.success && response.data) {
-          this.accounts = Array.isArray(response.data) ? response.data : [];
-        } else {
-          this.accounts = [];
-        }
+    // Prefer the fully nested tree endpoint; fall back to the generic list if needed
+    this.treeAccountService.getTree().subscribe({
+      next: (data: any) => {
+        // Reporting endpoint returns plain array of accounts (already nested)
+        this.accounts = Array.isArray(data) ? data : (data?.data ?? []);
         this.buildTree();
         this.loading = false;
       },
-      error: (error) => {
-        console.error('Error loading accounts:', error);
-        this.accounts = [];
-        this.treeData = [];
-        this.loading = false;
+      error: () => {
+        // Fallback to the standard endpoint
+        this.treeAccountService.getAll().subscribe({
+          next: (response) => {
+            if (response.success && response.data) {
+              this.accounts = Array.isArray(response.data) ? response.data : [];
+            } else {
+              this.accounts = [];
+            }
+            this.buildTree();
+            this.loading = false;
+          },
+          error: (error) => {
+            console.error('Error loading accounts:', error);
+            this.accounts = [];
+            this.treeData = [];
+            this.loading = false;
+          }
+        });
       }
     });
   }
@@ -73,6 +85,7 @@ export class AccountingTreeComponent implements OnInit {
     if (hasNestedChildren) {
       // Use the nested structure directly
       this.treeData = this.accounts.filter(acc => !acc.parent_id);
+      this.sortTreeByCode(this.treeData);
     } else {
       // Build tree from flat list
       const accountMap = new Map<number, TreeAccount>();
@@ -99,6 +112,7 @@ export class AccountingTreeComponent implements OnInit {
       });
 
       this.treeData = rootAccounts;
+      this.sortTreeByCode(this.treeData);
     }
   }
 
@@ -218,5 +232,21 @@ export class AccountingTreeComponent implements OnInit {
 
   getIndentLevel(level: number): string {
     return `${level * 20}px`;
+  }
+
+  // Allow adding children up to level 4 (backend supports 4)
+  canAddChild(node: TreeAccount): boolean {
+    const lvl = node.level ?? 1;
+    return lvl < 4;
+  }
+
+  // Sort recursively by code for better presentation
+  private sortTreeByCode(nodes: TreeAccount[]): void {
+    nodes.sort((a, b) => (a.code ?? 0) - (b.code ?? 0));
+    nodes.forEach(n => {
+      if (n.children && n.children.length) {
+        this.sortTreeByCode(n.children);
+      }
+    });
   }
 }
