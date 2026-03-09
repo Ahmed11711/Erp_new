@@ -75,10 +75,10 @@
         </tr>
 
         <!-- مجمل الربح/الخسارة -->
-        <tr class="highlight-row" [class.result-loss]="(totalWin ?? 0) < 0">
+        <tr class="highlight-row" [class.result-loss]="totalWin < 0">
           <td><strong>مجمل الربح / (الخسارة)</strong></td>
           <td></td>
-          <td dir="ltr" [class.text-profit]="(totalWin ?? 0) >= 0" [class.text-loss]="(totalWin ?? 0) < 0">
+          <td dir="ltr" [class.text-profit]="totalWin >= 0" [class.text-loss]="totalWin < 0">
             {{ formatNumber(totalWin) }}
             <span *ngIf="grossMarginPercent != null" class="margin-badge">({{ grossMarginPercent }}%)</span>
           </td>

@@ -657,7 +657,7 @@ class AccountingReportController extends Controller
             $salesByOrder[$orderId] = ($salesByOrder[$orderId] ?? 0.0) + (float)$row->amount;
         }
 
-        // Allocate COGS to categories
+        // Allocate COGS to categories (from account_entries if available)
         $allocatedCogs = []; // category_id => cogs
         foreach ($shipments as $row) {
             $orderId = $row->invoice_number;
@@ -670,8 +670,34 @@ class AccountingReportController extends Controller
             $allocatedCogs[$cid] = ($allocatedCogs[$cid] ?? 0.0) + ($orderCogs * $weight);
         }
 
+        // Fallback: if no COGS from account_entries (e.g. cogs/inventory accounts not configured),
+        // calculate from categories table using avg cost (same formula as OrdersController)
+        if (empty($allocatedCogs)) {
+            $categories = DB::table('categories')->select('id', 'quantity', 'total_price', 'unit_price')->get()->keyBy('id');
+            foreach ($salesByCategory as $cid => $salesData) {
+                $salesQty = (float)($salesData['qty'] ?? 0);
+                $retQty = (float)(optional($returns->get($cid))->qty ?? 0);
+                $netQty = max(0, $salesQty - $retQty);
+                if ($netQty <= 0) continue;
+
+                $cat = $categories->get($cid);
+                $avgCost = 0.0;
+                if ($cat) {
+                    $q = (float)($cat->quantity ?? 0);
+                    $tp = (float)($cat->total_price ?? 0);
+                    $up = (float)($cat->unit_price ?? 0);
+                    if ($q > 0 && $tp != 0) {
+                        $avgCost = $tp / $q;
+                    } elseif ($up > 0) {
+                        $avgCost = $up;
+                    }
+                }
+                $allocatedCogs[$cid] = $netQty * $avgCost;
+            }
+        }
+
         // 3) Build per-product rows
-        $categoryNames = DB::table('categories')->select('id', 'category_name', 'category_code')->get()->keyBy('id');
+        $categoryNames = DB::table('categories')->select('id', 'category_name')->get()->keyBy('id');
 
         $productRows = [];
         $categoryIds = array_unique(array_merge(array_keys($salesByCategory), array_keys($returns->toArray()), array_keys($allocatedCogs)));
@@ -685,7 +711,7 @@ class AccountingReportController extends Controller
             $cogs = $allocatedCogs[$cid] ?? 0.0;
             $gross = $netSales - $cogs;
             $name = optional($categoryNames->get($cid))->category_name ?? ('#' . $cid);
-            $code = optional($categoryNames->get($cid))->category_code ?? null;
+            $code = null; // category_code column may not exist in categories table
 
             $productRows[] = [
                 'category_id' => $cid,
@@ -725,6 +751,77 @@ class AccountingReportController extends Controller
             'date_to' => $end,
             'totals' => $totals,
             'data' => $productRows
+        ], 200);
+    }
+
+    /**
+     * Category Profitability Report (تقرير ربحية الصنف)
+     * Same data as product-performance with category type, measurement unit, orders count
+     */
+    public function categoryProfitability(Request $request)
+    {
+        $productResponse = $this->productPerformance($request);
+        $data = json_decode($productResponse->getContent(), true);
+        if (!isset($data['data'])) {
+            return $productResponse;
+        }
+
+        $categoryIds = array_column($data['data'], 'category_id');
+        $categories = DB::table('categories')
+            ->leftJoin('productions', 'categories.production_id', '=', 'productions.id')
+            ->leftJoin('measurements', 'categories.measurement_id', '=', 'measurements.id')
+            ->whereIn('categories.id', $categoryIds)
+            ->select(
+                'categories.id',
+                DB::raw('COALESCE(productions.production_line, productions.warehouse, "-") as category_type'),
+                DB::raw('COALESCE(measurements.unit, "-") as measurement_unit')
+            )
+            ->get()
+            ->keyBy('id');
+
+        $ordersByCategory = DB::table('categories_balance')
+            ->where('type', 'شحن طلب')
+            ->where('created_at', '>=', ($data['date_from'] ?? date('Y-m-01')) . ' 00:00:00')
+            ->where('created_at', '<=', ($data['date_to'] ?? date('Y-m-d')) . ' 23:59:59')
+            ->select('category_id', DB::raw('COUNT(DISTINCT invoice_number) as orders_count'))
+            ->groupBy('category_id')
+            ->get()
+            ->keyBy('category_id');
+
+        $rows = [];
+        foreach ($data['data'] as $row) {
+            $cid = $row['category_id'];
+            $cat = $categories->get($cid);
+            $ordersCount = optional($ordersByCategory->get($cid))->orders_count ?? 0;
+            $salesQty = (float)($row['sales_qty'] ?? 0);
+            $avgSellingPrice = $salesQty > 0 ? round((float)$row['sales_amount'] / $salesQty, 2) : 0;
+            $netQty = max(0, $salesQty - (float)($row['returns_qty'] ?? 0));
+            $avgCost = $netQty > 0 ? round((float)$row['cogs'] / $netQty, 2) : 0;
+
+            $rows[] = [
+                'category_id' => $cid,
+                'category_name' => $row['category_name'] ?? '-',
+                'category_type' => $cat ? $cat->category_type : '-',
+                'measurement_unit' => $cat ? $cat->measurement_unit : '-',
+                'sales_qty' => $row['sales_qty'],
+                'sales_amount' => $row['sales_amount'],
+                'orders_count' => (int)$ordersCount,
+                'returns_qty' => $row['returns_qty'],
+                'rejected_qty' => $row['returns_qty'],
+                'avg_selling_price' => $avgSellingPrice,
+                'avg_cost' => $avgCost,
+                'net_profit' => $row['gross_profit'],
+                'total_profit' => $row['gross_profit'],
+                'profit_margin' => $row['gross_margin_percent'],
+                'description' => '',
+            ];
+        }
+
+        return response()->json([
+            'date_from' => $data['date_from'],
+            'date_to' => $data['date_to'],
+            'totals' => $data['totals'] ?? [],
+            'data' => $rows
         ], 200);
     }
 }

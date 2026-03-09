@@ -436,6 +436,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/validate-income-structure', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'validateIncomeStructure']);
         Route::get('/income-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'incomeStatement']);
         Route::get('/product-performance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'productPerformance']);
+        Route::get('/category-profitability', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'categoryProfitability']);
     });
 
     // Accounting Transactions

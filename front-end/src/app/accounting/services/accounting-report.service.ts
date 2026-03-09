@@ -83,4 +83,11 @@ export class AccountingReportService {
         if (params?.date_to) httpParams = httpParams.set('date_to', params.date_to);
         return this.http.get(`${this.apiUrl}/product-performance`, { params: httpParams });
     }
+
+    getCategoryProfitability(params: { date_from?: string; date_to?: string }): Observable<any> {
+        let httpParams = new HttpParams();
+        if (params?.date_from) httpParams = httpParams.set('date_from', params.date_from);
+        if (params?.date_to) httpParams = httpParams.set('date_to', params.date_to);
+        return this.http.get(`${this.apiUrl}/category-profitability`, { params: httpParams });
+    }
 }

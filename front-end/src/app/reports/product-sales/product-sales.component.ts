@@ -1,56 +1,74 @@
-import { Component } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { Component, OnInit } from '@angular/core';
+import { CategoryService } from 'src/app/categories/services/category.service';
 
 @Component({
   selector: 'app-product-sales',
   templateUrl: './product-sales.component.html',
   styleUrls: ['./product-sales.component.css']
 })
-export class ProductSalesComponent {
+export class ProductSalesComponent implements OnInit {
+  data: any[] = [];
+  filteredData: any[] = [];
+  dateFrom: string | null = null;
+  dateTo: string | null = null;
+  searchTerm = '';
+  loading = false;
+  loadError = false;
+  length = 0;
+  page = 0;
+  pageSize = 50;
+  pageSizeOptions = [15, 50, 100];
 
-  data:any[]=[];
-  dateFrom!:any
-  dateTo!:any
+  constructor(private categoryService: CategoryService) {}
 
-  constructor(){
+  ngOnInit(): void {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
-    this.dateFrom = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    this.dateTo = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    this.form.patchValue({
-      type:'نوع الراتب'
-    })
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    this.dateFrom = `${y}-${m}-01`;
+    this.dateTo = `${y}-${m}-${d}`;
+    this.load();
   }
 
-  ngOnInit(){
-
+  load(): void {
+    this.loading = true;
+    this.loadError = false;
+    const params: any = { date_from: this.dateFrom, date_to: this.dateTo };
+    this.categoryService.categoriesSellReports(this.pageSize, this.page + 1, params).subscribe({
+      next: (res: any) => {
+        this.data = res?.data || [];
+        this.length = res?.total || 0;
+        this.applyFilter();
+        this.loading = false;
+      },
+      error: () => {
+        this.data = [];
+        this.filteredData = [];
+        this.loadError = true;
+        this.loading = false;
+      }
+    });
   }
 
-  form:FormGroup = new FormGroup({
-    'name' :new FormControl(null , [Validators.required ]),
-    'type' :new FormControl(null , [Validators.required ]),
-  })
-
-  submitform(){
-
+  onPageChange(event: any): void {
+    this.page = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.load();
   }
 
-  productChange(e:any){
-
+  onSearchChange(): void {
+    this.applyFilter();
   }
 
-  onDateFromChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const selectedDate = target.value;
-    console.log(selectedDate);
-
-  }
-  onDateToChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const selectedDate = target.value;
-    console.log(selectedDate);
-
+  applyFilter(): void {
+    const term = (this.searchTerm || '').trim().toLowerCase();
+    if (!term) {
+      this.filteredData = [...this.data];
+    } else {
+      this.filteredData = this.data.filter((r: any) =>
+        (r.category_name || '').toLowerCase().includes(term)
+      );
+    }
   }
 }
