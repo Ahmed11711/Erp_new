@@ -4,11 +4,11 @@
       <app-time></app-time>
     </div>
     <div class="col-5">
-      <div><p class="title header w-50 m-auto">تقرير نشاط العملاء المحتملين</p></div>
+      <div><p class="title header w-50 m-auto">Lead Activity Report</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end gap-2">
       <div class="recommender-widget position-relative">
-        <button type="button" class="btn btn-reminder position-relative" (click)="toggleRecommenderDropdown()" title="تذاكر المتابعة - تذكير">
+        <button type="button" class="btn btn-reminder position-relative" (click)="toggleRecommenderDropdown()" title="Follow-up Reminders">
           <i class="fa-solid fa-calendar-check"></i>
           <span *ngIf="recommenderCount > 0" class="reminder-badge">
             {{ recommenderCount > 99 ? '99+' : recommenderCount }}
@@ -17,23 +17,23 @@
         <div *ngIf="showRecommenderDropdown" class="reminder-dropdown">
           <div class="reminder-dropdown-header">
             <i class="fa-solid fa-calendar-check me-2"></i>
-            <strong>تذاكر المتابعة</strong>
+            <strong>Follow-up Reminders</strong>
             <span class="reminder-count-badge">{{ recommenderCount }}</span>
           </div>
           <div class="reminder-dropdown-list">
             <div *ngFor="let rec of recommenders" (click)="goToLeadFromReminder(rec.corporate_sales_lead_id)" class="reminder-item" role="button" tabindex="0">
               <div class="d-flex justify-content-between align-items-start">
-                <span class="reminder-company">{{ rec.lead?.company_name || 'ليد #' + rec.corporate_sales_lead_id }}</span>
+                <span class="reminder-company">{{ rec.lead?.company_name || 'Lead #' + rec.corporate_sales_lead_id }}</span>
                 <span class="reminder-date">{{ rec.reminder_date | date: 'yyyy-MM-dd' }}</span>
               </div>
               <div *ngIf="rec.notes" class="reminder-notes">{{ rec.notes }}</div>
             </div>
-            <div *ngIf="!recommenders.length" class="reminder-empty">لا توجد تذاكر</div>
+            <div *ngIf="!recommenders.length" class="reminder-empty">No reminders</div>
           </div>
         </div>
       </div>
       <button class="btn btn-primary m-4" (click)="loadData()">
-        <i class="fa-solid fa-refresh me-2"></i>تحديث
+        <i class="fa-solid fa-refresh me-2"></i>Refresh
       </button>
     </div>
   </div>
@@ -42,19 +42,19 @@
   <div class="container-fluid mb-4">
     <div class="card stats-card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">نقاط الفريق</h6>
+        <h6 class="mb-0">Team Points</h6>
       </div>
       <div class="card-body">
         <div class="row g-2">
           <div class="col-md-4 col-lg-3" *ngFor="let stat of activityStats">
             <div class="stat-item" [class.active]="stat.activity_count > 0">
               <div class="stat-name">{{ stat.user_name }}</div>
-              <div class="stat-count">{{ stat.activity_count }} نشاط</div>
+              <div class="stat-count">{{ stat.activity_count }} activity</div>
               <div class="stat-date text-muted small">{{ formatLastActivity(stat.last_activity_at) }}</div>
             </div>
           </div>
           <div class="col-12" *ngIf="activityStats.length === 0 && !isLoading">
-            <p class="text-muted text-center mb-0">لا يوجد بيانات نشاط</p>
+            <p class="text-muted text-center mb-0">No activity data</p>
           </div>
         </div>
       </div>
@@ -65,42 +65,42 @@
   <div class="filters-section" dir="ltr" [formGroup]="form">
     <div class="filters-row">
       <div class="filter-item">
-        <label>ترتيب حسب</label>
+        <label>Sort by</label>
         <select class="form-control form-control-sm" formControlName="sortBy">
-          <option value="last_activity">آخر نشاط</option>
-          <option value="date">التاريخ</option>
-          <option value="id">الرقم</option>
+          <option value="last_activity">Last Activity</option>
+          <option value="date">Date</option>
+          <option value="id">ID</option>
         </select>
       </div>
       <div class="filter-item">
         <select class="form-control form-control-sm" formControlName="sortOrder">
-          <option value="desc">الأحدث أولاً</option>
-          <option value="asc">الأقدم أولاً</option>
+          <option value="desc">Newest First</option>
+          <option value="asc">Oldest First</option>
         </select>
       </div>
       <div class="filter-item">
-        <label>المستخدم</label>
+        <label>User</label>
         <select class="form-control form-control-sm" formControlName="userId">
-          <option value="">الكل</option>
+          <option value="">All</option>
           <option *ngFor="let u of teamUsers" [value]="u.id">{{ u.name }}</option>
         </select>
       </div>
       <div class="filter-item">
-        <label>الحالة</label>
+        <label>Status</label>
         <select class="form-control form-control-sm" formControlName="statusId">
-          <option value="">الكل</option>
+          <option value="">All</option>
           <option *ngFor="let s of leadStatuses" [value]="s.id">{{ s.name }}</option>
         </select>
       </div>
       <div class="filter-item">
-        <label>من تاريخ</label>
+        <label>From Date</label>
         <input type="date" class="form-control form-control-sm" formControlName="activityDateFrom" />
       </div>
       <div class="filter-item">
-        <label>إلى تاريخ</label>
+        <label>To Date</label>
         <input type="date" class="form-control form-control-sm" formControlName="activityDateTo" />
       </div>
-      <button type="button" class="btn-reset" (click)="reset()" title="إعادة تعيين">
+      <button type="button" class="btn-reset" (click)="reset()" title="Reset">
         <i class="fa-solid fa-rotate-right"></i>
       </button>
     </div>
@@ -111,14 +111,14 @@
     <table dir="ltr" class="table table-bordered table-hover text-center">
       <thead class="bg-dark text-white">
         <tr>
-          <th>الرقم</th>
-          <th>اسم الشركة</th>
-          <th>الدولة</th>
-          <th>القطاع</th>
-          <th>المصدر</th>
-          <th>المستخدم</th>
-          <th>الحالة</th>
-          <th>إجراءات</th>
+          <th>ID</th>
+          <th>Company Name</th>
+          <th>Country</th>
+          <th>Industry</th>
+          <th>Source</th>
+          <th>User</th>
+          <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -141,7 +141,7 @@
             </span>
             <mat-menu #menu="matMenu">
               <button mat-menu-item (click)="goToDetails(elm.id)">
-                <span>التفاصيل</span>
+                <span>Details</span>
               </button>
             </mat-menu>
           </td>
@@ -154,7 +154,7 @@
     </div>
 
     <div *ngIf="!isLoading && leads.length === 0" class="text-center py-4 text-muted">
-      لا توجد نتائج
+      No results
     </div>
 
     <div class="text-center mt-5" *ngIf="leads.length > 0">
@@ -167,7 +167,7 @@
         showFirstLastButtons
         (page)="onPageChange($event)"
         [pageSizeOptions]="pageSizeOptions"
-        aria-label="اختر الصفحة">
+        aria-label="Select page">
       </mat-paginator>
     </div>
   </div>

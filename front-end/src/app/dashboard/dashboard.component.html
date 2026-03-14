@@ -825,24 +825,24 @@
                     *ngIf="user == 'Admin' || user == 'Shipping Management'|| user == 'Corparates' ">
                     <mat-expansion-panel-header>
                         <mat-icon>person_celebrate</mat-icon>
-                       متابعة العملاء 
+                       Corporate Sales 
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/corparates-sales/add-lead" routerLinkActive="active">
-                            <span>إضافة عميل محتمل</span>
+                            <span>Add New Lead</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/corparates-sales/leads" routerLinkActive="active">
-                            <span>العملاء المحتملون</span>
+                            <span>Leads</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/corparates-sales/lead-status-management" routerLinkActive="active">
-                            <span>إدارة حالات العملاء</span>
+                            <span>Lead Status Management</span>
                         </a>
                         <!-- <a mat-list-item routerLink="/dashboard/corparates-sales/follow-up-leads" routerLinkActive="active">
-                            <span>العملاء المتابعين</span>
+                            <span>Follow-Up Leads</span>
                         </a> -->
                         <a mat-list-item routerLink="/dashboard/reports/lead-activity" routerLinkActive="active"
                         *ngIf="user == 'Admin'">
-                        <span>تقرير نشاط العملاء المحتملين</span>
+                        <span>Lead Activity Report</span>
                     </a>
                     </mat-nav-list>
                 </mat-expansion-panel>

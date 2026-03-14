@@ -16,9 +16,9 @@ return [
         ],
         [
             'name' => 'order_confirmation',
-            'language' => 'ar',
-            'body_params' => ['اسم العميل', 'رقم الطلب'],
-            'body_param_keys' => ['customer_name', 'id'],
+            'language' => 'en',
+            'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'],
+            'body_param_keys' => ['customer_name', 'id', 'net_total'],
         ],
         [
             'name' => 'hello_world',

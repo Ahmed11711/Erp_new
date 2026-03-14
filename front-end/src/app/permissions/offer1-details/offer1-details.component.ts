@@ -128,6 +128,25 @@ export class Offer1DetailsComponent implements OnInit {
             background: #fff;
             box-shadow: 0 4px 24px rgba(0,0,0,0.18);
           }
+          .note-section {
+            page-break-inside: avoid;
+            max-height: 85mm;
+            overflow: hidden;
+            padding: 8px 12px !important;
+            margin-top: 8px !important;
+            margin-bottom: 12px !important;
+            background: #fff;
+          }
+          .note-section .note-title {
+            font-size: 13px !important;
+            margin-bottom: 6px !important;
+          }
+          .note-section .note-text {
+            font-size: 11px !important;
+            line-height: 1.25 !important;
+            word-break: break-word !important;
+            white-space: normal !important;
+          }
           @page { size: A4; margin: 0; }
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }

@@ -1,11 +1,11 @@
-<div class="container-fluid">
+<div class="container-fluid lead-form-wrapper" dir="ltr">
   <div class="row py-3">
     <div class="col-4 d-flex align-items-center">
       <app-time></app-time>
     </div>
     <div class="col-6">
       <div>
-        <p class="title header w-80 m-1"> إضافة عميل محتمل </p>
+        <p class="page-title">Add Lead</p>
       </div>
     </div>
     <div class="col-2 d-flex align-items-center justify-content-end">
@@ -14,16 +14,16 @@
   </div>
 
   <div class="container-fluid">
-    <form class="text-start w-100 mt-2" [formGroup]="form" *ngIf="form" (ngSubmit)="submitform()">
+    <form class="lead-form" [formGroup]="form" *ngIf="form" (ngSubmit)="submitform()">
 
       <!-- Basic Information Section -->
       <div class="form-section">
-        <h5 class="section-title">المعلومات الأساسية</h5>
+        <h5 class="section-title">Basic Information</h5>
         <div class="row">
           <div class="col-md-3">
             <div class="input-group">
-              <label class="input-label">الصناعة</label>
-              <ng-autocomplete [data]="leadIndustry" [searchKeyword]="industry" placeholder="اختر الصناعة"
+              <label class="input-label">Industry</label>
+              <ng-autocomplete [data]="leadIndustry" [searchKeyword]="industry" placeholder="Select Industry"
                 (keyup)="industryKeyUp($event)" (selected)='industryChange($event)' (inputCleared)="resetIndustry()"
                 [itemTemplate]="itemTemplates1" [notFoundTemplate]="notFoundTemplate1">
               </ng-autocomplete>
@@ -37,8 +37,8 @@
           </div>
           <div class="col-md-3">
             <div class="input-group">
-              <label class="input-label">الدولة</label>
-              <ng-autocomplete [data]="countries" [searchKeyword]="catword" placeholder="اختر الدولة"
+              <label class="input-label">Country</label>
+              <ng-autocomplete [data]="countries" [searchKeyword]="catword" placeholder="Select Country"
                 [initialValue]="initialCountry" (selected)='countryChange($event)' (inputCleared)="resetInp()"
                 [itemTemplate]="itemTemplates" [notFoundTemplate]="notFoundTemplate">
               </ng-autocomplete>
@@ -52,19 +52,19 @@
           </div>
           <div class="col-md-3">
             <div class="input-group">
-              <label class="input-label">الحالة</label>
+              <label class="input-label">Status</label>
               <select class="form-select"
                 [class.is-valid]="form.get('lead_status_id')?.errors ==null && form.get('lead_status_id')?.touched"
                 [class.is-invalid]="form.get('lead_status_id')?.errors !=null && form.get('lead_status_id')?.touched"
                 formControlName='lead_status_id'>
-                <option value="" disabled selected>اختر الحالة</option>
+                <option value="" disabled selected>Select Status</option>
                 <option [value]="status?.id" *ngFor="let status of leadStatuses">{{status?.name}}</option>
               </select>
             </div>
           </div>
           <div class="col-md-3">
             <div class="input-group">
-              <label class="input-label"> التاريخ </label>
+              <label class="input-label"> Date </label>
               <input [class.is-valid]="form.get('date')?.errors ==null && form.get('date')?.touched"
                 [class.is-invalid]="form.get('date')?.errors !=null && form.get('date')?.touched" autocomplete="off"
                 formControlName="date" class="form-control" type="date">
@@ -75,12 +75,12 @@
 
       <!-- Company Information Section -->
       <div class="form-section company-info">
-        <h5 class="section-title">معلومات الشركة</h5>
+        <h5 class="section-title">Company Information</h5>
         <div class="row">
           <div class="col-md-4">
             <div class="input-group">
-              <label class="input-label">اسم الشركة *</label>
-              <input autocomplete="off" class="form-control" placeholder="أدخل اسم الشركة"
+              <label class="input-label">Company Name *</label>
+              <input autocomplete="off" class="form-control" placeholder="Enter company name"
                 [class.is-valid]="form.get('company_name')?.errors ==null && form.get('company_name')?.touched"
                 [class.is-invalid]="form.get('company_name')?.errors !=null && form.get('company_name')?.touched"
                 formControlName='company_name' type="text">
@@ -88,8 +88,8 @@
           </div>
           <div class="col-md-4">
             <div class="input-group">
-              <label class="input-label">المنصب</label>
-              <input autocomplete="off" class="form-control" placeholder="المنصب (CEO، مدير، إلخ)"
+              <label class="input-label">Title</label>
+              <input autocomplete="off" class="form-control" placeholder="Title (CEO, Manager, etc.)"
                 [class.is-valid]="form.get('contact_title')?.errors ==null && form.get('contact_title')?.touched"
                 [class.is-invalid]="form.get('contact_title')?.errors !=null && form.get('contact_title')?.touched"
                 formControlName='contact_title' type="text">
@@ -97,8 +97,8 @@
           </div>
           <div class="col-md-4">
             <div class="input-group">
-              <label class="input-label">القسم</label>
-              <input autocomplete="off" class="form-control" placeholder="القسم (تقنية المعلومات، المبيعات، إلخ)"
+              <label class="input-label">Department</label>
+              <input autocomplete="off" class="form-control" placeholder="Department (IT, Sales, etc.)"
                 [class.is-valid]="form.get('contact_department')?.errors ==null && form.get('contact_department')?.touched"
                 [class.is-invalid]="form.get('contact_department')?.errors !=null && form.get('contact_department')?.touched"
                 formControlName='contact_department' type="text">
@@ -109,11 +109,11 @@
 
       <!-- Contact Information Section -->
       <div class="form-section">
-        <h5 class="section-title">معلومات جهة الاتصال</h5>
+        <h5 class="section-title">Contact Information</h5>
         <div formArrayName="contacts">
           <div class="contact-section" *ngFor="let contactGroup of contacts.controls; let i = index" [formGroupName]="i">
             <div class="contact-header">
-              <h6 class="contact-title">جهة الاتصال #{{i + 1}}</h6>
+              <h6 class="contact-title">Contact #{{i + 1}}</h6>
               <button type="button" class="btn btn-remove" *ngIf="i > 0" (click)="removeContact(i)">
                 <i class="fa-solid fa-trash"></i>
               </button>
@@ -121,8 +121,8 @@
             <div class="row">
                <div class="col-md-6">
                 <div class="input-group">
-                  <label class="input-label">اسم جهة الاتصال *</label>
-                  <input autocomplete="off" class="form-control" placeholder="أدخل اسم جهة الاتصال"
+                  <label class="input-label">Contact Name *</label>
+                  <input autocomplete="off" class="form-control" placeholder="Enter contact name"
                     [class.is-valid]="contactGroup.get('contact_name')?.errors ==null && contactGroup.get('contact_name')?.touched"
                     [class.is-invalid]="contactGroup.get('contact_name')?.errors !=null && contactGroup.get('contact_name')?.touched"
                     formControlName='contact_name' type="text">
@@ -150,8 +150,8 @@
               </div> -->
               <div class="col-md-6">
                 <div class="input-group">
-                  <label class="input-label">رابط LinkedIn</label>
-                  <input autocomplete="off" class="form-control" placeholder="رابط الملف الشخصي"
+                  <label class="input-label">LinkedIn Link</label>
+                  <input autocomplete="off" class="form-control" placeholder="Profile link"
                     [class.is-valid]="contactGroup.get('contact_linkedin')?.errors ==null && contactGroup.get('contact_linkedin')?.touched"
                     [class.is-invalid]="contactGroup.get('contact_linkedin')?.errors !=null && contactGroup.get('contact_linkedin')?.touched"
                     formControlName='contact_linkedin' type="text">
@@ -159,19 +159,20 @@
               </div>
             </div>
             
-            <!-- Phones and Emails Section -->
-            <div class="row mt-3">
-              <div class="col-md-6">
-                <h6 class="contact-title">أرقام الهاتف</h6>
-                <div formArrayName="phones">
+            <!-- Phones and Emails Section - Phone left, Email right -->
+            <div class="row mt-3 g-3 contact-row">
+              <div class="col-12 col-lg-6 contact-phones-col">
+                <label class="input-label">Phone Numbers</label>
+                <div class="phones-emails-wrapper" formArrayName="phones">
                   <div class="phone-group" *ngFor="let phoneGroup of getPhones(i).controls; let j = index" [formGroupName]="j">
                     <select class="form-select phone-select" formControlName="dial_code">
                       <option [value]="elm.dial_code" *ngFor="let elm of countries" [selected]="elm.name === 'Egypt'">{{elm.dial_code}}</option>
                     </select>
-                    <input autocomplete="off" class="form-control phone-input" placeholder="رقم الهاتف"
+                    <input autocomplete="off" class="form-control phone-input" placeholder="Phone number"
                       [class.is-valid]="phoneGroup.get('contact_number')?.errors ==null && phoneGroup.get('contact_number')?.touched"
                       [class.is-invalid]="phoneGroup.get('contact_number')?.errors !=null && phoneGroup.get('contact_number')?.touched"
                       formControlName='contact_number' type="text">
+                    
                     <button type="button" class="btn btn-remove" *ngIf="j > 0" (click)="removePhone(i,j)">
                       <i class="fa-solid fa-trash"></i>
                     </button>
@@ -181,11 +182,11 @@
                   </button>
                 </div>
               </div>
-              <div class="col-md-6">
-                <h6 class="contact-title">البريد الإلكتروني</h6>
-                <div formArrayName="emails">
+              <div class="col-12 col-lg-6 contact-emails-col">
+                <label class="input-label">Email</label>
+                <div class="phones-emails-wrapper" formArrayName="emails">
                   <div class="email-group" *ngFor="let emailCtrl of getEmails(i).controls; let j = index">
-                    <input autocomplete="off" class="form-control email-input" placeholder="البريد الإلكتروني"
+                    <input autocomplete="off" class="form-control email-input" placeholder="Email address"
                       [class.is-valid]="emailCtrl.valid && emailCtrl.touched"
                       [class.is-invalid]="emailCtrl.invalid && emailCtrl.touched" [formControlName]='j' type="text">
                     <button type="button" class="btn btn-remove" *ngIf="j > 0" (click)="removeEmail(i,j)">
@@ -202,25 +203,25 @@
         </div>
         <div class="text-center mt-3">
           <button type="button" class="btn btn-add-contact" (click)="addContact()">
-            <i class="fa-solid fa-plus mr-2"></i>
-            إضافة جهة اتصال جديدة
+            <i class="fa-solid fa-plus me-2"></i>
+            Add New Contact
           </button>
         </div>
       </div>
 
       <!-- Lead Source and Tools Section -->
       <div class="form-section">
-        <h5 class="section-title">مصدر العميل المحتمل</h5>
+        <h5 class="section-title">Lead Source</h5>
         <div class="row">
           <div class="col-md-6">
             <div class="input-group">
-              <label class="input-label">المصدر</label>
+              <label class="input-label">Source</label>
               <div class="d-flex align-items-center">
                 <select class="form-select"
                   [class.is-valid]="form.get('lead_source')?.errors ==null && form.get('lead_source')?.touched"
                   [class.is-invalid]="form.get('lead_source')?.errors !=null && form.get('lead_source')?.touched"
                   formControlName='lead_source'>
-                  <option value="0" disabled selected>اختر المصدر</option>
+                  <option value="0" disabled selected>Select Source</option>
                   <option [value]="elm?.id" *ngFor="let elm of leadSource">{{elm?.name}}</option>
                 </select>
                 <button type="button" class="btn btn-add-item" (click)="addSource()">
@@ -231,13 +232,13 @@
           </div>
           <div class="col-md-6">
             <div class="input-group">
-              <label class="input-label">الأداة</label>
+              <label class="input-label">Tool</label>
               <div class="d-flex align-items-center">
                 <select class="form-select"
                   [class.is-valid]="form.get('lead_tool')?.errors ==null && form.get('lead_tool')?.touched"
                   [class.is-invalid]="form.get('lead_tool')?.errors !=null && form.get('lead_tool')?.touched"
                   formControlName='lead_tool'>
-                  <option value="0" disabled selected>اختر الأداة</option>
+                  <option value="0" disabled selected>Select Tool</option>
                   <option [value]="elm?.id" *ngFor="let elm of leadTools">{{elm?.name}}</option>
                 </select>
                 <button type="button" class="btn btn-add-item" (click)="addTool()">
@@ -251,13 +252,13 @@
 
       <!-- Social Media Links Section -->
       <div class="form-section">
-        <h5 class="section-title">روابط التواصل الاجتماعي</h5>
+        <h5 class="section-title">Social Media Links</h5>
         <div class="row">
           <div class="col-md-6">
             <div class="social-input">
               <div class="input-group">
                 <label class="input-label">LinkedIn</label>
-                <input autocomplete="off" class="form-control" placeholder="رابط حساب الشركة"
+                <input autocomplete="off" class="form-control" placeholder="Company profile link"
                   [class.is-valid]="form.get('company_linkedin')?.errors ==null && form.get('company_linkedin')?.touched"
                   [class.is-invalid]="form.get('company_linkedin')?.errors !=null && form.get('company_linkedin')?.touched"
                   formControlName='company_linkedin' type="text">
@@ -266,7 +267,7 @@
             <div class="social-input">
               <div class="input-group">
                 <label class="input-label">Facebook</label>
-                <input autocomplete="off" class="form-control" placeholder="رابط حساب الشركة"
+                <input autocomplete="off" class="form-control" placeholder="Company profile link"
                   [class.is-valid]="form.get('company_facebook')?.errors ==null && form.get('company_facebook')?.touched"
                   [class.is-invalid]="form.get('company_facebook')?.errors !=null && form.get('company_facebook')?.touched"
                   formControlName='company_facebook' type="text">
@@ -277,7 +278,7 @@
             <div class="social-input">
               <div class="input-group">
                 <label class="input-label">Instagram</label>
-                <input autocomplete="off" class="form-control" placeholder="رابط حساب الشركة"
+                <input autocomplete="off" class="form-control" placeholder="Company profile link"
                   [class.is-valid]="form.get('company_instagram')?.errors ==null && form.get('company_instagram')?.touched"
                   [class.is-invalid]="form.get('company_instagram')?.errors !=null && form.get('company_instagram')?.touched"
                   formControlName='company_instagram' type="text">
@@ -285,8 +286,8 @@
             </div>
             <div class="social-input">
               <div class="input-group">
-                <label class="input-label">الموقع الإلكتروني</label>
-                <input autocomplete="off" class="form-control" placeholder="رابط الموقع الرسمي"
+                <label class="input-label">Website</label>
+                <input autocomplete="off" class="form-control" placeholder="Official website link"
                   [class.is-valid]="form.get('company_website')?.errors ==null && form.get('company_website')?.touched"
                   [class.is-invalid]="form.get('company_website')?.errors !=null && form.get('company_website')?.touched"
                   formControlName='company_website' type="text">
@@ -298,12 +299,12 @@
 
       <!-- Notes Section -->
       <div class="form-section">
-        <h5 class="section-title">ملاحظات إضافية</h5>
+        <h5 class="section-title">Additional Notes</h5>
         <div class="row">
           <div class="col-12">
             <div class="input-group">
-              <label class="input-label">ملاحظات</label>
-              <textarea class="form-control" placeholder="أضف أي ملاحظات إضافية عن العميل المحتمل" 
+              <label class="input-label">Notes</label>
+              <textarea class="form-control" placeholder="Add any additional notes about the lead" 
                 formControlName='notes' rows="4"
                 [class.is-valid]="form.get('notes')?.errors ==null && form.get('notes')?.touched"
                 [class.is-invalid]="form.get('notes')?.errors !=null && form.get('notes')?.touched"></textarea>
@@ -436,35 +437,35 @@
           <div class="card border-warning">
             <div class="card-header bg-warning text-dark">
               <h6 class="mb-0">
-                <i class="fa-solid fa-clock me-2"></i>الإجراء التالي مطلوب
+                <i class="fa-solid fa-clock me-2"></i>Next Action Required
               </h6>
             </div>
             <div class="card-body">
               <div class="row">
                 <div class="col-md-3">
                   <div class="mb-3">
-                    <label class="form-label">نوع الإجراء</label>
+                    <label class="form-label">Action Type</label>
                     <select class="form-control form-select" formControlName="next_action_type">
-                      <option value="">اختر الإجراء</option>
-                      <option value="Call">مكالمة</option>
-                      <option value="Email">بريد إلكتروني</option>
-                      <option value="Meeting">اجتماع</option>
-                      <option value="Follow-up Call">مكالمة متابعة</option>
-                      <option value="Send Proposal">إرسال عرض</option>
-                      <option value="Site Visit">زيارة الموقع</option>
+                      <option value="">Select Action</option>
+                      <option value="Call">Call</option>
+                      <option value="Email">Email</option>
+                      <option value="Meeting">Meeting</option>
+                      <option value="Follow-up Call">Follow-up Call</option>
+                      <option value="Send Proposal">Send Proposal</option>
+                      <option value="Site Visit">Site Visit</option>
                     </select>
                   </div>
                 </div>
                 <div class="col-md-3">
                   <div class="mb-3">
-                    <label class="form-label">تاريخ الإجراء</label>
+                    <label class="form-label">Action Date</label>
                     <input type="date" class="form-control" formControlName="next_action_date">
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="mb-3">
-                    <label class="form-label">ملاحظات الإجراء</label>
-                    <textarea class="form-control" placeholder="مثال: مكالمة لمناقشة تفاصيل العرض" 
+                    <label class="form-label">Action Notes</label>
+                    <textarea class="form-control" placeholder="e.g.: Call to discuss proposal details" 
                            formControlName="next_action_notes" rows="3"></textarea>
                   </div>
                 </div>
@@ -475,7 +476,7 @@
       </div>
 
       <div class="text-center mt-4">
-        <button type="submit" class="btn btn-submit">إضافة عميل محتمل</button>
+        <button type="submit" class="btn btn-submit">Add Lead</button>
       </div>
 
     </form>

@@ -4,11 +4,11 @@
       <app-time></app-time>
     </div>
     <div class="col-5">
-      <div><p class="title header w-50 m-auto">العملاء المحتملون</p></div>
+      <div><p class="title header w-50 m-auto">Leads</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end gap-2">
       <div class="recommender-widget position-relative">
-        <button type="button" class="btn btn-reminder position-relative" (click)="toggleRecommenderDropdown()" title="تذاكر المتابعة - تذكير">
+        <button type="button" class="btn btn-reminder position-relative" (click)="toggleRecommenderDropdown()" title="Follow-up Reminders">
           <i class="fa-solid fa-calendar-check"></i>
           <span *ngIf="recommenderCount > 0" class="reminder-badge">
             {{ recommenderCount > 99 ? '99+' : recommenderCount }}
@@ -17,18 +17,18 @@
         <div *ngIf="showRecommenderDropdown" class="reminder-dropdown">
           <div class="reminder-dropdown-header">
             <i class="fa-solid fa-calendar-check me-2"></i>
-            <strong>تذاكر المتابعة</strong>
+            <strong>Follow-up Reminders</strong>
             <span class="reminder-count-badge">{{ recommenderCount }}</span>
           </div>
           <div class="reminder-dropdown-list">
             <div *ngFor="let rec of recommenders" (click)="goToLeadDetails(rec.corporate_sales_lead_id)" class="reminder-item" role="button" tabindex="0">
               <div class="d-flex justify-content-between align-items-start">
-                <span class="reminder-company">{{ rec.lead?.company_name || 'ليد #' + rec.corporate_sales_lead_id }}</span>
+                <span class="reminder-company">{{ rec.lead?.company_name || 'Lead #' + rec.corporate_sales_lead_id }}</span>
                 <span class="reminder-date">{{ rec.reminder_date | date: 'yyyy-MM-dd' }}</span>
               </div>
               <div *ngIf="rec.notes" class="reminder-notes">{{ rec.notes }}</div>
             </div>
-            <div *ngIf="!recommenders.length" class="reminder-empty">لا توجد تذاكر</div>
+            <div *ngIf="!recommenders.length" class="reminder-empty">No reminders</div>
           </div>
         </div>
       </div>
@@ -37,56 +37,56 @@
 
   <div class="container-fluid d-flex flex-wrap justify-content-start align-items-end gap-3 mb-3" dir="ltr" [formGroup]="form">
     <div class="form-group mb-0">
-      <label class="small d-block mb-1">القطاع</label>
+      <label class="small d-block mb-1">Industry</label>
       <select class="form-control" formControlName="leadIndustry">
-        <option value="0">الكل</option>
+        <option value="0">All</option>
         <option *ngFor="let elm of leadIndustry" [value]="elm.id">{{ elm.name }}</option>
       </select>
     </div>
     <div class="form-group mb-0">
-      <label class="small d-block mb-1">المصدر</label>
+      <label class="small d-block mb-1">Source</label>
       <select class="form-control" formControlName="leadSource">
-        <option value="0">الكل</option>
+        <option value="0">All</option>
         <option *ngFor="let elm of leadSource" [value]="elm.id">{{ elm.name }}</option>
       </select>
     </div>
     <div class="form-group mb-0">
-      <label class="small d-block mb-1">الأداة</label>
+      <label class="small d-block mb-1">Tool</label>
       <select class="form-control" formControlName="leadTool">
-        <option value="0">الكل</option>
+        <option value="0">All</option>
         <option *ngFor="let elm of leadTools" [value]="elm.id">{{ elm.name }}</option>
       </select>
     </div>
     <div class="form-group mb-0">
-      <label class="small d-block mb-1">الدولة</label>
+      <label class="small d-block mb-1">Country</label>
       <select class="form-control" formControlName="country">
-        <option value="0">الكل</option>
+        <option value="0">All</option>
         <option *ngFor="let elm of countries" [value]="elm.name">{{ elm.name }}</option>
       </select>
     </div>
     <div class="form-group">
-      <label class="small d-block mb-1">المستخدم</label>
+      <label class="small d-block mb-1">User</label>
       <select class="form-control" formControlName="userId">
-        <option value="">الكل</option>
+        <option value="">All</option>
         <option *ngFor="let u of teamUsers" [value]="u.id">{{ u.name }}</option>
       </select>
     </div>
-    <i class="fa-solid fa-rotate-right mx-2" (click)="reset()" style="cursor:pointer" title="إعادة تعيين"></i>
+    <i class="fa-solid fa-rotate-right mx-2" (click)="reset()" style="cursor:pointer" title="Reset"></i>
   </div>
 
   <div class="container-fluid table-responsive">
     <table dir="ltr" class="table table-bordered table-hover text-center">
       <thead class="bg-dark text-white">
         <tr>
-          <th>الرقم</th>
-          <th>اسم الشركة</th>
-          <th>الدولة</th>
-          <th>القطاع</th>
-          <th>المصدر</th>
-          <th>الأداة</th>
-          <th>المستخدم</th>
-          <th>الحالة</th>
-          <th>إجراءات</th>
+          <th>ID</th>
+          <th>Company Name</th>
+          <th>Country</th>
+          <th>Industry</th>
+          <th>Source</th>
+          <th>Tool</th>
+          <th>User</th>
+          <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -110,7 +110,7 @@
             </span>
             <mat-menu #menu="matMenu">
               <button mat-menu-item [routerLink]="['./', elm.id]">
-                <span>التفاصيل</span>
+                <span>Details</span>
               </button>
             </mat-menu>
           </td>
@@ -127,7 +127,7 @@
         showFirstLastButtons
         (page)="onPageChange($event)"
         [pageSizeOptions]="pageSizeOptions"
-        aria-label="اختر الصفحة">
+        aria-label="Select page">
       </mat-paginator>
     </div>
   </div>

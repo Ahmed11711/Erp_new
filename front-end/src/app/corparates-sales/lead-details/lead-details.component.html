@@ -18,26 +18,26 @@
     <div class="col-md-12">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تفاصيل الشركة</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Company Details</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
             <table dir="ltr" class="table table-bordered table-hover text-center mb-0">
               <thead   class="text-white">
                 <tr>
-                  <th>اسم الشركة</th>
-                  <th>حالة العميل</th>
-                  <th>المنصب</th>
-                  <th>القسم</th>
-                  <th>الدولة</th>
-                  <th>الصناعة</th>
-                  <th>المصدر</th>
-                  <th>الأداة</th>
+                  <th>Company Name</th>
+                  <th>Lead Status</th>
+                  <th>Title</th>
+                  <th>Department</th>
+                  <th>Country</th>
+                  <th>Industry</th>
+                  <th>Source</th>
+                  <th>Tool</th>
                   <th>LinkedIn</th>
-                  <th>الموقع الإلكتروني</th>
+                  <th>Website</th>
                   <th>Facebook</th>
                   <th>Instagram</th>
-                  <th>أضافه بواسطة</th>
+                  <th>Added By</th>
                 </tr>
               </thead>
               <tbody>
@@ -166,7 +166,7 @@
     <div class="col-md-12">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تفاصيل جهة الاتصال</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Contact Details</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
@@ -174,11 +174,11 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>الاسم</th>
+                  <th>Name</th>
                   <th>LinkedIn</th>
-                  <th>البريد الإلكتروني</th>
-                  <th>أرقام الهاتف</th>
-                  <th>أضافه بواسطة</th>
+                  <th>Email</th>
+                  <th>Phone Numbers</th>
+                  <th>Added By</th>
                 </tr>
               </thead>
               <tbody>
@@ -199,7 +199,7 @@
                         <i class="mx-2 fa-solid fa-pen" (click)="editEmail(email)"></i>
                       </li>
                     </ul>
-                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addEmailToContact(contact.id)">إضافة بريد إلكتروني</button>
+                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addEmailToContact(contact.id)">Add Email</button>
                   </td>
                   <td>
                     <ul class="list-unstyled mb-0 text-start">
@@ -209,7 +209,7 @@
                         <i class="mx-2 fa-solid fa-pen" (click)="editPhone(phone.id, phone.dial_code,phone.contact_number)"></i>
                       </li>
                     </ul>
-                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addPhoneToContact(contact.id)">إضافة هاتف</button>
+                    <button class="btn bg-main my-2" style="width: fit-content;" (click)="addPhoneToContact(contact.id)">Add Phone</button>
                   </td>
                   <td>{{ contact.user?.name }}</td>
                 </tr>
@@ -217,7 +217,7 @@
             </table>
           </div>
           <div class="d-flex flex-column align-items-end" style="margin-inline-end: 10px;">
-            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addContact()">إضافة جهة اتصال</button>
+            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addContact()">Add Contact</button>
           </div>
         </div>
       </div>
@@ -227,9 +227,9 @@
     <div class="col-md-12">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">تذاكر المتابعة</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Follow-up Reminders</h5>
           <button class="btn bg-main btn-sm" (click)="addRecommender()">
-            <i class="fa-solid fa-bell me-1"></i> إضافة تذكرة
+            <i class="fa-solid fa-bell me-1"></i> Add Reminder
           </button>
         </div>
         <div class="card-body p-0">
@@ -238,11 +238,11 @@
               <thead class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>التاريخ</th>
-                  <th>الملاحظة</th>
-                  <th>الحالة</th>
-                  <th>بواسطة</th>
-                  <th>إجراءات</th>
+                  <th>Date</th>
+                  <th>Notes</th>
+                  <th>Status</th>
+                  <th>By</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -251,17 +251,17 @@
                   <td>{{ rec.reminder_date | date: 'yyyy-MM-dd' }}</td>
                   <td class="text-start">{{ rec.notes || '-' }}</td>
                   <td>
-                    <i class="fa-solid recommender-status-icon" [ngClass]="rec.is_done ? 'fa-circle-check recommender-done' : 'fa-circle-xmark recommender-pending'" (click)="toggleRecommenderDone(rec)" [title]="rec.is_done ? 'تم - اضغط للتغيير' : 'لم يتم - اضغط للتغيير'"></i>
+                    <i class="fa-solid recommender-status-icon" [ngClass]="rec.is_done ? 'fa-circle-check recommender-done' : 'fa-circle-xmark recommender-pending'" (click)="toggleRecommenderDone(rec)" [title]="rec.is_done ? 'Done - Click to change' : 'Pending - Click to change'"></i>
                   </td>
                   <td>{{ rec.user?.name || '-' }}</td>
                   <td>
-                    <button class="btn btn-sm btn-outline-danger" (click)="deleteRecommender(rec.id)" title="حذف">
+                    <button class="btn btn-sm btn-outline-danger" (click)="deleteRecommender(rec.id)" title="Delete">
                       <i class="fa-solid fa-trash"></i>
                     </button>
                   </td>
                 </tr>
                 <tr *ngIf="!data?.recommenders?.length">
-                  <td colspan="6" class="text-muted">لا توجد تذاكر متابعة</td>
+                  <td colspan="6" class="text-muted">No follow-up reminders</td>
                 </tr>
               </tbody>
             </table>
@@ -273,7 +273,7 @@
     <div class="col-md-6">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end">
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">التتبع</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Tracking</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive" style="max-height: 1000px;">
@@ -281,10 +281,10 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>التفاصيل</th>
-                  <th>القيمة</th>
-                  <th>بواسطة</th>
-                  <th>التاريخ</th>
+                  <th>Details</th>
+                  <th>Value</th>
+                  <th>By</th>
+                  <th>Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -322,7 +322,7 @@
     <div class="col-md-6">
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">الملاحظات</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Notes</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive" style="max-height: 400px;">
@@ -330,9 +330,9 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>الملاحظة</th>
-                  <th>بواسطة</th>
-                  <th>التاريخ</th>
+                  <th>Note</th>
+                  <th>By</th>
+                  <th>Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -346,13 +346,13 @@
             </table>
           </div>
           <div class="d-flex flex-column align-items-end" style="margin-inline-end: 10px;">
-            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('note', 'add Note')">إضافة ملاحظة</button>
+            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('note', 'add Note')">Add Note</button>
         </div>
         </div>
       </div>
       <div class="card shadow-sm mb-4 border-0">
         <div class="card-header d-flex justify-content-end" >
-          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">التقدم</h5>
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Progress</h5>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive" style="max-height: 400px;">
@@ -360,10 +360,10 @@
               <thead   class="text-white">
                 <tr>
                   <th>#</th>
-                  <th>التقدم</th>
-                  <th>الملف</th>
-                  <th>بواسطة</th>
-                  <th>التاريخ</th>
+                  <th>Progress</th>
+                  <th>File</th>
+                  <th>By</th>
+                  <th>Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -382,8 +382,8 @@
           </div>
         </div>
         <div class="d-flex flex-column align-items-end" style="margin-inline-end: 10px;">
-            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('progress', 'add Progress')">إضافة تقدم</button>
-          <button class="btn bg-main mb-2" style="width: fit-content;" (click)="openFileInput()">رفع صورة</button>
+            <button class="btn bg-main my-2" style="width: fit-content;" (click)="addToLead('progress', 'add Progress')">Add Progress</button>
+          <button class="btn bg-main mb-2" style="width: fit-content;" (click)="openFileInput()">Upload Image</button>
           <input type="file" (change)="onFileChanged($event)" name="uploadFile"  accept="image/*" id="fileInput" #uploadFile="ngModel" ngModel class="img d-none">
         </div>
       </div>

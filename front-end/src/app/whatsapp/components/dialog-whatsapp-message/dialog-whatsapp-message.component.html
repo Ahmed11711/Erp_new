@@ -2,6 +2,26 @@
   <h1 mat-dialog-title>إرسال رسالة واتساب</h1>
 </div>
 <div mat-dialog-content>
+  <!-- قوالب ميتا (للتواصل الأول / خارج نافذة 24 ساعة) -->
+  <div class="form-group mb-3" *ngIf="data.order || data.orders?.length">
+    <label>قوالب ميتا المعتمدة</label>
+    <select class="form-control" [(ngModel)]="selectedMetaTemplate" [ngModelOptions]="{standalone: true}">
+      <option [ngValue]="null">اختر قالب ميتا (اختياري)</option>
+      <option *ngFor="let t of metaTemplates" [ngValue]="t">{{ t.name }} ({{ t.language }})</option>
+    </select>
+    <small class="text-muted" *ngIf="selectedMetaTemplate">
+      {{ selectedMetaTemplate.body_params?.join('، ') }}
+    </small>
+    <div class="mt-2" *ngIf="selectedMetaTemplate">
+      <button type="button" class="btn btn-primary" [disabled]="sendingMeta" (click)="sendMetaTemplate()">
+        <span *ngIf="sendingMeta">جاري الإرسال...</span>
+        <span *ngIf="!sendingMeta">إرسال قالب ميتا</span>
+      </button>
+    </div>
+  </div>
+
+  <hr *ngIf="(data.order || data.orders?.length) && metaTemplates.length" class="my-3">
+
   <form dir="rtl" class="text-first w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
     
     <div class="form-group" *ngIf="templates.length > 0">

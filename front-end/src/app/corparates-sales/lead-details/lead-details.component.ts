@@ -109,16 +109,16 @@ export class LeadDetailsComponent {
 
   addRecommender() {
     Swal.fire({
-      title: 'إضافة تذكرة متابعة',
+      title: 'Add Follow-up Reminder',
       html: `
         <div class="recommender-modal-body">
           <div class="recommender-field">
-            <label class="recommender-label"><i class="fa-solid fa-calendar-days me-2"></i>التاريخ</label>
+            <label class="recommender-label"><i class="fa-solid fa-calendar-days me-2"></i>Date</label>
             <input type="date" id="recommender-date" class="recommender-input" required>
           </div>
           <div class="recommender-field">
-            <label class="recommender-label"><i class="fa-solid fa-note-sticky me-2"></i>ملاحظة (اختياري)</label>
-            <textarea id="recommender-notes" class="recommender-textarea" rows="4" placeholder="أضف ملاحظة للتذكرة..."></textarea>
+            <label class="recommender-label"><i class="fa-solid fa-note-sticky me-2"></i>Notes (optional)</label>
+            <textarea id="recommender-notes" class="recommender-textarea" rows="4" placeholder="Add a note for the reminder..."></textarea>
           </div>
         </div>
       `,
@@ -131,8 +131,8 @@ export class LeadDetailsComponent {
         actions: 'recommender-modal-actions'
       },
       showCancelButton: true,
-      confirmButtonText: 'إضافة',
-      cancelButtonText: 'إلغاء',
+      confirmButtonText: 'Add',
+      cancelButtonText: 'Cancel',
       width: '420px',
       padding: '1.5rem',
       preConfirm: () => {
@@ -140,7 +140,7 @@ export class LeadDetailsComponent {
         const notesInput = document.getElementById('recommender-notes') as HTMLTextAreaElement;
         const dateValue = dateInput?.value;
         if (!dateValue) {
-          Swal.showValidationMessage('يرجى تحديد التاريخ');
+          Swal.showValidationMessage('Please select a date');
           return false;
         }
         return { reminder_date: dateValue, notes: notesInput?.value?.trim() || '' };
@@ -156,7 +156,7 @@ export class LeadDetailsComponent {
         this.CorparatesSalesService.addToLead(data).subscribe({
           next: () => {
             Swal.fire({
-              title: 'تمت إضافة التذكرة',
+              title: 'Reminder Added',
               icon: 'success',
               timer: 2000,
               showConfirmButton: false
@@ -165,9 +165,9 @@ export class LeadDetailsComponent {
           },
           error: () => {
             Swal.fire({
-              title: 'خطأ',
-              text: 'فشل في إضافة التذكرة',
-              icon: 'error', confirmButtonText: 'موافق'
+              title: 'Error',
+              text: 'Failed to add reminder',
+              icon: 'error', confirmButtonText: 'OK'
             });
           }
         });
@@ -182,10 +182,10 @@ export class LeadDetailsComponent {
       },
       error: () => {
         Swal.fire({
-          title: 'خطأ',
-          text: 'فشل في تحديث الحالة',
+          title: 'Error',
+          text: 'Failed to update status',
           icon: 'error',
-          confirmButtonText: 'موافق'
+          confirmButtonText: 'OK'
         });
       }
     });
@@ -193,18 +193,18 @@ export class LeadDetailsComponent {
 
   deleteRecommender(id: number) {
     Swal.fire({
-      title: 'حذف التذكرة؟',
-      text: 'هل أنت متأكد من حذف هذه التذكرة؟',
+      title: 'Delete Reminder?',
+      text: 'Are you sure you want to delete this reminder?',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'نعم، احذف',
-      cancelButtonText: 'إلغاء'
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel'
     }).then((result) => {
       if (result.isConfirmed) {
         this.CorparatesSalesService.deleteRecommender(id).subscribe({
           next: () => {
             Swal.fire({
-              title: 'تم الحذف',
+              title: 'Deleted',
               icon: 'success',
               timer: 2000,
               showConfirmButton: false
@@ -213,9 +213,9 @@ export class LeadDetailsComponent {
           },
           error: () => {
             Swal.fire({
-              title: 'خطأ',
-              text: 'فشل في إزالة التذكرة',
-              icon: 'error', confirmButtonText: 'موافق'
+              title: 'Error',
+              text: 'Failed to remove reminder',
+              icon: 'error', confirmButtonText: 'OK'
             });
           }
         });
@@ -1391,10 +1391,10 @@ export class LeadDetailsComponent {
   editLeadStatus(currentStatusId?: number, currentStatusName?: string) {
     if (!this.leadStatuses?.length) {
       Swal.fire({
-        title: 'خطأ',
-        text: 'لم يتم تحميل الحالات. يرجى تحديث الصفحة والمحاولة مرة أخرى.',
+        title: 'Error',
+        text: 'Failed to load statuses. Please refresh the page and try again.',
         icon: 'error',
-        confirmButtonText: 'موافق'
+        confirmButtonText: 'OK'
       });
       return;
     }
@@ -1405,7 +1405,7 @@ export class LeadDetailsComponent {
     });
 
     Swal.fire({
-      title: 'تغيير حالة العميل',
+      title: 'Change Lead Status',
       input: 'select',
       inputOptions: statusOptions,
       inputValue: currentStatusId || '',
@@ -1413,7 +1413,7 @@ export class LeadDetailsComponent {
       confirmButtonText: 'تحديث الحالة',
       cancelButtonText: 'إلغاء',
       inputValidator: (newStatusId) => {
-        if (!newStatusId) return 'يرجى اختيار حالة';
+        if (!newStatusId) return 'Please select a status';
         return undefined;
       }
     }).then((result) => {
@@ -1432,8 +1432,8 @@ export class LeadDetailsComponent {
           this.leadStatusService.updateLeadStatus(this.id, data).subscribe({
             next: () => {
               Swal.fire({
-                title: 'تم تحديث الحالة',
-                text: `تم تغيير الحالة إلى: ${newStatus?.name}`,
+                title: 'Status Updated',
+                text: `Status changed to: ${newStatus?.name}`,
                 icon: 'success',
                 timer: 2000,
                 showConfirmButton: false
@@ -1442,10 +1442,10 @@ export class LeadDetailsComponent {
             },
             error: () => {
               Swal.fire({
-                title: 'خطأ',
-                text: 'فشل في تحديث الحالة',
+                title: 'Error',
+                text: 'Failed to update status',
                 icon: 'error',
-                confirmButtonText: 'موافق'
+                confirmButtonText: 'OK'
               });
             }
           });
@@ -1454,7 +1454,7 @@ export class LeadDetailsComponent {
         if (requiresDate) {
           Swal.fire({
             title: 'تحديد التاريخ',
-            html: '<input type="date" id="status-date" class="swal2-input" placeholder="يرجى تحديد تاريخ للمتابعة">',
+            html: '<input type="date" id="status-date" class="swal2-input" placeholder="Please select a date for follow-up">',
             showCancelButton: true,
             confirmButtonText: 'حفظ',
             cancelButtonText: 'إلغاء',
@@ -1462,7 +1462,7 @@ export class LeadDetailsComponent {
               const dateInput = document.getElementById('status-date') as HTMLInputElement;
               const dateValue = dateInput?.value;
               if (!dateValue) {
-                Swal.showValidationMessage('يرجى تحديد التاريخ');
+                Swal.showValidationMessage('Please select a date');
                 return false;
               }
               return dateValue;

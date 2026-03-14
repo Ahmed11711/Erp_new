@@ -209,14 +209,11 @@ export class LeadAddEditComponent {
   }
 
   createPhoneFormGroup(): FormGroup {
-    let dial_code = '+20';
-    if (this.countries && this.countries.length > 0) {
-      const egypt = this.countries.find(c => c.name === 'Egypt');
-      dial_code = egypt ? egypt.dial_code : '+20';
-    }
+    const egypt = this.countries?.find((c: any) => c.name === 'Egypt');
+    const defaultDialCode = egypt?.dial_code || '+20';
 
     return new FormGroup({
-      dial_code: new FormControl(dial_code, [Validators.required]),
+      dial_code: new FormControl(defaultDialCode, [Validators.required]),
       contact_number: new FormControl(null, [Validators.pattern(/^\d{7,15}$/)]),
     });
   }
