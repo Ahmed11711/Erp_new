@@ -110,9 +110,20 @@ private function sendStaticReply($to)
         $body = '';
         if ($type === 'text') {
             $body = $messageData['text']['body'];
+        } elseif ($type === 'interactive') {
+            // Extract button reply or list reply for readable display
+            $interactive = $messageData['interactive'] ?? [];
+            $buttonReply = $interactive['button_reply'] ?? null;
+            $listReply = $interactive['list_reply'] ?? null;
+            if ($buttonReply && isset($buttonReply['title'])) {
+                $body = '🔘 ' . $buttonReply['title'];
+            } elseif ($listReply && isset($listReply['title'])) {
+                $body = '📋 ' . $listReply['title'];
+            } else {
+                $body = '[رسالة تفاعلية]';
+            }
         } else {
-             // Handle other types if needed (image, etc.)
-             $body = '[' . ucfirst($type) . ' Message]';
+            $body = '[' . ucfirst($type) . ' Message]';
         }
 
         // Get customer name from contacts if available

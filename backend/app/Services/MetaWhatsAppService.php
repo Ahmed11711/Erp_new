@@ -30,13 +30,11 @@ class MetaWhatsAppService
     private function getPhoneNumberId(?string $userPhoneNumberId): ?string
     {
         if ($userPhoneNumberId) {
-            // Check if it matches any configured phone number
             $configuredNumbers = $this->getConfiguredPhoneNumbers();
             return $configuredNumbers[$userPhoneNumberId] ?? null;
         }
-        
-        // Default to first phone number
-        return env('META_PHONE_NUMBER_ID');
+
+        return config('services.meta_whatsapp.phone_number_id');
     }
 
     /**
@@ -44,15 +42,11 @@ class MetaWhatsAppService
      */
     private function getAccessToken(?string $userPhoneNumberId): ?string
     {
-        if ($userPhoneNumberId) {
-            // Return corresponding token for the phone number
-            if ($userPhoneNumberId === env('META_PHONE_NUMBER_ID_2')) {
-                return env('META_ACCESS_TOKEN_2');
-            }
+        if ($userPhoneNumberId && $userPhoneNumberId === config('services.meta_whatsapp.phone_number_id_2')) {
+            return config('services.meta_whatsapp.access_token_2');
         }
-        
-        // Default to first token
-        return env('META_ACCESS_TOKEN');
+
+        return config('services.meta_whatsapp.access_token');
     }
 
     /**
@@ -60,10 +54,13 @@ class MetaWhatsAppService
      */
     private function getConfiguredPhoneNumbers(): array
     {
-        return [
-            env('META_PHONE_NUMBER_ID') => env('META_PHONE_NUMBER_ID'),
-            env('META_PHONE_NUMBER_ID_2') => env('META_PHONE_NUMBER_ID_2'),
-        ];
+        $phone1 = config('services.meta_whatsapp.phone_number_id');
+        $phone2 = config('services.meta_whatsapp.phone_number_id_2');
+
+        return array_filter([
+            $phone1 => $phone1,
+            $phone2 => $phone2,
+        ]);
     }
 
     /**
@@ -71,9 +68,11 @@ class MetaWhatsAppService
      */
     public static function getAvailablePhoneNumbers(): array
     {
-        $phone1Id = env('META_PHONE_NUMBER_ID');
-        $phone2Id = env('META_PHONE_NUMBER_ID_2');
-        
+        $phone1Id = config('services.meta_whatsapp.phone_number_id');
+        $phone2Id = config('services.meta_whatsapp.phone_number_id_2');
+        $token1 = config('services.meta_whatsapp.access_token');
+        $token2 = config('services.meta_whatsapp.access_token_2');
+
         // If no phone numbers are configured, provide mock numbers for testing
         if (empty($phone1Id) && empty($phone2Id)) {
             return [
@@ -83,23 +82,23 @@ class MetaWhatsAppService
                     'is_configured' => false
                 ],
                 [
-                    'id' => 'mock_phone_2', 
+                    'id' => 'mock_phone_2',
                     'name' => 'WhatsApp Number 2 (Test)',
                     'is_configured' => false
                 ],
             ];
         }
-        
+
         return [
             [
                 'id' => $phone1Id ?: 'mock_phone_1',
                 'name' => 'WhatsApp Number 1',
-                'is_configured' => !empty($phone1Id) && !empty(env('META_ACCESS_TOKEN'))
+                'is_configured' => ! empty($phone1Id) && ! empty($token1)
             ],
             [
                 'id' => $phone2Id ?: 'mock_phone_2',
-                'name' => 'WhatsApp Number 2', 
-                'is_configured' => !empty($phone2Id) && !empty(env('META_ACCESS_TOKEN_2'))
+                'name' => 'WhatsApp Number 2',
+                'is_configured' => ! empty($phone2Id) && ! empty($token2)
             ],
         ];
     }
@@ -111,10 +110,34 @@ class MetaWhatsAppService
     {
         $assignedPhoneNumbers = WhatsAppAssignment::getPhoneNumbersByUserId($userId);
         $availableNumbers = self::getAvailablePhoneNumbers();
-        
-        return array_filter($availableNumbers, function($number) use ($assignedPhoneNumbers) {
-            return in_array($number['id'], $assignedPhoneNumbers);
-        });
+
+        if (empty($assignedPhoneNumbers)) {
+            return [];
+        }
+
+        $availableIds = array_map('strval', array_column($availableNumbers, 'id'));
+        $unmatchedAssignedIds = array_values(array_filter($assignedPhoneNumbers, fn ($id) => ! in_array((string) $id, $availableIds)));
+        sort($unmatchedAssignedIds);
+        $unmatchedIndex = 0;
+
+        $result = [];
+        foreach ($availableNumbers as $number) {
+            $numId = (string) ($number['id'] ?? '');
+            $isAssigned = in_array($numId, $assignedPhoneNumbers);
+
+            if (! $isAssigned && isset($unmatchedAssignedIds[$unmatchedIndex])) {
+                $isAssigned = true;
+                // Use real DB id for MetaWhatsAppService (sending) when mapping mock to real
+                $number = array_merge($number, ['id' => $unmatchedAssignedIds[$unmatchedIndex]]);
+                $unmatchedIndex++;
+            }
+
+            if ($isAssigned) {
+                $result[] = $number;
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -125,10 +148,25 @@ class MetaWhatsAppService
         $assignmentsByPhone = WhatsAppAssignment::getAllWithPhoneNumberDetails();
         $availableNumbers = self::getAvailablePhoneNumbers();
         
+        // DB phone_number_ids not in available numbers (e.g. real IDs when UI shows mock IDs)
+        $availableIds = collect($availableNumbers)->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $unmatchedDbIds = $assignmentsByPhone->keys()
+            ->filter(fn ($k) => ! in_array((string) $k, $availableIds))
+            ->sort()
+            ->values()
+            ->all();
+        $unmatchedIndex = 0;
+        
         $result = [];
         foreach ($availableNumbers as $phoneNumber) {
             $phoneNumberId = (string) ($phoneNumber['id'] ?? '');
+            
+            // Find matching assignment group: direct match or by position (when config uses mock IDs)
             $assignmentGroup = $assignmentsByPhone->get($phoneNumberId);
+            if (! $assignmentGroup && isset($unmatchedDbIds[$unmatchedIndex])) {
+                $assignmentGroup = $assignmentsByPhone->get($unmatchedDbIds[$unmatchedIndex]);
+                $unmatchedIndex++;
+            }
             
             $assignedUsers = [];
             if ($assignmentGroup) {

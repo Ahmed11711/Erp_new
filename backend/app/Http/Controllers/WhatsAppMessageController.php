@@ -97,11 +97,11 @@ class WhatsAppMessageController extends Controller
 
             // Format phone number (ensure it starts with country code)
             if (!str_starts_with($phone, '+')) {
-                // Assume Egypt country code if not provided
+                // Assume Egypt country code (+20) if not provided
                 if (str_starts_with($phone, '0')) {
-                    $phone = '+2' . substr($phone, 1);
+                    $phone = '+20' . substr($phone, 1);
                 } else {
-                    $phone = '+2' . $phone;
+                    $phone = '+20' . $phone;
                 }
             }
 
@@ -180,12 +180,12 @@ class WhatsAppMessageController extends Controller
             $templateId = $request->template_id;
             $orderId = $request->order_id;
 
-            // Format phone number
+            // Format phone number (Egypt +20)
             if (!str_starts_with($phone, '+')) {
                 if (str_starts_with($phone, '0')) {
-                    $phone = '+2' . substr($phone, 1);
+                    $phone = '+20' . substr($phone, 1);
                 } else {
-                    $phone = '+2' . $phone;
+                    $phone = '+20' . $phone;
                 }
             }
 
@@ -392,9 +392,9 @@ class WhatsAppMessageController extends Controller
             // Format phone number
             if (!str_starts_with($phone, '+')) {
                 if (str_starts_with($phone, '0')) {
-                    $phone = '+2' . substr($phone, 1);
+                    $phone = '+20' . substr($phone, 1);
                 } else {
-                    $phone = '+2' . $phone;
+                    $phone = '+20' . $phone;
                 }
             }
 
@@ -460,6 +460,17 @@ class WhatsAppMessageController extends Controller
     {
         try {
             $templates = config('whatsapp_meta_templates.templates', []);
+
+            // Fallback when config is empty (e.g. config cache or file not deployed)
+            if (empty($templates)) {
+                $templates = [
+                    ['name' => 'order_update', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب', 'حالة الطلب'], 'body_param_keys' => ['customer_name', 'id', 'order_status']],
+                    ['name' => 'order_confirmation', 'language' => 'en', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total']],
+                    ['name' => 'hello_world', 'language' => 'ar', 'body_params' => [], 'body_param_keys' => []],
+                ];
+                Log::warning('Meta templates loaded from fallback - config may be empty. Run: php artisan config:clear && php artisan config:cache');
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $templates,
@@ -501,7 +512,7 @@ class WhatsAppMessageController extends Controller
             }
 
             if (!str_starts_with($phone, '+')) {
-                $phone = str_starts_with($phone, '0') ? '+2' . substr($phone, 1) : '+2' . $phone;
+                $phone = str_starts_with($phone, '0') ? '+20' . substr($phone, 1) : '+20' . $phone;
             }
 
             $whatsappService = $this->initializeWhatsAppService();
@@ -554,7 +565,14 @@ class WhatsAppMessageController extends Controller
                     ['phone' => $phone],
                     ['name' => $order->customer_name, 'assigned_agent_id' => auth()->id()]
                 );
-                $messageContent = sprintf('[Meta Template: %s]', $templateName);
+                // Build readable message for chat display
+                $templateLabels = [
+                    'order_confirmation' => 'تأكيد الطلب',
+                    'order_update' => 'تحديث الطلب',
+                    'hello_world' => 'رسالة ترحيب',
+                ];
+                $label = $templateLabels[$templateName] ?? $templateName;
+                $messageContent = "📋 قالب: {$label} - الطلب #{$order->id} - {$order->customer_name} - {$order->net_total} ج.م";
                 Message::create([
                     'customer_id' => $customer->id,
                     'sender_id' => auth()->id(),

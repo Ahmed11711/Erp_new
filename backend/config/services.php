@@ -31,4 +31,13 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'meta_whatsapp' => [
+        'phone_number_id' => env('META_PHONE_NUMBER_ID'),
+        'access_token' => env('META_ACCESS_TOKEN'),
+        'verify_token' => env('META_VERIFY_TOKEN'),
+        'phone_number_id_2' => env('META_PHONE_NUMBER_ID_2'),
+        'access_token_2' => env('META_ACCESS_TOKEN_2'),
+        'verify_token_2' => env('META_VERIFY_TOKEN_2'),
+    ],
+
 ];

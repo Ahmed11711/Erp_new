@@ -42,9 +42,13 @@ export class DialogWhatsAppMessageComponent implements OnInit {
   loadMetaTemplates() {
     this.whatsappService.getMetaTemplates().subscribe({
       next: (res: any) => {
-        this.metaTemplates = res?.data ?? res ?? [];
+        const data = res?.data ?? res;
+        this.metaTemplates = Array.isArray(data) ? data : [];
       },
-      error: () => { this.metaTemplates = []; }
+      error: (err) => {
+        console.warn('Failed to load Meta templates:', err?.status, err?.error);
+        this.metaTemplates = [];
+      }
     });
   }
 
