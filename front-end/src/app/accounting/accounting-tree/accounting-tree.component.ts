@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { TreeAccountService } from '../services/tree-account.service';
+import { AccountingReportService } from '../services/accounting-report.service';
 import { TreeAccount } from '../interfaces/tree-account.interface';
 
 @Component({
@@ -11,6 +12,7 @@ export class AccountingTreeComponent implements OnInit {
   accounts: TreeAccount[] = [];
   treeData: TreeAccount[] = [];
   loading = false;
+  recalculating = false;
   showAddDialog = false;
   showEditDialog = false;
   selectedAccount: TreeAccount | null = null;
@@ -39,7 +41,10 @@ export class AccountingTreeComponent implements OnInit {
     is_trading_account: false
   };
 
-  constructor(private treeAccountService: TreeAccountService) { }
+  constructor(
+    private treeAccountService: TreeAccountService,
+    private accountingReportService: AccountingReportService
+  ) { }
 
   ngOnInit(): void {
     this.loadAccounts();
@@ -223,6 +228,29 @@ export class AccountingTreeComponent implements OnInit {
 
   findAccountById(id: number): TreeAccount | null {
     return this.accounts.find(acc => acc.id === id) || null;
+  }
+
+  recalculateAllBalances(): void {
+    if (this.recalculating) return;
+    if (!confirm('هل تريد إعادة حساب جميع أرصدة الشجرة؟ سيتم تحديث كل الحسابات بناءً على القيود.')) return;
+
+    this.recalculating = true;
+    this.accountingReportService.recalculateAllHierarchyBalances().subscribe({
+      next: (response: any) => {
+        this.recalculating = false;
+        if (response.success) {
+          alert(response.message || 'تم تحديث الأرصدة بنجاح');
+          this.loadAccounts();
+        } else {
+          alert(response.message || 'حدث خطأ أثناء إعادة الحساب');
+        }
+      },
+      error: (err) => {
+        this.recalculating = false;
+        console.error('Recalculate error:', err);
+        alert(err?.error?.message || 'فشل إعادة حساب الأرصدة');
+      }
+    });
   }
 
   getAccountTypeLabel(type: string): string {

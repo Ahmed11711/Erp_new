@@ -3,9 +3,14 @@
     <div class="col-12">
       <div class="header-section">
         <h2>شجرة الحسابات</h2>
-        <button class="btn btn-primary" (click)="openAddDialog()" [disabled]="loading">
-          <i class="fas fa-plus"></i> إضافة حساب رئيسي
-        </button>
+        <div class="header-actions">
+          <button class="btn btn-outline-secondary" (click)="recalculateAllBalances()" [disabled]="loading || recalculating" title="إعادة حساب جميع الأرصدة وتحديث الشجرة">
+            <i class="fas fa-sync-alt" [class.fa-spin]="recalculating"></i> إعادة حساب الأرصدة
+          </button>
+          <button class="btn btn-primary" (click)="openAddDialog()" [disabled]="loading">
+            <i class="fas fa-plus"></i> إضافة حساب رئيسي
+          </button>
+        </div>
       </div>
 
       <div class="loading-spinner" *ngIf="loading">

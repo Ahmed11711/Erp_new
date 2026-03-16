@@ -84,29 +84,9 @@
           </td>
         </tr>
 
-        <!-- الإيرادات الأخرى -->
+        <!-- ربح التشغيل -->
         <tr class="section-header">
-          <td colspan="3"><strong>ثالثاً: إيرادات أخرى</strong></td>
-        </tr>
-        <tr>
-          <td>أرباح رأس مالية</td>
-          <td dir="ltr">{{ formatNumber(data?.capital_gains) }}</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>إيرادات أخرى</td>
-          <td dir="ltr">{{ formatNumber(data?.other_revenues) }}</td>
-          <td></td>
-        </tr>
-        <tr class="subtotal-row">
-          <td><strong>إجمالي الإيرادات الأخرى</strong></td>
-          <td></td>
-          <td dir="ltr">{{ formatNumber((data?.capital_gains || 0) + (data?.other_revenues || 0)) }}</td>
-        </tr>
-
-        <!-- المصروفات -->
-        <tr class="section-header">
-          <td colspan="3"><strong>رابعاً: المصروفات</strong></td>
+          <td colspan="3"><strong>ثالثاً: مصروفات التشغيل</strong></td>
         </tr>
         <tr>
           <td>مصاريف النشاط</td>
@@ -134,17 +114,66 @@
           <td></td>
         </tr>
         <tr class="subtotal-row">
-          <td><strong>إجمالي المصروفات</strong></td>
+          <td><strong>إجمالي مصروفات التشغيل</strong></td>
           <td></td>
-          <td dir="ltr">{{ formatNumber(otherExpensesTotal) }}</td>
+          <td dir="ltr">{{ formatNumber(operatingExpensesTotal) }}</td>
         </tr>
 
-        <!-- صافي الربح/الخسارة -->
+        <!-- ربح التشغيل -->
+        <tr class="highlight-row" [class.result-loss]="operatingIncome < 0">
+          <td><strong>ربح التشغيل</strong></td>
+          <td></td>
+          <td dir="ltr" [class.text-profit]="operatingIncome >= 0" [class.text-loss]="operatingIncome < 0">
+            {{ formatNumber(operatingIncome) }}
+            <span *ngIf="operatingMarginPercent != null" class="margin-badge">({{ operatingMarginPercent }}%)</span>
+          </td>
+        </tr>
+
+        <!-- الإيرادات والمصروفات الأخرى -->
+        <tr class="section-header">
+          <td colspan="3"><strong>رابعاً: إيرادات ومصروفات أخرى</strong></td>
+        </tr>
+        <tr>
+          <td>أرباح رأس مالية</td>
+          <td dir="ltr">{{ formatNumber(data?.capital_gains) }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>إيرادات أخرى</td>
+          <td dir="ltr">{{ formatNumber(data?.other_revenues) }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>إيراد الفوائد</td>
+          <td dir="ltr">{{ formatNumber(data?.interest_income) }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>(-) مصروف الفوائد</td>
+          <td dir="ltr">{{ formatNumber(data?.interest_expense) }}</td>
+          <td></td>
+        </tr>
+
+        <!-- صافي الربح قبل الضريبة -->
+        <tr class="subtotal-row">
+          <td><strong>صافي الربح / (الخسارة) قبل الضريبة</strong></td>
+          <td></td>
+          <td dir="ltr">{{ formatNumber(totalWinBeforeVat) }}</td>
+        </tr>
+
+        <!-- الضريبة -->
+        <tr>
+          <td>(-) مصروف الضريبة</td>
+          <td dir="ltr">{{ formatNumber(data?.tax_expense) }}</td>
+          <td></td>
+        </tr>
+
+        <!-- صافي الربح النهائي -->
         <tr class="result-row" [class.result-loss]="!isProfit">
-          <td><strong>{{ isProfit ? 'صافي الربح' : 'صافي الخسارة' }} قبل الضريبة</strong></td>
+          <td><strong>{{ isProfit ? 'صافي الربح' : 'صافي الخسارة' }} بعد الضريبة</strong></td>
           <td></td>
           <td dir="ltr" [class.text-profit]="isProfit" [class.text-loss]="!isProfit">
-            {{ formatNumber(totalWinBeforeVat) }}
+            {{ formatNumber(netProfitAfterTax) }}
             <span *ngIf="netMarginPercent != null" class="margin-badge">({{ netMarginPercent }}%)</span>
           </td>
         </tr>

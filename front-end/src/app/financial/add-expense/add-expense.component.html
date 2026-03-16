@@ -18,7 +18,30 @@
         <div class="col-md-2">
           <input formControlName="created_at" class="form-control" type="date" [min]="minDate" [max]="maxDate">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+          <label class="form-label small text-muted">مكان الدفع</label>
+          <select formControlName="payment_type" (change)="onPaymentTypeChange()" class="form-control type">
+            <option value="safe">خزنة</option>
+            <option value="bank">بنك</option>
+            <option value="service_account">حساب خدمي</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small text-muted">الخزينة</label>
+          <select formControlName="safe_id" *ngIf="paymentType === 'safe'" class="form-control type">
+            <option [ngValue]="null" disabled>-- اختر الخزينة --</option>
+            <option *ngFor="let elm of safesData" [value]="elm.id">{{ elm.name }}</option>
+          </select>
+          <select formControlName="bank_id" *ngIf="paymentType === 'bank'" class="form-control type">
+            <option [ngValue]="null" disabled>-- اختر البنك --</option>
+            <option *ngFor="let elm of banksData" [value]="elm.id">{{ elm.name }}</option>
+          </select>
+          <select formControlName="service_account_id" *ngIf="paymentType === 'service_account'" class="form-control type">
+            <option [ngValue]="null" disabled>-- اختر الحساب الخدمي --</option>
+            <option *ngFor="let elm of serviceAccountsData" [value]="elm.id">{{ elm.name }}</option>
+          </select>
+        </div>
+        <div class="col-md-2">
           <select formControlName='expense_type' class="form-control type">
             <option disabled selected value="نوع المصروف">نوع المصروف</option>
             <option value="مصروف تشغيل">مصروف تشغيل</option>
@@ -26,19 +49,12 @@
             <option value="مصروف ادارى">مصروف ادارى</option>
           </select>
         </div>
-        <div  class="col-md-4">
-          <select formControlName='kind_id' class="form-control type" id="inlineFormCustomSelect" >
+        <div class="col-md-2">
+          <select formControlName='kind_id' class="form-control type">
             <option disabled selected value="فئة المصروف">فئة المصروف</option>
-            <option *ngFor="let elm of expenseKind" [value]="elm.id">{{elm.expense_kind}}</option>
+            <option *ngFor="let elm of expenseKind" [value]="elm.id">{{ elm.expense_kind }}</option>
           </select>
         </div>
-        <div class="col-md-3">
-          <select formControlName='bank_id' class="form-control type" id="inlineFormCustomSelect" >
-            <option disabled selected value="الخزينة">الخزينة</option>
-            <option *ngFor="let elm of banksData" [value]="elm.id">{{elm.name}}</option>
-          </select>
-        </div>
-
       </div>
 
       <div class="row mt-3">
@@ -95,9 +111,9 @@
       </div>
       <div class="text-center mt-2">
         <button
-          [disabled]="form.get('expense_type')?.value =='نوع المصروف' ||
-          form.get('kind_id')?.value =='فئة المصروف' ||
-          form.get('bank_id')?.value =='الخزينة' ||
+          [disabled]="form.get('expense_type')?.value == 'نوع المصروف' ||
+          form.get('kind_id')?.value == 'فئة المصروف' ||
+          !isSourceSelected ||
           form.invalid"
           type="submit" class="btn submit text-white">صرف</button>
       </div>
