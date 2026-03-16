@@ -406,6 +406,10 @@ class PurchasesController extends Controller
                 'description' => 'فاتورة مشتريات - صرف من ' . $sourceName,
                 'daily_entry_id' => $dailyEntry->id,
             ]);
+            // تحديث الحساب والحسابات الأب في الشجرة
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+            $accService->updateAccountHierarchyBalances($supplierTreeId);
+            $accService->updateAccountHierarchyBalances($creditTreeId);
         }
     }
 

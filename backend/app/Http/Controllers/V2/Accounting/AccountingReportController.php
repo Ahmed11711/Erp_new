@@ -105,8 +105,13 @@ class AccountingReportController extends Controller
     }
 
     /**
-     * Trial Balance Report - Enhanced Version
-     * Supports date ranges, opening balance, movement, and closing balance
+     * Trial Balance Report - Enhanced Version (ميزان المراجعة الشامل)
+     * Follows best practices of professional accounting systems:
+     * - Includes ALL accounts (roots + children) - no exclusion
+     * - Opening balance, movement, closing balance columns
+     * - Standard account type order: Assets, Liabilities, Equity, Revenue, Expense
+     * - Optimized queries (single batch fetch)
+     * - Options: leaf_only, include_zero_balance
      */
     public function trialBalance(Request $request)
     {
@@ -114,121 +119,142 @@ class AccountingReportController extends Controller
         $request->validate([
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date|after_or_equal:date_from',
-            'account_type' => 'nullable|string',
+            'account_type' => 'nullable|string|in:asset,liability,equity,revenue,expense',
             'level' => 'nullable|integer',
             'search' => 'nullable|string',
+            'leaf_only' => 'nullable|boolean',
+            'include_zero_balance' => 'nullable|boolean',
         ]);
 
         $dateFrom = $request->date_from;
         $dateTo = $request->date_to ?? now()->format('Y-m-d');
-        
-        // Build accounts query
-        $accountsQuery = TreeAccount::whereNotNull('parent_id')
-            ->with(['parent']);
+        $leafOnly = $request->boolean('leaf_only', false);
+        $includeZeroBalance = $request->boolean('include_zero_balance', false);
 
-        // Apply filters
-        if ($request->has('account_type')) {
+        // Build accounts query - include ALL accounts (roots + children)
+        $accountsQuery = TreeAccount::with(['parent']);
+
+        if ($leafOnly) {
+            $accountsQuery->whereDoesntHave('children');
+        }
+
+        if ($request->filled('account_type')) {
             $accountsQuery->where('type', $request->account_type);
         }
 
-        if ($request->has('level')) {
+        if ($request->filled('level')) {
             $accountsQuery->where('level', $request->level);
         }
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $search = $request->search;
-            $accountsQuery->where(function($q) use ($search) {
+            $accountsQuery->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('name_en', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
+                    ->orWhere('name_en', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
             });
         }
 
-        $accounts = $accountsQuery->orderBy('code')->get();
+        // Standard order: asset, liability, equity, revenue, expense (GAAP/IFRS)
+        $typeOrder = ['asset' => 1, 'liability' => 2, 'equity' => 3, 'revenue' => 4, 'expense' => 5];
+        $accounts = $accountsQuery->get()->sortBy(function ($a) use ($typeOrder) {
+            return ($typeOrder[$a->type] ?? 99) * 100000 + (int) $a->code;
+        })->values();
+
+        $accountIds = $accounts->pluck('id')->toArray();
+
+        if (empty($accountIds)) {
+            return response()->json([
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'data' => [],
+                'totals' => [
+                    'opening_debit' => 0, 'opening_credit' => 0,
+                    'movement_debit' => 0, 'movement_credit' => 0,
+                    'closing_debit' => 0, 'closing_credit' => 0,
+                    'opening_difference' => 0, 'movement_difference' => 0, 'closing_difference' => 0,
+                ],
+                'validation' => ['is_balanced' => true, 'message' => 'ميزان المراجعة متوازن'],
+                'count' => 0,
+                'options' => ['leaf_only' => $leafOnly, 'include_zero_balance' => $includeZeroBalance],
+            ], 200);
+        }
+
+        // Optimized: single query for all opening balances (before date_from)
+        $openingRows = collect();
+        if ($dateFrom && !empty($accountIds)) {
+            $openingRows = AccountEntry::whereIn('tree_account_id', $accountIds)
+                ->where('created_at', '<', $dateFrom . ' 00:00:00')
+                ->selectRaw('tree_account_id, COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
+                ->groupBy('tree_account_id')
+                ->get()
+                ->keyBy('tree_account_id');
+        }
+
+        // Optimized: single query for all movement (date_from to date_to)
+        $movementRows = AccountEntry::whereIn('tree_account_id', $accountIds)
+            ->when($dateFrom, fn ($q) => $q->where('created_at', '>=', $dateFrom . ' 00:00:00'))
+            ->where('created_at', '<=', $dateTo . ' 23:59:59')
+            ->selectRaw('tree_account_id, COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
+            ->groupBy('tree_account_id')
+            ->get()
+            ->keyBy('tree_account_id');
 
         $trialBalance = [];
 
         foreach ($accounts as $account) {
-            // Calculate opening balance (before date_from)
-            $openingDebit = 0;
-            $openingCredit = 0;
-            
-            if ($dateFrom) {
-                $openingDebit = AccountEntry::where('tree_account_id', $account->id)
-                    ->where('created_at', '<', $dateFrom . ' 00:00:00')
-                    ->sum('debit');
-
-                $openingCredit = AccountEntry::where('tree_account_id', $account->id)
-                    ->where('created_at', '<', $dateFrom . ' 00:00:00')
-                    ->sum('credit');
-            }
-
+            $openingRow = $openingRows->get($account->id);
+            $openingDebit = (float) ($openingRow?->total_debit ?? 0);
+            $openingCredit = (float) ($openingRow?->total_credit ?? 0);
             $openingBalance = $openingDebit - $openingCredit;
 
-            // Calculate movement (between date_from and date_to)
-            $movementQuery = AccountEntry::where('tree_account_id', $account->id);
-            
-            if ($dateFrom) {
-                $movementQuery->where('created_at', '>=', $dateFrom . ' 00:00:00');
-            }
-            
-            $movementQuery->where('created_at', '<=', $dateTo . ' 23:59:59');
+            $movRow = $movementRows->get($account->id);
+            $movementDebit = (float) ($movRow->total_debit ?? 0);
+            $movementCredit = (float) ($movRow->total_credit ?? 0);
 
-            $movementDebit = $movementQuery->sum('debit');
-            $movementCredit = AccountEntry::where('tree_account_id', $account->id)
-                ->when($dateFrom, function($q) use ($dateFrom) {
-                    return $q->where('created_at', '>=', $dateFrom . ' 00:00:00');
-                })
-                ->where('created_at', '<=', $dateTo . ' 23:59:59')
-                ->sum('credit');
-
-            // Calculate closing balance
             $closingBalance = $openingBalance + ($movementDebit - $movementCredit);
 
-            // Only include accounts with activity
-            if ($openingBalance != 0 || $movementDebit != 0 || $movementCredit != 0 || $closingBalance != 0) {
-                $trialBalance[] = [
-                    'account_id' => $account->id,
-                    'account_code' => $account->code,
-                    'account_name' => $account->name,
-                    'account_name_en' => $account->name_en,
-                    'account_type' => $account->type,
-                    'level' => $account->level,
-                    'parent_name' => $account->parent ? $account->parent->name : null,
-                    
-                    // Opening Balance
-                    'opening_debit' => $openingBalance > 0 ? abs($openingBalance) : 0,
-                    'opening_credit' => $openingBalance < 0 ? abs($openingBalance) : 0,
-                    
-                    // Movement
-                    'movement_debit' => $movementDebit,
-                    'movement_credit' => $movementCredit,
-                    
-                    // Closing Balance
-                    'closing_debit' => $closingBalance > 0 ? abs($closingBalance) : 0,
-                    'closing_credit' => $closingBalance < 0 ? abs($closingBalance) : 0,
-                ];
+            $hasActivity = $openingBalance != 0 || $movementDebit != 0 || $movementCredit != 0 || $closingBalance != 0;
+
+            if (!$hasActivity && !$includeZeroBalance) {
+                continue;
             }
+
+            $trialBalance[] = [
+                'account_id' => $account->id,
+                'account_code' => $account->code,
+                'account_name' => $account->name,
+                'account_name_en' => $account->name_en,
+                'account_type' => $account->type,
+                'level' => $account->level,
+                'parent_name' => $account->parent?->name,
+
+                'opening_debit' => $openingBalance > 0 ? round(abs($openingBalance), 2) : 0,
+                'opening_credit' => $openingBalance < 0 ? round(abs($openingBalance), 2) : 0,
+
+                'movement_debit' => round($movementDebit, 2),
+                'movement_credit' => round($movementCredit, 2),
+
+                'closing_debit' => $closingBalance > 0 ? round(abs($closingBalance), 2) : 0,
+                'closing_credit' => $closingBalance < 0 ? round(abs($closingBalance), 2) : 0,
+            ];
         }
 
-        // Calculate totals
         $totals = [
-            'opening_debit' => collect($trialBalance)->sum('opening_debit'),
-            'opening_credit' => collect($trialBalance)->sum('opening_credit'),
-            'movement_debit' => collect($trialBalance)->sum('movement_debit'),
-            'movement_credit' => collect($trialBalance)->sum('movement_credit'),
-            'closing_debit' => collect($trialBalance)->sum('closing_debit'),
-            'closing_credit' => collect($trialBalance)->sum('closing_credit'),
+            'opening_debit' => round(collect($trialBalance)->sum('opening_debit'), 2),
+            'opening_credit' => round(collect($trialBalance)->sum('opening_credit'), 2),
+            'movement_debit' => round(collect($trialBalance)->sum('movement_debit'), 2),
+            'movement_credit' => round(collect($trialBalance)->sum('movement_credit'), 2),
+            'closing_debit' => round(collect($trialBalance)->sum('closing_debit'), 2),
+            'closing_credit' => round(collect($trialBalance)->sum('closing_credit'), 2),
         ];
 
-        $totals['opening_difference'] = abs($totals['opening_debit'] - $totals['opening_credit']);
-        $totals['movement_difference'] = abs($totals['movement_debit'] - $totals['movement_credit']);
-        $totals['closing_difference'] = abs($totals['closing_debit'] - $totals['closing_credit']);
+        $totals['opening_difference'] = round(abs($totals['opening_debit'] - $totals['opening_credit']), 2);
+        $totals['movement_difference'] = round(abs($totals['movement_debit'] - $totals['movement_credit']), 2);
+        $totals['closing_difference'] = round(abs($totals['closing_debit'] - $totals['closing_credit']), 2);
 
-        // Validate trial balance equality
         $validation = $this->accountingService->validateTrialBalance($trialBalance);
 
-        // Update account hierarchy balances if requested
         if ($request->get('update_hierarchy', false)) {
             foreach ($accounts as $account) {
                 $this->accountingService->updateAccountHierarchyBalances($account->id);
@@ -242,6 +268,10 @@ class AccountingReportController extends Controller
             'totals' => $totals,
             'validation' => $validation,
             'count' => count($trialBalance),
+            'options' => [
+                'leaf_only' => $leafOnly,
+                'include_zero_balance' => $includeZeroBalance,
+            ],
         ], 200);
     }
 
@@ -279,7 +309,7 @@ class AccountingReportController extends Controller
     }
 
     /**
-     * Update Account Hierarchy Balances
+     * Update Account Hierarchy Balances (single account)
      */
     public function updateHierarchyBalances(Request $request)
     {
@@ -299,6 +329,31 @@ class AccountingReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'فشل تحديث الأرصدة: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * Recalculate ALL account hierarchy balances from scratch
+     * إعادة حساب جميع أرصدة الشجرة - يضمن أن كل حساب يؤثر في ما فوقه
+     */
+    public function recalculateAllHierarchyBalances(Request $request)
+    {
+        try {
+            $result = $this->accountingService->recalculateAllHierarchyBalances();
+
+            return response()->json([
+                'success' => $result['success'],
+                'message' => $result['message'],
+                'updated_count' => $result['updated_count'],
+                'total_accounts' => $result['total_accounts'] ?? null,
+                'errors' => $result['errors'] ?? []
+            ], $result['success'] ? 200 : 400);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل إعادة الحساب: ' . $e->getMessage()
             ], 400);
         }
     }
@@ -410,9 +465,12 @@ class AccountingReportController extends Controller
     }
 
     /**
-     * Income Statement
-     * Computes revenues, COGS, expenses and margins from accounting entries
+     * Income Statement (قائمة الدخل)
+     * Multi-step format per GAAP/IFRS best practices
+     * Computes: Revenue → COGS → Gross Profit → Operating Expenses → Operating Income
+     *         → Other Income/Expenses → EBIT → Interest → EBT → Tax → Net Income
      * Inputs: month=YYYY-MM or date_from/date_to
+     * Uses only leaf accounts to prevent double-counting in hierarchical chart of accounts
      */
     public function incomeStatement(Request $request)
     {
@@ -430,20 +488,23 @@ class AccountingReportController extends Controller
             $end = $request->date_to ?: date('Y-m-t', strtotime($start));
         }
 
-        // Helper to constrain by period
         $withinPeriod = function ($q) use ($start, $end) {
             return $q->where('created_at', '>=', $start . ' 00:00:00')
                      ->where('created_at', '<=', $end . ' 23:59:59');
         };
 
-        // Load all accounts once
-        $accounts = TreeAccount::select('id', 'name', 'name_en', 'type', 'detail_type')->get()->keyBy('id');
+        // Leaf accounts only: prevents double-counting when parent balance = sum of children
+        $leafAccountIds = TreeAccount::whereDoesntHave('children')->pluck('id')->toArray();
+        $accounts = TreeAccount::select('id', 'name', 'name_en', 'code', 'type', 'detail_type')
+            ->whereIn('id', $leafAccountIds)
+            ->get()
+            ->keyBy('id');
 
-        // Query sums by account id
         $entrySums = AccountEntry::select('tree_account_id',
                 DB::raw('SUM(debit) as total_debit'),
                 DB::raw('SUM(credit) as total_credit')
             )
+            ->whereIn('tree_account_id', $leafAccountIds)
             ->when(true, $withinPeriod)
             ->groupBy('tree_account_id')
             ->get()
@@ -454,7 +515,6 @@ class AccountingReportController extends Controller
                 ]];
             });
 
-        // Helper to net amount by nature
         $netByNature = function ($acc, $sum) {
             if (!$sum) return 0.0;
             $type = $acc->type ?? null;
@@ -464,7 +524,6 @@ class AccountingReportController extends Controller
             return (float)$sum['debit'] - (float)$sum['credit'];
         };
 
-        // Pattern helpers
         $hasKeyword = function ($name, array $patterns) {
             $n = mb_strtolower($name ?? '');
             foreach ($patterns as $p) {
@@ -473,7 +532,7 @@ class AccountingReportController extends Controller
             return false;
         };
 
-        // Buckets
+        // Buckets - GAAP/IFRS multi-step structure
         $sales = 0.0;
         $salesReturns = 0.0;
         $cogs = 0.0;
@@ -484,14 +543,17 @@ class AccountingReportController extends Controller
         $depreciation = 0.0;
         $otherRevenues = 0.0;
         $capitalGains = 0.0;
+        $interestExpense = 0.0;
+        $interestIncome = 0.0;
+        $taxExpense = 0.0;
 
         foreach ($entrySums as $accId => $sum) {
             $acc = $accounts->get($accId);
             if (!$acc) continue;
 
             $net = $netByNature($acc, $sum);
-            $name = $acc->name . ' ' . $acc->name_en;
-            $detail = $acc->detail_type;
+            $name = ($acc->name ?? '') . ' ' . ($acc->name_en ?? '');
+            $detail = $acc->detail_type ?? '';
 
             if (in_array($acc->type, ['revenue', 'income'])) {
                 if ($detail === 'sales' || $hasKeyword($name, ['مبيعات', 'sales'])) {
@@ -500,13 +562,15 @@ class AccountingReportController extends Controller
                     $salesReturns += abs($net);
                 } elseif ($detail === 'capital_gain' || $hasKeyword($name, ['رأس مالية', 'capital gain'])) {
                     $capitalGains += $net;
+                } elseif ($detail === 'interest_income' || $hasKeyword($name, ['فوائد', 'إيراد فوائد', 'interest'])) {
+                    $interestIncome += $net;
                 } else {
                     $otherRevenues += $net;
                 }
             } elseif ($acc->type === 'expense') {
-                if ($detail === 'cogs' || $hasKeyword($name, ['تكلفة المبيعات', 'cost of sales', 'COGS'])) {
+                if ($detail === 'cogs' || $hasKeyword($name, ['تكلفة المبيعات', 'cost of sales', 'COGS', 'تكلفة البضاعة'])) {
                     $cogs += $net;
-                } elseif ($detail === 'sales_expense' || $hasKeyword($name, ['مصاريف مبيعات'])) {
+                } elseif ($detail === 'sales_expense' || $hasKeyword($name, ['مصاريف مبيعات', 'مصروف مبيعات'])) {
                     $salesExpenses += $net;
                 } elseif ($detail === 'admin' || $hasKeyword($name, ['عمومية', 'إدارية', 'إداري', 'general & admin', 'g&a'])) {
                     $adminExpenses += $net;
@@ -514,13 +578,17 @@ class AccountingReportController extends Controller
                     $purchaseExpenses += $net;
                 } elseif ($detail === 'depreciation' || $hasKeyword($name, ['اهلاك', 'استهلاك', 'depreciation', 'amortization'])) {
                     $depreciation += $net;
+                } elseif ($detail === 'interest_expense' || $hasKeyword($name, ['فوائد مدينة', 'مصروف فوائد', 'interest expense'])) {
+                    $interestExpense += $net;
+                } elseif ($detail === 'tax' || $hasKeyword($name, ['ضريبة', 'tax', 'زكاة'])) {
+                    $taxExpense += $net;
                 } else {
                     $operatingExpenses += $net;
                 }
             }
         }
 
-        // Get inventory balances (opening at start, closing at end)
+        // Inventory (for reference / COGS reconciliation)
         $inventoryAcc = TreeAccount::where('detail_type', 'inventory')->first();
         if (!$inventoryAcc) {
             $inventoryAcc = TreeAccount::where('type', 'asset')->where('name', 'like', '%مخزون%')->first();
@@ -542,40 +610,55 @@ class AccountingReportController extends Controller
             $closingInventory = max(0, (float)($closingSums->d ?? 0) - (float)($closingSums->c ?? 0));
         }
 
+        // Multi-step income statement (GAAP/IFRS)
         $netSales = $sales - $salesReturns;
         $grossProfit = $netSales - $cogs;
-        $otherIncomeTotal = $capitalGains + $otherRevenues;
-        $otherExpensesTotal = $purchaseExpenses + $adminExpenses + $depreciation + $salesExpenses;
         $operatingExpensesTotal = $operatingExpenses + $salesExpenses + $adminExpenses + $depreciation + $purchaseExpenses;
-        $netProfitBeforeTax = $grossProfit + $otherIncomeTotal - $otherExpensesTotal;
+        $operatingIncome = $grossProfit - $operatingExpensesTotal;
+        $otherIncomeTotal = $capitalGains + $otherRevenues + $interestIncome;
+        $otherExpensesTotal = $interestExpense;
+        $earningsBeforeTax = $operatingIncome + $otherIncomeTotal - $otherExpensesTotal;
+        $netProfitAfterTax = $earningsBeforeTax - $taxExpense;
 
-        // Margins
         $grossMarginPercent = $netSales != 0 ? round(($grossProfit / $netSales) * 100, 2) : 0;
-        $netMarginPercent = $netSales != 0 ? round(($netProfitBeforeTax / $netSales) * 100, 2) : 0;
+        $operatingMarginPercent = $netSales != 0 ? round(($operatingIncome / $netSales) * 100, 2) : 0;
+        $netMarginPercent = $netSales != 0 ? round(($netProfitAfterTax / $netSales) * 100, 2) : 0;
 
         return response()->json([
             'date_from' => $start,
             'date_to' => $end,
+            // Revenue section
             'sales' => round($sales, 2),
             'sales_returns' => round($salesReturns, 2),
             'net_sales' => round($netSales, 2),
+            // Cost of sales
             'opening_inventory' => round($openingInventory, 2),
             'closing_inventory' => round($closingInventory, 2),
             'cogs' => round($cogs, 2),
+            'gross_profit' => round($grossProfit, 2),
+            'gross_margin_percent' => $grossMarginPercent,
+            // Operating expenses
             'operating_expenses' => round($operatingExpenses, 2),
             'sales_expenses' => round($salesExpenses, 2),
             'admin_expenses' => round($adminExpenses, 2),
             'purchase_expenses' => round($purchaseExpenses, 2),
             'depreciation' => round($depreciation, 2),
-            'capital_gains' => round($capitalGains, 2),
+            'operating_expenses_total' => round($operatingExpensesTotal, 2),
+            'operating_income' => round($operatingIncome, 2),
+            'operating_margin_percent' => $operatingMarginPercent,
+            // Other income/expenses
             'other_revenues' => round($otherRevenues, 2),
-            'gross_profit' => round($grossProfit, 2),
-            'gross_margin_percent' => $grossMarginPercent,
+            'capital_gains' => round($capitalGains, 2),
+            'interest_income' => round($interestIncome, 2),
+            'interest_expense' => round($interestExpense, 2),
             'other_income_total' => round($otherIncomeTotal, 2),
             'other_expenses_total' => round($otherExpensesTotal, 2),
-            'operating_expenses_total' => round($operatingExpensesTotal, 2),
-            'net_profit_before_tax' => round($netProfitBeforeTax, 2),
-            'profit_margin_percent' => $netMarginPercent
+            // Bottom line
+            'earnings_before_tax' => round($earningsBeforeTax, 2),
+            'tax_expense' => round($taxExpense, 2),
+            'net_profit_after_tax' => round($netProfitAfterTax, 2),
+            'net_profit_before_tax' => round($earningsBeforeTax, 2),
+            'profit_margin_percent' => $netMarginPercent,
         ], 200);
     }
 

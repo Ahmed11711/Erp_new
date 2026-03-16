@@ -157,45 +157,128 @@ class AccountingService
     }
 
     /**
-     * Update parent account balance based on children
+     * Update parent account balance based on own entries + children (best practice: parent = own + children)
+     * يضمن أن الحساب الفرعي يؤثر في الحساب الأب وجميع المستويات الأعلى في الشجرة
      */
     private function updateParentAccountBalance(int $parentId): void
     {
         $parent = TreeAccount::findOrFail($parentId);
         
-        // Calculate sum of all direct children
+        // 1. Parent's direct entries (الحساب الأب قد يكون له قيود مباشرة)
+        $directDebit = AccountEntry::where('tree_account_id', $parentId)->sum('debit');
+        $directCredit = AccountEntry::where('tree_account_id', $parentId)->sum('credit');
+        
+        // 2. Sum of all direct children's balances (الأبناء قد يكون لهم أرصدة محدثة)
         $children = TreeAccount::where('parent_id', $parentId)->get();
+        $childrenDebit = $children->sum('debit_balance');
+        $childrenCredit = $children->sum('credit_balance');
         
-        $totalDebit = $children->sum('debit_balance');
-        $totalCredit = $children->sum('credit_balance');
+        // 3. Total = own entries + children (المجموع = القيود المباشرة + أرصدة الأبناء)
+        $totalDebit = $directDebit + $childrenDebit;
+        $totalCredit = $directCredit + $childrenCredit;
         
-        // Update parent balance
         $parent->debit_balance = $totalDebit;
         $parent->credit_balance = $totalCredit;
         $parent->balance = $totalDebit - $totalCredit;
         $parent->save();
 
-        // Continue up the hierarchy
+        // Continue up the hierarchy (الاستمرار للأعلى في الشجرة)
         if ($parent->parent_id) {
             $this->updateParentAccountBalance($parent->parent_id);
         }
     }
 
     /**
-     * Validate trial balance equality
+     * Recalculate all account hierarchy balances from scratch (bottom-up)
+     * إعادة حساب جميع أرصدة الشجرة من الصفر - مفيد لتصحيح سلامة البيانات
+     * يعالج الحسابات الطرفية فقط، والأباء يتم تحديثهم تلقائياً عند التصاعد
+     */
+    public function recalculateAllHierarchyBalances(): array
+    {
+        $updated = 0;
+        $errors = [];
+
+        try {
+            // Leaf accounts only - parents get updated when we propagate up
+            $leafAccounts = TreeAccount::whereDoesntHave('children')->get();
+            
+            foreach ($leafAccounts as $account) {
+                try {
+                    $this->updateAccountHierarchyBalances($account->id);
+                    $updated++;
+                } catch (\Exception $e) {
+                    $errors[] = "حساب {$account->id} ({$account->name}): " . $e->getMessage();
+                }
+            }
+
+            return [
+                'success' => empty($errors),
+                'updated_count' => $updated,
+                'total_accounts' => TreeAccount::count(),
+                'errors' => $errors,
+                'message' => empty($errors)
+                    ? "تم تحديث جميع الأرصدة بنجاح ({$updated} حساب طرفي)"
+                    : "تم التحديث مع بعض الأخطاء"
+            ];
+        } catch (\Exception $e) {
+            Log::error('Recalculate hierarchy failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'updated_count' => $updated,
+                'errors' => [$e->getMessage()],
+                'message' => 'فشل إعادة الحساب: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validate trial balance equality (مطابق لأفضل أنظمة المحاسبة)
+     * - التحقق من توازن الرصيد الافتتاحي والختامي والحركة
+     * - استخدام tolerance صغير (0.01) لتجنب أخطاء الفاصلة العائمة
      */
     public function validateTrialBalance(array $trialBalanceData): array
     {
-        $totalDebit = collect($trialBalanceData)->sum('closing_debit');
-        $totalCredit = collect($trialBalanceData)->sum('closing_credit');
-        $difference = abs($totalDebit - $totalCredit);
+        $tolerance = 0.01;
+        $data = collect($trialBalanceData);
+
+        $closingDebit = round($data->sum('closing_debit'), 2);
+        $closingCredit = round($data->sum('closing_credit'), 2);
+        $closingDiff = abs($closingDebit - $closingCredit);
+
+        $openingDebit = round($data->sum('opening_debit'), 2);
+        $openingCredit = round($data->sum('opening_credit'), 2);
+        $openingDiff = abs($openingDebit - $openingCredit);
+
+        $movementDebit = round($data->sum('movement_debit'), 2);
+        $movementCredit = round($data->sum('movement_credit'), 2);
+        $movementDiff = abs($movementDebit - $movementCredit);
+
+        $isBalanced = $closingDiff <= $tolerance && $movementDiff <= $tolerance;
 
         return [
-            'is_balanced' => $difference == 0,
-            'total_debit' => $totalDebit,
-            'total_credit' => $totalCredit,
-            'difference' => $difference,
-            'message' => $difference == 0 ? 'ميزان المراجعة متوازن' : 'ميزان المراجعة غير متوازن'
+            'is_balanced' => $isBalanced,
+            'total_debit' => $closingDebit,
+            'total_credit' => $closingCredit,
+            'difference' => $closingDiff,
+            'opening' => [
+                'debit' => $openingDebit,
+                'credit' => $openingCredit,
+                'difference' => $openingDiff,
+                'balanced' => $openingDiff <= $tolerance,
+            ],
+            'movement' => [
+                'debit' => $movementDebit,
+                'credit' => $movementCredit,
+                'difference' => $movementDiff,
+                'balanced' => $movementDiff <= $tolerance,
+            ],
+            'closing' => [
+                'debit' => $closingDebit,
+                'credit' => $closingCredit,
+                'difference' => $closingDiff,
+                'balanced' => $closingDiff <= $tolerance,
+            ],
+            'message' => $isBalanced ? 'ميزان المراجعة متوازن' : 'ميزان المراجعة غير متوازن - يرجى مراجعة القيود',
         ];
     }
 

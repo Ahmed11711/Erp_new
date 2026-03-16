@@ -40,10 +40,10 @@ class TreeAccount extends Model
     }
 
     /**
-     * Calculate the total balance including debit and credit
+     * Total balance = debit - credit (مطابق لأفضل أنظمة المحاسبة)
      */
     public function getTotalBalanceAttribute()
     {
-        return $this->balance + $this->debit_balance - $this->credit_balance;
+        return (float) ($this->debit_balance ?? 0) - (float) ($this->credit_balance ?? 0);
     }
 }

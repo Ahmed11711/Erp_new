@@ -346,6 +346,10 @@ class SupplierController extends Controller
                 $creditAcc = TreeAccount::find($creditTreeId);
                 $creditAcc->increment('credit_balance', $amount);
                 $creditAcc->decrement('balance', $amount);
+                // تحديث الحساب والحسابات الأب في الشجرة
+                $accService = app(\App\Services\Accounting\AccountingService::class);
+                $accService->updateAccountHierarchyBalances($supplierTreeId);
+                $accService->updateAccountHierarchyBalances($creditTreeId);
             }
 
             DB::commit();

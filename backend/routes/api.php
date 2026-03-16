@@ -443,6 +443,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
     Route::prefix('accounting/')->group(function () {
         Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
         Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
+        Route::post('/recalculate-all-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'recalculateAllHierarchyBalances']);
     });
     // Service Accounts
     Route::prefix('service-accounts/')->group(function () {

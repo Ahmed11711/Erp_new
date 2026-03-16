@@ -2624,6 +2624,11 @@ class OrdersController extends Controller
             $custAcc = \App\Models\TreeAccount::find($customerTreeId);
             $custAcc->increment('credit_balance', $amount);
             $custAcc->decrement('balance', $amount); // Asset decreases
+
+            // تحديث الحساب والحسابات الأب في الشجرة
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+            $accService->updateAccountHierarchyBalances($debitTreeId);
+            $accService->updateAccountHierarchyBalances($customerTreeId);
         }
     }
 

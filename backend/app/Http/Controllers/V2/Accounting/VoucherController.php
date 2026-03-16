@@ -286,6 +286,11 @@ class VoucherController extends Controller
             $debitAccount->save();
             $creditAccount->save();
 
+            // تحديث الحساب والحسابات الأب في الشجرة (لتأثير التعاملات على الحساب وما فوقه)
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            $accountingService->updateAccountHierarchyBalances($debitAccountId);
+            $accountingService->updateAccountHierarchyBalances($creditAccountId);
+
             // ------------------------------------------------------------------
             // UPDATE OPERATIONAL BALANCES (Legacy System)
             // ------------------------------------------------------------------
@@ -440,6 +445,11 @@ class VoucherController extends Controller
             $debitAccount->save();
             $creditAccount->save();
 
+            // تحديث الحساب والحسابات الأب في الشجرة
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            $accountingService->updateAccountHierarchyBalances($debitAccountId);
+            $accountingService->updateAccountHierarchyBalances($creditAccountId);
+
             // ------------------------------------------------------------------
             // APPLY NEW OPERATIONAL BALANCE
             // ------------------------------------------------------------------
@@ -477,28 +487,15 @@ class VoucherController extends Controller
             // Reverse accounting entries
             // Reverse accounting entries
              $oldEntries = AccountEntry::where('voucher_id', $voucher->id)->get();
+            $affectedAccountIds = $oldEntries->pluck('tree_account_id')->unique()->values()->all();
             foreach ($oldEntries as $entry) {
-                $acct = TreeAccount::find($entry->tree_account_id);
-                if ($acct) {
-                    if ($entry->debit > 0) {
-                        $acct->decrement('debit_balance', $entry->debit);
-                        if (in_array($acct->type, ['asset', 'expense'])) {
-                            $acct->decrement('balance', $entry->debit);
-                        } else {
-                            $acct->increment('balance', $entry->debit);
-                        }
-                    }
-                    if ($entry->credit > 0) {
-                        $acct->decrement('credit_balance', $entry->credit);
-                        if (in_array($acct->type, ['asset', 'expense'])) {
-                            $acct->increment('balance', $entry->credit);
-                        } else {
-                            $acct->decrement('balance', $entry->credit);
-                        }
-                    }
-                    $acct->save();
-                }
                 $entry->delete();
+            }
+
+            // إعادة حساب أرصدة الحسابات المتأثرة والحسابات الأب بعد حذف القيود
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            foreach ($affectedAccountIds as $accountId) {
+                $accountingService->updateAccountHierarchyBalances($accountId);
             }
 
             // Delete voucher
