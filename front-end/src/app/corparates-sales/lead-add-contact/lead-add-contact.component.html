@@ -1,32 +1,37 @@
 <div class="container-fluid mt-3">
-  <div><p class="title header py-3 my-3 w-50 m-auto"> Add Contact</p></div>
+  <div>
+    <p class="title header py-3 my-3 w-50 m-auto"> Add Contact</p>
+  </div>
   <div dir="ltr" class="container-fluid mt-3">
-    <form class="text-start w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
+    <form class="text-start w-100 mt-2" [formGroup]="form" *ngIf="form" (ngSubmit)="submitform()">
       <div class="row">
         <!-- contact data -->
         <div class="col-md-12" dir="ltr" formArrayName="contacts">
-          <div class="row mb-2" style="border-bottom: solid 1px #82225e;" *ngFor="let contactGroup of contacts.controls; let i = index" [formGroupName]="i">
+          <div class="row mb-2" style="border-bottom: solid 1px #82225e;"
+            *ngFor="let contactGroup of contacts.controls; let i = index" [formGroupName]="i">
             <div class="col-md-5">
               <div class="mb-3">
                 <div class="d-flex align-items-center mb-3">
                   <input autocomplete="off" class="form-control" placeholder="Contact Name"
-                  [class.is-valid]="contactGroup.get('contact_name')?.errors ==null && contactGroup.get('contact_name')?.touched"
-                  [class.is-invalid]="contactGroup.get('contact_name')?.errors !=null && contactGroup.get('contact_name')?.touched"
-                  formControlName='contact_name' type="text" class="form-control">
-                  <i class="fa-solid fa-trash mr-2" style="cursor: pointer;" *ngIf="i > 0" (click)="removeContact(i)"></i>
+                    [class.is-valid]="contactGroup.get('contact_name')?.errors ==null && contactGroup.get('contact_name')?.touched"
+                    [class.is-invalid]="contactGroup.get('contact_name')?.errors !=null && contactGroup.get('contact_name')?.touched"
+                    formControlName='contact_name' type="text" class="form-control">
+                  <i class="fa-solid fa-trash mr-2" style="cursor: pointer;" *ngIf="i > 0"
+                    (click)="removeContact(i)"></i>
                 </div>
                 <div class="d-flex align-items-center">
                   <input autocomplete="off" class="form-control" placeholder="Contact LinkedIn"
-                  [class.is-valid]="contactGroup.get('contact_linkedin')?.errors ==null && contactGroup.get('contact_linkedin')?.touched"
-                  [class.is-invalid]="contactGroup.get('contact_linkedin')?.errors !=null && contactGroup.get('contact_linkedin')?.touched"
-                  formControlName='contact_linkedin' type="text" class="form-control">
+                    [class.is-valid]="contactGroup.get('contact_linkedin')?.errors ==null && contactGroup.get('contact_linkedin')?.touched"
+                    [class.is-invalid]="contactGroup.get('contact_linkedin')?.errors !=null && contactGroup.get('contact_linkedin')?.touched"
+                    formControlName='contact_linkedin' type="text" class="form-control">
                 </div>
               </div>
             </div>
             <div class="col-md-7">
 
               <div formArrayName="phones">
-                <div class="mb-3 d-flex align-items-center" *ngFor="let phoneGroup of getPhones(i).controls; let j = index" [formGroupName]="j">
+                <div class="mb-3 d-flex align-items-center"
+                  *ngFor="let phoneGroup of getPhones(i).controls; let j = index" [formGroupName]="j">
                   <div style="margin-inline-end: 5px; width: 140px;">
                     <select class="form-control form-select" formControlName="dial_code">
                       <option [value]="elm.dial_code" *ngFor="let elm of countries">{{elm.dial_code}}</option>
@@ -34,27 +39,30 @@
                   </div>
                   <div class="w-100">
                     <input autocomplete="off" class="form-control" placeholder="Contact number"
-                    [class.is-valid]="phoneGroup.get('contact_number')?.errors ==null && phoneGroup.get('contact_number')?.touched"
-                    [class.is-invalid]="phoneGroup.get('contact_number')?.errors !=null && phoneGroup.get('contact_number')?.touched"
-                    formControlName='contact_number' type="text" class="form-control">
+                      [class.is-valid]="phoneGroup.get('contact_number')?.errors ==null && phoneGroup.get('contact_number')?.touched"
+                      [class.is-invalid]="phoneGroup.get('contact_number')?.errors !=null && phoneGroup.get('contact_number')?.touched"
+                      formControlName='contact_number' type="text" class="form-control">
                   </div>
                   <div>
-                    <i class="fa-solid fa-trash mr-2" style="cursor: pointer;" *ngIf="j > 0" (click)="removePhone(i,j)"></i>
+                    <i class="fa-solid fa-trash mr-2" style="cursor: pointer;" *ngIf="j > 0"
+                      (click)="removePhone(i,j)"></i>
                   </div>
                 </div>
                 <i class="fa-solid fa-plus mr-2" style="cursor: pointer; color: #82225e;" (click)="addPhone(i)"></i>
               </div>
 
               <div formArrayName="emails">
-                <div class="mb-3 d-flex align-items-center" *ngFor="let emailCtrl of getEmails(i).controls; let j = index">
+                <div class="mb-3 d-flex align-items-center"
+                  *ngFor="let emailCtrl of getEmails(i).controls; let j = index">
                   <div class=" w-100">
                     <input autocomplete="off" class="form-control" placeholder="Contact Email"
                       [class.is-valid]="emailCtrl.valid && emailCtrl.touched"
-                      [class.is-invalid]="emailCtrl.invalid && emailCtrl.touched"
-                      [formControlName]='j' type="text" class="form-control">
+                      [class.is-invalid]="emailCtrl.invalid && emailCtrl.touched" [formControlName]='j' type="text"
+                      class="form-control">
                   </div>
                   <div>
-                    <i class="fa-solid fa-trash mr-2" style="cursor: pointer;" *ngIf="j > 0" (click)="removeEmail(i,j)"></i>
+                    <i class="fa-solid fa-trash mr-2" style="cursor: pointer;" *ngIf="j > 0"
+                      (click)="removeEmail(i,j)"></i>
                   </div>
                 </div>
                 <i class="fa-solid fa-plus mr-2" style="cursor: pointer; color: #82225e;" (click)="addEmail(i)"></i>
@@ -63,7 +71,7 @@
           </div>
           <div class="text-right">
             <button type="button" class="btn btn-info mb-2" style="background-color: #82225e;" (click)="addContact()">
-              <i class="fa-solid fa-plus mr-2" style="cursor: pointer; color: white;" ></i>
+              <i class="fa-solid fa-plus mr-2" style="cursor: pointer; color: white;"></i>
               Add Contact
             </button>
           </div>
@@ -73,8 +81,7 @@
       </div>
 
       <div class="text-center mt-2">
-        <button
-          type="submit" class="btn submit my-3 text-white">Add</button>
+        <button type="submit" class="btn submit my-3 text-white">Add</button>
       </div>
 
     </form>

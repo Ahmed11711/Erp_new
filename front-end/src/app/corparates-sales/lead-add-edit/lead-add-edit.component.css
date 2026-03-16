@@ -1,135 +1,385 @@
-.header{
-  background-color: black;
-  color: white;
-  text-align: center;
-  font-size: 2rem;
-  border-radius: 7px;
+/* Simple, clean style for English LTR layout */
+.lead-form-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  text-align: left;
 }
 
-i:first-child{
-  font-size: 1rem;
-  color: #82225e;
-}
-
-
-.content{
-  padding: 20px 20px;
-  width: 500px;
-}
-
-
-
-.form-control:focus {
-  border-color: #82225e !important;
-  box-shadow: 0 0 0 0.1rem #82225e !important;
-}
-input{
-  direction: ltr;
-}
-
-form p{
-  margin: 0.5rem;
-}
-
-::ng-deep  .autocomplete-container .suggestions-container ul li a {
-  text-align: start !important;
-}
-
-::ng-deep  .autocomplete-container .input-container .x {
-  right: 0 !important;
-}
-
-.first td{
-  display: inline-block;
-  min-width: 12rem;
-  margin: 0 3rem;
-  text-align: center;
-}
-
-input , select , option{
-  font-size: 1.3rem;
-}
-
-.type , .type:focus{
-  background-color: #82225e;
-  color: white;
-  padding-right: 1rem;
-  text-align: center;
+.page-title {
+  font-size: 1.5rem;
   font-weight: 600;
-  font-size: 1.4rem;
-  border-radius: 10px;
+  color: #333;
+  margin: 0 0 1.5rem 0;
 }
 
-label{
-  font-size: 1.8rem;
+.lead-form {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.lead-form input,
+.lead-form select,
+.lead-form textarea {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Simple section blocks */
+.form-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Clean inputs */
+.input-label {
+  display: block;
+  font-size: 0.95rem;
   font-weight: 500;
+  color: #4b5563;
+  margin-bottom: 0.4rem;
 }
 
-.row table{
-  width: 90%;
+.form-control,
+.form-select {
+  width: 100%;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  font-size: 1rem;
+  background: #fff;
 }
 
-.row thead th{
-  background-color: #82225e;
+.form-control:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #82225e;
+  box-shadow: 0 0 0 2px rgba(130, 34, 94, 0.15);
 }
 
-.row thead{
+.form-control::placeholder {
+  color: #9ca3af;
+}
+
+.input-group {
+  margin-bottom: 0.9rem;
+}
+
+.input-group .d-flex {
+  display: flex;
+  align-items: stretch;
+}
+
+.input-group .d-flex .form-select {
+  flex: 1;
+  border-radius: 4px 0 0 4px;
+}
+
+.input-group .d-flex .btn-add-item {
+  border-radius: 0 4px 4px 0;
+  margin-left: 0;
+}
+
+/* Contact sections - clean like reference */
+.contact-section {
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.contact-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.contact-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+/* Reference style: Email left, Phone right, labels in purple, add button below */
+.contact-field-label {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #82225e;
+  margin-bottom: 0.5rem;
+}
+
+.contact-section .phone-group,
+.contact-section .email-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.contact-section .phone-input {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 1.15rem !important;
+  padding: 0.65rem 0.8rem;
+  min-height: 44px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.contact-section .phone-select {
+  min-width: 75px;
+  max-width: 85px;
+  flex-shrink: 0;
+  font-size: 0.85rem !important;
+  padding: 0.5rem 0.5rem;
+  min-height: 44px;
+  border-radius: 8px;
+}
+
+.contact-section .phone-select option {
+  font-size: 0.85rem;
+}
+
+.contact-section .email-input {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 1rem;
+  padding: 0.6rem 0.75rem;
+  min-height: 42px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.contact-section .contact-phones-col,
+.contact-section .contact-emails-col {
+  min-width: 0;
+}
+
+.contact-section .phones-emails-wrapper {
+  width: 100%;
+}
+
+.contact-section .phones-emails-wrapper .phone-group,
+.contact-section .phones-emails-wrapper .email-group {
+  width: 100%;
+}
+
+.contact-section .phones-emails-wrapper .btn-add-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  margin-top: 0.4rem;
+  padding: 0;
+  border-radius: 6px;
+  background: #82225e;
   color: white;
-  font-size: 1.5rem;
-  padding: 0 0.5rem;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
 }
 
-textarea{
-  font-size: 1.5rem;
-  padding: 0 0.5rem;
+.contact-section .phones-emails-wrapper .btn-add-item:hover {
+  background: #6a1a4a;
 }
 
-textarea:first-child::placeholder{
-  font-size: 1.5rem;
+.contact-section .btn-add-item {
+  flex-shrink: 0;
 }
 
-.submit {
-  background-color: black !important;
-  font-size: 1.8rem;
-  padding: 0.5rem 2rem !important;
+/* Simple buttons */
+.btn-add-contact {
+  background: #82225e;
+  color: white;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
 }
 
-.btn-add{
-  border: #82225e solid thin !important;
-  font-size: 1.8rem;
-  padding: 0.1rem 1.5rem !important;
-  border-radius: 2rem;
+.btn-add-contact:hover {
+  background: #6a1a4a;
 }
 
+.btn-add-item {
+  background: #82225e;
+  color: white;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+}
 
+.btn-add-item:hover {
+  background: #6a1a4a;
+}
+
+.btn-submit {
+  background: #82225e;
+  color: white;
+  font-size: 0.95rem;
+  padding: 0.6rem 1.5rem;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-submit:hover {
+  background: #6a1a4a;
+}
+
+.btn-remove {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #dc3545;
+}
+
+.btn-remove:hover {
+  color: #c82333;
+}
+
+/* Company info - same as others, no gradient */
+.company-info {
+  background: #fff;
+}
+
+/* Card for next action */
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.card-header {
+  background: #fef3c7;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.card-body {
+  padding: 1rem;
+  background: #fff;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4b5563;
+  margin-bottom: 0.35rem;
+}
+
+textarea.form-control {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Autocomplete */
+::ng-deep .autocomplete-container {
+  width: 100%;
+}
+
+::ng-deep .autocomplete-container .input-container input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+::ng-deep .autocomplete-container .suggestions-container ul li a {
+  text-align: left !important;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+::ng-deep .autocomplete-container .input-container .x {
+  right: 10px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+/* Validation */
+.form-control.is-valid {
+  border-color: #10b981;
+}
+
+.form-control.is-invalid {
+  border-color: #ef4444;
+  min-width: 120px;
+}
+
+/* Element / file upload */
 .element {
   display: inline-flex;
   align-items: center;
-}
-
-.img {
-  display: none;
-}
-
-i.fa-camera {
-  margin: 10px;
-  cursor: pointer;
-  font-size: 30px;
-}
-
-i:hover {
-  opacity: 0.6;
-}
-
-tr{
-  text-align: center;
-  font-size: 1.5rem;
-}
-
-i.fa-trash{
+  padding: 0.6rem;
+  border: 1px dashed #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
   cursor: pointer;
 }
 
-textarea{
-  width: 100%;
+.element:hover {
+  border-color: #82225e;
+  background: #faf5f8;
+}
+
+/* Layout */
+.row {
+  margin-bottom: 0;
+}
+
+.mb-3 {
+  margin-bottom: 1rem !important;
+}
+
+.social-input {
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .lead-form-wrapper {
+    padding: 0 0.5rem;
+  }
+
+  .form-section {
+    padding: 1rem;
+  }
+
+  .btn-submit {
+    width: 100%;
+  }
 }

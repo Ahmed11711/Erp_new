@@ -7,47 +7,87 @@
       <div><p class="title header w-50 m-auto">اضافة التزام</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container-fluid">
-    <div class="w-50 m-auto mt-5">
+    <div class="w-75 m-auto mt-5">
       <div *ngIf="errorform" class="alert alert-danger">
-        {{errorMessage}}
+        {{ errorMessage }}
       </div>
       <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
-        <div class="row">
+        <div class="row mb-3">
           <div class="col-md-4">
-            <div class="form-group">
-              <input class="form-control"   placeholder="اسم الالتزام"
-              [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
-              formControlName='name' type="text" class="form-control">
-              <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
-                class="error mb-0 text-danger">مطلوب</p>
-            </div>
+            <label class="form-label">اسم الالتزام</label>
+            <input class="form-control" placeholder="اسم الالتزام"
+              [class.is-invalid]="form.get('name')?.invalid && form.get('name')?.touched"
+              formControlName="name" type="text">
+            <p *ngIf="form.get('name')?.invalid && form.get('name')?.touched" class="mb-0 text-danger small">مطلوب</p>
           </div>
           <div class="col-md-4">
-            <input formControlName="date" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+            <label class="form-label">التاريخ</label>
+            <input formControlName="date" class="form-control" type="date">
           </div>
           <div class="col-md-4">
-            <div class="form-group">
-              <input class="form-control"   placeholder="المبلغ المستحق"
-              [class.is-valid]="form.get('deservet_amount')?.errors ==null && form.get('deserved_amount')?.touched"
-              formControlName='deserved_amount' type="number" min="0" class="form-control">
-              <p *ngIf="form.get('deserved_amount')?.errors !=null && form.get('deserved_amount')?.touched"
-                class="error mb-0 text-danger">مطلوب</p>
-            </div>
+            <label class="form-label">المبلغ المستحق</label>
+            <input class="form-control" placeholder="المبلغ المستحق"
+              [class.is-invalid]="form.get('deserved_amount')?.invalid && form.get('deserved_amount')?.touched"
+              formControlName="deserved_amount" type="number" min="0" step="0.01">
+            <p *ngIf="form.get('deserved_amount')?.invalid && form.get('deserved_amount')?.touched" class="mb-0 text-danger small">مطلوب</p>
           </div>
         </div>
 
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">الجهة المسددة</label>
+            <select class="form-control" formControlName="payee_type" (change)="onPayeeTypeChange()">
+              <option *ngFor="let p of payeeTypes" [value]="p.value">{{ p.label }}</option>
+            </select>
+          </div>
+          <div class="col-md-4" *ngIf="form.get('payee_type')?.value === 'supplier'">
+            <label class="form-label">المورد</label>
+            <select class="form-control" formControlName="supplier_id">
+              <option value="">-- اختر المورد --</option>
+              <option *ngFor="let s of suppliers" [value]="s.id">{{ s.supplier_name }}</option>
+            </select>
+            <p *ngIf="form.hasError('payeeRequired') && form.get('payee_type')?.value === 'supplier'" class="mb-0 text-danger small">مطلوب</p>
+          </div>
+          <div class="col-md-4" *ngIf="form.get('payee_type')?.value === 'other'">
+            <label class="form-label">اسم الجهة المسددة</label>
+            <input class="form-control" placeholder="اسم الجهة المسددة" formControlName="payee_name">
+            <p *ngIf="form.hasError('payeeRequired') && form.get('payee_type')?.value === 'other'" class="mb-0 text-danger small">مطلوب</p>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">حساب المصروف</label>
+            <select class="form-control" formControlName="expense_account_id">
+              <option value="">-- اختر حساب المصروف --</option>
+              <option *ngFor="let acc of expenseAccounts" [value]="acc.id">{{ acc.name }} ({{ acc.code }})</option>
+            </select>
+            <p *ngIf="form.get('expense_account_id')?.invalid && form.get('expense_account_id')?.touched" class="mb-0 text-danger small">مطلوب</p>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">حساب الالتزام (اختياري - عند جهة أخرى سيُستخدم الإعداد الافتراضي)</label>
+            <select class="form-control" formControlName="liability_account_id">
+              <option value="">-- اختر أو اترك للافتراضي --</option>
+              <option *ngFor="let acc of liabilityAccounts" [value]="acc.id">{{ acc.name }} ({{ acc.code }})</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">ملاحظات</label>
+            <input class="form-control" placeholder="ملاحظات" formControlName="notes">
+          </div>
+        </div>
 
         <div class="text-center my-3">
-          <button [disabled]="form.invalid" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
+          <button [disabled]="form.invalid || loading" class="btn btn-add my-3">
+            <span *ngIf="!loading">اضافة <i class="fa-solid fa-plus"></i></span>
+            <span *ngIf="loading">جاري الحفظ...</span>
+          </button>
         </div>
       </form>
-
     </div>
   </div>
 </div>

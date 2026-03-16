@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Voucher;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\BudgetReviewService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -201,59 +202,17 @@ class VoucherController extends Controller
             // 1. Get or Create the Partner's Tree Account (Client or Supplier)
             $partnerTreeAccountId = null;
             
+            $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+
             if ($request->voucher_type === 'client') {
                 $client = \App\Models\customerCompany::find($request->client_id);
-                if (!$client->tree_account_id) {
-                    // Auto-create Account
-                    $parentAccount = TreeAccount::where('name', 'like', '%العملاء%')->first(); 
-                    if (!$parentAccount) {
-                        $parentAccount = TreeAccount::firstOrCreate(
-                            ['name' => 'العملاء'],
-                            ['type' => 'asset', 'balance' => 0, 'code' => '1200'] 
-                        );
-                    }
-
-                    $newAccount = TreeAccount::create([
-                        'name' => $client->name ?? $client->company_name ?? 'Client ' . $client->id,
-                        'parent_id' => $parentAccount->id,
-                        'code' => $parentAccount->code . $client->id, 
-                        'type' => 'asset', 
-                        'balance' => 0,
-                        'debit_balance' => 0,
-                        'credit_balance' => 0,
-                    ]);
-                    
-                    $client->tree_account_id = $newAccount->id;
-                    $client->save();
-                }
-                $partnerTreeAccountId = $client->tree_account_id;
+                $account = $accountLinkingService->ensureCustomerCompanyAccount($client);
+                $partnerTreeAccountId = $account?->id;
 
             } else {
                 $supplier = \App\Models\Supplier::find($request->supplier_id);
-                 if (!$supplier->tree_account_id) {
-                     // Auto-create Account
-                    $parentAccount = TreeAccount::where('name', 'like', '%الموردين%')->first(); 
-                     if (!$parentAccount) {
-                        $parentAccount = TreeAccount::firstOrCreate(
-                            ['name' => 'الموردين'],
-                            ['type' => 'liability', 'balance' => 0, 'code' => '2100'] 
-                        );
-                    }
-
-                     $newAccount = TreeAccount::create([
-                        'name' => $supplier->supplier_name ?? 'Supplier ' . $supplier->id,
-                        'parent_id' => $parentAccount->id,
-                        'code' => $parentAccount->code . $supplier->id,
-                        'type' => 'liability',
-                        'balance' => 0,
-                        'debit_balance' => 0,
-                        'credit_balance' => 0,
-                    ]);
-                    
-                    $supplier->tree_account_id = $newAccount->id;
-                    $supplier->save();
-                 }
-                $partnerTreeAccountId = $supplier->tree_account_id;
+                $account = $accountLinkingService->ensureSupplierAccount($supplier);
+                $partnerTreeAccountId = $account?->id;
             }
 
             // 2. Identify Debit and Credit Accounts
@@ -268,6 +227,20 @@ class VoucherController extends Controller
                 // Payment: Debit Partner, Credit Safe/Bank
                 $debitAccountId = $partnerTreeAccountId;
                 $creditAccountId = $request->account_id;
+            }
+
+            // Budget review
+            $budgetService = app(BudgetReviewService::class);
+            $budgetResult = $budgetService->checkBudget([
+                ['tree_account_id' => $debitAccountId, 'debit' => $request->amount, 'credit' => 0],
+                ['tree_account_id' => $creditAccountId, 'debit' => 0, 'credit' => $request->amount],
+            ], $request->date);
+            if (!$budgetResult['valid']) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => $budgetResult['message'],
+                    'violations' => $budgetResult['violations'],
+                ], 422);
             }
 
             // 3. Create Debit Entry
@@ -312,6 +285,11 @@ class VoucherController extends Controller
             // Save Model Updates
             $debitAccount->save();
             $creditAccount->save();
+
+            // تحديث الحساب والحسابات الأب في الشجرة (لتأثير التعاملات على الحساب وما فوقه)
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            $accountingService->updateAccountHierarchyBalances($debitAccountId);
+            $accountingService->updateAccountHierarchyBalances($creditAccountId);
 
             // ------------------------------------------------------------------
             // UPDATE OPERATIONAL BALANCES (Legacy System)
@@ -467,6 +445,11 @@ class VoucherController extends Controller
             $debitAccount->save();
             $creditAccount->save();
 
+            // تحديث الحساب والحسابات الأب في الشجرة
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            $accountingService->updateAccountHierarchyBalances($debitAccountId);
+            $accountingService->updateAccountHierarchyBalances($creditAccountId);
+
             // ------------------------------------------------------------------
             // APPLY NEW OPERATIONAL BALANCE
             // ------------------------------------------------------------------
@@ -504,28 +487,15 @@ class VoucherController extends Controller
             // Reverse accounting entries
             // Reverse accounting entries
              $oldEntries = AccountEntry::where('voucher_id', $voucher->id)->get();
+            $affectedAccountIds = $oldEntries->pluck('tree_account_id')->unique()->values()->all();
             foreach ($oldEntries as $entry) {
-                $acct = TreeAccount::find($entry->tree_account_id);
-                if ($acct) {
-                    if ($entry->debit > 0) {
-                        $acct->decrement('debit_balance', $entry->debit);
-                        if (in_array($acct->type, ['asset', 'expense'])) {
-                            $acct->decrement('balance', $entry->debit);
-                        } else {
-                            $acct->increment('balance', $entry->debit);
-                        }
-                    }
-                    if ($entry->credit > 0) {
-                        $acct->decrement('credit_balance', $entry->credit);
-                        if (in_array($acct->type, ['asset', 'expense'])) {
-                            $acct->increment('balance', $entry->credit);
-                        } else {
-                            $acct->decrement('balance', $entry->credit);
-                        }
-                    }
-                    $acct->save();
-                }
                 $entry->delete();
+            }
+
+            // إعادة حساب أرصدة الحسابات المتأثرة والحسابات الأب بعد حذف القيود
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            foreach ($affectedAccountIds as $accountId) {
+                $accountingService->updateAccountHierarchyBalances($accountId);
             }
 
             // Delete voucher

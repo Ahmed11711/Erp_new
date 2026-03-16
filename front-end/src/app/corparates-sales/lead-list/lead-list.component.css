@@ -52,3 +52,130 @@ i{
 ::ng-deep .mat-mdc-paginator-container{
   justify-content: center !important;
 }
+
+/* تذاكر المتابعة - أيقونة التذكير */
+.recommender-widget {
+  display: inline-flex;
+}
+
+.btn-reminder {
+  background: linear-gradient(135deg, #82225e 0%, #a02d6e 100%) !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.5rem 1rem !important;
+  border-radius: 10px !important;
+  font-size: 1.1rem !important;
+  box-shadow: 0 2px 8px rgba(130, 34, 94, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-reminder:hover {
+  background: linear-gradient(135deg, #6b1c4a 0%, #82225e 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(130, 34, 94, 0.4);
+}
+
+.btn-reminder i {
+  color: white !important;
+}
+
+.reminder-badge {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  background: #dc3545;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+.reminder-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  min-width: 340px;
+  max-width: 420px;
+  max-height: 420px;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  z-index: 1050;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.reminder-dropdown-header {
+  padding: 0.9rem 1.25rem;
+  background: linear-gradient(135deg, #82225e 0%, #a02d6e 100%);
+  color: white;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.reminder-dropdown-header i {
+  color: white !important;
+}
+
+.reminder-count-badge {
+  margin-inline-start: auto;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+}
+
+.reminder-dropdown-list {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.reminder-item {
+  display: block;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid #eee;
+  color: inherit;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.reminder-item:hover {
+  background: linear-gradient(135deg, #f8e8f0 0%, #f0e0eb 100%);
+}
+
+.reminder-company {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #212529;
+}
+
+.reminder-date {
+  font-size: 0.8rem;
+  color: #82225e;
+  font-weight: 500;
+}
+
+.reminder-notes {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-top: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reminder-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #6c757d;
+  font-size: 0.95rem;
+}

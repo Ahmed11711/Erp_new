@@ -56,6 +56,36 @@ const routes: Routes = [
     loadChildren: () => import('./daily-ledger-report/daily-ledger-report.module').then(m => m.DailyLedgerReportModule),
     canActivate: [departmentGuard],
     data: { allowedDepartments: ['Admin', 'Account Management'] }
+  },
+  {
+    path: 'trial-balance',
+    loadChildren: () => import('./trial-balance/trial-balance.module').then(m => m.TrialBalanceModule),
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+  },
+  {
+    path: 'account-statement',
+    loadChildren: () => import('./account-statement/account-statement.module').then(m => m.AccountStatementModule),
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management'] }
+  },
+  {
+    path: 'cash-transaction',
+    loadChildren: () => import('./cash-transaction/cash-transaction.module').then(m => m.CashTransactionModule),
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+  },
+  {
+    path: 'bank-transaction',
+    loadChildren: () => import('./bank-transaction/bank-transaction.module').then(m => m.BankTransactionModule),
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+  },
+  {
+    path: 'service-transaction',
+    loadChildren: () => import('./service-transaction/service-transaction.module').then(m => m.ServiceTransactionModule),
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management'] }
   }
 ];
 

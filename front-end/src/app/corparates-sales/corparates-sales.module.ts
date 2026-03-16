@@ -17,6 +17,8 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
 import { LeadDetailsComponent } from './lead-details/lead-details.component';
 import { LeadAddContactComponent } from './lead-add-contact/lead-add-contact.component';
+import { LeadStatusManagementComponent } from '../lead-status-management/lead-status-management.component';
+import { FollowUpLeadsComponent } from './follow-up-leads/follow-up-leads.component';
 
 
 @NgModule({
@@ -24,7 +26,9 @@ import { LeadAddContactComponent } from './lead-add-contact/lead-add-contact.com
     LeadListComponent,
     LeadAddEditComponent,
     LeadDetailsComponent,
-    LeadAddContactComponent
+    LeadAddContactComponent,
+    LeadStatusManagementComponent,
+    FollowUpLeadsComponent
   ],
   imports: [
     CommonModule,

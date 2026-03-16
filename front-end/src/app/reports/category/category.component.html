@@ -6,70 +6,84 @@
     <div class="col-5">
       <div><p class="title header w-50 m-auto">تقرير ربحية الصنف</p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end"></div>
   </div>
 
-
   <div class="container-fluid">
-
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
+    <form class="my-5">
+      <div class="row g-3 align-items-end">
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label class="form-label">من تاريخ</label>
+          <input class="form-control" type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="load()">
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label class="form-label">الى تاريخ</label>
+          <input class="form-control" type="date" [(ngModel)]="dateTo" name="dateTo" (change)="load()">
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100" type="button" (click)="load()" [disabled]="loading">تحديث</button>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">البحث</label>
+          <input class="form-control" type="search" placeholder="البحث..." [(ngModel)]="searchTerm" name="searchTerm" (input)="onSearchChange()">
         </div>
       </div>
     </form>
 
+    <div *ngIf="loading" class="text-center my-4">
+      <div class="spinner-border text-primary" role="status"></div>
+    </div>
 
-    <table class="table table-bordered m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>الصنف</th>
-        <th>نوع</th>
-        <th>وحدة القياس</th>
-        <th>المبيعات بالقطعة</th>
-        <th>المبيعات بالقيمة</th>
-        <th>عدد الطلبات</th>
-        <th>التاريخ</th>
-        <th>المرتجعات بالقطع</th>
-        <th>رفض الاستلام بالقطع</th>
-        <th>متوسط سعر البيع</th>
-        <th>متوسط التكلفه</th>
-        <th>صافي ربح الصنف</th>
-        <th>اجمالى ربح الصنف</th>
-        <th>هامش ربح الصنف</th>
-        <th>البيان</th>
-      </thead>
-      <tbody>
-        <tr >
-          <td></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-        </tr>
-      </tbody>
-    </table>
+    <div *ngIf="!loading && loadError" class="alert alert-danger text-center my-4">
+      حدث خطأ في تحميل البيانات. تأكد من الاتصال بالخادم وتسجيل الدخول.
+    </div>
 
+    <div *ngIf="!loading && !loadError && data.length === 0" class="alert alert-info text-center my-4">
+      لا توجد بيانات لهذه الفترة. جرب تغيير نطاق التاريخ أو تأكد من وجود مبيعات مسجلة.
+    </div>
 
+    <div class="table-responsive" *ngIf="!loading && !loadError && data.length > 0">
+      <table class="table table-bordered table-striped m-auto text-center">
+        <thead class="bg-dark text-white">
+          <tr>
+            <th>الصنف</th>
+            <th>نوع الصنف</th>
+            <th>وحدة القياس</th>
+            <th>المبيعات بالقطعة</th>
+            <th>المبيعات بالقيمة</th>
+            <th>عدد الطلبات</th>
+            <th>المرتجعات بالقطع</th>
+            <th>رفض الاستلام بالقطع</th>
+            <th>متوسط سعر البيع</th>
+            <th>متوسط التكلفة</th>
+            <th>صافي ربح الصنف</th>
+            <th>اجمالي ربح الصنف</th>
+            <th>هامش ربح الصنف %</th>
+            <th>البيان</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of filteredData">
+            <td class="text-start">{{ r.category_name }}</td>
+            <td>{{ r.category_type }}</td>
+            <td>{{ r.measurement_unit }}</td>
+            <td>{{ r.sales_qty }}</td>
+            <td>{{ r.sales_amount }}</td>
+            <td>{{ r.orders_count }}</td>
+            <td>{{ r.returns_qty }}</td>
+            <td>{{ r.rejected_qty }}</td>
+            <td>{{ r.avg_selling_price }}</td>
+            <td>{{ r.avg_cost }}</td>
+            <td>{{ r.net_profit }}</td>
+            <td>{{ r.total_profit }}</td>
+            <td>{{ r.profit_margin }}</td>
+            <td>{{ r.description || '-' }}</td>
+          </tr>
+          <tr *ngIf="searchTerm && filteredData.length === 0" class="table-warning">
+            <td colspan="14" class="text-center">لا توجد نتائج تطابق البحث</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>

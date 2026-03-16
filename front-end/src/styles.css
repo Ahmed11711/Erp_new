@@ -113,3 +113,104 @@ thead th{
 tfoot td{
   font-size: 1.1rem !important;
 }
+
+/* تذكرة المتابعة - تحسين استايل المودال */
+.recommender-modal-popup {
+  border-radius: 16px !important;
+  box-shadow: 0 12px 40px rgba(130, 34, 94, 0.2) !important;
+  border: 1px solid rgba(130, 34, 94, 0.15) !important;
+  overflow: hidden !important;
+}
+
+.recommender-modal-popup .swal2-title {
+  font-size: 1.35rem !important;
+  font-weight: 600 !important;
+  color: #1a1a2e !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.recommender-modal-popup .recommender-modal-body {
+  text-align: right;
+  padding: 0.5rem 0;
+}
+
+.recommender-modal-popup .recommender-field {
+  margin-bottom: 1.25rem;
+}
+
+.recommender-modal-popup .recommender-field:last-child {
+  margin-bottom: 0;
+}
+
+.recommender-modal-popup .recommender-label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.recommender-modal-popup .recommender-label i {
+  color: #82225e;
+}
+
+.recommender-modal-popup .recommender-input,
+.recommender-modal-popup .recommender-textarea {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  font-size: 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.recommender-modal-popup .recommender-input:focus,
+.recommender-modal-popup .recommender-textarea:focus {
+  outline: none;
+  border-color: #82225e;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15);
+}
+
+.recommender-modal-popup .recommender-textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.recommender-modal-popup .recommender-modal-actions {
+  margin-top: 1.5rem;
+  gap: 0.75rem;
+}
+
+.recommender-modal-popup .recommender-confirm-btn {
+  background: linear-gradient(135deg, #82225e 0%, #a02d6e 100%) !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.6rem 1.5rem !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 12px rgba(130, 34, 94, 0.35) !important;
+  transition: all 0.2s !important;
+}
+
+.recommender-modal-popup .recommender-confirm-btn:hover {
+  background: linear-gradient(135deg, #6b1c4a 0%, #82225e 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(130, 34, 94, 0.4) !important;
+}
+
+.recommender-modal-popup .recommender-cancel-btn {
+  background: #f8f9fa !important;
+  color: #6c757d !important;
+  border: 1px solid #dee2e6 !important;
+  padding: 0.6rem 1.5rem !important;
+  font-size: 1rem !important;
+  border-radius: 10px !important;
+  transition: all 0.2s !important;
+}
+
+.recommender-modal-popup .recommender-cancel-btn:hover {
+  background: #e9ecef !important;
+  color: #495057 !important;
+  border-color: #ced4da !important;
+}

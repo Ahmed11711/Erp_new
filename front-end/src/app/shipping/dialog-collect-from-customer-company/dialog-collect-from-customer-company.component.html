@@ -6,10 +6,19 @@
 <div mat-dialog-content>
   <form #form="ngForm" (ngSubmit)="submit(form)">
     <div class="form-group">
-      <select (change)="onBankSelect($event)" class="form-control" dir="rtl">
-        <option selected disabled>الخزينة</option>
-        <option *ngFor="let elm of banksData" [value]="elm.id">
-          {{ elm.name }}
+      <label class="form-label">نوع المصدر</label>
+      <select [(ngModel)]="paymentType" name="paymentType" class="form-control" dir="rtl">
+        <option value="safe">خزينة</option>
+        <option value="bank">بنك</option>
+        <option value="service_account">حساب خدمي</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">{{ paymentType === 'safe' ? 'الخزينة' : paymentType === 'bank' ? 'البنك' : 'الحساب الخدمي' }}</label>
+      <select [(ngModel)]="sourceId" (ngModelChange)="sourceId = $event" name="sourceId" class="form-control" dir="rtl">
+        <option [ngValue]="null" disabled>اختر المصدر</option>
+        <option *ngFor="let elm of sourceList" [ngValue]="elm.id">
+          {{ elm.name }} ({{ elm.balance | number:'1.2-2' }})
         </option>
       </select>
     </div>
@@ -18,7 +27,7 @@
     </div>
     <div class="d-flex justify-content-center ">
       <a mat-button (click)="onCloseClick()" class="btn btn-danger mx-2">الغاء </a>
-      <button class="btn btn-success" [disabled]="!bank || amount.invalid || amount.value < 1 ">تحصيل</button>
+      <button class="btn btn-success" [disabled]="!canSubmit || amount.invalid || amount.value < 1">تحصيل</button>
     </div>
   </form>
 </div>

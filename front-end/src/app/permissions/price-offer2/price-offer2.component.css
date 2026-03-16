@@ -63,7 +63,84 @@ hr{
 .quote {
   background-color: transparent;
   border: none;
-  text-align: end;
+  text-align: right;
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
+/* PDF-specific Arabic text handling */
+.pdf-arabic-fix {
+  direction: rtl !important;
+  text-align: right !important;
+  unicode-bidi: embed !important;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting' !important;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+}
+
+/* Print-specific styles for Arabic text */
+@media print {
+  .quote {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  .arabic-text {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  textarea[style*="direction: rtl"] {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Enhanced textarea print styles */
+  .arabic-textarea,
+  .arabic-note {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting' !important;
+    font-size: 12pt !important;
+    line-height: 1.4 !important;
+  }
+  
+  /* Ensure all Arabic content displays correctly in print */
+  *[dir="rtl"] {
+    direction: rtl !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Fix for table cells with Arabic content */
+  td[style*="text-align: right"], th[style*="text-align: right"] {
+    direction: rtl !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Force Arabic font loading */
+  .arabic-container,
+  .arabic-label {
+    direction: rtl !important;
+    unicode-bidi: embed !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting' !important;
+  }
+  
+  /* Additional fixes for PDF generation */
+  textarea,
+  input[type="text"],
+  .form-control {
+    unicode-bidi: embed !important;
+  }
+  
+  textarea[dir="rtl"],
+  input[dir="rtl"] {
+    direction: rtl !important;
+    text-align: right !important;
+  }
 }
 .quote::placeholder{
   font-size: 1.3rem;
@@ -92,8 +169,8 @@ input[type="number"]{
 }
 
 .bank{
-  direction: ltr;
-  text-align: start;
+  direction: rtl;
+  text-align: right;
 }
 
 .bank i{

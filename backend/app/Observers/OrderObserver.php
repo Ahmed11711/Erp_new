@@ -72,8 +72,8 @@ class OrderObserver
                 ->first()?->code;
 
             if (!$codeCustomer) {
-                $add = $this->addAssetRepo->Addcustomer($order->customer_name, $order->customer_type);
-                $codeCustomer = $add->code;
+                $add = $this->addAssetRepo->Addcustomer($order->customer_name, $order->customer_type ?? 'شركة');
+                $codeCustomer = $add?->code;
             }
 
             $accounts = [
@@ -243,7 +243,7 @@ class OrderObserver
             Log::alert("Customer Account Found", ['customerAccount' => $customerAccount?->toArray()]);
 
             if (!$customerAccount) {
-                $add = $this->addAssetRepo->Addcustomer($order->customer_name, $order->customer_type);
+                $add = $this->addAssetRepo->Addcustomer($order->customer_name, $order->customer_type ?? 'شركة');
                 $customerAccount = $add;
                 Log::alert("Customer Account Created", ['customerAccount' => $customerAccount?->toArray()]);
             }

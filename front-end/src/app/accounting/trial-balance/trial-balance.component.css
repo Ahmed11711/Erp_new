@@ -1,0 +1,92 @@
+.trial-balance-container {
+  padding: 20px;
+  direction: rtl;
+}
+
+.header-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  padding: 20px;
+}
+
+.header-section h2 {
+  font-weight: 600;
+  margin: 0;
+}
+
+.filter-form {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.trial-balance-table {
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.trial-balance-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.trial-balance-table th {
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 12px 8px;
+}
+
+.trial-balance-table td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.trial-balance-table tbody tr:hover {
+  background-color: #f5f5f5;
+}
+
+.trial-balance-table tfoot {
+  font-weight: bold;
+  background-color: #e9ecef !important;
+}
+
+.large-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: #999;
+}
+
+/* Print Styles */
+@media print {
+  .filter-form,
+  button,
+  .alert-info {
+    display: none !important;
+  }
+
+  .trial-balance-table {
+    font-size: 10px;
+  }
+
+  .trial-balance-table th,
+  .trial-balance-table td {
+    padding: 4px;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .trial-balance-table {
+    font-size: 12px;
+  }
+
+  .trial-balance-table th,
+  .trial-balance-table td {
+    padding: 6px 4px;
+  }
+}

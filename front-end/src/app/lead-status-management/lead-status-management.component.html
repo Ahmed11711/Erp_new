@@ -1,0 +1,191 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div>
+        <p class="title header w-50 m-auto">Lead Status Management</p>
+      </div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+      <button class="btn btn-primary" (click)="openModal()">
+        <i class="fa-solid fa-plus mr-2"></i>Add New Status
+      </button>
+    </div>
+  </div>
+
+  <div class="container-fluid mt-4" *ngIf="!isLoading; else loading">
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Lead Statuses</h5>
+            <small class="text-muted">Manage your lead pipeline statuses in professional order</small>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Status Name</th>
+                    <th>Description</th>
+                    <th>Color</th>
+                    <th>Follow-Up Required</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let status of leadStatuses">
+                    <td>
+                      <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary" 
+                                [disabled]="status.order === 1" 
+                                (click)="moveStatusUp(status)"
+                                title="Move Up">
+                          <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" 
+                                [disabled]="status.order === leadStatuses.length" 
+                                (click)="moveStatusDown(status)"
+                                title="Move Down">
+                          <i class="fa-solid fa-arrow-down"></i>
+                        </button>
+                      </div>
+                      <span class="ms-2 badge bg-secondary">{{ status.order }}</span>
+                    </td>
+                    <td>
+                      <strong>{{ status.name }}</strong>
+                      <span class="badge ms-2" [style.background-color]="getStatusColor(status)" style="color: white;">
+                        &nbsp;&nbsp;&nbsp;
+                      </span>
+                    </td>
+                    <td>
+                      <small *ngIf="status.description" class="text-muted">{{ status.description }}</small>
+                      <span *ngIf="!status.description" class="text-muted">-</span>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="color-preview me-2" 
+                             [style.background-color]="getStatusColor(status)"
+                             style="width: 20px; height: 20px; border-radius: 3px; border: 1px solid #ccc;">
+                        </div>
+                        <small>{{ status.color }}</small>
+                      </div>
+                    </td>
+                    <td>
+                      <span *ngIf="isFollowUpStatus(status)" class="badge bg-warning">
+                        <i class="fa-solid fa-clock me-1"></i>Yes
+                      </span>
+                      <span *ngIf="!isFollowUpStatus(status)" class="badge bg-secondary">No</span>
+                    </td>
+                    <td>
+                      <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary" 
+                                (click)="openModal(status)"
+                                title="Edit">
+                          <i class="fa-solid fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" 
+                                (click)="deleteStatus(status)"
+                                title="Delete">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Template -->
+  <ng-template #loading>
+    <div class="text-center mt-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2">Loading lead statuses...</p>
+    </div>
+  </ng-template>
+
+  <!-- Add/Edit Modal -->
+  <div class="modal fade" [class.show]="isModalOpen" [style.display]="isModalOpen ? 'block' : 'none'" 
+       [class]="isModalOpen ? 'show' : ''" tabindex="-1" *ngIf="isModalOpen">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            {{ editingStatus ? 'Edit Lead Status' : 'Add New Lead Status' }}
+          </h5>
+          <button type="button" class="btn-close" (click)="closeModal()"></button>
+        </div>
+        <div class="modal-body">
+          <form>
+            <div class="mb-3">
+              <label for="statusName" class="form-label">Status Name *</label>
+              <input type="text" class="form-control" id="statusName" 
+                     [(ngModel)]="formData.name" name="name" required>
+            </div>
+            
+            <div class="mb-3">
+              <label for="statusDescription" class="form-label">Description</label>
+              <textarea class="form-control" id="statusDescription" rows="3"
+                        [(ngModel)]="formData.description" name="description"></textarea>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="statusOrder" class="form-label">Order</label>
+                  <input type="number" class="form-control" id="statusOrder" 
+                         [(ngModel)]="formData.order" name="order" min="1">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="statusColor" class="form-label">Color</label>
+                  <div class="input-group">
+                    <input type="color" class="form-control form-control-color" 
+                           id="statusColor" [(ngModel)]="formData.color" name="color">
+                    <input type="text" class="form-control" 
+                           [(ngModel)]="formData.color" name="colorText" 
+                           placeholder="#6c757d">
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="requiresFollowUp" 
+                       [(ngModel)]="formData.requires_follow_up" name="requires_follow_up">
+                <label class="form-check-label" for="requiresFollowUp">
+                  Requires Follow-Up Action
+                  <small class="d-block text-muted">
+                    Enable this for statuses that need follow-up with dates (like "Follow-Up")
+                  </small>
+                </label>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="saveStatus()">
+            {{ editingStatus ? 'Update Status' : 'Create Status' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Modal Backdrop -->
+  <div class="modal-backdrop fade show" *ngIf="isModalOpen" 
+       (click)="closeModal()"></div>
+</div>

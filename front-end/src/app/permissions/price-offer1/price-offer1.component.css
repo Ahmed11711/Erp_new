@@ -51,7 +51,57 @@ hr{
   background-color: transparent;
   border: none;
   color: white;
-  text-align: end;
+  text-align: right;
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
+/* PDF-specific Arabic text handling */
+.pdf-arabic-fix {
+  direction: rtl !important;
+  text-align: right !important;
+  unicode-bidi: embed !important;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting' !important;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+}
+
+/* Print-specific styles for Arabic text */
+@media print {
+  .quote {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+    color: black !important;
+  }
+  
+  .arabic-text {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  textarea[style*="direction: rtl"] {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Ensure all Arabic content displays correctly in print */
+  *[dir="rtl"] {
+    direction: rtl !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Fix for white text on white background in print */
+  .bg-main {
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  .bg-main * {
+    color: black !important;
+  }
 }
 .quote::placeholder{
   color: white;
@@ -87,8 +137,8 @@ input[name="vat"]{
 }
 
 .bank{
-  direction: ltr;
-  text-align: start;
+  direction: rtl;
+  text-align: right;
 }
 
 .bank i{
@@ -108,8 +158,8 @@ input[name="vat"]{
 }
 
 .condition{
-  direction: ltr;
-  text-align: start;
+  direction: rtl;
+  text-align: right;
 }
 
 li{

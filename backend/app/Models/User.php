@@ -21,6 +21,7 @@ class User extends Authenticatable implements JWTSubject{
     protected $fillable = [
         'name',
         'email',
+        'whatsapp_phone_number_id',
         'department',
         'role',
         'password',
@@ -53,5 +54,13 @@ class User extends Authenticatable implements JWTSubject{
     public function getJWTCustomClaims()
     {
         return [];
+    }
+
+    /**
+     * Customers assigned to this user (agent) for WhatsApp chat.
+     */
+    public function customers()
+    {
+        return $this->hasMany(Customer::class, 'assigned_agent_id');
     }
 }

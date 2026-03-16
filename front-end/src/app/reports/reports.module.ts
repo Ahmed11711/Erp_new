@@ -12,6 +12,11 @@ import { ProductSalesComponent } from './product-sales/product-sales.component';
 import { StorageComponent } from './storage/storage.component';
 import { CategoryComponent } from './category/category.component';
 import { ShippincompanyReportsComponent } from './shippincompany-reports/shippincompany-reports.component';
+import { ProductPerformanceComponent } from './product-performance/product-performance.component';
+import { LeadActivityReportComponent } from './lead-activity-report/lead-activity-report.component';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatPaginatorModule } from '@angular/material/paginator';
 
 
 @NgModule({
@@ -23,14 +28,19 @@ import { ShippincompanyReportsComponent } from './shippincompany-reports/shippin
     ProductSalesComponent,
     StorageComponent,
     CategoryComponent,
-    ShippincompanyReportsComponent
+    ShippincompanyReportsComponent,
+    ProductPerformanceComponent,
+    LeadActivityReportComponent
   ],
   imports: [
     CommonModule,
     ReportsRoutingModule,
     ReactiveFormsModule,
     FormsModule,
-    SharedModule
+    SharedModule,
+    MatIconModule,
+    MatMenuModule,
+    MatPaginatorModule
   ]
 })
 export class ReportsModule { }

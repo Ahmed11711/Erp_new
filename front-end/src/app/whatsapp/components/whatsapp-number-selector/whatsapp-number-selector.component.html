@@ -1,0 +1,47 @@
+<div class="whatsapp-number-selector">
+  <mat-form-field appearance="outline" class="w-100">
+    <mat-label>
+      <mat-icon class="me-2">phone</mat-icon>
+      رقم الواتساب
+    </mat-label>
+    <mat-select 
+      [(value)]="selectedPhoneNumberId" 
+      (selectionChange)="onPhoneNumberChange($event)"
+      [disabled]="loading || availablePhoneNumbers.length === 0">
+      <mat-option value="">اختر رقم الواتساب</mat-option>
+      <mat-option 
+        *ngFor="let phoneNumber of availablePhoneNumbers" 
+        [value]="phoneNumber.id">
+        <div class="d-flex justify-content-between align-items-center">
+          <span>{{ phoneNumber.name }}</span>
+          <mat-chip 
+            [color]="phoneNumber.is_configured ? 'primary' : 'warn'"
+            class="ms-2">
+            {{ phoneNumber.is_configured ? 'مكون' : 'غير مكون' }}
+          </mat-chip>
+        </div>
+      </mat-option>
+    </mat-select>
+    <mat-hint *ngIf="availablePhoneNumbers.length === 0">
+      <mat-icon class="me-1 text-warn">warning</mat-icon>
+      لا توجد أرقام واتساب معينة لك. تواصل مع مدير النظام.
+    </mat-hint>
+    <mat-hint *ngIf="availablePhoneNumbers.length > 0">
+      <mat-icon class="me-1 text-info">info</mat-icon>
+      سيتم إرسال الرسالة من الرقم المحدد
+    </mat-hint>
+    <button 
+      mat-icon-button 
+      matSuffix 
+      (click)="refreshPhoneNumbers()"
+      [disabled]="loading"
+      matTooltip="تحديث أرقام الواتساب">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </mat-form-field>
+  
+  <!-- Loading Indicator -->
+  <div class="loading-indicator" *ngIf="loading">
+    <mat-spinner diameter="20"></mat-spinner>
+  </div>
+</div>

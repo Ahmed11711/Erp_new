@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { CorparatesSalesService } from '../services/corparates-sales.service';
 import { FormControl, FormGroup } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-lead-list',
@@ -20,8 +21,13 @@ export class LeadListComponent {
   leadSource:any[]=[];
   leadTools:any[]=[];
   leadIndustry:any[]=[];
+  teamUsers: any[] = [];
 
-  constructor(private CorparatesSalesService:CorparatesSalesService, private http:HttpClient){}
+  recommenderCount = 0;
+  recommenders: any[] = [];
+  showRecommenderDropdown = false;
+
+  constructor(private CorparatesSalesService:CorparatesSalesService, private http:HttpClient, private router: Router){}
 
   ngOnInit(): void {
 
@@ -31,13 +37,53 @@ export class LeadListComponent {
 
     this.http.get('assets/country/CountryCodes.json').subscribe((data:any)=>{
       this.countries=data;
-      console.log(this.countries);
-
     })
     this.getLeads();
     this.getLeadSource();
     this.getLeadTool();
     this.getLeadIndustry();
+    this.loadTeamUsers();
+    this.loadPendingRecommenders();
+  }
+
+  loadPendingRecommenders() {
+    this.CorparatesSalesService.getPendingRecommenders().subscribe({
+      next: (res: any) => {
+        this.recommenderCount = res?.count ?? 0;
+        this.recommenders = res?.recommenders ?? [];
+      },
+      error: () => {
+        this.recommenderCount = 0;
+        this.recommenders = [];
+      }
+    });
+  }
+
+  toggleRecommenderDropdown() {
+    this.showRecommenderDropdown = !this.showRecommenderDropdown;
+    if (this.showRecommenderDropdown) {
+      this.loadPendingRecommenders();
+    }
+  }
+
+  closeRecommenderDropdown() {
+    this.showRecommenderDropdown = false;
+  }
+
+  goToLeadDetails(leadId: number) {
+    this.closeRecommenderDropdown();
+    this.router.navigate(['/dashboard/corparates-sales/leads', leadId]);
+  }
+
+  loadTeamUsers(): void {
+    this.CorparatesSalesService.getLeadTeamUsers().subscribe({
+      next: (res: any) => {
+        this.teamUsers = Array.isArray(res) ? res : (res?.data || []);
+      },
+      error: () => {
+        this.teamUsers = [];
+      }
+    });
   }
 
   form:FormGroup = new FormGroup({
@@ -45,12 +91,20 @@ export class LeadListComponent {
     leadSource: new FormControl('0'),
     leadTool: new FormControl('0'),
     leadIndustry: new FormControl('0'),
+    userId: new FormControl(''),
   });
 
   getLeads(){
-    let params = {
-      itemsPerPage:this.pageSize,page:this.page+1,...this.form.value
-    }
+    const formVal = this.form.value;
+    const params: any = {
+      itemsPerPage: this.pageSize,
+      page: this.page + 1,
+      country: formVal.country,
+      leadSource: formVal.leadSource,
+      leadTool: formVal.leadTool,
+      leadIndustry: formVal.leadIndustry,
+    };
+    if (formVal.userId) params.userId = formVal.userId;
     this.CorparatesSalesService.getLeads(params).subscribe((res:any)=>{
       this.leads = res.data;
       this.length=res.total;
@@ -65,6 +119,7 @@ export class LeadListComponent {
       leadSource: '0',
       leadTool: '0',
       leadIndustry: '0',
+      userId: '',
     })
   }
 

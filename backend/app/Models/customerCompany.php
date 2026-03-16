@@ -9,16 +9,22 @@ class customerCompany extends Model
 {
     use HasFactory;
 
-    protected $fillable=[
-        "name",
-        "phone1",
-        "phone2",
-        "phone3",
-        "phone4",
-        "tel",
-        "governorate",
-        "city",
-        "address",
-        "tree_account_id"
+    protected $fillable = [
+        'name',
+        'phone1',
+        'phone2',
+        'phone3',
+        'phone4',
+        'tel',
+        'governorate',
+        'city',
+        'address',
+        'tree_account_id',
+        'balance',
     ];
+
+    public function treeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
+    }
 }

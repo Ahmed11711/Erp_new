@@ -1,0 +1,171 @@
+<div class="container-fluid trial-balance-container">
+    <!-- Header -->
+    <div class="row py-3 header-section">
+        <div class="col-12">
+            <h2 class="text-center mb-0">ميزان المراجعة</h2>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="row my-4">
+        <div class="col-12">
+            <form [formGroup]="filterForm" (ngSubmit)="onFilter()" class="filter-form">
+                <div class="row g-3">
+                    <!-- Date From -->
+                    <div class="col-md-2">
+                        <mat-form-field appearance="outline" class="w-100">
+                            <mat-label>من تاريخ</mat-label>
+                            <input matInput type="date" formControlName="date_from">
+                        </mat-form-field>
+                    </div>
+
+                    <!-- Date To -->
+                    <div class="col-md-2">
+                        <mat-form-field appearance="outline" class="w-100">
+                            <mat-label>إلى تاريخ</mat-label>
+                            <input matInput type="date" formControlName="date_to">
+                        </mat-form-field>
+                    </div>
+
+                    <!-- Account Type -->
+                    <div class="col-md-2">
+                        <mat-form-field appearance="outline" class="w-100">
+                            <mat-label>نوع الحساب</mat-label>
+                            <mat-select formControlName="account_type">
+                                <mat-option *ngFor="let type of accountTypes" [value]="type.value">
+                                    {{ type.label }}
+                                </mat-option>
+                            </mat-select>
+                        </mat-form-field>
+                    </div>
+
+                    <!-- Level -->
+                    <div class="col-md-2">
+                        <mat-form-field appearance="outline" class="w-100">
+                            <mat-label>المستوى</mat-label>
+                            <mat-select formControlName="level">
+                                <mat-option *ngFor="let level of levels" [value]="level.value">
+                                    {{ level.label }}
+                                </mat-option>
+                            </mat-select>
+                        </mat-form-field>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="col-md-3">
+                        <mat-form-field appearance="outline" class="w-100">
+                            <mat-label>بحث</mat-label>
+                            <input matInput formControlName="search" placeholder="ابحث بالكود أو الاسم">
+                            <mat-icon matSuffix>search</mat-icon>
+                        </mat-form-field>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="col-md-1 d-flex align-items-center">
+                        <button mat-raised-button color="primary" type="submit" class="me-2">
+                            <mat-icon>filter_list</mat-icon>
+                        </button>
+                        <button mat-raised-button type="button" (click)="onReset()">
+                            <mat-icon>refresh</mat-icon>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-3">
+        <div class="col-12 d-flex justify-content-end">
+            <button mat-raised-button color="accent" (click)="exportToExcel()" class="me-2"
+                [disabled]="loading || trialBalanceData.length === 0">
+                <mat-icon>download</mat-icon>
+                تصدير Excel
+            </button>
+            <button mat-raised-button (click)="print()" [disabled]="loading || trialBalanceData.length === 0">
+                <mat-icon>print</mat-icon>
+                طباعة
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div *ngIf="loading" class="text-center my-5">
+        <mat-spinner class="mx-auto"></mat-spinner>
+        <p class="mt-3">جاري التحميل...</p>
+    </div>
+
+    <!-- Error Message -->
+    <div *ngIf="error && !loading" class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+
+    <!-- Trial Balance Table -->
+    <div *ngIf="!loading && !error" class="table-responsive">
+        <table class="table table-bordered trial-balance-table">
+            <thead class="table-dark">
+                <tr>
+                    <th rowspan="2" class="align-middle text-center">كود الحساب</th>
+                    <th rowspan="2" class="align-middle text-center">اسم الحساب</th>
+                    <th colspan="2" class="text-center">رصيد أول المدة</th>
+                    <th colspan="2" class="text-center">الحركة</th>
+                    <th colspan="2" class="text-center">رصيد آخر المدة</th>
+                </tr>
+                <tr>
+                    <th class="text-center">مدين</th>
+                    <th class="text-center">دائن</th>
+                    <th class="text-center">مدين</th>
+                    <th class="text-center">دائن</th>
+                    <th class="text-center">مدين</th>
+                    <th class="text-center">دائن</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr *ngFor="let account of trialBalanceData">
+                    <td class="text-center">{{ account.account_code }}</td>
+                    <td>{{ account.account_name }}</td>
+                    <td class="text-end">{{ formatNumber(account.opening_debit) }}</td>
+                    <td class="text-end">{{ formatNumber(account.opening_credit) }}</td>
+                    <td class="text-end">{{ formatNumber(account.movement_debit) }}</td>
+                    <td class="text-end">{{ formatNumber(account.movement_credit) }}</td>
+                    <td class="text-end">{{ formatNumber(account.closing_debit) }}</td>
+                    <td class="text-end">{{ formatNumber(account.closing_credit) }}</td>
+                </tr>
+
+                <!-- No Data Row -->
+                <tr *ngIf="trialBalanceData.length === 0">
+                    <td colspan="8" class="text-center py-4">
+                        <mat-icon class="large-icon">inbox</mat-icon>
+                        <p class="mt-2 mb-0">لا توجد بيانات لعرضها</p>
+                    </td>
+                </tr>
+            </tbody>
+
+            <!-- Totals Footer -->
+            <tfoot class="table-secondary" *ngIf="trialBalanceData.length > 0">
+                <tr class="fw-bold">
+                    <td colspan="2" class="text-center">الإجمالي</td>
+                    <td class="text-end">{{ formatNumber(totals.opening_debit) }}</td>
+                    <td class="text-end">{{ formatNumber(totals.opening_credit) }}</td>
+                    <td class="text-end">{{ formatNumber(totals.movement_debit) }}</td>
+                    <td class="text-end">{{ formatNumber(totals.movement_credit) }}</td>
+                    <td class="text-end">{{ formatNumber(totals.closing_debit) }}</td>
+                    <td class="text-end">{{ formatNumber(totals.closing_credit) }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- Summary Info -->
+    <div *ngIf="!loading && !error && trialBalanceData.length > 0" class="row mt-3">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <strong>ملخص:</strong>
+                عدد الحسابات: {{ trialBalanceData.length }} |
+                الفرق في رصيد أول المدة: {{ formatNumber(totals.opening_difference) }} |
+                الفرق في الحركة: {{ formatNumber(totals.movement_difference) }} |
+                الفرق في رصيد آخر المدة: {{ formatNumber(totals.closing_difference) }}
+            </div>
+        </div>
+    </div>
+</div>

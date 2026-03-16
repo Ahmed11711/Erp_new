@@ -1,0 +1,201 @@
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+      <mat-icon class="me-2">settings_phone</mat-icon>
+      إدارة أرقام الواتساب المتقدمة
+    </h2>
+    <button mat-raised-button color="primary" (click)="refreshData()" [disabled]="loading">
+      <mat-icon>refresh</mat-icon>
+      تحديث
+    </button>
+  </div>
+
+  <!-- Available Phone Numbers with Assignments -->
+  <div class="row" *ngIf="availablePhoneNumbers.length > 0; else noPhoneNumbers">
+    <div class="col-12 mb-4" *ngFor="let phoneNumber of availablePhoneNumbers">
+      <mat-card [class]="isPhoneNumberConfigured(phoneNumber.id) ? 'border-success configured-card' : 'border-warning unconfigured-card'" 
+               class="phone-number-card mb-3">
+        <mat-card-header>
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+              <mat-icon class="me-2" [color]="isPhoneNumberConfigured(phoneNumber.id) ? 'primary' : 'warn'">
+                {{ isPhoneNumberConfigured(phoneNumber.id) ? 'phone' : 'phone_disabled' }}
+              </mat-icon>
+              <div>
+                <h5 class="mb-1">{{ phoneNumber.name }}</h5>
+                <small class="text-muted">ID: {{ phoneNumber.id }}</small>
+              </div>
+            </div>
+            <mat-chip [color]="isPhoneNumberConfigured(phoneNumber.id) ? 'primary' : 'warn'">
+              {{ isPhoneNumberConfigured(phoneNumber.id) ? 'مكون' : 'غير مكون' }}
+            </mat-chip>
+          </div>
+        </mat-card-header>
+        <mat-card-content>
+          <!-- Assigned Users Section -->
+          <div class="assigned-users-section">
+            <h6 class="mb-3">
+              <mat-icon class="me-2">people</mat-icon>
+              المستخدمون المعينون ({{ getAssignedUsersForPhoneNumber(phoneNumber.id).length }})
+            </h6>
+            
+            <!-- Current Assignments -->
+            <div class="current-assignments mb-3" *ngIf="getAssignedUsersForPhoneNumber(phoneNumber.id).length > 0">
+              <div class="row">
+                <div class="col-md-6 mb-2" *ngFor="let user of getAssignedUsersForPhoneNumber(phoneNumber.id)">
+                  <div class="user-assignment-card d-flex justify-content-between align-items-center p-2">
+                    <div class="d-flex align-items-center">
+                      <mat-icon class="me-2 text-primary">person</mat-icon>
+                      <div>
+                        <div class="user-name">{{ user.name }}</div>
+                        <small class="text-muted">{{ user.email }}</small>
+                      </div>
+                    </div>
+                    <button mat-icon-button color="warn" 
+                            (click)="removeUserAssignment(phoneNumber.id, user.id)"
+                            [disabled]="loading"
+                            matTooltip="إزالة التعيين">
+                      <mat-icon>remove_circle</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- No Users Assigned -->
+            <div class="no-users-assigned text-center py-3" *ngIf="getAssignedUsersForPhoneNumber(phoneNumber.id).length === 0">
+              <mat-icon class="text-muted" style="font-size: 48px; height: 48px; width: 48px;">person_off</mat-icon>
+              <p class="text-muted mt-2">لا يوجد مستخدمون معينون لهذا الرقم</p>
+            </div>
+          </div>
+
+          <!-- Assignment Controls -->
+          <div class="assignment-controls mt-3" *ngIf="isPhoneNumberConfigured(phoneNumber.id)">
+            <mat-divider class="mb-3"></mat-divider>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">
+                <mat-icon class="me-2">person_add</mat-icon>
+                تعيين مستخدمين جدد
+              </h6>
+              <div class="selection-info">
+                <mat-chip 
+                  *ngIf="selectedUsers[phoneNumber.id] && selectedUsers[phoneNumber.id].length > 0"
+                  color="primary" 
+                  class="me-2">
+                  {{ selectedUsers[phoneNumber.id].length }} مستخدمين محددين
+                </mat-chip>
+                <mat-chip 
+                  *ngIf="!selectedUsers[phoneNumber.id] || selectedUsers[phoneNumber.id].length === 0"
+                  color="default" 
+                  class="me-2">
+                  لم يتم الاختيار بعد
+                </mat-chip>
+              </div>
+            </div>
+            
+            <div class="row">
+              <div class="col-md-8">
+                <mat-form-field appearance="outline" class="w-100 user-select-field">
+                  <mat-label>
+                    <mat-icon class="me-2">people</mat-icon>
+                    اختر المستخدمين
+                  </mat-label>
+                  <mat-select multiple 
+                            [(value)]="selectedUsers[phoneNumber.id]"
+                            (selectionChange)="onSelectionChange(phoneNumber.id, $event)"
+                            panelClass="user-select-panel">
+                    <mat-option *ngFor="let user of getUnassignedUsersForPhoneNumber(phoneNumber.id)" 
+                                [value]="user.id"
+                                class="user-option">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <div class="user-info">
+                          <div class="user-name">{{ user.name }}</div>
+                          <small class="user-email">{{ user.email }}</small>
+                        </div>
+                        <mat-icon class="user-icon">person</mat-icon>
+                      </div>
+                    </mat-option>
+                    <mat-option 
+                      *ngIf="getUnassignedUsersForPhoneNumber(phoneNumber.id).length === 0"
+                      disabled 
+                      class="no-users-option">
+                      <div class="text-center">
+                        <mat-icon class="text-muted">person_off</mat-icon>
+                        <div>لا يوجد مستخدمون متاحون للتعيين</div>
+                      </div>
+                    </mat-option>
+                  </mat-select>
+                  <mat-hint>
+                    <mat-icon class="me-1 text-info">info</mat-icon>
+                    يمكنك اختيار عدة مستخدمين بنفس الوقت. 
+                    {{ getUnassignedUsersForPhoneNumber(phoneNumber.id).length }} مستخدم متاح
+                  </mat-hint>
+                </mat-form-field>
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <div class="w-100 d-flex gap-2">
+                  <button mat-raised-button 
+                          color="primary" 
+                          [disabled]="!selectedUsers[phoneNumber.id] || selectedUsers[phoneNumber.id].length === 0 || loading"
+                          (click)="assignUsersToPhoneNumber(phoneNumber.id)"
+                          class="flex-fill"
+                          matTooltip="تعيين المستخدمين المحددين لهذا الرقم">
+                    <mat-icon class="me-1">group_add</mat-icon>
+                    تعيين المستخدمين
+                  </button>
+                  <button mat-stroked-button 
+                          color="accent"
+                          (click)="clearSelection(phoneNumber.id)"
+                          [disabled]="!selectedUsers[phoneNumber.id] || selectedUsers[phoneNumber.id].length === 0"
+                          matTooltip="مسح الاختيار">
+                    <mat-icon>clear</mat-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </div>
+
+  <!-- No Phone Numbers -->
+  <ng-template #noPhoneNumbers>
+    <div class="text-center py-4">
+      <mat-icon class="text-muted" style="font-size: 48px; height: 48px; width: 48px;">phone_disabled</mat-icon>
+      <p class="text-muted mt-2">لا توجد أرقام واتساب متاحة</p>
+      <p class="text-muted">يرجى تكوين أرقام الواتساب في ملف .env</p>
+    </div>
+  </ng-template>
+
+  <!-- Instructions Card -->
+  <!-- <mat-card class="mt-4 instructions-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon class="me-2">info</mat-icon>
+        كيفية الاستخدام
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="instructions">
+        <div class="instruction-item mb-3">
+          <h6><mat-icon class="me-2 text-primary">looks_one</mat-icon>تكوين الأرقام</h6>
+          <p>تأكد من تكوين أرقام الواتساب في ملف .env مع META_PHONE_NUMBER_ID و META_ACCESS_TOKEN</p>
+        </div>
+        <div class="instruction-item mb-3">
+          <h6><mat-icon class="me-2 text-primary">looks_two</mat-icon>تعيين المستخدمين</h6>
+          <p>يمكنك تعيين عدة مستخدمين لنفس رقم الواتساب. المستخدمون المعينون سيمكنهم إرسال الرسائل من هذا الرقم.</p>
+        </div>
+        <div class="instruction-item mb-3">
+          <h6><mat-icon class="me-2 text-primary">looks_3</mat-icon>إرسال الرسائل</h6>
+          <p>عند إرسال الرسالة، يمكن للمستخدم اختيار رقم الواتساب الذي يريد الإرسال منه من بين الأرقام المعينة له.</p>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card> -->
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="loading">
+    <mat-spinner></mat-spinner>
+  </div>
+</div>

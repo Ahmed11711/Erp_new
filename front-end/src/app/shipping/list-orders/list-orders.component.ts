@@ -14,8 +14,10 @@ import { UserService } from 'src/app/manage-system/services/user.service';
 import { DialogNotificationNoteComponent } from '../dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from '../dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { DialogWhatsAppMessageComponent } from 'src/app/whatsapp/components/dialog-whatsapp-message/dialog-whatsapp-message.component';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { AuthService } from 'src/app/auth/auth.service';
+import { WhatsAppService } from 'src/app/whatsapp/services/whatsapp.service';
 
 @Component({
   selector: 'app-list-orders',
@@ -24,6 +26,8 @@ import { AuthService } from 'src/app/auth/auth.service';
 })
 export class ListOrdersComponent {
   user!:string;
+  /** True if the current user is assigned to at least one WhatsApp number */
+  hasWhatsAppAccess = false;
   orders :any = [];
   banks :any = [];
   currentPageData :any = [];
@@ -45,7 +49,8 @@ export class ListOrdersComponent {
     private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
     private filterService:FilterOrderService , private shippingLine:ShippingLinesService,
     private userService:UserService ,private renderer: Renderer2 ,private el: ElementRef, private bankService:BanksService,
-    private authService:AuthService
+    private authService:AuthService, private router: Router,
+    private whatsappService: WhatsAppService
     ) {
       document.addEventListener('scroll', (event) => {
         this.onListenerTriggered(event);
@@ -54,6 +59,13 @@ export class ListOrdersComponent {
 
   ngOnInit(): void {
     this.user = this.authService.getUser();
+    this.whatsappService.getUserPhoneNumbers().subscribe({
+      next: (res) => {
+        const list = res?.data ?? res ?? [];
+        this.hasWhatsAppAccess = Array.isArray(list) && list.length > 0;
+      },
+      error: () => { this.hasWhatsAppAccess = false; }
+    });
     this.order.getProducts().subscribe((result:any)=>this.products = result);
 
     this.filterService.value.subscribe(res=>{
@@ -386,6 +398,52 @@ export class ListOrdersComponent {
   orderToSend:any[]=[];
   sendOneOrder:boolean = false;
 
+  sendWhatsAppMessage(item: any): void {
+    if (item && item.customer_phone_1) {
+      const dialogRef = this.dialog.open(DialogWhatsAppMessageComponent, {
+        width: '40%',
+        data: {
+          order: item,
+          refreshData: () => this.filter(arguments)
+        },
+      });
+      dialogRef.afterClosed().subscribe(result => {
+        // Handle closed dialog if needed
+      });
+    } else {
+      Swal.fire({
+        icon: 'warning',
+        title: 'تنبيه',
+        text: 'لا يوجد رقم هاتف للعميل',
+      });
+    }
+  }
+
+  openChatWithCustomer(item: any): void {
+    if (item && item.customer_phone_1) {
+      // Format phone number
+      let phone = item.customer_phone_1;
+      if (!phone.startsWith('+')) {
+        if (phone.startsWith('0')) {
+          phone = '+2' + phone.substring(1);
+        } else {
+          phone = '+2' + phone;
+        }
+      }
+      
+      // Navigate to chat page - the component will find or create customer by phone
+      this.router.navigate(['/dashboard/whatsapp/chat'], {
+        queryParams: { phone: phone }
+      });
+    } else {
+      Swal.fire({
+        icon: 'warning',
+        title: 'تنبيه',
+        text: 'لا يوجد رقم هاتف للعميل',
+      });
+    }
+  }
+
   notificationOrders:any[]=[];
   sendNotification(user:any): void {
     if (this.sendOneOrder) {
@@ -394,14 +452,33 @@ export class ListOrdersComponent {
       this.notificationOrders = this.googleSheetData
     }
     if (this.notificationOrders.length >0) {
-      const dialogRef = this.dialog.open(DialogNotificationNoteComponent, {
-        width: '25%',data: {user,orders: this.notificationOrders ,  refreshData: ()=>this.filter(arguments)},
-      });
-      dialogRef.afterClosed().subscribe(result => {
-        this.googleSheetData = [];
-        this.notificationOrders = [];
-        this.orderToSend = [];
-      });
+      // Use WhatsApp dialog instead of notification dialog
+      const order = this.notificationOrders[0];
+      if (order && order.customer_phone_1) {
+        const dialogRef = this.dialog.open(DialogWhatsAppMessageComponent, {
+          width: '40%',
+          data: {
+            order: order,
+            orders: this.notificationOrders,
+            refreshData: () => this.filter(arguments)
+          },
+        });
+        dialogRef.afterClosed().subscribe(result => {
+          this.googleSheetData = [];
+          this.notificationOrders = [];
+          this.orderToSend = [];
+        });
+      } else {
+        // Fallback to notification if no phone number
+        const dialogRef = this.dialog.open(DialogNotificationNoteComponent, {
+          width: '25%',data: {user,orders: this.notificationOrders ,  refreshData: ()=>this.filter(arguments)},
+        });
+        dialogRef.afterClosed().subscribe(result => {
+          this.googleSheetData = [];
+          this.notificationOrders = [];
+          this.orderToSend = [];
+        });
+      }
     }
   }
 

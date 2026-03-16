@@ -19,4 +19,14 @@ export class CimmitmentService {
   data(){
     return this.http.get<any>(`${environment.Url}/cimmitments`)
   }
+
+  pay(id: number, payload: {
+    amount: number;
+    cash_account_id: number;
+    payment_source_type: 'safe' | 'bank' | 'service_account';
+    payment_source_id: number;
+    description?: string;
+  }): Observable<any> {
+    return this.http.post<any>(`${environment.Url}/cimmitments/${id}/pay`, payload);
+  }
 }

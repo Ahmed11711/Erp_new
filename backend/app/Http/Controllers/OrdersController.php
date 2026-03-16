@@ -1169,7 +1169,19 @@ class OrdersController extends Controller
                 $total = 0;
                 $finshied = true;
                 $productsToShip = json_decode($request->productsToShip, true);
+                $totalCogs = 0;
                 foreach ($productsToShip as $product) {
+                    $order_product = OrderProduct::find($product['id']);
+                    $categoryForCost = Category::find($order_product->category_id);
+                    $avgCost = 0;
+                    if ($categoryForCost) {
+                        if ($categoryForCost->quantity > 0 && $categoryForCost->total_price != 0) {
+                            $avgCost = (float)$categoryForCost->total_price / (float)$categoryForCost->quantity;
+                        } elseif (!is_null($categoryForCost->unit_price)) {
+                            $avgCost = (float)$categoryForCost->unit_price;
+                        }
+                    }
+                    $totalCogs += $avgCost * (float)$product['quantity'];
                     $order_product = OrderProduct::find($product['id']);
                     $order_product->shipped_quantity += (float)$product['quantity'];
                     $order_product->save();
@@ -1338,6 +1350,98 @@ class OrdersController extends Controller
 
                     $order->order_status = 'شحن جزئي';
                     $order->save();
+                }
+                
+                if ($totalCogs > 0) {
+                    $cogsAcc = \App\Models\TreeAccount::where('detail_type', 'cogs')->first();
+                    if (!$cogsAcc) {
+                        $cogsAcc = \App\Models\TreeAccount::where('type', 'expense')->where('name', 'like', '%تكلفة%')->first();
+                    }
+                    $inventoryAcc = \App\Models\TreeAccount::where('detail_type', 'inventory')->first();
+                    if (!$inventoryAcc) {
+                        $inventoryAcc = \App\Models\TreeAccount::where('type', 'asset')->where('name', 'like', '%مخزون%')->first();
+                    }
+                    if ($cogsAcc && $inventoryAcc) {
+                        \App\Models\AccountEntry::create([
+                            'tree_account_id' => $cogsAcc->id,
+                            'debit' => $totalCogs,
+                            'credit' => 0,
+                            'description' => 'تكلفة البضاعة المباعة للطلب رقم ' . $order->id,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        \App\Models\AccountEntry::create([
+                            'tree_account_id' => $inventoryAcc->id,
+                            'debit' => 0,
+                            'credit' => $totalCogs,
+                            'description' => 'إثبات تكلفة البضاعة المباعة للطلب رقم ' . $order->id,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        try {
+                            $accService = app(\App\Services\Accounting\AccountingService::class);
+                            $accService->updateAccountHierarchyBalances($cogsAcc->id);
+                            $accService->updateAccountHierarchyBalances($inventoryAcc->id);
+                        } catch (\Exception $e) {
+                        }
+                    }
+                }
+                $salesAcc = \App\Models\TreeAccount::where('detail_type', 'sales')->first();
+                if (!$salesAcc) {
+                    $salesAcc = \App\Models\TreeAccount::where('type', 'revenue')->where(function ($q) {
+                        $q->where('name', 'like', '%مبيعات%')->orWhere('name_en', 'like', '%sales%');
+                    })->first();
+                }
+                if ($salesAcc && $total > 0) {
+                    $customerTreeId = null;
+                    $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+                    if ($order->customer_type == 'شركة' && $order->company_id) {
+                        $company = \App\Models\customerCompany::find($order->company_id);
+                        if ($company) {
+                            $account = $accountLinkingService->ensureCustomerCompanyAccount($company);
+                            $customerTreeId = $account ? $account->id : null;
+                        }
+                    } else {
+                        $phone = $order->customer_phone_1 ?? '';
+                        $accName = $order->customer_name . ($phone ? ' - ' . $phone : '');
+                        $indAccount = \App\Models\TreeAccount::where('name', $accName)->first();
+                        if (!$indAccount) {
+                            $indAccount = $accountLinkingService->createCustomerAccount($accName, 'فرد', null);
+                        }
+                        $customerTreeId = $indAccount ? $indAccount->id : null;
+                    }
+                    if ($customerTreeId) {
+                        $dailyEntry = \App\Models\DailyEntry::create([
+                            'date' => now(),
+                            'entry_number' => \App\Models\DailyEntry::getNextEntryNumber(),
+                            'description' => "إثبات إيراد مبيعات - طلب: " . $order->id,
+                            'user_id' => auth()->id(),
+                        ]);
+                        \App\Models\AccountEntry::create([
+                            'tree_account_id' => $customerTreeId,
+                            'debit' => $total,
+                            'credit' => 0,
+                            'description' => "ذمم عملاء مقابل مبيعات - طلب: " . $order->id,
+                            'daily_entry_id' => $dailyEntry->id,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        \App\Models\AccountEntry::create([
+                            'tree_account_id' => $salesAcc->id,
+                            'debit' => 0,
+                            'credit' => $total,
+                            'description' => "إيراد مبيعات - طلب: " . $order->id,
+                            'daily_entry_id' => $dailyEntry->id,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        try {
+                            $accService = app(\App\Services\Accounting\AccountingService::class);
+                            $accService->updateAccountHierarchyBalances($customerTreeId);
+                            $accService->updateAccountHierarchyBalances($salesAcc->id);
+                        } catch (\Exception $e) {
+                        }
+                    }
                 }
             } else {
                 $order->order_status = 'تم شحن';
@@ -1559,6 +1663,9 @@ class OrdersController extends Controller
                     } else {
                         $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
                     }
+                    if ($paymentType === 'bank' && $request->bank_id) {
+                        $this->postBankCollectionAccounting($order, $amount, $request->bank_id, $details);
+                    }
                 }
 
                 $company = CustomerCompany::find($order->company_id);
@@ -1684,6 +1791,7 @@ class OrdersController extends Controller
                         $ref = $request->id;
                         $type = 'الطلبات';
                         $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                        $this->postBankCollectionAccounting($order, $amount, $request->bank_id, $details);
                     }
                 }
 
@@ -1769,10 +1877,12 @@ class OrdersController extends Controller
                 $ref = $order->id;
                 $details = ' تحصيل جزئي من طلب رقم ' . $order->id;
                 $type = 'الطلبات';
+                $paymentType = $request->payment_type ?? 'bank';
+                $bankIdForProc = ($paymentType === 'bank') ? $request->bank_id : null;
                 DB::statement('CALL update_customer_company_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
                     $company_id,
                     $amount,
-                    $request->bank_id,
+                    $bankIdForProc,
                     $ref,
                     $details,
                     $type,
@@ -1780,15 +1890,26 @@ class OrdersController extends Controller
                     now()
                 ]);
 
-                $bank = Bank::find($request->bank_id);
-
                 $amount = (float)$request->amount;
                 $details = ' تحصيل جزئي من عميل شركة    ' . $company->name;
                 $ref = $order->id;
                 $type = 'الطلبات';
-                $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                $sourceName = '';
+                if ($paymentType === 'safe' && $request->has('safe_id')) {
+                    $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    $safe = \App\Models\Safe::find($request->safe_id);
+                    $sourceName = $safe ? $safe->name : 'خزينة';
+                } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
+                    $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    $svc = \App\Models\ServiceAccount::find($request->service_account_id);
+                    $sourceName = $svc ? $svc->name : 'حساب خدمي';
+                } else {
+                    $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                    $bank = Bank::find($request->bank_id);
+                    $sourceName = $bank ? $bank->name : 'بنك';
+                }
 
-                $action = ' تحصيل جزئي مبلغ ' . $request->amount . ' في حساب ' . $bank->name;
+                $action = ' تحصيل جزئي مبلغ ' . $request->amount . ' في حساب ' . $sourceName;
                 $this->insertTracking($order->id, $action, $user_id, now());
 
                 if ($request->has('note') && $request->note != '') {
@@ -2427,75 +2548,33 @@ class OrdersController extends Controller
 
         // 2. Customer Tree Account (Credit)
         $customerTreeId = null;
+        $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+
         if ($order->customer_type == 'شركة' && $order->company_id) {
             $company = \App\Models\customerCompany::find($order->company_id);
             if ($company) {
-                if (!$company->tree_account_id) {
-                    // Create Tree Account for Company
-                    $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first();
-                    if (!$parentAccount) {
-                         $parentAccount = \App\Models\TreeAccount::firstOrCreate(
-                            ['name' => 'العملاء'],
-                            ['type' => 'asset', 'balance' => 0, 'code' => '1100'] 
-                        );
-                    }
-                    $checkCode = \App\Models\TreeAccount::where('code', $parentAccount->code . $company->id)->first();
-                     $newAccount = \App\Models\TreeAccount::create([
-                        'name' => $company->name,
-                        'parent_id' => $parentAccount->id,
-                        'code' => $checkCode ? $parentAccount->code . $company->id . rand(10,99) : $parentAccount->code . $company->id,
-                        'type' => 'asset',
-                        'balance' => 0
-                    ]);
-                    $company->tree_account_id = $newAccount->id;
-                    $company->save();
-                }
-                $customerTreeId = $company->tree_account_id;
+                $account = $accountLinkingService->ensureCustomerCompanyAccount($company);
+            $customerTreeId = $account ? $account->id : null;
             }
         } else {
-             // Individual Customer - Use generic "Individual Customers" account or create specific?
-             // Creating specific for every individual might bloat the tree. 
-             // But for consistency:
-             $parentAccount = \App\Models\TreeAccount::where('name', 'like', '%عملاء افراد%')->first(); // Individual Customers
-             if (!$parentAccount) {
-                 $parentMain = \App\Models\TreeAccount::where('name', 'like', '%العملاء%')->first(); // Customers
-                 if (!$parentMain) {
-                      $parentMain = \App\Models\TreeAccount::create(['name' => 'العملاء', 'type' => 'asset', 'code' => '1100', 'balance'=>0]);
-                 }
-                 $parentAccount = \App\Models\TreeAccount::create([
-                     'name' => 'عملاء افراد',
-                     'parent_id' => $parentMain->id,
-                     'code' => $parentMain->code . '999',
-                     'type' => 'asset',
-                     'balance' => 0
-                 ]);
-             }
+             // Individual Customer - إنشاء حساب تحت إعدادات عملاء الأفراد
+             $phone = $order->customer_phone_1 ?? '';
+             $accName = $order->customer_name . ($phone ? ' - ' . $phone : '');
              
-             // Check if specific individual account exists (by phone)
-             // Using phone as identifier
-             $phone = $order->customer_phone_1;
-             $accName = $order->customer_name . ' - ' . $phone;
              $indAccount = \App\Models\TreeAccount::where('name', $accName)->first();
-             if (!$indAccount) {
-                 $indAccount = \App\Models\TreeAccount::create([
-                     'name' => $accName,
-                     'parent_id' => $parentAccount->id,
-                     'code' => $parentAccount->code . substr($phone, -4) . rand(10,99),
-                     'type' => 'asset',
-                     'balance' => 0
-                 ]);
+             if ($indAccount) {
+                 $customerTreeId = $indAccount->id;
+             } else {
+                $indAccount = $accountLinkingService->createCustomerAccount($accName, 'فرد', null);
+                $customerTreeId = $indAccount ? $indAccount->id : null;
              }
-             $customerTreeId = $indAccount->id;
         }
 
         if ($customerTreeId) {
             // Generate Daily Entry
-             $lastEntry = \App\Models\DailyEntry::orderByDesc('entry_number')->first();
-             $entryNumber = $lastEntry ? (int)$lastEntry->entry_number + 1 : 1;
- 
              $dailyEntry = \App\Models\DailyEntry::create([
                  'date' => now(),
-                 'entry_number' => str_pad($entryNumber, 6, '0', STR_PAD_LEFT),
+                 'entry_number' => \App\Models\DailyEntry::getNextEntryNumber(),
                  'description' => "دفعة مقدمة - طلب: " . $order->id . " - " . $note,
                  'user_id' => auth()->id(),
              ]);
@@ -2545,6 +2624,11 @@ class OrdersController extends Controller
             $custAcc = \App\Models\TreeAccount::find($customerTreeId);
             $custAcc->increment('credit_balance', $amount);
             $custAcc->decrement('balance', $amount); // Asset decreases
+
+            // تحديث الحساب والحسابات الأب في الشجرة
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+            $accService->updateAccountHierarchyBalances($debitTreeId);
+            $accService->updateAccountHierarchyBalances($customerTreeId);
         }
     }
 
@@ -2592,6 +2676,62 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
             $new_balance = $current_balance + $amount;
 
             $account->update(['balance' => $new_balance]);
+        }
+    }
+    
+    private function postBankCollectionAccounting($order, $amount, $bankId, $note)
+    {
+        $bank = \App\Models\Bank::find($bankId);
+        if (!$bank || !$bank->asset_id || $amount <= 0) {
+            return;
+        }
+        $customerTreeId = null;
+        $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+        if ($order->customer_type == 'شركة' && $order->company_id) {
+            $company = \App\Models\customerCompany::find($order->company_id);
+            if ($company) {
+                $account = $accountLinkingService->ensureCustomerCompanyAccount($company);
+                $customerTreeId = $account ? $account->id : null;
+            }
+        } else {
+            $phone = $order->customer_phone_1 ?? '';
+            $accName = $order->customer_name . ($phone ? ' - ' . $phone : '');
+            $indAccount = \App\Models\TreeAccount::where('name', $accName)->first();
+            if (!$indAccount) {
+                $indAccount = $accountLinkingService->createCustomerAccount($accName, 'فرد', null);
+            }
+            $customerTreeId = $indAccount ? $indAccount->id : null;
+        }
+        if (!$customerTreeId) return;
+        $dailyEntry = \App\Models\DailyEntry::create([
+            'date' => now(),
+            'entry_number' => \App\Models\DailyEntry::getNextEntryNumber(),
+            'description' => "تحصيل من العميل - طلب: " . $order->id . " - " . $note,
+            'user_id' => auth()->id(),
+        ]);
+        \App\Models\AccountEntry::create([
+            'tree_account_id' => $bank->asset_id,
+            'debit' => $amount,
+            'credit' => 0,
+            'description' => "تحصيل من العميل - طلب: " . $order->id,
+            'daily_entry_id' => $dailyEntry->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \App\Models\AccountEntry::create([
+            'tree_account_id' => $customerTreeId,
+            'debit' => 0,
+            'credit' => $amount,
+            'description' => "سداد ذمم العملاء - طلب: " . $order->id,
+            'daily_entry_id' => $dailyEntry->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        try {
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+            $accService->updateAccountHierarchyBalances($bank->asset_id);
+            $accService->updateAccountHierarchyBalances($customerTreeId);
+        } catch (\Exception $e) {
         }
     }
 }

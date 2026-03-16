@@ -23,6 +23,8 @@ class SupplierPay extends Model
         'pay_number',
         'amount',
         'bank_id',
+        'safe_id',
+        'service_account_id',
         'supplier_id',
         'receipt_date'
     ];

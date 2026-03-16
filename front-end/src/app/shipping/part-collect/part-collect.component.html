@@ -17,13 +17,20 @@
 
   <div class="form-row">
     <div class="form-group col-md-2">
-
-          <select class="form-control" name="bank" ngModel required #bank="ngModel">
-            <option selected disabled value=""> الخزينة</option>
-            <option *ngFor="let item of banks" value="{{item.id}}">{{item.name}}</option>
-          </select>
-        </div>
-
+      <label class="form-label">نوع المصدر</label>
+      <select class="form-control" name="paymentType" [(ngModel)]="paymentType">
+        <option value="safe">خزينة</option>
+        <option value="bank">بنك</option>
+        <option value="service_account">حساب خدمي</option>
+      </select>
+    </div>
+    <div class="form-group col-md-2">
+      <label class="form-label">{{ paymentType === 'safe' ? 'الخزينة' : paymentType === 'bank' ? 'البنك' : 'الحساب الخدمي' }}</label>
+      <select class="form-control" name="sourceId" [(ngModel)]="sourceId" required #sourceSelect="ngModel">
+        <option [ngValue]="null" disabled>اختر المصدر</option>
+        <option *ngFor="let item of sourceList" [ngValue]="item.id">{{ item.name }} ({{ item.balance | number:'1.2-2' }})</option>
+      </select>
+    </div>
     <div class="form-group col-md-2">
       <input
       type="number"
@@ -45,13 +52,11 @@
       placeholder="اضف ملحوظة"
       />
     </div>
-
   </div>
   <div class="text-center">
-    <button  type="submit" class="btn btn-primary"
-      [disabled]="collect.invalid || total_balance<amount">تحصيل</button>
+    <button type="submit" class="btn btn-primary"
+      [disabled]="collect.invalid || !sourceId || total_balance < amount">تحصيل</button>
   </div>
-
 
 </form>
 </div>

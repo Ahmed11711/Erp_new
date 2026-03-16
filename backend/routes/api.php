@@ -32,6 +32,28 @@ use Illuminate\Support\Facades\Log;
 |
 */
 
+Route::get('/meta-test', function () {
+    return app(\App\Services\MetaWhatsAppService::class)
+        ->sendMessage('201068704455', 'Test from server');
+});
+
+Route::get('/test', function () {
+    return response()->json(['status' => 'ok']);
+});
+
+
+// Route::get('/meta/webhook', function () {
+//     $verify_token = 'K9xT2pLm8QwZ4rNs7VbY1cHd6EfG3uJk';
+//     if (request()->get('hub_verify_token') === $verify_token) {
+//         return response(request()->get('hub_challenge'), 200);
+//     }
+//     return response('Error, wrong token', 403);
+// });
+
+Route::get('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'verify']);
+Route::post('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'handle']);
+
+
 Route::group(['middleware' => 'api', 'prefix' => 'auth'], function ($router) {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout']);
@@ -53,6 +75,26 @@ Route::middleware('auth')->group(function () {
     Route::get('sentnotification', [App\Http\Controllers\NotificationController::class, 'sentNotifiy']);
     Route::get('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readNotify']);
     Route::post('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readOrderNotify']);
+
+    // WhatsApp Messaging Routes
+    Route::prefix('whatsapp/')->group(function () {
+        Route::post('send', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessage']);
+        Route::post('send-template', [App\Http\Controllers\WhatsAppMessageController::class, 'sendTemplateMessage']);
+        Route::post('send-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessageFromOrder']);
+        Route::get('meta-templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getMetaTemplatesList']);
+        Route::post('send-meta-template-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMetaTemplateFromOrder']);
+        Route::get('chat/{customerId}', [App\Http\Controllers\WhatsAppMessageController::class, 'getChatMessages']);
+        Route::get('customers', [App\Http\Controllers\WhatsAppMessageController::class, 'getCustomers']);
+        Route::get('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getTemplates']);
+        Route::post('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'createTemplate']);
+        
+        // WhatsApp Number Assignment Routes
+        Route::get('phone-numbers', [App\Http\Controllers\WhatsAppMessageController::class, 'getAvailablePhoneNumbers']);
+        Route::get('assignments', [App\Http\Controllers\WhatsAppMessageController::class, 'getAllAssignments']);
+        Route::get('user-phone-numbers', [App\Http\Controllers\WhatsAppMessageController::class, 'getUserPhoneNumbers']);
+        Route::post('assign-users', [App\Http\Controllers\WhatsAppMessageController::class, 'assignUsersToPhoneNumber']);
+        Route::delete('remove-assignment', [App\Http\Controllers\WhatsAppMessageController::class, 'removeUserAssignment']);
+    });
 
     Route::get('order_source', [OrderSourceController::class, 'index']);
     Route::get('shipping_methods', [ShippingMethodsController::class, 'index']);
@@ -114,6 +156,7 @@ Route::middleware('auth')->group(function () {
 
         Route::apiResource('assets', App\Http\Controllers\AssetController::class);
         Route::post('assets/run-depreciation', [App\Http\Controllers\DepreciationController::class, 'runDepreciation']); // New Route
+        Route::post('cimmitments/{id}/pay', [App\Http\Controllers\CimmitmentController::class, 'pay']);
         Route::apiResource('cimmitments', App\Http\Controllers\CimmitmentController::class);
         Route::apiResource('incomes', App\Http\Controllers\IncomeController::class);
     });
@@ -232,10 +275,23 @@ Route::middleware('auth')->group(function () {
         Route::post('googlesheet/{sheet}', [App\Http\Controllers\GoogleController::class, 'addData']);
 
         Route::post('edit-lead', [CorporateSalesLeadController::class, 'edit']);
+        Route::get('lead/team-users', [CorporateSalesLeadController::class, 'getLeadTeamUsers']);
+        Route::get('lead/activity-stats', [CorporateSalesLeadController::class, 'getLeadActivityStats']);
+        Route::get('lead/recommenders/pending', [CorporateSalesLeadController::class, 'getPendingRecommenders']);
+        Route::delete('lead/recommenders/{id}', [CorporateSalesLeadController::class, 'deleteRecommender']);
+        Route::patch('lead/recommenders/{id}/toggle-done', [CorporateSalesLeadController::class, 'toggleRecommenderDone']);
         Route::apiResource('lead', App\Http\Controllers\CorporateSalesLeadController::class);
         Route::apiResource('lead-source', App\Http\Controllers\CorporateSalesLeadSourceController::class);
         Route::apiResource('lead-tool', App\Http\Controllers\CorporateSalesLeadToolController::class);
         Route::apiResource('lead-industry', App\Http\Controllers\CorporateSalesIndustryController::class);
+        
+        // Lead Status Management Routes
+        Route::apiResource('lead-statuses', App\Http\Controllers\LeadStatusController::class);
+        Route::get('lead-statuses/active', [App\Http\Controllers\LeadStatusController::class, 'getActive']);
+        Route::get('lead-statuses/closed-won', [App\Http\Controllers\LeadStatusController::class, 'getClosedWon']);
+        Route::get('lead-statuses/closed-lost', [App\Http\Controllers\LeadStatusController::class, 'getClosedLost']);
+        Route::get('lead-statuses/follow-up-leads', [App\Http\Controllers\LeadStatusController::class, 'getFollowUpLeads']);
+        Route::put('lead-statuses/lead/{lead}', [App\Http\Controllers\LeadStatusController::class, 'updateLeadStatus']);
     });
 
     Route::middleware(['department.access:Admin,Data Entry'])->group(function () {
@@ -366,6 +422,9 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::post('/', [App\Http\Controllers\V2\Accounting\CapitalController::class, 'store']);
     });
 
+    // Payment sources (unified: safes, banks, service accounts) for payment follow-up
+    Route::get('payment-sources', [App\Http\Controllers\V2\Accounting\PaymentSourcesController::class, 'index']);
+
     // Reports
     Route::prefix('reports/')->group(function () {
         Route::get('/daily-ledger', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'dailyLedger']);
@@ -373,6 +432,18 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/trial-balance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'trialBalance']);
         Route::get('/accounting-tree', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountingTree']);
         Route::get('/account-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'accountStatement']);
+        Route::get('/account-hierarchy', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'getAccountHierarchy']);
+        Route::get('/validate-income-structure', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'validateIncomeStructure']);
+        Route::get('/income-statement', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'incomeStatement']);
+        Route::get('/product-performance', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'productPerformance']);
+        Route::get('/category-profitability', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'categoryProfitability']);
+    });
+
+    // Accounting Transactions
+    Route::prefix('accounting/')->group(function () {
+        Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
+        Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
+        Route::post('/recalculate-all-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'recalculateAllHierarchyBalances']);
     });
     // Service Accounts
     Route::prefix('service-accounts/')->group(function () {
@@ -382,6 +453,11 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::put('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'update']);
         // Route::delete('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'destroy']);
     });
+
+    // Settings
+    Route::get('/settings', [App\Http\Controllers\SettingController::class, 'getSettings']);
+    Route::post('/settings', [App\Http\Controllers\SettingController::class, 'updateSettings']);
+    Route::post('/settings/update-existing', [App\Http\Controllers\SettingController::class, 'updateExistingEntities']);
 });
 
 Route::prefix('report/')->group(function () {

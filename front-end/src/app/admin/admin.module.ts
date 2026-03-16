@@ -15,12 +15,20 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
-
+import { WhatsappManagementComponent } from './whatsapp-management/whatsapp-management.component';
+import { MatCardModule } from '@angular/material/card';
+import { MatButtonModule } from '@angular/material/button';
+import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatDividerModule } from '@angular/material/divider';
 
 @NgModule({
   declarations: [
     AdminOrderComponent,
-    TrackingsComponent
+    TrackingsComponent,
+    WhatsappManagementComponent
   ],
   imports: [
     CommonModule,
@@ -37,6 +45,13 @@ import { NgxPaginationModule } from 'ngx-pagination';
     NgxPaginationModule,
     MatPaginatorModule,
     MatMenuModule,
+    MatCardModule,
+    MatButtonModule,
+    MatSelectModule,
+    MatSnackBarModule,
+    MatProgressSpinnerModule,
+    MatChipsModule,
+    MatDividerModule,
   ]
 })
 export class AdminModule { }

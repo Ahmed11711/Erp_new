@@ -6,67 +6,83 @@
     <div class="col-5">
       <div><p class="title header w-50 m-auto">تقرير المخزون</p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end"></div>
   </div>
 
-
   <div class="container-fluid">
-
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
+    <form class="my-5">
+      <div class="row g-3 align-items-end">
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label class="form-label">من تاريخ</label>
+          <input class="form-control" type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="load()">
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label class="form-label">الى تاريخ</label>
+          <input class="form-control" type="date" [(ngModel)]="dateTo" name="dateTo" (change)="load()">
         </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <select class="form-control" name="" id="">
-            <option selected disabled>المخزن</option>
-            <option value="">مخزن المواد الخام</option>
-            <option value="">مخزن منتج التشغيل</option>
-            <option value="">مخزن المنتج التام</option>
-            <option value="">مخزن الصيانة</option>
-            <option value="">مخزن التالف</option>
+        <div class="col-md-2">
+          <label class="form-label">المخزن</label>
+          <select class="form-control" [(ngModel)]="warehouse" name="warehouse" (change)="load()">
+            <option *ngFor="let w of warehouses" [value]="w.value">{{ w.label }}</option>
           </select>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100" type="button" (click)="load()" [disabled]="loading">تحديث</button>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">البحث</label>
+          <input class="form-control" type="search" placeholder="البحث..." [(ngModel)]="searchTerm" name="searchTerm" (input)="onSearchChange()">
         </div>
       </div>
     </form>
 
+    <div *ngIf="loading" class="text-center my-4">
+      <div class="spinner-border text-primary" role="status"></div>
+    </div>
 
-    <table class="table table-bordered w-75 m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>الصنف</th>
-        <th>المخزن</th>
-        <th>وحدة القياس</th>
-        <th>رصيد اول</th>
-        <th>الحركة</th>
-        <th>رصيد اخر</th>
-        <th>التاريخ</th>
-        <th>البيان</th>
-        <th>تفاصيل</th>
-      </thead>
-      <tbody>
-        <tr >
-          <td></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-        </tr>
-      </tbody>
-    </table>
+    <div *ngIf="!loading && loadError" class="alert alert-danger text-center my-4">
+      حدث خطأ في تحميل البيانات. تأكد من الاتصال بالخادم وتسجيل الدخول.
+    </div>
 
+    <div *ngIf="!loading && !loadError && data.length === 0" class="alert alert-info text-center my-4">
+      لا توجد بيانات لهذه الفترة أو المخزن المحدد.
+    </div>
 
+    <div class="table-responsive" *ngIf="!loading && !loadError && data.length > 0">
+      <table class="table table-bordered table-striped w-75 m-auto text-center">
+        <thead class="bg-dark text-white">
+          <tr>
+            <th>الصنف</th>
+            <th>المخزن</th>
+            <th>وحدة القياس</th>
+            <th>رصيد اول</th>
+            <th>الحركة</th>
+            <th>رصيد اخر</th>
+            <th>التاريخ</th>
+            <th>البيان</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of filteredData">
+            <td class="text-start">{{ r.category_name }}</td>
+            <td>{{ r.warehouse || warehouse }}</td>
+            <td>{{ r.measurement_unit || '-' }}</td>
+            <td>{{ r.balance_before }}</td>
+            <td>{{ r.quantity }}</td>
+            <td>{{ r.balance_after }}</td>
+            <td>{{ formatDate(r.created_at) }}</td>
+            <td>{{ r.type }}</td>
+          </tr>
+          <tr *ngIf="searchTerm && filteredData.length === 0" class="table-warning">
+            <td colspan="8" class="text-center">لا توجد نتائج تطابق البحث</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="d-flex justify-content-center my-2">
+        <mat-paginator [length]="length" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"
+          (page)="onPageChange($event)" showFirstLastButtons>
+        </mat-paginator>
+      </div>
+    </div>
+  </div>
 </div>

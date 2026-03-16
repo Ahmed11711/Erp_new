@@ -8,6 +8,8 @@ import { ProductSalesComponent } from './product-sales/product-sales.component';
 import { StorageComponent } from './storage/storage.component';
 import { CategoryComponent } from './category/category.component';
 import { ShippincompanyReportsComponent } from './shippincompany-reports/shippincompany-reports.component';
+import { ProductPerformanceComponent } from './product-performance/product-performance.component';
+import { LeadActivityReportComponent } from './lead-activity-report/lead-activity-report.component';
 import { departmentGuard } from '../guards/department.guard';
 
 const routes: Routes = [
@@ -26,6 +28,9 @@ const routes: Routes = [
   {path:"productsales" , component:ProductSalesComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
+  {path:"product-performance" , component:ProductPerformanceComponent,
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  },
   {path:"storage" , component:StorageComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
@@ -34,6 +39,9 @@ const routes: Routes = [
   },
   {path:"shippingcompany" , component:ShippincompanyReportsComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  },
+  {path:"lead-activity" , component:LeadActivityReportComponent,
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management', 'Corparates']}
   },
 ];
 

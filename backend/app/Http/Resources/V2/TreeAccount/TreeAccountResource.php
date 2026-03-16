@@ -16,8 +16,11 @@ class TreeAccountResource extends JsonResource
             'type' => $this->type,
             'account_type' => $this->account_type,
             'budget_type' => $this->budget_type,
+            'budget_amount' => $this->budget_amount ?? null,
+            'budget_period' => $this->budget_period ?? null,
             'is_trading_account' => $this->is_trading_account,
             'level' => $this->level,
+            'parent_id' => $this->parent_id,
             'balance' => $this->balance,
             'debit_balance' => $this->debit_balance,
             'credit_balance' => $this->credit_balance,
@@ -28,6 +31,7 @@ class TreeAccountResource extends JsonResource
                     'id' => $this->parent->id,
                     'name' => $this->parent->name,
                     'code' => $this->parent->code,
+                    'level' => $this->parent->level,
                 ];
             }),
             'main_account' => $this->whenLoaded('mainAccount', function () {
@@ -37,21 +41,11 @@ class TreeAccountResource extends JsonResource
                     'code' => $this->mainAccount->code,
                 ];
             }),
-            'children' => $this->whenLoaded('children', function () {
-                return $this->children->map(function ($child) {
-                    return [
-                        'id' => $child->id,
-                        'name' => $child->name,
-                        'name_en' => $child->name_en,
-                        'code' => $child->code,
-                        'type' => $child->type,
-                        'level' => $child->level,
-                        'balance' => $child->balance,
-                        'debit_balance' => $child->debit_balance,
-                        'credit_balance' => $child->credit_balance,
-                    ];
-                });
-            }),
+            // Always return children as full nested resources when available,
+            // whether they were loaded via relation or built manually (repository tree).
+            'children' => $this->children && $this->children->count() > 0
+                ? self::collection($this->children)
+                : [],
             'created_at' => $this->created_at->format('Y-m-d H:i') ?? null,
             'updated_at' => $this->updated_at->format('Y-m-d H:i') ?? null,
         ];

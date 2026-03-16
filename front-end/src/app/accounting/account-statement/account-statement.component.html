@@ -1,0 +1,116 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-5">
+      <div>
+        <p class="title header w-50 m-auto">كشف حساب تفصيلي</p>
+      </div>
+    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end">
+    </div>
+  </div>
+
+  <div class="container-fluid">
+
+    <form class="my-5 border p-3 rounded" [formGroup]="filterForm" (ngSubmit)="onSearch()">
+      <div class="row align-items-end">
+        <div class="col-md-2">
+          <label>نوع الحساب</label>
+          <select class="form-control" formControlName="source_type" (change)="onSourceTypeChange()">
+            <option value="all">الكل</option>
+            <option value="cash">خزينة</option>
+            <option value="bank">بنك</option>
+            <option value="service">حساب خدمي</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label>اسم الحساب</label>
+          <select class="form-control" formControlName="account_id">
+            <option *ngFor="let acc of filteredAccounts" [value]="acc.id">
+              {{ acc.code }} - {{ acc.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <label>من تاريخ</label>
+          <input class="form-control" type="date" formControlName="date_from">
+        </div>
+        <div class="col-md-2">
+          <label>الى تاريخ</label>
+          <input class="form-control" type="date" formControlName="date_to">
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100 submit" type="submit" [disabled]="loading">عرض التقرير</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Error Message -->
+    <div *ngIf="error" class="alert alert-danger" role="alert">
+      {{ error }}
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="text-center my-4">
+      جاري تحميل البيانات...
+    </div>
+
+    <div *ngIf="!loading && account" class="card mb-4">
+      <div class="card-header bg-info text-white">
+        <h5 class="mb-0">ملخص الحساب: {{ account?.name }} ({{ account?.code }})</h5>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col-md-3 border-end">
+            <h6>الرصيد الافتتاحي</h6>
+            <h4 class="text-primary">{{ openingBalance | number:'1.2-2' }}</h4>
+          </div>
+          <div class="col-md-3 border-end">
+            <h6>إجمالي مدين (وارد)</h6>
+            <h4 class="text-success">{{ totalDebit | number:'1.2-2' }}</h4>
+          </div>
+          <div class="col-md-3 border-end">
+            <h6>إجمالي دائن (صادر)</h6>
+            <h4 class="text-danger">{{ totalCredit | number:'1.2-2' }}</h4>
+          </div>
+          <div class="col-md-3">
+            <h6>الرصيد الختامي</h6>
+            <h4 class="text-primary">{{ closingBalance | number:'1.2-2' }}</h4>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="entries && entries.length > 0" class="table-responsive">
+      <table class="table table-bordered table-striped text-center">
+        <thead class="bg-dark text-white">
+          <th>التاريخ</th>
+          <th>البيان / الشرح</th>
+          <th class="text-success">مدين</th>
+          <th class="text-danger">دائن</th>
+          <th>الرصيد المتحرك</th>
+        </thead>
+        <tbody>
+          <tr *ngFor="let entry of entries">
+            <td>{{ entry.created_at | date:'yyyy-MM-dd HH:mm' }}</td>
+            <td>{{ entry.description }}</td>
+            <td class="text-success">{{ entry.debit > 0 ? (entry.debit | number:'1.2-2') : '-' }}</td>
+            <td class="text-danger">{{ entry.credit > 0 ? (entry.credit | number:'1.2-2') : '-' }}</td>
+            <td style="direction: ltr;">{{ entry.running_balance | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="!loading && account && entries && entries.length == 0" class="alert alert-warning text-center">
+      لا توجد حركات في الفترة المحددة
+    </div>
+
+  </div>
+
+</div>
+

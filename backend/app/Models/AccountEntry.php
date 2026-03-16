@@ -35,4 +35,9 @@ class AccountEntry extends Model
     {
         return $this->belongsTo(DailyEntry::class);
     }
+
+    public function cimmitment()
+    {
+        return $this->belongsTo(Cimmitment::class);
+    }
 }

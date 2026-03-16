@@ -1,0 +1,155 @@
+/* Arabic RTL Support Classes */
+.arabic-text {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.arabic-input {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.arabic-textarea {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.arabic-label {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+/* Fix for Arabic text in mixed content */
+.arabic-container {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Ensure proper display of Arabic numbers and text */
+.arabic-numbers {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: normal;
+}
+
+/* For headings with Arabic content */
+.arabic-heading {
+  direction: rtl;
+  text-align: right;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* For paragraphs with Arabic content */
+.arabic-paragraph {
+  direction: rtl;
+  text-align: right;
+  line-height: 1.6;
+  unicode-bidi: embed;
+}
+
+/* For table cells with Arabic content */
+.arabic-cell {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+/* For quotes and notes with Arabic content */
+.arabic-quote {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.arabic-note {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+  resize: vertical;
+}
+
+/* Global RTL support for form elements */
+input[type="text"].arabic,
+input[type="email"].arabic,
+input[type="tel"].arabic,
+input[type="search"].arabic,
+textarea.arabic {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+/* Fix for placeholder text in Arabic */
+.arabic::placeholder {
+  text-align: right;
+  direction: rtl;
+}
+
+/* Bootstrap RTL overrides */
+.arabic .form-control {
+  direction: rtl;
+  text-align: right;
+}
+
+.arabic .text-left {
+  text-align: right !important;
+}
+
+.arabic .text-right {
+  text-align: left !important;
+}
+
+/* For mixed LTR/RTL content */
+.mixed-content {
+  unicode-bidi: bidi-override;
+}
+
+/* Ensure proper Arabic text rendering */
+.arabic-font {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting';
+}
+
+/* Print-specific styles for Arabic text */
+@media print {
+  .arabic-text,
+  .arabic-input,
+  .arabic-textarea,
+  .arabic-label,
+  .arabic-container,
+  .arabic-numbers,
+  .arabic-heading,
+  .arabic-paragraph,
+  .arabic-cell,
+  .arabic-quote,
+  .arabic-note {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Ensure all RTL elements work in print */
+  *[dir="rtl"] {
+    direction: rtl !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Fix for form elements in print */
+  input[type="text"].arabic,
+  input[type="email"].arabic,
+  input[type="tel"].arabic,
+  input[type="search"].arabic,
+  textarea.arabic {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: embed !important;
+  }
+  
+  /* Print-specific font fixes */
+  .arabic-font {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting' !important;
+  }
+}

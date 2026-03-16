@@ -5,6 +5,7 @@ import { filter, interval, startWith, switchMap } from 'rxjs';
 import { NotificationService } from '../notification/service/notification.service';
 import Swal from 'sweetalert2';
 import { FilterOrderService } from '../shipping/services/filter-order.service';
+import { WhatsAppService } from '../whatsapp/services/whatsapp.service';
 
 
 @Component({
@@ -25,6 +26,9 @@ export class DashboardComponent {
   user!:string;
   userName!:string;
 
+  /** True if the current user is assigned to at least one WhatsApp number */
+  hasWhatsAppAccess = false;
+
   openASide:boolean = true;
   asideMode:string = 'side';
 
@@ -32,7 +36,7 @@ export class DashboardComponent {
 
   constructor(private loginService:AuthService , private notificationService:NotificationService, private route:Router,
     private orderFilter :FilterOrderService, private renderer: Renderer2,
-
+    private whatsappService: WhatsAppService,
     ) {
 
     }
@@ -49,6 +53,14 @@ export class DashboardComponent {
 
     this.user = this.loginService.getUser();
     this.userName = this.loginService.userName();
+
+    this.whatsappService.getUserPhoneNumbers().subscribe({
+      next: (res) => {
+        const list = res?.data ?? res ?? [];
+        this.hasWhatsAppAccess = Array.isArray(list) && list.length > 0;
+      },
+      error: () => { this.hasWhatsAppAccess = false; }
+    });
 
     this.getNotifiy();
     interval(10 * 60 * 1000)

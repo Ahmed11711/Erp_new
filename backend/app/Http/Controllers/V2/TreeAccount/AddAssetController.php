@@ -7,45 +7,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Repositories\TreeAccount\TreeAccountRepositoryInterface;
+use App\Services\Accounting\AccountLinkingService;
 
 class AddAssetController extends Controller
 {
-   public function __construct(public TreeAccountRepositoryInterface $repository)
-  {}
+   public function __construct(
+       public TreeAccountRepositoryInterface $repository,
+       public AccountLinkingService $accountLinkingService
+   ) {}
 
-  public function Addcustomer($name,$type)
+  public function Addcustomer($name, $type, $parentAccountId = null)
   {
-
-    if($type == "شركة")
-    {
-            $parent = TreeAccount::where('code', 104)->where('level',3)->first();
-
-    }else{
-            $parent = TreeAccount::where('code', 100025)->first();
-
-    }
-
-            $lastChildCode = TreeAccount::where('parent_id', $parent->id)->max('code');
-
-        if ($lastChildCode) {
-            $newCode = $lastChildCode + 1;
-        } else {
-             $newCode = $parent->code * 10 + 1;
-        }
-                $data = [
-            'name'      => $name,
-            'parent_id' => $parent->id,
-            'code'      => $newCode,
-            'level'     => $parent->level + 1,
-            'type'      => $parent->type,
-            'balance'   => 0
-        ];
-
-     return    $account = $this->repository->create($data);
-
-
-
- 
+      return $this->accountLinkingService->createCustomerAccount($name, $type ?? 'شركة', $parentAccountId);
   }
 
   public function createNewTreeAccount()

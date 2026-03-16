@@ -385,11 +385,15 @@ class CategoriesController extends Controller
 
   $warehouse = DB::table('categories_balance')
    ->join('categories', 'categories_balance.category_id', '=', 'categories.id')
+   ->leftJoin('measurements', 'categories.measurement_id', '=', 'measurements.id')
    ->where('categories.warehouse', $request->warehouse)
-   ->when($request->has('date'), function ($query) use ($request) {
+   ->when($request->has('date_from') && $request->has('date_to'), function ($query) use ($request) {
+    return $query->whereBetween('categories_balance.created_at', [$request->date_from . ' 00:00:00', $request->date_to . ' 23:59:59']);
+   })
+   ->when($request->has('date') && !$request->has('date_from'), function ($query) use ($request) {
     return $query->whereDate('categories_balance.created_at', $request->date);
    })
-   ->select('categories_balance.*', 'categories.category_name')
+   ->select('categories_balance.*', 'categories.category_name', 'categories.warehouse', DB::raw('COALESCE(measurements.unit, "-") as measurement_unit'))
    ->orderBy('categories_balance.id', 'desc')
    ->paginate($itemsPerPage);
 
@@ -476,6 +480,7 @@ class CategoriesController extends Controller
    ->select(
     'categories.id as category_id',
     'categories.category_name as category_name',
+    'categories.quantity as warehouse_balance',
     DB::raw('SUM(CASE WHEN orders.order_type = "جديد" THEN order_products.quantity ELSE 0 END) as total_quantity_new'),
     DB::raw('SUM(CASE WHEN orders.order_type = "طلب مرتجع" THEN order_products.quantity ELSE 0 END) as total_quantity_return'),
     DB::raw('COUNT(DISTINCT order_products.order_id) as total_orders'),
@@ -492,7 +497,7 @@ class CategoriesController extends Controller
    $query->where('categories.production_id', $request->production_id);
   }
 
-  $categorySales = $query->groupBy('categories.id', 'categories.category_name');
+  $categorySales = $query->groupBy('categories.id', 'categories.category_name', 'categories.quantity');
 
   if ($request->has('sort')) {
    if ($request->sort == 'category_name' || $request->sort == 'total_quantity_return' || $request->sort == 'total_postpone') {

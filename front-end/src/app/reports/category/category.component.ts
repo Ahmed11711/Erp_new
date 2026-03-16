@@ -1,56 +1,84 @@
-import { Component } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { Component, OnInit } from '@angular/core';
+import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 
 @Component({
   selector: 'app-category',
   templateUrl: './category.component.html',
   styleUrls: ['./category.component.css']
 })
-export class CategoryComponent {
+export class CategoryComponent implements OnInit {
+  data: any[] = [];
+  filteredData: any[] = [];
+  dateFrom: string | null = null;
+  dateTo: string | null = null;
+  searchTerm = '';
+  loading = false;
+  loadError = false;
 
-  data:any[]=[];
-  dateFrom!:any
-  dateTo!:any
+  constructor(private reportService: AccountingReportService) {}
 
-  constructor(){
+  ngOnInit(): void {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
-    this.dateFrom = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    this.dateTo = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    this.form.patchValue({
-      type:'نوع الراتب'
-    })
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    this.dateFrom = `${y}-${m}-01`;
+    this.dateTo = `${y}-${m}-${d}`;
+    this.load();
   }
 
-  ngOnInit(){
-
+  load(): void {
+    this.loading = true;
+    this.loadError = false;
+    const params = { date_from: this.dateFrom || undefined, date_to: this.dateTo || undefined };
+    this.reportService.getProductPerformance(params).subscribe({
+      next: (res) => {
+        const rows = (res?.data || []).map((r: any) => {
+          const salesQty = (r.sales_qty || 0);
+          const netQty = Math.max(0, salesQty - (r.returns_qty || 0));
+          return {
+            category_name: r.category_name,
+            category_type: '-',
+            measurement_unit: '-',
+            sales_qty: r.sales_qty,
+            sales_amount: r.sales_amount,
+            orders_count: 0,
+            returns_qty: r.returns_qty,
+            rejected_qty: r.returns_qty,
+            avg_selling_price: salesQty > 0 ? Math.round((r.sales_amount || 0) / salesQty * 100) / 100 : 0,
+            avg_cost: netQty > 0 ? Math.round((r.cogs || 0) / netQty * 100) / 100 : 0,
+            net_profit: r.gross_profit,
+            total_profit: r.gross_profit,
+            profit_margin: r.gross_margin_percent,
+            description: ''
+          };
+        });
+        this.data = rows;
+        this.applyFilter();
+        this.loading = false;
+      },
+      error: () => {
+        this.data = [];
+        this.filteredData = [];
+        this.loadError = true;
+        this.loading = false;
+      }
+    });
   }
 
-  form:FormGroup = new FormGroup({
-    'name' :new FormControl(null , [Validators.required ]),
-    'type' :new FormControl(null , [Validators.required ]),
-  })
-
-  submitform(){
-
+  onSearchChange(): void {
+    this.applyFilter();
   }
 
-  productChange(e:any){
-
-  }
-
-  onDateFromChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const selectedDate = target.value;
-    console.log(selectedDate);
-
-  }
-  onDateToChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const selectedDate = target.value;
-    console.log(selectedDate);
-
+  applyFilter(): void {
+    const term = (this.searchTerm || '').trim().toLowerCase();
+    if (!term) {
+      this.filteredData = [...this.data];
+    } else {
+      this.filteredData = this.data.filter((r: any) =>
+        (r.category_name || '').toLowerCase().includes(term) ||
+        (r.category_type || '').toLowerCase().includes(term)
+      );
+    }
   }
 }

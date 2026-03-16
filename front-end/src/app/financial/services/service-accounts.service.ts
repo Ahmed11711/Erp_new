@@ -18,6 +18,11 @@ export class ServiceAccountsService {
   }
 
   update(id: any, data: any) {
+    // PHP/Laravel لا يفسر multipart/form-data لطلبات PUT - نستخدم POST مع _method=PUT
+    if (data instanceof FormData) {
+      data.append('_method', 'PUT');
+      return this.http.post(environment.Url + '/accounting/service-accounts/' + id, data);
+    }
     return this.http.put(environment.Url + '/accounting/service-accounts/' + id, data);
   }
 

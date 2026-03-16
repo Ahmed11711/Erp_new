@@ -15,6 +15,11 @@ export class TreeAccountService {
     return this.http.get<TreeAccountResponse>(`${environment.Url}/tree_accounts`);
   }
 
+  // Get fully nested accounting tree (up to 4 levels) from reporting endpoint
+  getTree(): Observable<any> {
+    return this.http.get<any>(`${environment.Url}/accounting/accounting-tree`);
+  }
+
   getRootAccounts(): Observable<TreeAccountResponse> {
     return this.http.get<TreeAccountResponse>(`${environment.Url}/tree_accounts?parent=true`);
   }

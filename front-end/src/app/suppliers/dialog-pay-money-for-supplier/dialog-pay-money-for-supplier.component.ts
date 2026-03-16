@@ -1,8 +1,7 @@
 import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { BanksService } from 'src/app/financial/services/banks.service';
 import { SuppliersService } from '../services/suppliers.service';
-import { Router } from '@angular/router';
+import { PaymentSourcesService, PaymentSourceItem } from 'src/app/accounting/services/payment-sources.service';
 
 @Component({
   selector: 'app-dialog-pay-money-for-supplier',
@@ -11,42 +10,51 @@ import { Router } from '@angular/router';
 })
 export class DialogPayMoneyForSupplierComponent {
 
-  banksData:any[]=[]
-
-  bank!:number;
+  paymentType: 'safe' | 'bank' | 'service_account' = 'bank';
+  safes: PaymentSourceItem[] = [];
+  banks: PaymentSourceItem[] = [];
+  serviceAccounts: PaymentSourceItem[] = [];
+  sourceId: number | null = null;
 
   constructor(public dialogRef: MatDialogRef<DialogPayMoneyForSupplierComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
-    private bankService:BanksService,
-    private supplierService:SuppliersService,
-    private route:Router
+    private supplierService: SuppliersService,
+    private paymentSources: PaymentSourcesService
   ) {}
 
-  ngOnInit(){
-    this.bankService.bankSelect().subscribe((result:any)=>this.banksData=result);
+  ngOnInit() {
+    this.paymentSources.getPaymentSources().subscribe((res: any) => {
+      this.safes = res.safes || [];
+      this.banks = res.banks || [];
+      this.serviceAccounts = res.service_accounts || [];
+    });
+  }
+
+  get sourceList(): PaymentSourceItem[] {
+    if (this.paymentType === 'safe') return this.safes;
+    if (this.paymentType === 'service_account') return this.serviceAccounts;
+    return this.banks;
   }
 
   onCloseClick(): void {
     this.dialogRef.close();
   }
 
-  onBankSelect(e){
-    this.bank = e.target.value;
+  get canSubmit(): boolean {
+    return !!this.sourceId && this.sourceId > 0;
   }
 
-  submit(form){
+  submit(form: any) {
+    const payload: any = { amount: form.value.amount, payment_type: this.paymentType };
+    if (this.paymentType === 'safe') payload.safe_id = this.sourceId;
+    else if (this.paymentType === 'service_account') payload.service_account_id = this.sourceId;
+    else payload.bank_id = this.sourceId;
 
-    this.supplierService.supplierPay(this.data.supplier.id , {bank:this.bank,amount:form.value.amount}).subscribe((res:any)=>{
-      console.log(res);
-
-      if (res.message == 'success') {
-        console.log('work');
+    this.supplierService.supplierPay(this.data.supplier.id, payload).subscribe((res: any) => {
+      if (res.message === 'success') {
         this.onCloseClick();
         this.data.refreshData();
       }
-
-    })
-
-
-    }
+    });
+  }
 }

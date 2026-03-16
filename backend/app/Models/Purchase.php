@@ -50,6 +50,9 @@ class Purchase extends Model
         'invoice_image',
         'price_edited',
         'bank_id',
+        'payment_type',
+        'safe_id',
+        'service_account_id',
         'status',
         'edits',
         'ref'
@@ -71,5 +74,15 @@ class Purchase extends Model
     public function bank()
     {
         return $this->hasOne(Bank::class, 'id', 'bank_id');
+    }
+
+    public function safe()
+    {
+        return $this->belongsTo(Safe::class, 'safe_id');
+    }
+
+    public function serviceAccount()
+    {
+        return $this->belongsTo(ServiceAccount::class, 'service_account_id');
     }
 }

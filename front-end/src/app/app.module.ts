@@ -29,6 +29,7 @@ import { LoadingService } from './loading.service';
 import { LoadingSpinnerComponent } from './loading-spinner/loading-spinner.component';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
+import { LeadStatusService } from './services/lead-status.service';
  
 
 
@@ -41,7 +42,6 @@ import { NgxPaginationModule } from 'ngx-pagination';
     SnackBarComponent,
     // HomeComponent,
     LoadingSpinnerComponent,
-    
    ],
   imports: [
     MatTooltipModule,
@@ -72,7 +72,8 @@ import { NgxPaginationModule } from 'ngx-pagination';
       useClass: TokenInterceptor,
       multi: true
     },
-    NotificationService
+    NotificationService,
+    LeadStatusService
   ],
   bootstrap: [AppComponent]
 })

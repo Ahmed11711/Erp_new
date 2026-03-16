@@ -6,56 +6,75 @@
     <div class="col-5">
       <div><p class="title header w-50 m-auto">تقرير مبيعات المنتجات</p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
+    <div class="col-3 d-flex align-items-center justify-content-end"></div>
   </div>
 
-
   <div class="container-fluid">
-
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
+    <form class="my-5">
+      <div class="row g-3 align-items-end">
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label class="form-label">من تاريخ</label>
+          <input class="form-control" type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="load()">
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label class="form-label">الى تاريخ</label>
+          <input class="form-control" type="date" [(ngModel)]="dateTo" name="dateTo" (change)="load()">
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100" type="button" (click)="load()" [disabled]="loading">تحديث</button>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">البحث</label>
+          <input class="form-control" type="search" placeholder="البحث..." [(ngModel)]="searchTerm" name="searchTerm" (input)="onSearchChange()">
         </div>
       </div>
     </form>
 
+    <div *ngIf="loading" class="text-center my-4">
+      <div class="spinner-border text-primary" role="status"></div>
+    </div>
 
-    <table class="table table-bordered w-75 m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>اسم المنتج</th>
-        <th>عدد الطلبات</th>
-        <th>عدد القطع المطلوبة</th>
-        <th>رصيد المخزن</th>
-        <th>توفير الخامات</th>
-        <th>المطلوب تصنيعه</th>
-        <th>تاكيد امر التصنيع</th>
-        <th>تنفيذ الطلبات</th>
-      </thead>
-      <tbody>
-        <tr >
-          <td></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-        </tr>
-      </tbody>
-    </table>
+    <div *ngIf="!loading && loadError" class="alert alert-danger text-center my-4">
+      حدث خطأ في تحميل البيانات. تأكد من الاتصال بالخادم وتسجيل الدخول.
+    </div>
 
+    <div *ngIf="!loading && !loadError && data.length === 0" class="alert alert-info text-center my-4">
+      لا توجد بيانات لهذه الفترة.
+    </div>
 
+    <div class="table-responsive" *ngIf="!loading && !loadError && data.length > 0">
+      <table class="table table-bordered table-striped w-75 m-auto text-center">
+        <thead class="bg-dark text-white">
+          <tr>
+            <th>اسم المنتج</th>
+            <th>عدد الطلبات</th>
+            <th>عدد القطع المطلوبة</th>
+            <th>رصيد المخزن</th>
+            <th>اجمالي قطع المرتجع</th>
+            <th>اجمالي قيمة الجديد</th>
+            <th>اجمالي قيمة المرتجع</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of filteredData">
+            <td class="text-start">{{ r.category_name }}</td>
+            <td>{{ r.total_orders }}</td>
+            <td>{{ r.total_quantity_new }}</td>
+            <td>{{ r.warehouse_balance ?? '-' }}</td>
+            <td>{{ r.total_quantity_return }}</td>
+            <td>{{ r.total_new }}</td>
+            <td>{{ r.total_postpone }}</td>
+          </tr>
+          <tr *ngIf="searchTerm && filteredData.length === 0" class="table-warning">
+            <td colspan="7" class="text-center">لا توجد نتائج تطابق البحث</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="d-flex justify-content-center my-2">
+        <mat-paginator [length]="length" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"
+          (page)="onPageChange($event)" showFirstLastButtons>
+        </mat-paginator>
+      </div>
+    </div>
+  </div>
 </div>
