@@ -70,6 +70,13 @@
                         </mat-select>
                     </mat-form-field>
                 </div>
+                <div class="col-md-3">
+                    <button mat-stroked-button color="warn"
+                        (click)="updateExisting('supplier', 'general', settings.supplier_general_parent_id)"
+                        [disabled]="!settings.supplier_general_parent_id || loading">
+                        تحديث الموردين الحاليين
+                    </button>
+                </div>
             </div>
 
             <hr>

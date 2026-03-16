@@ -23,10 +23,13 @@ export class IncomeListComponent implements OnInit{
   incomeSales: number = 0;
   costSales: number = 0;
   totalWin: number = 0;
+  operatingIncome: number = 0;
   totalWinBeforeVat: number = 0;
+  netProfitAfterTax: number = 0;
   grossMarginPercent: number = 0;
+  operatingMarginPercent: number = 0;
   netMarginPercent: number = 0;
-  otherExpensesTotal: number = 0;
+  operatingExpensesTotal: number = 0;
 
   user!: string;
   constructor( private IncomeListService:IncomeListService , private authService:AuthService,
@@ -73,10 +76,13 @@ export class IncomeListComponent implements OnInit{
       this.incomeSales = res?.net_sales ?? 0;
       this.costSales = res?.cogs ?? 0;
       this.totalWin = res?.gross_profit ?? 0;
-      this.totalWinBeforeVat = res?.net_profit_before_tax ?? 0;
+      this.operatingIncome = res?.operating_income ?? 0;
+      this.totalWinBeforeVat = res?.earnings_before_tax ?? res?.net_profit_before_tax ?? 0;
+      this.netProfitAfterTax = res?.net_profit_after_tax ?? res?.earnings_before_tax ?? 0;
       this.grossMarginPercent = res?.gross_margin_percent ?? 0;
+      this.operatingMarginPercent = res?.operating_margin_percent ?? 0;
       this.netMarginPercent = res?.profit_margin_percent ?? 0;
-      this.otherExpensesTotal = res?.other_expenses_total ?? 0;
+      this.operatingExpensesTotal = res?.operating_expenses_total ?? 0;
     });
   }
 
@@ -86,7 +92,7 @@ export class IncomeListComponent implements OnInit{
   }
 
   get isProfit(): boolean {
-    const val = this.totalWinBeforeVat ?? 0;
+    const val = this.netProfitAfterTax ?? this.totalWinBeforeVat ?? 0;
     return val >= 0;
   }
 

@@ -77,6 +77,10 @@ export class AccountingReportService {
         return this.http.post(`${this.accountingUrl}/update-hierarchy-balances`, { account_id: accountId });
     }
 
+    recalculateAllHierarchyBalances(): Observable<any> {
+        return this.http.post(`${this.accountingUrl}/recalculate-all-hierarchy-balances`, {});
+    }
+
     getProductPerformance(params: { date_from?: string; date_to?: string }): Observable<any> {
         let httpParams = new HttpParams();
         if (params?.date_from) httpParams = httpParams.set('date_from', params.date_from);

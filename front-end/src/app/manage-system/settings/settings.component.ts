@@ -84,7 +84,7 @@ export class SettingsComponent implements OnInit {
     }
 
     updateExisting(type: string, subType: any, parentId: any) {
-        if (!confirm('Are you sure you want to update all existing entities of this type to the new parent account? This will change their account codes.')) return;
+        if (!confirm('هل أنت متأكد من تحديث جميع العملاء/الموردين الحاليين للحساب الأب الجديد؟ سيتم تغيير رموز حساباتهم.')) return;
 
         this.loading = true;
         const body = {
