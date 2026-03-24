@@ -31,7 +31,10 @@ class MetaWhatsAppService
     {
         if ($userPhoneNumberId) {
             $configuredNumbers = $this->getConfiguredPhoneNumbers();
-            return $configuredNumbers[$userPhoneNumberId] ?? null;
+            $matched = $configuredNumbers[$userPhoneNumberId] ?? null;
+            if ($matched) {
+                return $matched;
+            }
         }
 
         return config('services.meta_whatsapp.phone_number_id');
@@ -42,7 +45,8 @@ class MetaWhatsAppService
      */
     private function getAccessToken(?string $userPhoneNumberId): ?string
     {
-        if ($userPhoneNumberId && $userPhoneNumberId === config('services.meta_whatsapp.phone_number_id_2')) {
+        $phone2 = config('services.meta_whatsapp.phone_number_id_2');
+        if ($userPhoneNumberId && $phone2 && $userPhoneNumberId === $phone2) {
             return config('services.meta_whatsapp.access_token_2');
         }
 
@@ -303,6 +307,76 @@ class MetaWhatsAppService
                 return ['success' => false, 'error' => $response->body()];
             }
 
+        } catch (\Exception $e) {
+            Log::error('Meta WhatsApp exception', ['error' => $e->getMessage()]);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Send interactive quick reply buttons (within 24h session).
+     *
+     * @param  string  $to  Phone number (with or without +)
+     * @param  string  $bodyText  Message body text
+     * @param  array<int, array{id: string, title: string}>  $buttons  Up to 3 buttons
+     */
+    public function sendInteractiveButtons(string $to, string $bodyText, array $buttons): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'Meta WhatsApp not configured'];
+        }
+
+        $to = preg_replace('/\D/', '', $to);
+        if (strlen($to) === 10 && str_starts_with($to, '0')) {
+            $to = '20' . substr($to, 1);
+        } elseif (strlen($to) === 9 && str_starts_with($to, '1')) {
+            $to = '20' . $to;
+        }
+        $to = ltrim($to, '+');
+
+        $actionButtons = [];
+        foreach (array_slice($buttons, 0, 3) as $btn) {
+            $actionButtons[] = [
+                'type' => 'reply',
+                'reply' => [
+                    'id' => $btn['id'],
+                    'title' => $btn['title'],
+                ],
+            ];
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $to,
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button',
+                'body' => ['text' => $bodyText],
+                'action' => ['buttons' => $actionButtons],
+            ],
+        ];
+
+        try {
+            $response = Http::withToken($this->accessToken)
+                ->post("https://graph.facebook.com/{$this->metaVersion}/{$this->phoneNumberId}/messages", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return [
+                    'success' => true,
+                    'message_sid' => $data['messages'][0]['id'] ?? null,
+                    'status' => 'sent',
+                ];
+            }
+
+            Log::error('Meta WhatsApp interactive send failed', [
+                'to' => $to,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return ['success' => false, 'error' => $response->body()];
         } catch (\Exception $e) {
             Log::error('Meta WhatsApp exception', ['error' => $e->getMessage()]);
             return ['success' => false, 'error' => $e->getMessage()];

@@ -19,6 +19,8 @@ export class DialogWhatsAppMessageComponent implements OnInit {
   templates: any[] = [];
   metaTemplates: any[] = [];
   selectedMetaTemplate: any = null;
+  userPhoneNumbers: any[] = [];
+  selectedPhoneNumberId: string | null = null;
   loading = false;
   sendingMeta = false;
 
@@ -30,7 +32,7 @@ export class DialogWhatsAppMessageComponent implements OnInit {
 
   ngOnInit() {
     this.loadTemplates();
-    this.loadMetaTemplates();
+    this.loadUserPhoneNumbers();
     
     // If order data is provided, set default message
     if (this.data.order && this.data.order.customer_phone_1) {
@@ -39,8 +41,25 @@ export class DialogWhatsAppMessageComponent implements OnInit {
     }
   }
 
+  loadUserPhoneNumbers() {
+    this.whatsappService.getUserPhoneNumbers().subscribe({
+      next: (res: any) => {
+        const data = res?.data ?? res;
+        this.userPhoneNumbers = Array.isArray(data) ? data : [];
+        if (this.userPhoneNumbers.length === 1) {
+          this.selectedPhoneNumberId = this.userPhoneNumbers[0]?.id ?? null;
+        }
+        this.loadMetaTemplates();
+      },
+      error: () => {
+        this.userPhoneNumbers = [];
+        this.loadMetaTemplates();
+      }
+    });
+  }
+
   loadMetaTemplates() {
-    this.whatsappService.getMetaTemplates().subscribe({
+    this.whatsappService.getMetaTemplates(this.selectedPhoneNumberId ?? undefined).subscribe({
       next: (res: any) => {
         const data = res?.data ?? res;
         this.metaTemplates = Array.isArray(data) ? data : [];
@@ -50,6 +69,10 @@ export class DialogWhatsAppMessageComponent implements OnInit {
         this.metaTemplates = [];
       }
     });
+  }
+
+  onPhoneNumberChange() {
+    this.loadMetaTemplates();
   }
 
   loadTemplates() {
@@ -100,6 +123,7 @@ export class DialogWhatsAppMessageComponent implements OnInit {
       template_name: this.selectedMetaTemplate.name,
       language_code: this.selectedMetaTemplate.language || 'ar',
       body_parameters: bodyParameters,
+      phone_number_id: this.selectedPhoneNumberId ?? undefined,
     }).subscribe({
       next: (res: any) => {
         this.sendingMeta = false;

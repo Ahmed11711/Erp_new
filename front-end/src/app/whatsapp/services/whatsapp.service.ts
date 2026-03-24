@@ -21,9 +21,12 @@ export class WhatsAppService {
     return this.http.post<any>(`${environment.Url}/whatsapp/send-from-order`, data);
   }
 
-  /** List of Meta-approved templates (from backend config) */
-  getMetaTemplates(): Observable<any> {
-    return this.http.get<any>(`${environment.Url}/whatsapp/meta-templates`);
+  /** List of Meta-approved templates (from backend config). Pass phone_number_id to filter by number. */
+  getMetaTemplates(phoneNumberId?: string): Observable<any> {
+    const url = `${environment.Url}/whatsapp/meta-templates`;
+    return phoneNumberId
+      ? this.http.get<any>(url, { params: { phone_number_id: phoneNumberId } })
+      : this.http.get<any>(url);
   }
 
   /** Send Meta WhatsApp template from order (for 24h window / first contact) */
@@ -32,6 +35,7 @@ export class WhatsAppService {
     template_name: string;
     language_code?: string;
     body_parameters?: string[];
+    phone_number_id?: string;
   }): Observable<any> {
     return this.http.post<any>(`${environment.Url}/whatsapp/send-meta-template-from-order`, data);
   }

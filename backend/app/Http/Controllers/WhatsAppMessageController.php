@@ -456,7 +456,7 @@ class WhatsAppMessageController extends Controller
     /**
      * Get list of Meta WhatsApp templates (from config) for use when sending from order
      */
-    public function getMetaTemplatesList()
+    public function getMetaTemplatesList(Request $request)
     {
         try {
             $templates = config('whatsapp_meta_templates.templates', []);
@@ -464,11 +464,21 @@ class WhatsAppMessageController extends Controller
             // Fallback when config is empty (e.g. config cache or file not deployed)
             if (empty($templates)) {
                 $templates = [
-                    ['name' => 'order_update', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب', 'حالة الطلب'], 'body_param_keys' => ['customer_name', 'id', 'order_status']],
-                    ['name' => 'order_confirmation', 'language' => 'en', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total']],
-                    ['name' => 'hello_world', 'language' => 'ar', 'body_params' => [], 'body_param_keys' => []],
+                    ['name' => 'order_update', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب', 'حالة الطلب'], 'body_param_keys' => ['customer_name', 'id', 'order_status'], 'phone_number_id' => null],
+                    ['name' => 'order_confirmation', 'language' => 'en', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total'], 'phone_number_id' => null],
+                    ['name' => 'order_confirmation_flow', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
+                    ['name' => 'hello_world', 'language' => 'ar', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
                 ];
                 Log::warning('Meta templates loaded from fallback - config may be empty. Run: php artisan config:clear && php artisan config:cache');
+            }
+
+            // Filter by phone_number_id if provided (show only templates for this number)
+            $phoneNumberId = $request->query('phone_number_id');
+            if ($phoneNumberId) {
+                $templates = collect($templates)->filter(function ($t) use ($phoneNumberId) {
+                    $tPhone = $t['phone_number_id'] ?? null;
+                    return $tPhone === null || $tPhone === $phoneNumberId;
+                })->values()->all();
             }
 
             return response()->json([
@@ -495,6 +505,7 @@ class WhatsAppMessageController extends Controller
             'language_code' => 'nullable|string|max:10',
             'body_parameters' => 'nullable|array',
             'body_parameters.*' => 'string',
+            'phone_number_id' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -515,7 +526,8 @@ class WhatsAppMessageController extends Controller
                 $phone = str_starts_with($phone, '0') ? '+20' . substr($phone, 1) : '+20' . $phone;
             }
 
-            $whatsappService = $this->initializeWhatsAppService();
+            $phoneNumberId = $request->phone_number_id;
+            $whatsappService = $this->initializeWhatsAppService($phoneNumberId);
             if (!$whatsappService) {
                 return response()->json([
                     'success' => false,
@@ -540,7 +552,9 @@ class WhatsAppMessageController extends Controller
                 $keys = $templateConfig['body_param_keys'] ?? [];
                 $bodyParams = [];
                 foreach ($keys as $key) {
-                    $bodyParams[] = (string) ($order->{$key} ?? '');
+                    $val = (string) ($order->{$key} ?? '');
+                    // Meta rejects empty parameters - use placeholder to avoid "Parameter name is missing or empty"
+                    $bodyParams[] = trim($val) === '' ? '-' : $val;
                 }
             }
 
@@ -548,7 +562,8 @@ class WhatsAppMessageController extends Controller
             if (!empty($bodyParams)) {
                 $parameters = [];
                 foreach ($bodyParams as $val) {
-                    $parameters[] = ['type' => 'text', 'text' => (string) $val];
+                    $text = trim((string) $val) === '' ? '-' : (string) $val;
+                    $parameters[] = ['type' => 'text', 'text' => $text];
                 }
                 $components[] = ['type' => 'body', 'parameters' => $parameters];
             }
@@ -568,13 +583,16 @@ class WhatsAppMessageController extends Controller
                 // Build readable message for chat display
                 $templateLabels = [
                     'order_confirmation' => 'تأكيد الطلب',
-                    'order_update' => 'تحديث الطلب',
-                    'hello_world' => 'رسالة ترحيب',
+                    'order_confirmation_flow' => 'فلو تأكيد الطلب',
+                    // 'order_update' => 'تحديث الطلب',
+                    // 'hello_world' => 'رسالة ترحيب',
+                    'review_request' => 'طلب تقييم',
                 ];
                 $label = $templateLabels[$templateName] ?? $templateName;
                 $messageContent = "📋 قالب: {$label} - الطلب #{$order->id} - {$order->customer_name} - {$order->net_total} ج.م";
                 Message::create([
                     'customer_id' => $customer->id,
+                    'order_id' => $order->id,
                     'sender_id' => auth()->id(),
                     'receiver_id' => null,
                     'content' => $messageContent,

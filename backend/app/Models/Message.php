@@ -11,6 +11,7 @@ class Message extends Model
 
     protected $fillable = [
         'customer_id',
+        'order_id',
         'sender_id',
         'receiver_id',
         'content',
@@ -18,6 +19,11 @@ class Message extends Model
         'status',
         'twilio_message_sid',
     ];
+
+    public function order()
+    {
+        return $this->belongsTo(Order::class);
+    }
 
     public function customer()
     {
