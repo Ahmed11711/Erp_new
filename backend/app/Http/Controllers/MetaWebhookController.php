@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Message;
 use App\Models\User;
+use App\Services\OrderConfirmationFlowService;
+use App\Services\MetaWhatsAppService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
@@ -55,11 +57,63 @@ class MetaWebhookController extends Controller
 
                     if (isset($value['messages'])) {
                         $contacts = $value['contacts'] ?? [];
+                        $metadata = $value['metadata'] ?? [];
+                        $phoneNumberId = $metadata['phone_number_id'] ?? null;
+
                         foreach ($value['messages'] as $msg) {
-                            $from = $msg['from']; 
-                            Log::info("Incoming WhatsApp message from {$from}");
-                            
-                            // Process and store the message
+                            $from = $msg['from'];
+                            $msgType = $msg['type'] ?? 'unknown';
+                            Log::info("Incoming WhatsApp message from {$from}", [
+                                'type' => $msgType,
+                                'has_context' => isset($msg['context']),
+                                'keys' => array_keys($msg),
+                                'msg_sample' => $msgType === 'text' ? ($msg['text']['body'] ?? null) : ($msg[$msgType] ?? null),
+                            ]);
+
+                            $buttonId = null;
+                            $buttonTitle = null;
+                            $contextId = $msg['context']['id'] ?? null;
+
+                            // Handle button reply - Meta can send as "interactive" or "button" or "text"
+                            if ($msgType === 'interactive') {
+                                $interactive = $msg['interactive'] ?? [];
+                                $buttonReply = $interactive['button_reply'] ?? $interactive;
+                                if ($buttonReply) {
+                                    $buttonId = $buttonReply['id'] ?? null;
+                                    $buttonTitle = $buttonReply['title'] ?? null;
+                                }
+                            } elseif ($msgType === 'button') {
+                                $button = $msg['button'] ?? [];
+                                $buttonId = $button['payload'] ?? $button['id'] ?? null;
+                                $buttonTitle = $button['text'] ?? $button['title'] ?? null;
+                            } elseif ($msgType === 'text') {
+                                $body = trim($msg['text']['body'] ?? '');
+                                if (in_array($body, ['تأكيد الطلب', 'تأجيل الطلب', 'إلغاء الطلب', 'تعديل الطلب', 'إعادة الشحن'])) {
+                                    $buttonTitle = $body;
+                                }
+                            }
+
+                            if ($buttonId || $buttonTitle) {
+                                Log::info('OrderConfirmationFlow: Button reply received', [
+                                    'from' => $from,
+                                    'button_id' => $buttonId,
+                                    'button_title' => $buttonTitle,
+                                    'context_id' => $contextId,
+                                ]);
+                                try {
+                                    $whatsappService = new MetaWhatsAppService($phoneNumberId);
+                                    if ($whatsappService->isConfigured()) {
+                                        $flowService = new OrderConfirmationFlowService($whatsappService);
+                                        $flowService->handleButtonReply($from, $buttonId, $contextId, $phoneNumberId, $buttonTitle);
+                                    }
+                                } catch (\Throwable $e) {
+                                    Log::error('OrderConfirmationFlow: Exception', [
+                                        'message' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString(),
+                                    ]);
+                                }
+                            }
+
                             $this->processMessage($msg, $contacts);
                         }
                     }

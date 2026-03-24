@@ -4,6 +4,11 @@
 <div mat-dialog-content>
   <!-- قوالب ميتا (للتواصل الأول / خارج نافذة 24 ساعة) -->
   <div class="form-group mb-3" *ngIf="data.order || data.orders?.length">
+    <label>رقم واتساب (للعرض: القوالب التابعة للرقم فقط)</label>
+    <select class="form-control mb-2" [(ngModel)]="selectedPhoneNumberId" [ngModelOptions]="{standalone: true}" (ngModelChange)="onPhoneNumberChange()" *ngIf="userPhoneNumbers.length > 1">
+      <option [ngValue]="null">جميع الأرقام</option>
+      <option *ngFor="let p of userPhoneNumbers" [ngValue]="p.id">{{ p.name }}</option>
+    </select>
     <label>قوالب ميتا المعتمدة</label>
     <select class="form-control" [(ngModel)]="selectedMetaTemplate" [ngModelOptions]="{standalone: true}">
       <option [ngValue]="null">اختر قالب ميتا (اختياري)</option>
