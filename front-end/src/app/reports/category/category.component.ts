@@ -31,29 +31,25 @@ export class CategoryComponent implements OnInit {
     this.loading = true;
     this.loadError = false;
     const params = { date_from: this.dateFrom || undefined, date_to: this.dateTo || undefined };
-    this.reportService.getProductPerformance(params).subscribe({
+    this.reportService.getCategoryProfitability(params).subscribe({
       next: (res) => {
-        const rows = (res?.data || []).map((r: any) => {
-          const salesQty = (r.sales_qty || 0);
-          const netQty = Math.max(0, salesQty - (r.returns_qty || 0));
-          return {
-            category_name: r.category_name,
-            category_type: '-',
-            measurement_unit: '-',
-            sales_qty: r.sales_qty,
-            sales_amount: r.sales_amount,
-            orders_count: 0,
-            returns_qty: r.returns_qty,
-            rejected_qty: r.returns_qty,
-            avg_selling_price: salesQty > 0 ? Math.round((r.sales_amount || 0) / salesQty * 100) / 100 : 0,
-            avg_cost: netQty > 0 ? Math.round((r.cogs || 0) / netQty * 100) / 100 : 0,
-            net_profit: r.gross_profit,
-            total_profit: r.gross_profit,
-            profit_margin: r.gross_margin_percent,
-            description: ''
-          };
-        });
-        this.data = rows;
+        this.data = (res?.data || []).map((r: any) => ({
+          category_name: r.category_name,
+          category_type: r.category_type ?? '-',
+          measurement_unit: r.measurement_unit ?? '-',
+          sales_qty: r.sales_qty,
+          sales_amount: r.sales_amount,
+          orders_count: r.orders_count ?? 0,
+          returns_qty: r.returns_qty,
+          rejected_qty: r.rejected_qty ?? r.returns_qty,
+          avg_selling_price: r.avg_selling_price,
+          avg_cost: r.avg_cost,
+          ref_unit_cost: r.ref_unit_cost != null && r.ref_unit_cost !== '' ? r.ref_unit_cost : '—',
+          net_profit: r.net_profit,
+          total_profit: r.total_profit,
+          profit_margin: r.profit_margin,
+          description: r.description ?? ''
+        }));
         this.applyFilter();
         this.loading = false;
       },

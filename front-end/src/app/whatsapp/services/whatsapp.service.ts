@@ -44,6 +44,20 @@ export class WhatsAppService {
     return this.http.get<any>(`${environment.Url}/whatsapp/chat/${customerId}`);
   }
 
+  /** Resolve customer by phone (same matching as backend; fixes +210… vs +2010…). */
+  findCustomerByPhone(phone: string): Observable<any> {
+    return this.http.get<any>(`${environment.Url}/whatsapp/customers/by-phone`, {
+      params: { phone },
+    });
+  }
+
+  /** Last few chat lines for tooltips (order list). */
+  getWhatsAppSnippet(phone: string): Observable<any> {
+    return this.http.get<any>(`${environment.Url}/whatsapp/customers/whatsapp-snippet`, {
+      params: { phone },
+    });
+  }
+
   getCustomers(params?: any): Observable<any> {
     return this.http.get<any>(`${environment.Url}/whatsapp/customers`, { params });
   }

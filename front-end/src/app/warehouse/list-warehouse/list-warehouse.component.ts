@@ -56,5 +56,18 @@ openDialog(data = {}) {
     })
   }
 
+  /** mat-menu-item + routerLink often drops queryParams; navigate explicitly. */
+  openWarehouseDetails(elm: { name: string; balance?: number }) {
+    this.route.navigate(['/dashboard/warehouse/cat'], {
+      queryParams: { warehouse: elm.name, balance: elm.balance }
+    });
+  }
+
+  openWarehouseTransfers(elm: { name: string }) {
+    this.route.navigate(['/dashboard/warehouse/cat'], {
+      queryParams: { warehouse: elm.name }
+    });
+  }
+
 
 }

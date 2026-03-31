@@ -7,7 +7,6 @@
       <div><p class="title header w-50 m-auto">تقرير المشتريات</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
@@ -15,21 +14,22 @@
   <div class="container-fluid">
 
 
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
+    <div class="my-5">
       <div class="row">
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label for="proc-date-from">من تاريخ</label>
+          <input id="proc-date-from" class="form-control" type="date" [(ngModel)]="dateFrom" (ngModelChange)="onDatesChange()">
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label for="proc-date-to">الى تاريخ</label>
+          <input id="proc-date-to" class="form-control" type="date" [(ngModel)]="dateTo" (ngModelChange)="onDatesChange()">
         </div>
         <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="proc-search-input"
+            [(ngModel)]="searchKeyword" (ngModelChange)="onSearchInput()" autocomplete="off">
         </div>
       </div>
-    </form>
+    </div>
 
 
     <table class="table table-bordered m-auto text-center">
@@ -47,34 +47,54 @@
         <th>تعديل</th>
       </thead>
       <tbody>
-        <tr >
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
+        <tr *ngIf="!invoices?.length">
+          <td colspan="11">لا توجد بيانات</td>
+        </tr>
+        <tr *ngFor="let item of invoices" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
+          <td>{{ item?.invoice_number }}</td>
+          <td>{{ item?.first_product_name || '—' }}</td>
+          <td>{{ item?.first_product_unit || '—' }}</td>
+          <td>{{ item?.supplier?.supplier_name }}</td>
+          <td dir="ltr">{{ displayAmount(item, 'total_price') | customNumber }}</td>
+          <td dir="ltr">{{ displayAmount(item, 'paid_amount') | customNumber }}</td>
+          <td dir="ltr">0</td>
+          <td dir="ltr">0</td>
+          <td dir="ltr">{{ displayAmount(item, 'due_amount') | customNumber }}</td>
+          <td>
+            <button type="button" class="btn btn-link btn-sm p-0" (click)="invoiceDetails(item?.id)">تفاصيل</button>
+          </td>
+          <td>
+            <button type="button" class="btn btn-link btn-sm p-0" (click)="editInvoice(item?.id)" *ngIf="item?.status != 1">تعديل</button>
+          </td>
         </tr>
       </tbody>
-      <tfoot>
+      <tfoot *ngIf="invoices?.length">
         <tr>
           <td>الاجمالى</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
+          <td>—</td>
+          <td>—</td>
+          <td>—</td>
+          <td dir="ltr">{{ getTotals().total | customNumber }}</td>
+          <td dir="ltr">{{ getTotals().paid | customNumber }}</td>
+          <td dir="ltr">0</td>
+          <td dir="ltr">0</td>
+          <td dir="ltr">{{ getTotals().due | customNumber }}</td>
+          <td></td>
+          <td></td>
         </tr>
       </tfoot>
     </table>
+
+    <div class="mt-4" *ngIf="length > 0">
+      <mat-paginator
+        class="demo-paginator"
+        [length]="length"
+        showFirstLastButtons
+        (page)="onPageChange($event)"
+        [pageSizeOptions]="pageSizeOptions"
+        [pageSize]="pageSize"
+        [pageIndex]="page"
+        aria-label="Select page">
+      </mat-paginator>
+    </div>
 </div>

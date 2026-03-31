@@ -8,6 +8,7 @@ use App\Models\Manufacture;
 use App\Models\ManufactureProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\CategoryInventoryCostService;
 
 class ManufactureController extends Controller
 {
@@ -106,6 +107,8 @@ class ManufactureController extends Controller
                     }
                     //end rating
 
+                    $category->total_price = $total_price;
+
                     DB::table('categories_balance')->insert([
                         'invoice_number' => $confirmed->id,
                         'category_id' => $category->id,
@@ -115,6 +118,8 @@ class ManufactureController extends Controller
                         'balance_after' => $category->quantity- ($manproduct['quantity']*$confirmed['quantity']),
                         'price' => $manproduct['total_price']/$manproduct['quantity'],
                         'total_price' => $manproduct['total_price'],
+                        'unit_cost' => ($manproduct['quantity'] ?? 0) > 0 ? $manproduct['total_price'] / $manproduct['quantity'] : 0,
+                        'cost_total' => $manproduct['total_price'],
                         'by' => auth()->user()->name,
                         'created_at' =>now()
                     ]
@@ -122,6 +127,7 @@ class ManufactureController extends Controller
                     // $category->initial_balance = $category->initial_balance - $manproduct->quantity;
                     $category->quantity = $category->quantity - ($manproduct->quantity*$request->quantity);
                     $category->save();
+                    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
                 }
             if($confirmed->status == 'تم الانتهاء'){
                 $category = Category::find($request->product_id);
@@ -134,6 +140,8 @@ class ManufactureController extends Controller
                     'balance_after' => $category->quantity + $confirmed->quantity,
                     'price' => $confirmed['total']/$confirmed['quantity'],
                     'total_price' => $confirmed['total'],
+                    'unit_cost' => $confirmed['total'] / $confirmed['quantity'],
+                    'cost_total' => $confirmed['total'],
                     'by' => auth()->user()->name,
                     'created_at' =>now()
                 ]
@@ -144,6 +152,7 @@ class ManufactureController extends Controller
                 $category->unit_price = $confirmed->total/$confirmed->quantity;
                 $category->sell_total_price = $category->sell_total_price + ($category->category_price*$request->quantity);
                 $category->save();
+                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
             }
             return response()->json($confirmed,201);
 
@@ -178,6 +187,8 @@ class ManufactureController extends Controller
             'balance_after' => $category->quantity + $confirmed->quantity,
             'price' => $confirmed['total']/$confirmed['quantity'],
             'total_price' => $confirmed['total'],
+            'unit_cost' => $confirmed['total'] / $confirmed['quantity'],
+            'cost_total' => $confirmed['total'],
             'by' => auth()->user()->name,
             'created_at' =>now()
         ]
@@ -188,6 +199,7 @@ class ManufactureController extends Controller
         $category->unit_price = $confirmed->total/$confirmed->quantity;
         $category->sell_total_price = $category->sell_total_price + ($category->category_price*$confirmed->quantity);
         $category->save();
+        CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
 
         // $manfucture = Manufacture::where('product_id',$confirmed->product_id)->first();
         //  $manproducts = ManufactureProduct::where('manufacture_id',$manfucture->id)->get();

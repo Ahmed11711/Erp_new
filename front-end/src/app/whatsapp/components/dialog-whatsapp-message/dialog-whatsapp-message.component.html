@@ -12,7 +12,7 @@
     <label>قوالب ميتا المعتمدة</label>
     <select class="form-control" [(ngModel)]="selectedMetaTemplate" [ngModelOptions]="{standalone: true}">
       <option [ngValue]="null">اختر قالب ميتا (اختياري)</option>
-      <option *ngFor="let t of metaTemplates" [ngValue]="t">{{ t.name }} ({{ t.language }})</option>
+      <option *ngFor="let t of metaTemplates" [ngValue]="t">{{ t.ui_label ? t.ui_label : (t.name + ' — ' + metaTemplateLanguageLabel(t.language)) }}</option>
     </select>
     <small class="text-muted" *ngIf="selectedMetaTemplate">
       {{ selectedMetaTemplate.body_params?.join('، ') }}

@@ -46,4 +46,74 @@ class TreeAccount extends Model
     {
         return (float) ($this->debit_balance ?? 0) - (float) ($this->credit_balance ?? 0);
     }
+
+    /**
+     * Prefer a leaf revenue account so postings appear in reports that aggregate leaf accounts only.
+     */
+    public static function resolveSalesRevenueAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'sales')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        return static::where('type', 'revenue')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%مبيعات%')
+                    ->orWhere('name_en', 'like', '%sales%');
+            })
+            ->whereDoesntHave('children')
+            ->orderByRaw('LENGTH(code) DESC')
+            ->orderBy('code')
+            ->first();
+    }
+
+    /**
+     * Prefer a leaf COGS / cost-of-sales expense account.
+     */
+    public static function resolveCogsAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'cogs')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $acc = static::where('type', 'expense')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%تكلفة%')
+                    ->orWhere('name', 'like', '%تكاليف%')
+                    ->orWhere('name', 'like', '%تكلفة المبيعات%')
+                    ->orWhere('name', 'like', '%تكلفة البضاعة%')
+                    ->orWhere('name_en', 'like', '%cost%')
+                    ->orWhere('name_en', 'like', '%cogs%');
+            })
+            ->whereDoesntHave('children')
+            ->orderByRaw('LENGTH(code) DESC')
+            ->orderBy('code')
+            ->first();
+
+        return $acc;
+    }
+
+    /**
+     * Prefer a leaf asset account for inventory (stock) used in COGS journal pairs.
+     */
+    public static function resolveInventoryAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'inventory')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        return static::where('type', 'asset')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%مخزون%')
+                    ->orWhere('name_en', 'like', '%inventory%')
+                    ->orWhere('name_en', 'like', '%stock%');
+            })
+            ->whereDoesntHave('children')
+            ->orderByRaw('LENGTH(code) DESC')
+            ->orderBy('code')
+            ->first();
+    }
 }

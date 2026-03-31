@@ -28,10 +28,6 @@ export class CategoryService {
  getCategoryById(id: any) {
   return this.http.get(`${environment.Url}/category/${id}`);
  }
- updateCategoryCode(id: number, category_code: string) {
-  return this.http.patch(`${environment.Url}/categories/${id}/update-code`, { category_code });
- }
-
 
  searchCategories(items: number, page: number, search: any) {
   return this.http.get(`${environment.Url}/categories/search?itemsPerPage=${items}&page=${page}`, { params: search });
@@ -42,7 +38,8 @@ export class CategoryService {
  }
 
  getCatBywarehouse(warehouse: any) {
-  return this.http.get(`${environment.Url}/categories/categoryByWarehouse?warehouse=${warehouse}`);
+  const params = new HttpParams().set('warehouse', String(warehouse));
+  return this.http.get(`${environment.Url}/categories/categoryByWarehouse`, { params });
  }
 
  categoryDetails(warehouse: any, items: number, page: number, search: any) {

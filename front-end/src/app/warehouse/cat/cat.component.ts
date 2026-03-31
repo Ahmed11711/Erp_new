@@ -1,14 +1,15 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import {Location} from '@angular/common';
 import Swal from 'sweetalert2';
+import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-cat',
   templateUrl: './cat.component.html',
   styleUrls: ['./cat.component.css']
 })
-export class CatComponent {
+export class CatComponent implements OnInit, OnDestroy {
 
   warehouse:string = "";
   categories:any;
@@ -20,14 +21,29 @@ export class CatComponent {
 
   pageSizeOptions = [15,50];
 
-  constructor(private category:CategoryService, private route:ActivatedRoute, private _location:Location) {
-    this.warehouse =  this.route.snapshot.queryParams['warehouse'];
-    this.balance = Number( this.route.snapshot.queryParams['balance']);
-  }
+  private querySub?: Subscription;
+
+  constructor(private category:CategoryService, private route:ActivatedRoute, private _location:Location) {}
 
 
   ngOnInit(){
-    this.getData();
+    this.querySub = this.route.queryParams.subscribe((params) => {
+      const next = params['warehouse'] ?? '';
+      if (next !== this.warehouse) {
+        this.page = 0;
+        this.param = {};
+      }
+      this.warehouse = next;
+      this.balance = Number(params['balance']);
+      if (Number.isNaN(this.balance)) {
+        this.balance = 0;
+      }
+      this.getData();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.querySub?.unsubscribe();
   }
 
   getData(){

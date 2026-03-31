@@ -49,7 +49,7 @@
    </div>
    <div class="form-group col-md-3">
     <input type="text" name="type" placeholder="اسم الصنف" autocomplete="off" ngModel #type="ngModel"
-     class="form-control" (change)="onCategorychange($event)" [(ngModel)]="category_name" />
+     class="form-control" (ngModelChange)="onCategoryNameInput($event)" [(ngModel)]="category_name" />
    </div>
    <div class="form-group col-md-3">
     <button class="btn bg-main" type="button" (click)="clearSearch()">clear search</button>
@@ -65,7 +65,6 @@
       <tr>
        <th>#</th>
        <th>اسم الصنف</th>
-       <th>كود الصنف</th>
        <th>المخزن</th>
        <th>فرع الانتاج</th>
        <th>الوحدة</th>
@@ -79,15 +78,6 @@
       <tr *ngFor="let item of categories; let i = index">
        <th>{{ i + 1 }}</th>
        <td>{{ item.category_name }}</td>
-       <td>
-        <div *ngIf="editingCodeId !== item.id; else editCode">
-         <span (click)="startEditCode(item)">{{ item.category_code }}</span>
-        </div>
-        <ng-template #editCode>
-         <input type="text" [(ngModel)]="newCategoryCode" (blur)="saveCategoryCode(item)"
-          (keydown.enter)="saveCategoryCode(item)" />
-        </ng-template>
-       </td>
        <td>{{ item.warehouse }}</td>
        <td>{{ item.production.production_line }}</td>
        <td>{{ item.measurement.unit }}</td>

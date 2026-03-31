@@ -18,8 +18,8 @@ export class ManufacturingService {
     return this.http.post(`${environment.Url}/manufacture/confirm`,data);
   }
 
-  getAllRecipes(){
-    return this.http.get(`${environment.Url}/manufacture`)
+  getAllRecipes() {
+    return this.http.get<any[]>(`${environment.Url}/manufacture`);
   }
 
   manfuctureByWarhouse(data:any){

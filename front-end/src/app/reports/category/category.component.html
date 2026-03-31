@@ -55,7 +55,8 @@
             <th>المرتجعات بالقطع</th>
             <th>رفض الاستلام بالقطع</th>
             <th>متوسط سعر البيع</th>
-            <th>متوسط التكلفة</th>
+            <th>متوسط تكلفة الوحدة (الفترة)</th>
+            <th>تكلفة مرجعية (مخزون)</th>
             <th>صافي ربح الصنف</th>
             <th>اجمالي ربح الصنف</th>
             <th>هامش ربح الصنف %</th>
@@ -74,13 +75,14 @@
             <td>{{ r.rejected_qty }}</td>
             <td>{{ r.avg_selling_price }}</td>
             <td>{{ r.avg_cost }}</td>
+            <td>{{ r.ref_unit_cost }}</td>
             <td>{{ r.net_profit }}</td>
             <td>{{ r.total_profit }}</td>
             <td>{{ r.profit_margin }}</td>
             <td>{{ r.description || '-' }}</td>
           </tr>
           <tr *ngIf="searchTerm && filteredData.length === 0" class="table-warning">
-            <td colspan="14" class="text-center">لا توجد نتائج تطابق البحث</td>
+            <td colspan="15" class="text-center">لا توجد نتائج تطابق البحث</td>
           </tr>
         </tbody>
       </table>

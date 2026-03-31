@@ -84,6 +84,8 @@ Route::middleware('auth')->group(function () {
         Route::get('meta-templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getMetaTemplatesList']);
         Route::post('send-meta-template-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMetaTemplateFromOrder']);
         Route::get('chat/{customerId}', [App\Http\Controllers\WhatsAppMessageController::class, 'getChatMessages']);
+        Route::get('customers/by-phone', [App\Http\Controllers\WhatsAppMessageController::class, 'findCustomerByPhone']);
+        Route::get('customers/whatsapp-snippet', [App\Http\Controllers\WhatsAppMessageController::class, 'getWhatsAppSnippet']);
         Route::get('customers', [App\Http\Controllers\WhatsAppMessageController::class, 'getCustomers']);
         Route::get('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getTemplates']);
         Route::post('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'createTemplate']);
@@ -176,7 +178,6 @@ Route::middleware('auth')->group(function () {
         Route::get('getCategoryByStockId', [CategoriesController::class, 'getCategoryByStockId']);
 
         Route::post('categories', [CategoriesController::class, 'store']);
-        Route::PATCH('categories/{id}/update-code', [CategoriesController::class, 'updateCode']);
 
         Route::get('category/{id}', [CategoriesController::class, 'getCategoryById']);
         Route::post('editcategory/{id}', [CategoriesController::class, 'editCategory']);

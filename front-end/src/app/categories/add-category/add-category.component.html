@@ -19,7 +19,6 @@
 
  <form #addCat="ngForm" (ngSubmit)="addCategory(addCat)" enctype="multipart/form-data">
 
-  <!-- اسم الصنف وكود الصنف -->
   <div class="form-row">
    <div class="form-group col-md-6">
     <label for="category_name">اسم الصنف</label>
@@ -35,15 +34,6 @@
     <ng-template #notFoundTemplate let-notFound>
      <div [innerHTML]="notFound"></div>
     </ng-template>
-   </div>
-
-   <div class="form-group col-md-6">
-    <label for="category_code">كود الصنف</label>
-    <input type="text" name="category_code" ngModel #category_code="ngModel" class="form-control" id="category_code"
-     aria-describedby="category_code" required />
-    <div class="form-text text-danger" *ngIf="category_code.touched && category_code.invalid">
-     <div *ngIf="category_code.errors?.['required']">يجب ادخال كود الصنف</div>
-    </div>
    </div>
   </div>
 

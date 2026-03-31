@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\CategoryMonthlyInventory;
 use App\Http\Resources\V2\Category\CategoryResource;
 use App\Http\Requests\V2\Category\GetCategoryByStock;
+use App\Services\CategoryInventoryCostService;
 
 class CategoriesController extends Controller
 {
@@ -83,7 +84,6 @@ class CategoriesController extends Controller
   $request->validate([
    'category_name' => 'required|string',
    'category_price' => 'required|numeric|min:0',
-   'category_code' => 'required|string|max:255|unique:categories,category_code',
    'initial_balance' => 'required|numeric|min:0',
    'minimum_quantity' => 'required|numeric|min:0',
    'warehouse' => 'required|string',
@@ -110,7 +110,6 @@ class CategoriesController extends Controller
   $category = Category::create([
    'category_name' => request('category_name'),
    'category_price' => request('category_price'),
-   'category_code' => request('category_code'),
    'initial_balance' => request('initial_balance'),
    'minimum_quantity' => request('minimum_quantity'),
    'warehouse' => request('warehouse'),
@@ -123,20 +122,6 @@ class CategoriesController extends Controller
 
   return response()->json($category, 201);
  }
-
- public function updateCode(Request $request, $id)
- {
-  $request->validate([
-   'category_code' => 'required|unique:categories,category_code,' . $id,
-  ]);
-
-  $category = Category::findOrFail($id);
-  $category->category_code = $request->category_code;
-  $category->save();
-
-  return response()->json(['success' => true, 'category_code' => $category->category_code]);
- }
-
 
  public function editCategory($id, Request $request)
  {
@@ -279,6 +264,8 @@ class CategoriesController extends Controller
     'balance_after' => $category->quantity + $quantity,
     'price' => $categorPrice,
     'total_price' => $categorPrice * $quantity,
+    'unit_cost' => $categorPrice,
+    'cost_total' => $categorPrice * $quantity,
     'by' => auth()->user()->name,
     'created_at' => now()
    ]);
@@ -289,6 +276,9 @@ class CategoriesController extends Controller
     $category->total_price = $category->total_price + ($quantity * $categorPrice);
    }
    $category->save();
+   if ($category->warehouse !== 'مخزن منتج تام') {
+    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
    return response()->json('success', 200);
   }
 
@@ -308,6 +298,8 @@ class CategoriesController extends Controller
     'balance_after' => $quantity,
     'price' => $categorPrice,
     'total_price' => $categorPrice * ($quantity - $category->quantity),
+    'unit_cost' => $categorPrice,
+    'cost_total' => $categorPrice * ($quantity - $category->quantity),
     'by' => auth()->user()->name,
     'created_at' => now()
    ]);
@@ -318,6 +310,9 @@ class CategoriesController extends Controller
     $category->total_price = $category->total_price + $totalPrice;
    }
    $category->save();
+   if ($category->warehouse !== 'مخزن منتج تام') {
+    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
    return response()->json('success', 200);
   }
  }

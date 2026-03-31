@@ -15,6 +15,7 @@ use App\Models\Supplier;
 use Illuminate\Http\Request;
 use App\Models\Approvals;
 use Illuminate\Support\Facades\DB;
+use App\Services\CategoryInventoryCostService;
 use Validator;
 class PurchasesController extends Controller
 {
@@ -35,12 +36,36 @@ class PurchasesController extends Controller
         if($request->has('receipt_date')){
             $search->where('receipt_date', $request->receipt_date);
         }
+        if ($request->filled('date_from')) {
+            $search->whereDate('receipt_date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $search->whereDate('receipt_date', '<=', $request->date_to);
+        }
         if($request->has('invoice_type')){
             $search->where('invoice_type', $request->invoice_type);
         }
         if($request->has('supplier_id')){
             $search->where('supplier_id', $request->supplier_id);
         }
+        if ($request->filled('q')) {
+            $term = '%' . trim($request->q) . '%';
+            $search->where(function ($q) use ($term) {
+                $q->where('invoice_number', 'like', $term)
+                    ->orWhereHas('supplier', function ($s) use ($term) {
+                        $s->where('supplier_name', 'like', $term);
+                    })
+                    ->orWhereIn('id', function ($sub) use ($term) {
+                        $sub->select('purchase_id')
+                            ->from('invoice_categories')
+                            ->where('product_name', 'like', $term);
+                    });
+            });
+        }
+        $search->addSelect([
+            DB::raw('(SELECT ic.product_name FROM invoice_categories ic WHERE ic.purchase_id = purchases.id ORDER BY ic.id ASC LIMIT 1) as first_product_name'),
+            DB::raw('(SELECT ic.product_unit FROM invoice_categories ic WHERE ic.purchase_id = purchases.id ORDER BY ic.id ASC LIMIT 1) as first_product_unit'),
+        ]);
         $search = $search->with([
             'supplier:id,supplier_name',
             'updatedPurchase'
@@ -168,6 +193,8 @@ class PurchasesController extends Controller
                     'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
                     'price' => $product->product_price*-1,
                     'total_price' => $product->total*-1,
+                    'unit_cost' => $product->product_price*-1,
+                    'cost_total' => $product->total*-1,
                     'by' => auth()->user()->name,
                     'created_at' =>now()
                 ]
@@ -183,6 +210,10 @@ class PurchasesController extends Controller
                     'fixed_quantity' => $product->product_quantity*-1,
                     'created_at' =>now()
                 ]);
+                $revCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
+                if ($revCatId) {
+                    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
+                }
             }
             $old_paid_amount = $oldInvice->paid_amount;
             $old_due_amount = $oldInvice->due_amount;
@@ -257,6 +288,8 @@ class PurchasesController extends Controller
                 'balance_after' => DB::table('categories')->where('category_name', $product['product_name'])->value('quantity'),
                 'price' => $product['product_price'],
                 'total_price' => $product['total'],
+                'unit_cost' => $product['product_price'],
+                'cost_total' => $product['total'],
                 'by' => auth()->user()->name,
                 'created_at' =>now()
             ]
@@ -272,6 +305,10 @@ class PurchasesController extends Controller
                 'fixed_quantity' => $product['product_quantity'],
                 'created_at' =>now()
             ]);
+            $newCatId = (int) DB::table('categories')->where('category_name', $product['product_name'])->value('id');
+            if ($newCatId) {
+                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($newCatId);
+            }
         }
         $supplier = Supplier::find($purchase->supplier_id);
         $supplier->last_balance = $supplier->balance;
@@ -482,6 +519,8 @@ class PurchasesController extends Controller
                 'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
                 'price' => $product->product_price*-1,
                 'total_price' => $product->total*-1,
+                'unit_cost' => $product->product_price*-1,
+                'cost_total' => $product->total*-1,
                 'by' => auth()->user()->name,
                 'created_at' =>now()
             ]
@@ -497,6 +536,10 @@ class PurchasesController extends Controller
                 'fixed_quantity' => $product->product_quantity*-1,
                 'created_at' =>now()
             ]);
+            $delCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
+            if ($delCatId) {
+                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
+            }
         }
 
         $mainPurchase = Purchase::find($id);

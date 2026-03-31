@@ -58,11 +58,58 @@ export class DialogWhatsAppMessageComponent implements OnInit {
     });
   }
 
+  /** عرض لغة القالب بالعربية + ترتيب: نفس الاسم يظهر العربي قبل الإنجليزي */
+  metaTemplateLanguageLabel(lang: string | undefined): string {
+    const l = (lang || '').toLowerCase().split(/[-_]/)[0];
+    if (l === 'ar') {
+      return 'عربي';
+    }
+    if (l === 'en') {
+      return 'إنجليزي';
+    }
+    return lang || '';
+  }
+
+  /** ترتيب: تجهيز الطلب → تأكيد الطلب → تقييم العميل؛ داخل المجموعة العربي قبل الإنجليزي */
+  sortMetaTemplates(list: any[]): any[] {
+    const groupOrder = (name: string): number => {
+      const n = String(name || '');
+      if (n === 'order_confirmation_flow' || n === 'order_flow') {
+        return 0;
+      }
+      if (n === 'confirm_order') {
+        return 1;
+      }
+      if (n === 'client_review') {
+        return 2;
+      }
+      return 9;
+    };
+    const langPrio = (x: any): number => {
+      const p = String(x?.language || '').toLowerCase().split(/[-_]/)[0];
+      return p === 'ar' ? 0 : p === 'en' ? 1 : 2;
+    };
+    return [...list].sort((a, b) => {
+      const ga = groupOrder(a?.name);
+      const gb = groupOrder(b?.name);
+      if (ga !== gb) {
+        return ga - gb;
+      }
+      const na = String(a?.name || '');
+      const nb = String(b?.name || '');
+      if (na !== nb) {
+        return na.localeCompare(nb);
+      }
+      return langPrio(a) - langPrio(b);
+    });
+  }
+
   loadMetaTemplates() {
     this.whatsappService.getMetaTemplates(this.selectedPhoneNumberId ?? undefined).subscribe({
       next: (res: any) => {
         const data = res?.data ?? res;
-        this.metaTemplates = Array.isArray(data) ? data : [];
+        const raw = Array.isArray(data) ? data : [];
+        this.metaTemplates = this.sortMetaTemplates(raw);
       },
       error: (err) => {
         console.warn('Failed to load Meta templates:', err?.status, err?.error);
@@ -129,7 +176,16 @@ export class DialogWhatsAppMessageComponent implements OnInit {
         this.sendingMeta = false;
         if (res.success) {
           this.onCloseClick();
-          Swal.fire({ icon: 'success', title: 'تم إرسال القالب بنجاح', timer: 1500, showConfirmButton: false });
+          const followupFailed = res.followup_error != null && res.followup_error !== '';
+          if (followupFailed) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'تم إرسال القالب',
+              text: 'لم يُرسل نص المتابعة تلقائياً (غالباً يلزم أن يكون العميل ضمن نافذة المحادثة 24 ساعة).',
+            });
+          } else {
+            Swal.fire({ icon: 'success', title: 'تم إرسال القالب بنجاح', timer: 1500, showConfirmButton: false });
+          }
           if (this.data.refreshData) this.data.refreshData();
         } else {
           Swal.fire({ icon: 'error', title: 'خطأ', text: res.error || 'فشل إرسال القالب' });

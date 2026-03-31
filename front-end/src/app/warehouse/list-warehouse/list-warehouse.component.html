@@ -33,16 +33,16 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse:'مخزن مواد خام',balance:data?.Raw}">
+              <button mat-menu-item (click)="openWarehouseDetails(elm)">
                 <span>التفاصيل</span>
               </button>
               <button mat-menu-item (click)="openDialog(elm)">
                 <span>تعديل البيانات</span>
               </button>
-              <button mat-menu-item routerLink="/dashboard/warehouse/warehousedetails" [queryParams]="{warehouse:'مخزن مواد خام'}">
+              <button mat-menu-item routerLink="/dashboard/warehouse/warehousedetails" [queryParams]="{warehouse: elm.name}">
                 <span>تتبع</span>
               </button>
-              <button mat-menu-item routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse:'مخزن مواد خام'}">
+              <button mat-menu-item (click)="openWarehouseTransfers(elm)">
                 <span>التحويلات</span>
               </button>
               <button mat-menu-item (click)="deleteWarehouse(elm.id)">
@@ -51,7 +51,7 @@
             </mat-menu>
           </td>
           <td *ngIf="url == 'listwarhouse'">
-            <button class="btn btn-secondary" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse:'مخزن مواد خام'}">
+            <button class="btn btn-secondary" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse: elm.name}">
               <span>التفاصيل</span>
             </button>
           </td>

@@ -419,21 +419,45 @@ export class ListOrdersComponent {
     }
   }
 
+  /** Tooltip text loaded lazily (last WhatsApp lines). */
+  waTooltipCache: Record<number, string> = {};
+
+  /** Egypt numbers: 01… → +201… (not +21… which breaks lookup). */
+  formatEgyptInternational(raw: string): string {
+    let d = String(raw).replace(/\D/g, '');
+    if (d.startsWith('0') && d.length === 11) {
+      d = '20' + d.substring(1);
+    } else if (d.length === 10 && d.startsWith('1')) {
+      d = '20' + d;
+    }
+    return '+' + d;
+  }
+
+  onWaInfoHover(item: any): void {
+    if (!item?.customer_phone_1 || this.waTooltipCache[item.id]) {
+      return;
+    }
+    const phone = this.formatEgyptInternational(item.customer_phone_1);
+    this.waTooltipCache[item.id] = 'جاري تحميل آخر الرسائل…';
+    this.whatsappService.getWhatsAppSnippet(phone).subscribe({
+      next: (res: any) => {
+        if (res.success && res.lines?.length) {
+          this.waTooltipCache[item.id] = res.lines.join(' · ');
+        } else {
+          this.waTooltipCache[item.id] = 'لا توجد رسائل بعد. اضغط لفتح المحادثة.';
+        }
+      },
+      error: () => {
+        this.waTooltipCache[item.id] = 'تعذر تحميل المحادثة. اضغط لفتح الدردشة.';
+      },
+    });
+  }
+
   openChatWithCustomer(item: any): void {
     if (item && item.customer_phone_1) {
-      // Format phone number
-      let phone = item.customer_phone_1;
-      if (!phone.startsWith('+')) {
-        if (phone.startsWith('0')) {
-          phone = '+2' + phone.substring(1);
-        } else {
-          phone = '+2' + phone;
-        }
-      }
-      
-      // Navigate to chat page - the component will find or create customer by phone
+      const phone = this.formatEgyptInternational(item.customer_phone_1);
       this.router.navigate(['/dashboard/whatsapp/chat'], {
-        queryParams: { phone: phone }
+        queryParams: { phone },
       });
     } else {
       Swal.fire({

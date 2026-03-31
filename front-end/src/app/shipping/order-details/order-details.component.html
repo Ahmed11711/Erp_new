@@ -191,7 +191,6 @@
     <thead>
      <tr>
       <th>اسم المنتج</th>
-      <th>كود المنتج</th>
       <th>الكمية المطلوبة</th>
       <!-- <th *ngIf="order?.customer_type=='شركة' && order?.order_status=='طلب جديد' || order?.order_status=='طلب مؤكد'">الكمية التي تم شحنها</th> -->
       <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
@@ -207,7 +206,6 @@
     <tbody>
      <tr *ngFor="let product of order_products; let i = index">
       <td>{{product.category.category_name}}</td>
-      <td>{{product.category.category_code}}</td>
       <td dir="ltr">{{product.quantity}}</td>
       <!-- <td *ngIf="order?.customer_type=='شركة' && order.order_status=='طلب جديد' || order.order_status=='طلب مؤكد'">{{product.shipped_quantity}}</td> -->
       <td *ngIf="order?.customer_type=='شركة'">{{product.shipped_quantity}}</td>

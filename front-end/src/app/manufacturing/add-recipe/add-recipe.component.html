@@ -1,118 +1,193 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
-      <app-time></app-time>
+<div class="recipe-page container-fluid" dir="rtl">
+  <header class="recipe-page__header row align-items-center py-3">
+    <div class="col-md-4"><app-time></app-time></div>
+    <div class="col-md-4 text-center">
+      <h1 class="recipe-page__title">إضافة وصفة</h1>
+      <p class="recipe-page__subtitle text-muted mb-0">اختر المنتج النهائي، ثم أضف المواد الخام — تظهر في الجدول أسفل حقل الإضافة</p>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">اضافة وصفة</p></div>
-    </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
-  </div>
-
-
-  <div class="container mt-5">
-
-    <div class="row">
-      <div class="col-md-3">
-        <select id="inputState" class="form-control" (change)="productType($event)">
-          <option selected disabled>نوع المنتج</option>
-          <option value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
-          <option value="مخزن منتج تام">مخزن منتج تام</option>
-        </select>
+    <div class="col-md-4"></div>
+  </header>
+  <div class="recipe-page__content container pb-5">
+    <!-- ١ المنتج النهائي -->
+    <section class="recipe-card recipe-card--product">
+      <h2 class="recipe-card__heading"><span class="recipe-card__step">١</span> المنتج والمخزن</h2>
+      <p class="recipe-card__lead text-muted small mb-3">يحدد المنتج الذي ستُربَط به مكونات الوصفة.</p>
+      <div class="row align-items-end">
+        <div class="col-md-4 mb-3 mb-md-0">
+          <label class="mb-1 d-block small text-muted" for="productWarehouse">نوع المنتج</label>
+          <select id="productWarehouse" class="form-control recipe-select" (change)="productType($event)">
+            <option selected disabled value="">اختر نوع المخزن</option>
+            <option value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
+            <option value="مخزن منتج تام">مخزن منتج تام</option>
+          </select>
+        </div>
+        <div class="col-md-8" *ngIf="selectedWarehouse">
+          <label class="mb-1 d-block small text-muted" for="productSearch">المنتج النهائي</label>
+          <div *ngIf="loadingWarehouseProducts" class="text-muted small py-2">جاري تحميل الأصناف…</div>
+          <ng-autocomplete
+            #productAuto
+            *ngIf="!loadingWarehouseProducts && products.length > 0"
+            id="productSearch"
+            class="recipe-product-autocomplete"
+            [data]="products"
+            [searchKeyword]="catword"
+            [customFilter]="filterCategorySearch"
+            [minQueryLength]="1"
+            [debounceTime]="200"
+            notFoundText="لا توجد نتائج"
+            placeholder="ابحث باسم المنتج (مثلاً: Apron)…"
+            [selectedValueRender]="selectedCategoryLabel"
+            (selected)="onProductSelected($event)"
+            [itemTemplate]="productItemTemplate"
+            [notFoundTemplate]="productNotFoundTemplate"
+          >
+          </ng-autocomplete>
+          <ng-template #productItemTemplate let-item>
+            <div class="recipe-category-option">
+              <span class="recipe-category-option__name" [innerHTML]="item.category_name"></span>
+              <span class="recipe-category-option__meta text-muted" *ngIf="item.measurement?.warehouse">{{
+                item.measurement.warehouse
+              }}</span>
+            </div>
+          </ng-template>
+          <ng-template #productNotFoundTemplate let-notFound>
+            <div class="text-muted small p-2">{{ notFound }}</div>
+          </ng-template>
+          <p *ngIf="!loadingWarehouseProducts && products.length === 0" class="text-warning small mb-0">
+            لا توجد أصناف مسجّلة في هذا المخزن.
+          </p>
+        </div>
       </div>
-      <div class="col-md-3" *ngIf="products.length !== 0">
-        <ng-autocomplete
-          [data]="products"
-          [searchKeyword]="catword"
-          placeholder="اسم المنتج"
-          (selected)='productChange($event)'
-          [itemTemplate]="itemTemplates"
-          [notFoundTemplate]="notFoundTemplate">
-        </ng-autocomplete>
+    </section>
 
-        <ng-template #itemTemplates let-item>
-          <a [innerHTML]="item.category_name"></a>
-        </ng-template>
-
-        <ng-template #notFoundTemplate let-notFound>
-          <div [innerHTML]="notFound"></div>
-        </ng-template>
+    <!-- ٢ إضافة مادة → تتدفق إلى الجدول (٣) -->
+    <section class="recipe-card recipe-card--add-ingredient" *ngIf="selectedWarehouse && !loadingWarehouseProducts">
+      <div class="row align-items-center recipe-add-ingredient-row">
+        <div class="col-md-4 col-lg-3 mb-2 mb-md-0">
+          <h2 class="recipe-card__heading recipe-card__heading--inline mb-0">
+            <span class="recipe-card__step">٢</span> إضافة مادة إلى الوصفة
+          </h2>
+        </div>
+        <div class="col-md-8 col-lg-9">
+          <ng-autocomplete
+            #ingredientAuto
+            *ngIf="recipes.length > 0 && product_id"
+            id="ingredientSearch"
+            class="recipe-ingredient-autocomplete"
+            [data]="recipes"
+            [searchKeyword]="catword2"
+            [customFilter]="filterCategorySearch"
+            [minQueryLength]="1"
+            [debounceTime]="200"
+            notFoundText="لا توجد نتائج"
+            placeholder="ابحث عن الصنف (مواد خام أو تحت التشغيل حسب نوع المنتج)…"
+            [selectedValueRender]="selectedCategoryLabel"
+            (selected)="onIngredientSelected($event)"
+            [itemTemplate]="ingredientItemTemplate"
+            [notFoundTemplate]="ingredientNotFoundTemplate"
+          >
+          </ng-autocomplete>
+          <p *ngIf="recipes.length === 0" class="text-muted small mb-0">لا توجد مواد مطابقة لنوع الوصفة المختار.</p>
+          <p *ngIf="recipes.length > 0 && !product_id" class="text-warning small mb-0">
+            اختر المنتج النهائي من الخطوة ١ أولاً حتى تُربَط المواد به.
+          </p>
+        </div>
       </div>
-    </div>
+      <ng-template #ingredientItemTemplate let-item>
+        <div class="recipe-category-option">
+          <span class="recipe-category-option__name" [innerHTML]="item.category_name"></span>
+          <span class="recipe-category-option__meta text-muted" *ngIf="item.measurement?.warehouse">{{
+            item.measurement.warehouse
+          }}</span>
+        </div>
+      </ng-template>
+      <ng-template #ingredientNotFoundTemplate let-notFound>
+        <div class="text-muted small p-2">{{ notFound }}</div>
+      </ng-template>
+    </section>
 
+    <!-- ٣ جدول المكونات (نتيجة الخطوة ٢ ومربوط بالمنتج في ١) -->
+    <section class="recipe-card recipe-card--table" *ngIf="selectedWarehouse && !loadingWarehouseProducts">
+      <div class="recipe-table-toolbar">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+          <div>
+            <h2 class="recipe-card__heading mb-1"><span class="recipe-card__step">٣</span> مكونات الوصفة</h2>
+            <p class="recipe-card__lead text-muted small mb-0">الأصناف المضافة للمنتج المحدد في الخطوة ١</p>
+          </div>
+          <span class="badge recipe-badge" *ngIf="tableData.length">{{ tableData.length }} صنف</span>
+        </div>
+      </div>
+      <div class="table-responsive recipe-table-wrap">
+        <table class="table table-hover recipe-table mb-0">
+          <thead>
+            <tr>
+              <th scope="col">الصنف</th>
+              <th scope="col">النوع</th>
+              <th scope="col" class="text-center">الكمية المطلوبة</th>
+              <th scope="col">الوحدة</th>
+              <th scope="col" class="text-end">التكلفة</th>
+              <th scope="col" class="text-end">التكلفة الإجمالية</th>
+              <th scope="col" class="text-center">صورة</th>
+              <th scope="col" class="text-center recipe-col-actions">حذف</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="tableData.length === 0" class="recipe-row-empty">
+              <td colspan="8" class="recipe-empty">
+                <p class="mb-1 font-weight-bold">لا توجد أصناف بعد</p>
+                <p class="text-muted small mb-0">استخدم حقل «إضافة مادة إلى الوصفة» في الخطوة ٢ أعلاه لإضافة صفوف هنا.</p>
+              </td>
+            </tr>
+            <tr *ngFor="let elm of tableData; let i = index">
+              <td data-label="الصنف">{{ elm.category_name }}</td>
+              <td data-label="النوع">{{ elm.measurement.warehouse }}</td>
+              <td data-label="الكمية" class="text-center">
+                <input class="form-control recipe-qty-input" type="number" min="1" [value]="elm.quantity"
+                  (change)="quantityChange($event, i)" [attr.aria-label]="'الكمية لـ ' + elm.category_name" />
+              </td>
+              <td data-label="الوحدة">{{ elm.measurement.unit }}</td>
+              <td data-label="التكلفة" class="text-end">{{ elm.category_price }}</td>
+              <td data-label="الإجمالي" class="text-end font-weight-bold">{{ elm.total_price }}</td>
+              <td data-label="صورة" class="text-center recipe-thumb-cell">
+                <img *ngIf="!imageFailed.has(elm.id)" class="recipe-thumb" [src]="imgUrl + elm.category_image" alt=""
+                  (error)="onImgError(elm.id)" />
+                <span *ngIf="imageFailed.has(elm.id)" class="recipe-thumb-placeholder" title="لا توجد صورة">—</span>
+              </td>
+              <td data-label="حذف" class="text-center recipe-actions-cell">
+                <button type="button" class="btn btn-sm recipe-btn-remove" (click)="removeRow(i)"
+                  [attr.aria-label]="'حذف ' + elm.category_name" title="حذف الصف">−</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-  </div> <br>
-
-
-  <div class="container-fluid text-center">
-    <table class="table w-75 m-auto">
-      <thead class="bg-dark text-white">
-        <th>الصنف</th>
-        <th>النوع</th>
-        <th>الكمية المطلوبة</th>
-        <th>الوحده</th>
-        <th>التكلفه</th>
-        <th>التكلفه الاجماليه</th>
-        <th>صوره الصنف</th>
-      </thead>
-      <tbody>
-        <tr *ngFor="let elm of tableData; let i = index">
-          <td>{{elm.category_name}}</td>
-          <td>{{elm.measurement.warehouse}}</td>
-          <td class="text-center"><input class="form-control w-25 m-auto" type="number" min="1" [value]="elm.quantity" (change)="quantityChange($event , i)"></td>
-          <td>{{elm.measurement.unit}}</td>
-          <td>{{elm.category_price}}</td>
-          <td>{{elm.total_price}}</td>
-          <td><img class="img-fluid" style="width: 30px;" [src]="imgUrl+elm.category_image" alt="category image"></td>
-        </tr>
-
-      </tbody>
-    </table>
+    <section class="recipe-card recipe-card--footer" *ngIf="selectedWarehouse && !loadingWarehouseProducts">
+      <h2 class="sr-only">التكلفة والتأكيد</h2>
+      <div class="row align-items-stretch">
+        <div class="col-md-4 mb-3 mb-md-0">
+          <label class="mb-1 d-block small text-muted" for="costType">نوع التكلفة</label>
+          <select id="costType" class="form-control recipe-select" (change)="priceType($event)">
+            <option selected disabled value="">اختر نوع التكلفة</option>
+            <option value="ثابت">ثابت</option>
+            <option value="متغير">متغير</option>
+          </select>
+        </div>
+        <div class="col-md-4 mb-3 mb-md-0" *ngIf="showChangedPrice">
+          <label class="mb-1 d-block small text-muted" for="variableCost">التكلفة المتغيرة</label>
+          <input id="variableCost" class="form-control" type="number" min="0" [(ngModel)]="changedPrice" (keyup)="calcTotalPrice()" />
+        </div>
+        <div class="col-md-4 ml-md-auto">
+          <div class="recipe-total-box">
+            <span class="recipe-total-box__label">إجمالي التكلفة</span>
+            <span class="recipe-total-box__value">{{ totalPrice | number : '1.0-2' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-center mt-4">
+        <button type="button" class="btn recipe-btn-primary px-5" (click)="confirmOrder()">تأكيد الوصفة</button>
+      </div>
+    </section>
   </div>
-  <hr>
-  <div class="w-25 m-auto mt-5" *ngIf="products.length !== 0">
-    <ng-autocomplete
-      [data]="recipes"
-      [searchKeyword]="catword2"
-      placeholder="اسم الصنف"
-      (selected)='recipesChange($event)'
-      [itemTemplate]="itemTemplates"
-      [notFoundTemplate]="notFoundTemplate">
-    </ng-autocomplete>
-
-    <ng-template #itemTemplates let-item>
-      <a [innerHTML]="item.category_name"></a>
-    </ng-template>
-
-    <ng-template #notFoundTemplate let-notFound>
-      <div [innerHTML]="notFound"></div>
-    </ng-template>
-  </div>
-
-  <div class="row mt-5 d-flex justify-content-center">
-    <div class="col-md-2 d-flex align-items-center">
-      <select id="inputState" class="form-control" (change)="priceType($event)">
-        <option selected disabled>نوع التكلفة</option>
-        <option value="ثابت">ثابت</option>
-        <option value="متغير">متغير</option>
-      </select>
-    </div>
-
-    <div class="col-md-1 offset-md-1" *ngIf="showChangedPrice">
-      <h3 class="text-center"> التكلفة المتغيره</h3>
-      <h4><input class="form-control" type="number" min="1" [(ngModel)]="changedPrice" (keyup)="calcTotalPrice()"></h4>
-    </div>
-
-    <div class="col-md-2 text-center">
-      <h3>اجمالى التكلفة</h3>
-      <h4>{{totalPrice}}</h4>
-    </div>
-  </div>
-
-  <div class="text-center mt-3">
-    <button (click)="confirmOrder()" class="btn">تأكيد</button>
-  </div>
-
 </div>

@@ -9,6 +9,7 @@ use App\Models\Purchase;
 use App\Models\PurchasesTracking;
 use App\Models\Bank;
 use App\Models\Supplier;
+use App\Services\CategoryInventoryCostService;
 
 
 class ApprovalsController extends Controller
@@ -73,6 +74,8 @@ class ApprovalsController extends Controller
                             'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
                             'price' => $product->product_price*-1,
                             'total_price' => $product->total*-1,
+                            'unit_cost' => $product->product_price*-1,
+                            'cost_total' => $product->total*-1,
                             'by' => auth()->user()->name,
                             'created_at' =>now()
                         ]
@@ -88,6 +91,10 @@ class ApprovalsController extends Controller
                             'fixed_quantity' => $product->product_quantity*-1,
                             'created_at' =>now()
                         ]);
+                        $apCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
+                        if ($apCatId) {
+                            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($apCatId);
+                        }
                     }
 
                     $mainPurchase = Purchase::where('invoice_number' , $data->column_values['invoice_number'])->first();

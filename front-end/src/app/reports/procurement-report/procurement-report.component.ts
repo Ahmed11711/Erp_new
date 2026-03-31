@@ -1,56 +1,105 @@
-import { Component } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { InvoiceService } from 'src/app/purchases/service/invoice.service';
 
 @Component({
   selector: 'app-procurement-report',
   templateUrl: './procurement-report.component.html',
   styleUrls: ['./procurement-report.component.css']
 })
-export class ProcurementReportComponent {
+export class ProcurementReportComponent implements OnInit {
 
-  data:any[]=[];
-  dateFrom!:any
-  dateTo!:any
+  invoices: any[] = [];
+  dateFrom!: string;
+  dateTo!: string;
+  searchKeyword = '';
+  length = 0;
+  pageSize = 15;
+  page = 0;
+  pageSizeOptions = [15, 50, 100];
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(){
+  constructor(
+    private invoice: InvoiceService,
+    private router: Router
+  ) {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
-    this.dateFrom = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    this.dateTo = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    this.form.patchValue({
-      type:'نوع الراتب'
-    })
+    const to = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const from = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+    this.dateTo = this.formatDate(to);
+    this.dateFrom = this.formatDate(from);
   }
 
-  ngOnInit(){
-
+  private formatDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
-  form:FormGroup = new FormGroup({
-    'name' :new FormControl(null , [Validators.required ]),
-    'type' :new FormControl(null , [Validators.required ]),
-  })
-
-  submitform(){
-
+  ngOnInit(): void {
+    this.load();
   }
 
-  productChange(e:any){
-
+  load(): void {
+    const params: Record<string, string> = {
+      date_from: this.dateFrom,
+      date_to: this.dateTo,
+    };
+    if (this.searchKeyword.trim()) {
+      params['q'] = this.searchKeyword.trim();
+    }
+    this.invoice.search(this.pageSize, this.page + 1, params).subscribe((res: any) => {
+      this.invoices = res.data ?? [];
+      this.length = res.total ?? 0;
+    });
   }
 
-  onDateFromChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const selectedDate = target.value;
-    console.log(selectedDate);
-
+  onDatesChange(): void {
+    this.page = 0;
+    this.load();
   }
-  onDateToChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const selectedDate = target.value;
-    console.log(selectedDate);
 
+  onSearchInput(): void {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+    }
+    this.searchTimer = setTimeout(() => {
+      this.page = 0;
+      this.load();
+    }, 400);
+  }
+
+  onPageChange(event: any): void {
+    this.pageSize = event.pageSize;
+    this.page = event.pageIndex;
+    this.load();
+  }
+
+  displayAmount(inv: any, field: string): number {
+    const src = inv?.updated_purchase ? inv.updated_purchase : inv;
+    const v = src?.[field];
+    return v != null ? Number(v) : 0;
+  }
+
+  invoiceDetails(id: number): void {
+    sessionStorage.setItem('invoiceId', String(id));
+    this.router.navigateByUrl('/dashboard/purchases/invoice');
+  }
+
+  editInvoice(id: number): void {
+    sessionStorage.setItem('editInvoiceId', String(id));
+    this.router.navigateByUrl('/dashboard/purchases/add_invoice');
+  }
+
+  getTotals(): { total: number; paid: number; due: number } {
+    return this.invoices.reduce(
+      (acc, item) => ({
+        total: acc.total + this.displayAmount(item, 'total_price'),
+        paid: acc.paid + this.displayAmount(item, 'paid_amount'),
+        due: acc.due + this.displayAmount(item, 'due_amount'),
+      }),
+      { total: 0, paid: 0, due: 0 }
+    );
   }
 }

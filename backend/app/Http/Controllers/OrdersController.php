@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Log;
 use Twilio\TwiML\MessagingResponse;
 use Illuminate\Support\Facades\Cache;
 use App\Models\shippingCompanyDetails;
+use App\Services\CategoryInventoryCostService;
 
 class OrdersController extends Controller
 {
@@ -1172,15 +1173,7 @@ class OrdersController extends Controller
                 $totalCogs = 0;
                 foreach ($productsToShip as $product) {
                     $order_product = OrderProduct::find($product['id']);
-                    $categoryForCost = Category::find($order_product->category_id);
-                    $avgCost = 0;
-                    if ($categoryForCost) {
-                        if ($categoryForCost->quantity > 0 && $categoryForCost->total_price != 0) {
-                            $avgCost = (float)$categoryForCost->total_price / (float)$categoryForCost->quantity;
-                        } elseif (!is_null($categoryForCost->unit_price)) {
-                            $avgCost = (float)$categoryForCost->unit_price;
-                        }
-                    }
+                    $avgCost = CategoryInventoryCostService::resolveReferenceUnitCost((int) $order_product->category_id);
                     $totalCogs += $avgCost * (float)$product['quantity'];
                     $order_product = OrderProduct::find($product['id']);
                     $order_product->shipped_quantity += (float)$product['quantity'];
@@ -1353,14 +1346,8 @@ class OrdersController extends Controller
                 }
                 
                 if ($totalCogs > 0) {
-                    $cogsAcc = \App\Models\TreeAccount::where('detail_type', 'cogs')->first();
-                    if (!$cogsAcc) {
-                        $cogsAcc = \App\Models\TreeAccount::where('type', 'expense')->where('name', 'like', '%تكلفة%')->first();
-                    }
-                    $inventoryAcc = \App\Models\TreeAccount::where('detail_type', 'inventory')->first();
-                    if (!$inventoryAcc) {
-                        $inventoryAcc = \App\Models\TreeAccount::where('type', 'asset')->where('name', 'like', '%مخزون%')->first();
-                    }
+                    $cogsAcc = \App\Models\TreeAccount::resolveCogsAccount();
+                    $inventoryAcc = \App\Models\TreeAccount::resolveInventoryAccount();
                     if ($cogsAcc && $inventoryAcc) {
                         \App\Models\AccountEntry::create([
                             'tree_account_id' => $cogsAcc->id,
@@ -1386,12 +1373,7 @@ class OrdersController extends Controller
                         }
                     }
                 }
-                $salesAcc = \App\Models\TreeAccount::where('detail_type', 'sales')->first();
-                if (!$salesAcc) {
-                    $salesAcc = \App\Models\TreeAccount::where('type', 'revenue')->where(function ($q) {
-                        $q->where('name', 'like', '%مبيعات%')->orWhere('name_en', 'like', '%sales%');
-                    })->first();
-                }
+                $salesAcc = \App\Models\TreeAccount::resolveSalesRevenueAccount();
                 if ($salesAcc && $total > 0) {
                     $customerTreeId = null;
                     $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
@@ -1625,6 +1607,7 @@ class OrdersController extends Controller
             }
 
             $shippingDetails = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
+            $paymentType = $request->payment_type ?? 'bank';
             if ($order->customer_type == 'شركة' && $order->order_status == 'تم التحصيل') {
                 $collectFromCompanies = 0;
                 foreach ($shippingDetails as $elm) {
@@ -1655,17 +1638,7 @@ class OrdersController extends Controller
                     $ref = $order->id;
                     $type = 'الطلبات';
 
-                    $paymentType = $request->payment_type ?? 'bank';
-                    if ($paymentType === 'safe' && $request->has('safe_id')) {
-                        $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                    } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
-                        $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                    } else {
-                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                    }
-                    if ($paymentType === 'bank' && $request->bank_id) {
-                        $this->postBankCollectionAccounting($order, $amount, $request->bank_id, $details);
-                    }
+                    $this->applyOrderCollectionToPaymentSource($order, $request, $amount, $user_id, $details, $ref, $type, $paymentType);
                 }
 
                 $company = CustomerCompany::find($order->company_id);
@@ -1674,14 +1647,8 @@ class OrdersController extends Controller
                     $details = ' تحصيل من عميل شركة ' . $company->name;
                     $ref = $order->id;
                     $type = 'الطلبات';
-                    
-                    if ($paymentType === 'safe' && $request->has('safe_id')) {
-                        $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                    } elseif ($paymentType === 'service_account' && $request->has('service_account_id')) {
-                        $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                    } else {
-                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                    }
+
+                    $this->applyOrderCollectionToPaymentSource($order, $request, $amount, $user_id, $details, $ref, $type, $paymentType);
 
 
 
@@ -1715,6 +1682,7 @@ class OrdersController extends Controller
 
                 if ($order->order_type == 'طلب صيانة') {
                     $orders = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
+                    $paymentType = $request->payment_type ?? 'bank';
                     foreach ($orders as $elm) {
                         $elm->is_done = true;
                         $elm->save();
@@ -1740,19 +1708,31 @@ class OrdersController extends Controller
                         $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
                         $ref = $request->id;
                         $type = 'الطلبات';
-                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+                        $this->applyOrderCollectionToPaymentSource(
+                            $order,
+                            $request,
+                            $amount,
+                            $user_id,
+                            $details,
+                            $ref,
+                            $type,
+                            $paymentType
+                        );
                     }
                 } else {
                     $shipping_company = ShippingCompany::find($order->order_details->shipping_company_id);
-                    $order = ShippingCompanyDetails::where('order_id', $id)->latest()->first();
-                    $order->is_done = true;
-                    $order->save();
+                    $latestShippingDetail = ShippingCompanyDetails::where('order_id', $id)->latest()->first();
+                    if (!$latestShippingDetail) {
+                        throw new \RuntimeException('لا توجد بيانات شحن للطلب');
+                    }
+                    $latestShippingDetail->is_done = true;
+                    $latestShippingDetail->save();
 
-                    $shipping_company_id = (float)$order->shipping_company_id;
+                    $shipping_company_id = (float)$latestShippingDetail->shipping_company_id;
                     $order_id = $request->id;
                     $shipping_date = $order_details->shipping_date;
                     $status = 'تم التحصيل';
-                    $amount = (float)-$order->amount;
+                    $amount = (float)-$latestShippingDetail->amount;
                     DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
                         $shipping_company_id,
                         $order_id,
@@ -1764,15 +1744,23 @@ class OrdersController extends Controller
                     ]);
 
                     $shippingCompanyDetails = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم التحصيل')->first();
-                    if ($order->old_amount) {
-                        $shippingCompanyDetails->old_amount = (float)-$order->old_amount;
+                    if ($latestShippingDetail->old_amount && $shippingCompanyDetails) {
+                        $shippingCompanyDetails->old_amount = (float)-$latestShippingDetail->old_amount;
                         $shippingCompanyDetails->update();
                     }
 
+                    $collectAmount = (float)$latestShippingDetail->amount;
+                    $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
+                    $ref = $request->id;
+                    $type = 'الطلبات';
+                    $paymentType = $request->payment_type ?? 'bank';
+
                     if ($request->has('reference_number') || $request->hasFile('reference_image')) {
-                        $shippingCompanyDetails->old_amount = (float)-$order->amount;
-                        $shippingCompanyDetails->amount = 0;
-                        $shippingCompanyDetails->update();
+                        if ($shippingCompanyDetails) {
+                            $shippingCompanyDetails->old_amount = (float)-$latestShippingDetail->amount;
+                            $shippingCompanyDetails->amount = 0;
+                            $shippingCompanyDetails->update();
+                        }
 
                         $img_name = '';
                         if ($request->hasFile('reference_image')) {
@@ -1785,14 +1773,18 @@ class OrdersController extends Controller
                             'reference_image' => $img_name,
                             'reference_number' => $request->reference_number
                         ]);
-                    } else {
-                        $amount = (float)($order->amount);
-                        $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
-                        $ref = $request->id;
-                        $type = 'الطلبات';
-                        $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
-                        $this->postBankCollectionAccounting($order, $amount, $request->bank_id, $details);
                     }
+
+                    $this->applyOrderCollectionToPaymentSource(
+                        $order,
+                        $request,
+                        $collectAmount,
+                        $user_id,
+                        $details,
+                        $ref,
+                        $type,
+                        $paymentType
+                    );
                 }
 
                 if ($request->receivedOrder) {
@@ -2137,6 +2129,8 @@ class OrdersController extends Controller
                     'balance_after' => 0,
                     'price' => 0,
                     'total_price' => 0,
+                    'unit_cost' => 0,
+                    'cost_total' => 0,
                     'created_at' => now(),
                     'ref' => $id,
                     'by' => auth()->user()->name,
@@ -2641,31 +2635,16 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
         $new_balance = $current_balance + $amount;
 
         $safe->update(['balance' => $new_balance]);
-        
-        // Transaction
+
         \App\Models\SafeTransaction::create([
-             'from_safe_id' => $safe_id, // Or null? Typically for income, safe is target. But transaction model structure is Transfer-based.
-             // Looking at SafeTransaction: from_safe_id, to_safe_id. 
-             // If it's a deposit, maybe there is no "from"? Or we just use it as a log?
-             // Since SafeTransaction seems to be for TRANSFERS mostly, maybe we shouldn't use it for simple income/expense? 
-             // Wait, the user wants "Show in Journal". 
-             // SafeController only uses SafeTransaction for transfers. 
-             // Let's check if there is a 'safe_details' table? No.
-             // If we want to track movement, maybe we should just rely on the AccountEntry (Journal).
-             // However, Bank has `bank_details`. Safe doesn't seems to have `safe_details`.
-             // I will stick to updating the Safe Balance + Journal Entry (AccountEntry).
-             // If a log is needed, maybe create a Note or just rely on AccountEntry.
-             // Re-reading user request: "Show this order in the journal". Journal = AccountEntry. 
-             // So updating Safe Balance + AccountEntry is sufficient.
-             // But wait, the standard way in this system seems to be keeping a history table (bank_details).
-             // Since safe_details doesn't exist, I will just update balance.
+            'date' => Carbon::parse($created_at)->toDateString(),
+            'type' => 'deposit',
+            'from_safe_id' => null,
+            'to_safe_id' => $safe_id,
+            'amount' => abs((float) $amount),
+            'notes' => trim(($details ?? '') . ' — طلب #' . $order_id . ($ref ? " (مرجع: {$ref})" : '')),
+            'user_id' => $user_id,
         ]);
-        
-        // Actually, let's look at VoucherController. It just updates Safe/Bank balance? 
-        // VoucherController updates TreeAccount (Journal) and `updateOperationalBalance`.
-        // `updateOperationalBalance` updates `customer_company_details` or `supplier_balance`.
-        // It DOES NOT seem to insert into a `safe_details` table.
-        // So for Safes, the Journal IS the log. 
     }
 }
     private function updateServiceAccountBalance($service_account_id, $amount, $order_id, $user_id, $details, $ref, $type, $created_at)
@@ -2678,11 +2657,53 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
             $account->update(['balance' => $new_balance]);
         }
     }
-    
-    private function postBankCollectionAccounting($order, $amount, $bankId, $note)
+
+    /**
+     * تحديث رصيد البنك/الخزينة/الحساب الخدمي + قيود ذمم العملاء (أفراد أو شركات).
+     */
+    private function applyOrderCollectionToPaymentSource(
+        Order $order,
+        Request $request,
+        float $amount,
+        int $user_id,
+        string $details,
+        $ref,
+        string $type,
+        string $paymentType
+    ): void {
+        if ($amount <= 0) {
+            return;
+        }
+        if ($paymentType === 'safe' && $request->has('safe_id')) {
+            $this->updateSafeBalance($request->safe_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+            $safe = \App\Models\Safe::find($request->safe_id);
+            $debitId = $safe && $safe->account_id ? (int) $safe->account_id : null;
+            $this->postCustomerCollectionAccounting($order, $amount, $debitId, $details);
+
+            return;
+        }
+        if ($paymentType === 'service_account' && $request->has('service_account_id')) {
+            $this->updateServiceAccountBalance($request->service_account_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+            $svc = \App\Models\ServiceAccount::find($request->service_account_id);
+            $debitId = $svc && $svc->account_id ? (int) $svc->account_id : null;
+            $this->postCustomerCollectionAccounting($order, $amount, $debitId, $details);
+
+            return;
+        }
+        if ($request->bank_id) {
+            $this->updateBankBalance($request->bank_id, $amount, $order->id, $user_id, $details, $ref, $type, now());
+        }
+        if ($paymentType === 'bank' && $request->bank_id) {
+            $this->postBankCollectionAccounting($order, $amount, $request->bank_id, $details);
+        }
+    }
+
+    /**
+     * قيد مدين حساب النقدية/البنك ودائن ذمم العميل.
+     */
+    private function postCustomerCollectionAccounting(Order $order, float $amount, ?int $debitTreeAccountId, string $note): void
     {
-        $bank = \App\Models\Bank::find($bankId);
-        if (!$bank || !$bank->asset_id || $amount <= 0) {
+        if (!$debitTreeAccountId || $amount <= 0) {
             return;
         }
         $customerTreeId = null;
@@ -2702,7 +2723,9 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
             }
             $customerTreeId = $indAccount ? $indAccount->id : null;
         }
-        if (!$customerTreeId) return;
+        if (!$customerTreeId) {
+            return;
+        }
         $dailyEntry = \App\Models\DailyEntry::create([
             'date' => now(),
             'entry_number' => \App\Models\DailyEntry::getNextEntryNumber(),
@@ -2710,7 +2733,7 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
             'user_id' => auth()->id(),
         ]);
         \App\Models\AccountEntry::create([
-            'tree_account_id' => $bank->asset_id,
+            'tree_account_id' => $debitTreeAccountId,
             'debit' => $amount,
             'credit' => 0,
             'description' => "تحصيل من العميل - طلب: " . $order->id,
@@ -2729,9 +2752,18 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
         ]);
         try {
             $accService = app(\App\Services\Accounting\AccountingService::class);
-            $accService->updateAccountHierarchyBalances($bank->asset_id);
+            $accService->updateAccountHierarchyBalances($debitTreeAccountId);
             $accService->updateAccountHierarchyBalances($customerTreeId);
         } catch (\Exception $e) {
         }
+    }
+
+    private function postBankCollectionAccounting($order, $amount, $bankId, $note)
+    {
+        $bank = Bank::find($bankId);
+        if (!$bank || !$bank->asset_id) {
+            return;
+        }
+        $this->postCustomerCollectionAccounting($order, (float) $amount, (int) $bank->asset_id, $note);
     }
 }

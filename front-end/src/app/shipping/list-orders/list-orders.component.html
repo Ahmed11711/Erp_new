@@ -301,6 +301,7 @@
           <th scope="col">نوع الطلب</th>
           <th scope="col"> حالة الطلب</th>
           <th scope="col">الاشعارات</th>
+          <th scope="col" *ngIf="hasWhatsAppAccess || user == 'Admin'">واتساب</th>
           <th scope="col">المحافظة</th>
           <th scope="col" *ngIf="user!= 'Admin'"> المدينة</th>
           <th scope="col">اسم العميل</th>
@@ -376,6 +377,19 @@
               <i [id]="item.id" class="fa-solid fa-bell" [ngClass]="item?.new_notification ? 'color-main':'color-navy' "
                 (click)="showNotification(item?.notifications)"></i>
             </div>
+          </td>
+          <td *ngIf="hasWhatsAppAccess || user == 'Admin'" class="text-center">
+            <button
+              *ngIf="item?.customer_phone_1"
+              mat-icon-button
+              type="button"
+              matTooltip="{{ waTooltipCache[item.id] || 'مرّر لعرض آخر الرسائل — اضغط لفتح المحادثة' }}"
+              matTooltipShowDelay="300"
+              (mouseenter)="onWaInfoHover(item)"
+              (click)="openChatWithCustomer(item); $event.stopPropagation()"
+              aria-label="معلومات واتساب وفتح المحادثة">
+              <mat-icon>info_outline</mat-icon>
+            </button>
           </td>
           <td>{{item.governorate}}</td>
           <td *ngIf="user!= 'Admin'">{{item.city}}</td>

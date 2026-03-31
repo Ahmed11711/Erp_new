@@ -62,23 +62,37 @@
             <option *ngFor="let item of serviceAccounts" value="{{item.id}}">{{item.name}}</option>
           </select>
         </div>
-        <div class="form-group col-md-4 d-flex" *ngIf=" collectType === 'تحصيل الكتروني'">
-          <div>
-            <input type="text" class="form-control" name="refernceNumber" placeholder="الرقم المرجعي"
-              [(ngModel)]="referenceNumber">
-          </div>
-          <div class="form-group">
-            <div class="element">
-              <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
-              <input type="file" (change)="onFileChanged($event)" name="uploadFile" accept="image/*" id="fileInput"
-                #uploadFile="ngModel" ngModel class="img">
+        <div class="form-group col-md-4" *ngIf=" collectType === 'تحصيل الكتروني'">
+          <div class="d-flex mb-2">
+            <div class="flex-grow-1 me-2">
+              <input type="text" class="form-control" name="refernceNumber" placeholder="الرقم المرجعي"
+                [(ngModel)]="referenceNumber">
             </div>
-            <div *ngIf="uploadFile.invalid && fileopend " class="form-text text-danger">
-              <div *ngIf="uploadFile.errors?.['required']">
-                من فضلك اختر صورة
+            <div class="form-group mb-0">
+              <div class="element">
+                <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
+                <input type="file" (change)="onFileChanged($event)" name="uploadFile" accept="image/*" id="fileInput"
+                  #uploadFile="ngModel" ngModel class="img">
               </div>
             </div>
           </div>
+          <select class="form-control mb-2" name="paymentType" [(ngModel)]="paymentType">
+            <option value="bank">بنك</option>
+            <option value="safe">خزينة</option>
+            <option value="service_account">حساب خدمي</option>
+          </select>
+          <select class="form-control" name="bank" ngModel required *ngIf="paymentType == 'bank'">
+            <option selected disabled value=""> اختر البنك</option>
+            <option *ngFor="let item of banks" [value]="item.id">{{item.name}}</option>
+          </select>
+          <select class="form-control" name="safe" ngModel required *ngIf="paymentType == 'safe'">
+            <option selected disabled value=""> اختر الخزينة</option>
+            <option *ngFor="let item of safes" [value]="item.id">{{item.name}}</option>
+          </select>
+          <select class="form-control" name="service_account" ngModel required *ngIf="paymentType == 'service_account'">
+            <option selected disabled value=""> اختر الحساب</option>
+            <option *ngFor="let item of serviceAccounts" [value]="item.id">{{item.name}}</option>
+          </select>
         </div>
 
         <div class="form-group col-md-4">
@@ -86,7 +100,7 @@
         </div>
         <div class="form-group col-md-4">
           <button type="submit" class="btn btn-primary"
-            [disabled]="(collectType == 'تحصيل في الخزينة' && collect.invalid) || (collectType == 'تحصيل الكتروني' && !(referenceNumber || selectedFile))">تحصيل</button>
+            [disabled]="(collectType == 'تحصيل في الخزينة' && collect.invalid) || (collectType == 'تحصيل الكتروني' && (!(referenceNumber || selectedFile) || collect.invalid))">تحصيل</button>
 
         </div>
 

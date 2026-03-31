@@ -74,22 +74,60 @@ class MetaWebhookController extends Controller
                             $buttonTitle = null;
                             $contextId = $msg['context']['id'] ?? null;
 
-                            // Handle button reply - Meta can send as "interactive" or "button" or "text"
-                            if ($msgType === 'interactive') {
+                            $msgTypeLower = strtolower((string) $msgType);
+
+                            // Handle button / list reply — استخراج button_reply حتى لو تغيّر ترتيب الحقول أو type
+                            if ($msgTypeLower === 'interactive') {
                                 $interactive = $msg['interactive'] ?? [];
-                                $buttonReply = $interactive['button_reply'] ?? $interactive;
-                                if ($buttonReply) {
-                                    $buttonId = $buttonReply['id'] ?? null;
-                                    $buttonTitle = $buttonReply['title'] ?? null;
+                                if (isset($interactive['button_reply']) && is_array($interactive['button_reply'])) {
+                                    $br = $interactive['button_reply'];
+                                    $buttonId = $br['id'] ?? null;
+                                    $buttonTitle = $br['title'] ?? null;
+                                } elseif (isset($interactive['list_reply']) && is_array($interactive['list_reply'])) {
+                                    $lr = $interactive['list_reply'];
+                                    $buttonId = $lr['id'] ?? null;
+                                    $buttonTitle = $lr['title'] ?? null;
                                 }
-                            } elseif ($msgType === 'button') {
+                                if ($buttonId === null && $buttonTitle === null) {
+                                    Log::warning('Meta Webhook: interactive message without button_reply/list_reply', [
+                                        'interactive_keys' => array_keys($interactive),
+                                        'interactive_type' => $interactive['type'] ?? null,
+                                    ]);
+                                }
+                            } elseif ($msgTypeLower === 'button') {
                                 $button = $msg['button'] ?? [];
                                 $buttonId = $button['payload'] ?? $button['id'] ?? null;
                                 $buttonTitle = $button['text'] ?? $button['title'] ?? null;
-                            } elseif ($msgType === 'text') {
+                            } elseif ($msgTypeLower === 'text') {
                                 $body = trim($msg['text']['body'] ?? '');
-                                if (in_array($body, ['تأكيد الطلب', 'تأجيل الطلب', 'إلغاء الطلب', 'تعديل الطلب', 'إعادة الشحن'])) {
-                                    $buttonTitle = $body;
+                                $body = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $body);
+                                // جلسة فلو (1/2/3 أو نسخ العبارة): يُعالَج قبل محاكاة أزرار القالب
+                                try {
+                                    $whatsappService = new MetaWhatsAppService($phoneNumberId);
+                                    if ($whatsappService->isConfigured() && $body !== '') {
+                                        $flowService = new OrderConfirmationFlowService($whatsappService);
+                                        if (! $flowService->handleTextReply($from, $body, $contextId)) {
+                                            $knownTitles = [
+                                                'تأكيد الطلب', 'تأجيل الطلب', 'إلغاء الطلب', 'تعديل الطلب', 'إعادة الشحن',
+                                                'تأكيد التجهيز', 'تأكيد الشحن', 'تاجيل الطلب',
+                                                'نعم إلغاء الطلب', 'لا أريد تأكيد الطلب', 'بعد يومين', 'بعد أسبوع', 'تحديد موعد آخر',
+                                                'أريد إعادة الشحن', 'أريد تعديل الطلب', 'أريد إلغاء الطلب', 'رفض الاستلام',
+                                                'خلال 3 أيام', 'تحديد موعد',
+                                                'Recharge', 'Edit Order', 'Cancel order', 'Cancel Order',
+                                                'Confirm Preparation', 'Confirm Shipping', 'Delay Shipping',
+                                                'Yes, cancel order', 'No, keep order',
+                                                'In two days', 'In one week', 'Another date',
+                                                'Within 3 days', 'Schedule a date',
+                                            ];
+                                            if (in_array($body, $knownTitles, true)) {
+                                                $buttonTitle = $body;
+                                            }
+                                        }
+                                    }
+                                } catch (\Throwable $e) {
+                                    Log::error('OrderConfirmationFlow: Text reply exception', [
+                                        'message' => $e->getMessage(),
+                                    ]);
                                 }
                             }
 
@@ -102,9 +140,19 @@ class MetaWebhookController extends Controller
                                 ]);
                                 try {
                                     $whatsappService = new MetaWhatsAppService($phoneNumberId);
-                                    if ($whatsappService->isConfigured()) {
+                                    if (! $whatsappService->isConfigured()) {
+                                        Log::warning('OrderConfirmationFlow: Meta WhatsApp not configured — no auto reply', [
+                                            'phone_number_id' => $phoneNumberId,
+                                        ]);
+                                    } else {
                                         $flowService = new OrderConfirmationFlowService($whatsappService);
-                                        $flowService->handleButtonReply($from, $buttonId, $contextId, $phoneNumberId, $buttonTitle);
+                                        $handled = $flowService->handleButtonReply($from, $buttonId, $contextId, $phoneNumberId, $buttonTitle);
+                                        if (! $handled) {
+                                            Log::warning('OrderConfirmationFlow: Button not handled', [
+                                                'button_id' => $buttonId,
+                                                'button_title' => $buttonTitle,
+                                            ]);
+                                        }
                                     }
                                 } catch (\Throwable $e) {
                                     Log::error('OrderConfirmationFlow: Exception', [
@@ -169,12 +217,31 @@ private function sendStaticReply($to)
             $interactive = $messageData['interactive'] ?? [];
             $buttonReply = $interactive['button_reply'] ?? null;
             $listReply = $interactive['list_reply'] ?? null;
-            if ($buttonReply && isset($buttonReply['title'])) {
-                $body = '🔘 ' . $buttonReply['title'];
+            if ($buttonReply) {
+                $title = $buttonReply['title'] ?? null;
+                $id = $buttonReply['id'] ?? null;
+                if ($title) {
+                    $body = '🔘 ' . $title;
+                } elseif ($id) {
+                    $body = '🔘 ' . $id;
+                } else {
+                    $body = '[رسالة تفاعلية]';
+                }
             } elseif ($listReply && isset($listReply['title'])) {
                 $body = '📋 ' . $listReply['title'];
             } else {
                 $body = '[رسالة تفاعلية]';
+            }
+        } elseif ($type === 'button') {
+            $button = $messageData['button'] ?? [];
+            $text = $button['text'] ?? $button['title'] ?? null;
+            $payload = $button['payload'] ?? $button['id'] ?? null;
+            if ($text) {
+                $body = '🔘 ' . $text;
+            } elseif ($payload) {
+                $body = '🔘 ' . $payload;
+            } else {
+                $body = '[زر تفاعلي]';
             }
         } else {
             $body = '[' . ucfirst($type) . ' Message]';

@@ -12,7 +12,7 @@ export class ProductPerformanceComponent implements OnInit {
   loading = false;
 
   rows: any[] = [];
-  totals: any = { sales_qty: 0, sales_amount: 0, returns_qty: 0, returns_amount: 0, net_sales: 0, cogs: 0, gross_profit: 0, gross_margin_percent: 0 };
+  totals: any = { sales_qty: 0, sales_amount: 0, returns_qty: 0, returns_amount: 0, net_sales: 0, cogs: 0, avg_unit_cost: 0, gross_profit: 0, gross_margin_percent: 0 };
 
   constructor(private reportService: AccountingReportService) {}
 

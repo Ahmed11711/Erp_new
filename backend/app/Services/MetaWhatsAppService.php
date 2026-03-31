@@ -25,16 +25,48 @@ class MetaWhatsAppService
     }
 
     /**
+     * رقم المستلم لـ Meta API: أرقام فقط بدون + (قالب / نص / أزرار تفاعلية).
+     */
+    private function normalizeRecipientPhoneForMeta(string $to): string
+    {
+        $to = preg_replace('/\D/', '', $to);
+        if ($to === '') {
+            return '';
+        }
+        if (strlen($to) === 10 && str_starts_with($to, '0')) {
+            $to = '20'.substr($to, 1);
+        } elseif (strlen($to) === 9 && str_starts_with($to, '1')) {
+            $to = '20'.$to;
+        }
+
+        return $to;
+    }
+
+    /**
+     * رمز اللغة في قوالب واتساب يجب أن يطابق ما في مدير الأعمال؛ الإنجليزي غالباً en_US وليس en.
+     */
+    private function normalizeWhatsAppTemplateLanguageCode(string $code): string
+    {
+        $c = strtolower(trim(str_replace('-', '_', $code)));
+        if ($c === 'en') {
+            return 'en_US';
+        }
+
+        return $code;
+    }
+
+    /**
      * Get phone number ID based on user assignment
      */
     private function getPhoneNumberId(?string $userPhoneNumberId): ?string
     {
         if ($userPhoneNumberId) {
             $configuredNumbers = $this->getConfiguredPhoneNumbers();
-            $matched = $configuredNumbers[$userPhoneNumberId] ?? null;
-            if ($matched) {
-                return $matched;
+            if (isset($configuredNumbers[$userPhoneNumberId])) {
+                return $userPhoneNumberId;
             }
+            // الويب هوك يرسل phone_number_id الصحيح لرقم الاستقبال — لا تستبدله بقيمة .env قديمة
+            return $userPhoneNumberId;
         }
 
         return config('services.meta_whatsapp.phone_number_id');
@@ -254,8 +286,11 @@ class MetaWhatsAppService
 
     /**
      * Send a template message
+     *
+     * @param  bool  $languageCodeAsIs  إذا true: يُرسل رمز اللغة كما هو لـ Graph API (بدون تحويل en → en_US).
+     *                                  استخدمه عندما يكون القالب معتمداً بلغة مختلفة عن en_US (مثلاً en أو en_GB) لتفادي 132001.
      */
-    public function sendTemplateMessage(string $to, string $templateName, string $languageCode = 'en_US', array $components = []): array
+    public function sendTemplateMessage(string $to, string $templateName, string $languageCode = 'en_US', array $components = [], bool $languageCodeAsIs = false): array
     {
         if (!$this->isConfigured()) {
             return ['success' => false, 'error' => 'Meta WhatsApp not configured'];
@@ -263,6 +298,9 @@ class MetaWhatsAppService
 
         try {
             $to = ltrim($to, '+');
+            if (! $languageCodeAsIs) {
+                $languageCode = $this->normalizeWhatsAppTemplateLanguageCode($languageCode);
+            }
 
             $payload = [
                 'messaging_product' => 'whatsapp',
@@ -326,21 +364,19 @@ class MetaWhatsAppService
             return ['success' => false, 'error' => 'Meta WhatsApp not configured'];
         }
 
-        $to = preg_replace('/\D/', '', $to);
-        if (strlen($to) === 10 && str_starts_with($to, '0')) {
-            $to = '20' . substr($to, 1);
-        } elseif (strlen($to) === 9 && str_starts_with($to, '1')) {
-            $to = '20' . $to;
+        $to = $this->normalizeRecipientPhoneForMeta($to);
+        if ($to === '') {
+            return ['success' => false, 'error' => 'Invalid phone number'];
         }
-        $to = ltrim($to, '+');
 
         $actionButtons = [];
         foreach (array_slice($buttons, 0, 3) as $btn) {
+            $title = mb_substr((string) ($btn['title'] ?? ''), 0, 25);
             $actionButtons[] = [
                 'type' => 'reply',
                 'reply' => [
-                    'id' => $btn['id'],
-                    'title' => $btn['title'],
+                    'id' => (string) ($btn['id'] ?? ''),
+                    'title' => $title,
                 ],
             ];
         }

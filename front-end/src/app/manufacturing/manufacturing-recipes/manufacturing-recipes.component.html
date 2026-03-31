@@ -28,6 +28,7 @@
           [searchKeyword]="catword"
           placeholder="اسم المنتج"
           (selected)='productChange($event)'
+          (inputCleared)="resetProductFilter()"
           [itemTemplate]="itemTemplates"
           [notFoundTemplate]="notFoundTemplate">
         </ng-autocomplete>

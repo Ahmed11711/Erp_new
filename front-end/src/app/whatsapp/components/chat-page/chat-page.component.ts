@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { WhatsAppService } from '../../services/whatsapp.service';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import Swal from 'sweetalert2';
+import { combineLatest } from 'rxjs';
 
 @Component({
   selector: 'app-chat-page',
@@ -14,8 +15,20 @@ export class ChatPageComponent implements OnInit {
   customer: any = null;
   messages: any[] = [];
   customers: any[] = [];
+  /** قوالب النظام (نص حر) — تظهر كشرائح فوق خانة الإدخال */
+  templates: any[] = [];
+  /** عبارات جاهزة سريعة */
+  quickSnippets: { label: string; text: string }[] = [
+    { label: 'ترحيب', text: 'مرحباً، شكراً لتواصلك معنا. كيف يمكننا مساعدتك اليوم؟' },
+    { label: 'متابعة الطلب', text: 'تمت متابعة طلبك، وسنُعلمك بأي تحديث في أقرب وقت.' },
+    { label: 'تأكيد استلام', text: 'تم استلام رسالتك، وسيقوم فريقنا بالرد قريباً.' },
+    { label: 'بيانات الشحن', text: 'نحتاج تأكيد عنوان الشحن ورقم هاتفك لإتمام التوصيل.' },
+  ];
   loading = false;
   sending = false;
+
+  /** مفاتيح الرسائل الموسّعة (عرض كامل بدون حد ارتفاع) */
+  private expandedMessageKeys = new Set<string>();
 
   messageForm: FormGroup = new FormGroup({
     message: new FormControl('', [Validators.required])
@@ -28,51 +41,45 @@ export class ChatPageComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.route.params.subscribe(params => {
-      if (params['customerId']) {
-        this.customerId = +params['customerId'];
+    this.loadTemplates();
+    combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([params, query]) => {
+      const customerIdParam = params.get('customerId');
+      if (customerIdParam) {
+        this.customerId = +customerIdParam;
         this.loadChatMessages(this.customerId);
+        return;
+      }
+      const phone = query.get('phone');
+      if (phone) {
+        this.findCustomerByPhone(phone);
       } else {
-        // Check if phone number is provided in query params
-        this.route.queryParams.subscribe(queryParams => {
-          if (queryParams['phone']) {
-            this.findCustomerByPhone(queryParams['phone']);
-          } else {
-            this.loadCustomers();
-          }
-        });
+        this.loadCustomers();
       }
     });
   }
 
   findCustomerByPhone(phone: string) {
     this.loading = true;
-    this.whatsappService.getCustomers({ per_page: 1000 }).subscribe(
-      (res: any) => {
+    this.whatsappService.findCustomerByPhone(phone).subscribe({
+      next: (res: any) => {
         this.loading = false;
-        if (res.success) {
-          const customers = res.data.data || res.data;
-          const customer = customers.find((c: any) => c.phone === phone || c.phone === '+' + phone || c.phone.replace('+', '') === phone.replace('+', ''));
-          
-          if (customer) {
-            this.selectCustomer(customer);
-          } else {
-            // Customer not found, show all customers
-            this.customers = customers;
-            Swal.fire({
-              icon: 'info',
-              title: 'تنبيه',
-              text: 'لم يتم العثور على العميل، يرجى اختياره من القائمة',
-            });
-          }
+        if (res.success && res.customer) {
+          this.selectCustomer(res.customer);
+          return;
         }
-      },
-      (error) => {
-        this.loading = false;
-        console.error('Error loading customers:', error);
         this.loadCustomers();
-      }
-    );
+        Swal.fire({
+          icon: 'info',
+          title: 'تنبيه',
+          text: 'لم يتم العثور على العميل، يرجى اختياره من القائمة',
+        });
+      },
+      error: (err) => {
+        this.loading = false;
+        console.error('Error resolving customer by phone:', err);
+        this.loadCustomers();
+      },
+    });
   }
 
   loadCustomers() {
@@ -91,6 +98,66 @@ export class ChatPageComponent implements OnInit {
     );
   }
 
+  loadTemplates() {
+    this.whatsappService.getTemplates().subscribe({
+      next: (res: any) => {
+        if (res.success && Array.isArray(res.data)) {
+          this.templates = res.data;
+        }
+      },
+      error: () => {
+        this.templates = [];
+      },
+    });
+  }
+
+  /** يملأ خانة الرسالة دون إرسال — يمكن للمستخدم التعديل قبل الإرسال */
+  applySuggestion(text: string) {
+    if (!text) {
+      return;
+    }
+    this.messageForm.patchValue({ message: text });
+    this.messageForm.get('message')?.markAsTouched();
+  }
+
+  /** عرض أوضح لرسائل الأزرار القادمة من واتساب */
+  formatBubbleContent(content: string | null | undefined): string {
+    if (content == null || content === '') {
+      return '';
+    }
+    const t = content.trim();
+    if (t === '[Button Message]' || t === '[Interactive Message]') {
+      return '🔘 رد تفاعلي (زر واتساب)';
+    }
+    return content;
+  }
+
+  private messageRowKey(message: any, index: number): string {
+    if (message?.id != null) {
+      return `id:${message.id}`;
+    }
+    return `idx:${index}`;
+  }
+
+  /** رسالة طويلة: زر اقرأ المزيد + تمرير داخلي عند الطي */
+  shouldShowReadMoreToggle(message: any): boolean {
+    const text = this.formatBubbleContent(message?.content) || '';
+    return text.length > 220;
+  }
+
+  isMessageBodyExpanded(message: any, index: number): boolean {
+    return this.expandedMessageKeys.has(this.messageRowKey(message, index));
+  }
+
+  toggleMessageBodyExpand(message: any, index: number): void {
+    const key = this.messageRowKey(message, index);
+    if (this.expandedMessageKeys.has(key)) {
+      this.expandedMessageKeys.delete(key);
+    } else {
+      this.expandedMessageKeys.add(key);
+    }
+  }
+
   loadChatMessages(customerId: number) {
     this.loading = true;
     this.whatsappService.getChatMessages(customerId).subscribe(
@@ -99,6 +166,7 @@ export class ChatPageComponent implements OnInit {
         if (res.success) {
           this.customer = res.customer;
           this.messages = res.messages;
+          this.expandedMessageKeys.clear();
           // Scroll to bottom
           setTimeout(() => {
             this.scrollToBottom();
@@ -114,7 +182,7 @@ export class ChatPageComponent implements OnInit {
 
   selectCustomer(customer: any) {
     this.customerId = customer.id;
-    this.router.navigate(['/dashboard/whatsapp/chat', customer.id]);
+    this.router.navigate(['/dashboard/whatsapp/chat', customer.id], { replaceUrl: true });
     this.loadChatMessages(customer.id);
   }
 

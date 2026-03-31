@@ -26,6 +26,7 @@ import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { EditOrderComponent } from './edit-order/edit-order.component';
 
 import {MatButtonModule} from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormField } from '@angular/material/form-field';
 import { CollectOrderComponent } from './collect-order/collect-order.component';
 import { MatPaginatorModule } from '@angular/material/paginator';
@@ -97,6 +98,7 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     AutocompleteLibModule,
     NgxPaginationModule,
     MatPaginatorModule,
+    MatTooltipModule,
     FullCalendarModule,
     WhatsAppModule
   ],

@@ -464,10 +464,14 @@ class WhatsAppMessageController extends Controller
             // Fallback when config is empty (e.g. config cache or file not deployed)
             if (empty($templates)) {
                 $templates = [
-                    ['name' => 'order_update', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب', 'حالة الطلب'], 'body_param_keys' => ['customer_name', 'id', 'order_status'], 'phone_number_id' => null],
-                    ['name' => 'order_confirmation', 'language' => 'en', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total'], 'phone_number_id' => null],
-                    ['name' => 'order_confirmation_flow', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
-                    ['name' => 'hello_world', 'language' => 'ar', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
+                    ['name' => 'order_confirmation', 'language' => 'en_US', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total'], 'phone_number_id' => null],
+                    ['name' => 'order_confirmation_flow', 'language' => 'ar', 'ui_label' => 'تجهيز الطلب بالعربية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null, 'button_ids' => ['confirm_order', 'postpone_order', 'cancel_order']],
+                    ['name' => 'order_flow', 'language' => 'en_US', 'ui_label' => 'تجهيز الطلب بالإنجليزية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
+                    ['name' => 'confirm_order', 'language' => 'ar', 'ui_label' => 'تأكيد الطلب بالعربية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null, 'button_ids' => ['confirm_order', 'postpone_order', 'cancel_order']],
+                    ['name' => 'confirm_order', 'language' => 'en_US', 'ui_label' => 'تأكيد الطلب بالإنجليزية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
+                    ['name' => 'review_request', 'language' => 'ar', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
+                    ['name' => 'client_review', 'language' => 'ar', 'ui_label' => 'تقييم العميل بالعربية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
+                    ['name' => 'client_review', 'language' => 'en_US', 'ui_label' => 'تقييم العميل بالإنجليزية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
                 ];
                 Log::warning('Meta templates loaded from fallback - config may be empty. Run: php artisan config:clear && php artisan config:cache');
             }
@@ -505,6 +509,8 @@ class WhatsAppMessageController extends Controller
             'language_code' => 'nullable|string|max:10',
             'body_parameters' => 'nullable|array',
             'body_parameters.*' => 'string',
+            'header_parameters' => 'nullable|array',
+            'header_parameters.*' => 'string',
             'phone_number_id' => 'nullable|string',
         ]);
 
@@ -540,7 +546,7 @@ class WhatsAppMessageController extends Controller
             $bodyParams = $request->body_parameters;
 
             $templatesConfig = config('whatsapp_meta_templates.templates', []);
-            $templateConfig = collect($templatesConfig)->firstWhere('name', $templateName);
+            $templateConfig = $this->resolveMetaTemplateConfig($templatesConfig, $templateName, $languageCode);
             if (!$templateConfig) {
                 return response()->json([
                     'success' => false,
@@ -558,7 +564,25 @@ class WhatsAppMessageController extends Controller
                 }
             }
 
+            $headerParams = $request->header_parameters;
+            if ($headerParams === null || $headerParams === []) {
+                $hKeys = $templateConfig['header_param_keys'] ?? [];
+                $headerParams = [];
+                foreach ($hKeys as $key) {
+                    $val = (string) ($order->{$key} ?? '');
+                    $headerParams[] = trim($val) === '' ? '-' : $val;
+                }
+            }
+
             $components = [];
+            if (!empty($headerParams)) {
+                $parameters = [];
+                foreach ($headerParams as $val) {
+                    $text = trim((string) $val) === '' ? '-' : (string) $val;
+                    $parameters[] = ['type' => 'text', 'text' => $text];
+                }
+                $components[] = ['type' => 'header', 'parameters' => $parameters];
+            }
             if (!empty($bodyParams)) {
                 $parameters = [];
                 foreach ($bodyParams as $val) {
@@ -568,11 +592,16 @@ class WhatsAppMessageController extends Controller
                 $components[] = ['type' => 'body', 'parameters' => $parameters];
             }
 
+            $resolvedLang = $templateConfig['api_language_code'] ?? ($templateConfig['language'] ?? $languageCode);
+            $languageAsIs = isset($templateConfig['api_language_code'])
+                && is_string($templateConfig['api_language_code'])
+                && trim($templateConfig['api_language_code']) !== '';
             $result = $whatsappService->sendTemplateMessage(
                 $phone,
                 $templateName,
-                $languageCode,
-                $components
+                $resolvedLang,
+                $components,
+                $languageAsIs
             );
 
             if ($result['success']) {
@@ -580,15 +609,22 @@ class WhatsAppMessageController extends Controller
                     ['phone' => $phone],
                     ['name' => $order->customer_name, 'assigned_agent_id' => auth()->id()]
                 );
-                // Build readable message for chat display
+                // Build readable message for chat display (نفس الاسم بلغات مختلفة)
+                $langKey = explode('_', $resolvedLang)[0];
                 $templateLabels = [
                     'order_confirmation' => 'تأكيد الطلب',
-                    'order_confirmation_flow' => 'فلو تأكيد الطلب',
+                    'order_flow|en' => 'تجهيز الطلب بالإنجليزية',
+                    'order_confirmation_flow|ar' => 'تجهيز الطلب بالعربية',
+                    'confirm_order|ar' => 'تأكيد الطلب بالعربية',
+                    'confirm_order|en' => 'تأكيد الطلب بالإنجليزية',
                     // 'order_update' => 'تحديث الطلب',
                     // 'hello_world' => 'رسالة ترحيب',
                     'review_request' => 'طلب تقييم',
+                    'client_review|en' => 'تقييم العميل بالإنجليزية',
+                    'client_review|ar' => 'تقييم العميل بالعربية',
                 ];
-                $label = $templateLabels[$templateName] ?? $templateName;
+                $composite = $templateName . '|' . $langKey;
+                $label = $templateLabels[$composite] ?? $templateLabels[$templateName] ?? $templateName;
                 $messageContent = "📋 قالب: {$label} - الطلب #{$order->id} - {$order->customer_name} - {$order->net_total} ج.م";
                 Message::create([
                     'customer_id' => $customer->id,
@@ -600,9 +636,57 @@ class WhatsAppMessageController extends Controller
                     'status' => 'sent',
                     'twilio_message_sid' => $result['message_sid'] ?? null,
                 ]);
+
+                $followupText = isset($templateConfig['session_followup_text'])
+                    ? trim((string) $templateConfig['session_followup_text'])
+                    : '';
+                $followupSent = false;
+                $followupError = null;
+                if ($followupText !== '') {
+                    $followButtons = $templateConfig['session_followup_buttons'] ?? [];
+                    $followButtons = is_array($followButtons) ? array_values(array_filter($followButtons, function ($b) {
+                        return is_array($b) && ! empty($b['id']) && ! empty($b['title']);
+                    })) : [];
+
+                    if ($followButtons !== []) {
+                        $followRes = $whatsappService->sendInteractiveButtons($phone, $followupText, $followButtons);
+                    } else {
+                        $followRes = $whatsappService->sendMessage($phone, $followupText);
+                    }
+                    $followupSent = (bool) ($followRes['success'] ?? false);
+                    if (! $followupSent) {
+                        $followupError = $followRes['error'] ?? 'unknown';
+                        Log::warning('Meta template session follow-up failed', [
+                            'template' => $templateName,
+                            'order_id' => $order->id,
+                            'error' => $followupError,
+                        ]);
+                    } else {
+                        $preview = mb_strlen($followupText) > 200
+                            ? mb_substr($followupText, 0, 200).'…'
+                            : $followupText;
+                        if ($followButtons !== []) {
+                            $btnTitles = array_map(fn ($b) => $b['title'] ?? '', $followButtons);
+                            $preview = '[أزرار: '.implode(', ', $btnTitles).'] '.$preview;
+                        }
+                        Message::create([
+                            'customer_id' => $customer->id,
+                            'order_id' => $order->id,
+                            'sender_id' => auth()->id(),
+                            'receiver_id' => null,
+                            'content' => $preview,
+                            'direction' => 'outbound',
+                            'status' => 'sent',
+                            'twilio_message_sid' => $followRes['message_sid'] ?? null,
+                        ]);
+                    }
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Template sent successfully',
+                    'followup_sent' => $followupSent,
+                    'followup_error' => $followupError,
                 ], 200);
             }
 
@@ -789,5 +873,125 @@ class WhatsAppMessageController extends Controller
                 'error' => 'An error occurred while removing user assignment',
             ], 500);
         }
+    }
+
+    /**
+     * Find customer by phone (last 10 digits match; supports Egypt formats and typos like +210… vs +2010…).
+     */
+    public function findCustomerByPhone(Request $request)
+    {
+        $phone = $request->query('phone');
+        if (!$phone) {
+            return response()->json(['success' => false, 'error' => 'phone required'], 422);
+        }
+
+        try {
+            $customer = $this->findCustomerByPhoneDigits($phone);
+            if (!$customer) {
+                return response()->json(['success' => true, 'customer' => null], 200);
+            }
+
+            return response()->json([
+                'success' => true,
+                'customer' => $customer,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('findCustomerByPhone', ['e' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'error' => 'lookup failed'], 500);
+        }
+    }
+
+    /**
+     * Last few WhatsApp lines for order list tooltip (by customer phone).
+     */
+    public function getWhatsAppSnippet(Request $request)
+    {
+        $phone = $request->query('phone');
+        if (!$phone) {
+            return response()->json(['success' => false, 'error' => 'phone required'], 422);
+        }
+
+        try {
+            $customer = $this->findCustomerByPhoneDigits($phone);
+            if (!$customer) {
+                return response()->json([
+                    'success' => true,
+                    'customer_id' => null,
+                    'lines' => [],
+                ], 200);
+            }
+
+            $messages = Message::where('customer_id', $customer->id)
+                ->orderByDesc('created_at')
+                ->limit(5)
+                ->get(['content', 'direction', 'created_at']);
+
+            $lines = [];
+            foreach ($messages->reverse()->values() as $m) {
+                $label = $m->direction === 'inbound' ? 'عميل' : 'رد';
+                $text = mb_strlen($m->content) > 120 ? mb_substr($m->content, 0, 120) . '…' : $m->content;
+                $lines[] = $label . ': ' . $text;
+            }
+
+            return response()->json([
+                'success' => true,
+                'customer_id' => $customer->id,
+                'lines' => $lines,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('getWhatsAppSnippet', ['e' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'error' => 'lookup failed'], 500);
+        }
+    }
+
+    /**
+     * يطابق قالب Meta بالاسم + اللغة (نفس الاسم يمكن أن يكون معتمداً بعدة لغات).
+     */
+    private function resolveMetaTemplateConfig(array $templates, string $templateName, string $languageCode): ?array
+    {
+        $reqShort = explode('_', $languageCode)[0];
+
+        return collect($templates)->first(function ($t) use ($templateName, $languageCode, $reqShort) {
+            if (($t['name'] ?? '') !== $templateName) {
+                return false;
+            }
+            $tl = (string) ($t['language'] ?? 'ar');
+            $cfgShort = explode('_', $tl)[0];
+
+            return $tl === $languageCode
+                || $cfgShort === $reqShort;
+        });
+    }
+
+    private function normalizePhoneDigits(string $phone): string
+    {
+        $d = preg_replace('/\D/', '', $phone);
+        if ($d === '') {
+            return '';
+        }
+        if (strlen($d) === 11 && str_starts_with($d, '0')) {
+            $d = '20' . substr($d, 1);
+        } elseif (strlen($d) === 10 && str_starts_with($d, '1')) {
+            $d = '20' . $d;
+        }
+
+        return $d;
+    }
+
+    private function findCustomerByPhoneDigits(string $phone): ?Customer
+    {
+        $digits = $this->normalizePhoneDigits($phone);
+        if ($digits === '') {
+            return null;
+        }
+
+        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+        return Customer::whereRaw(
+            "REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE ?",
+            ['%' . $last10]
+        )->first();
     }
 }

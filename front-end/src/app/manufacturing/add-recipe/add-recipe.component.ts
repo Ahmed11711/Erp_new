@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { AutocompleteComponent } from 'angular-ng-autocomplete';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { ManufacturingService } from '../services/manufacturing.service';
 import { Router } from '@angular/router';
 import { environment } from 'src/env/env';
+import { forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-add-recipe',
@@ -10,10 +12,19 @@ import { environment } from 'src/env/env';
   styleUrls: ['./add-recipe.component.css']
 })
 export class AddRecipeComponent implements OnInit{
+  @ViewChild('productAuto') private productAuto?: AutocompleteComponent;
+  @ViewChild('ingredientAuto') private ingredientAuto?: AutocompleteComponent;
+
   imgUrl!: string;
+  /** صفوف فشل تحميل صورتها لعرض بديل */
+  imageFailed = new Set<number>();
 
   constructor(private category:CategoryService , private manufacturingService:ManufacturingService , private route:Router){
     this.imgUrl = environment.imgUrl;
+  }
+
+  onImgError(id: number): void {
+    this.imageFailed.add(id);
   }
 
   ngOnInit(): void {
@@ -29,43 +40,154 @@ export class AddRecipeComponent implements OnInit{
 
   tableData:any[]=[];
 
-  productType(event){
-    this.tableData = [];
-    this.products = [];
-    this.recipes = [];
-    this.totalPrice=0;
-    this.category.getCatBywarehouse(event.target.value).subscribe((result:any)=>{
-      this.products = result
-      if (event.target.value === 'مخزن منتج تحت التشغيل') {
-        this.category.getCatBywarehouse('مخزن مواد خام').subscribe((result:any)=>{
-          result.map(elm=>{
-            elm.quantity = 1
-            elm.total_price = elm.quantity * elm.category_price
-          });
-          this.recipes = result;
-        });
-      } else if(event.target.value === 'مخزن منتج تام'){
-        this.category.getCatBywarehouse('مخزن مواد خام').subscribe((result:any)=>{
-          result.map(elm=>{
-            elm.quantity = 1
-            elm.total_price = elm.quantity * elm.category_price
-          });
-          this.recipes = result;
-        });
-        this.category.getCatBywarehouse('مخزن منتج تحت التشغيل').subscribe((result:any)=>{
-          result.map(elm=>{
-            elm.quantity = 1
-            elm.total_price = elm.quantity * elm.category_price
-          });
-          this.recipes.push(...result)
-        });
-      }
-    })
+  /** بعد اختيار نوع المخزن يُعرض عمود المنتج حتى لو كانت القائمة فارغة */
+  selectedWarehouse: string | null = null;
+  loadingWarehouseProducts = false;
+
+  /** إزالة وسوم تمييز البحث من المكتبة (<b>) حتى لا تظهر كنص في الجدول أو الحقل */
+  private stripHighlightTags(value: string): string {
+    return String(value ?? '').replace(/<\/?b>/gi, '');
   }
 
-  productChange(event:any) {
+  /** نص المنتج/الصنف في حقل الإكمال بعد الاختيار (بدون HTML) */
+  selectedCategoryLabel = (item: any): string => {
+    if (!item || item.category_name == null) {
+      return '';
+    }
+    return this.stripHighlightTags(String(item.category_name));
+  };
+
+  /** نسخة نظيفة من الصنف للاستخدام في المنطق والجدول */
+  private normalizeCategoryItem(item: any): any {
+    if (!item) {
+      return item;
+    }
+    return {
+      ...item,
+      category_name: this.stripHighlightTags(String(item.category_name ?? '')),
+    };
+  }
+
+  /** بحث في اسم الصنف أو المخزن — للمنتج النهائي ولمواد الوصفة */
+  filterCategorySearch = (items: any[], query: string) => {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) {
+      return [...items];
+    }
+    return items.filter((item) => {
+      const name = String(item.category_name ?? '').toLowerCase();
+      const wh = String(item.measurement?.warehouse ?? '').toLowerCase();
+      return name.includes(q) || wh.includes(q);
+    });
+  };
+
+  private normalizeCategories(result: any): any[] {
+    if (Array.isArray(result)) {
+      return result;
+    }
+    if (result && Array.isArray(result.data)) {
+      return result.data;
+    }
+    return [];
+  }
+
+  private prepareRecipeLine(elm: any): void {
+    elm.quantity = 1;
+    elm.total_price = elm.quantity * elm.category_price;
+  }
+
+  productType(event: Event) {
+    const warehouse = (event.target as HTMLSelectElement).value;
+    if (!warehouse) {
+      return;
+    }
+    this.selectedWarehouse = warehouse;
+    this.tableData = [];
+    this.imageFailed.clear();
+    this.products = [];
+    this.recipes = [];
+    this.totalPrice = 0;
+    this.loadingWarehouseProducts = true;
+
+    this.category.getCatBywarehouse(warehouse).subscribe({
+      next: (result: any) => {
+        this.products = this.normalizeCategories(result);
+        this.loadingWarehouseProducts = false;
+        if (warehouse === 'مخزن منتج تحت التشغيل') {
+          this.loadRecipesWip();
+        } else if (warehouse === 'مخزن منتج تام') {
+          this.loadRecipesFinished();
+        }
+      },
+      error: () => {
+        this.loadingWarehouseProducts = false;
+        this.products = [];
+      },
+    });
+  }
+
+  /** مواد خام فقط */
+  private loadRecipesWip(): void {
+    this.category.getCatBywarehouse('مخزن مواد خام').subscribe({
+      next: (result: any) => {
+        const rows = this.normalizeCategories(result);
+        rows.forEach((elm) => this.prepareRecipeLine(elm));
+        this.recipes = rows;
+      },
+      error: () => {
+        this.recipes = [];
+      },
+    });
+  }
+
+  /** مواد خام + تحت التشغيل (بدون تعارض ترتيب الطلبات) */
+  private loadRecipesFinished(): void {
+    forkJoin({
+      raw: this.category.getCatBywarehouse('مخزن مواد خام'),
+      wip: this.category.getCatBywarehouse('مخزن منتج تحت التشغيل'),
+    }).subscribe({
+      next: ({ raw, wip }) => {
+        const a = this.normalizeCategories(raw);
+        const b = this.normalizeCategories(wip);
+        a.forEach((elm) => this.prepareRecipeLine(elm));
+        b.forEach((elm) => this.prepareRecipeLine(elm));
+        this.recipes = [...a, ...b];
+      },
+      error: () => {
+        this.recipes = [];
+      },
+    });
+  }
+
+  productChange(event: any) {
     this.product_id = event.id;
     this.tableData = [];
+    this.imageFailed.clear();
+  }
+
+  onProductSelected(item: any) {
+    if (!item) {
+      return;
+    }
+    const clean = this.normalizeCategoryItem(item);
+    this.productChange(clean);
+    queueMicrotask(() => this.syncAutocompleteInput(this.productAuto, clean.category_name));
+  }
+
+  onIngredientSelected(item: any) {
+    if (!item) {
+      return;
+    }
+    const clean = this.normalizeCategoryItem(item);
+    this.recipesChange(clean);
+    queueMicrotask(() => this.syncAutocompleteInput(this.ingredientAuto, clean.category_name));
+  }
+
+  /** المكتبة تضع في الحقل نصاً يحتوي وسوم <b>؛ نستبدله بالاسم الصافي */
+  private syncAutocompleteInput(ac: AutocompleteComponent | undefined, plainLabel: string): void {
+    if (ac) {
+      ac.query = plainLabel;
+    }
   }
 
   recipesChange(event:any) {
@@ -83,6 +205,15 @@ export class AddRecipeComponent implements OnInit{
         elm.total_price = elm.quantity * elm.category_price
       }
     })
+    this.calcTotalPrice();
+  }
+
+  removeRow(index: number): void {
+    const row = this.tableData[index];
+    if (row?.id != null) {
+      this.imageFailed.delete(row.id);
+    }
+    this.tableData.splice(index, 1);
     this.calcTotalPrice();
   }
 

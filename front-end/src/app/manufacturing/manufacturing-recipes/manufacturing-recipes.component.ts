@@ -28,7 +28,15 @@ export class ManufacturingRecipesComponent implements OnInit{
   }
 
   getProducts(){
-    this.tableData.forEach(elm=>this.products.push(elm.product));
+    this.products = [];
+    const seen = new Set<number>();
+    this.tableData.forEach(elm => {
+      const p = elm.product;
+      if (p?.id != null && !seen.has(p.id)) {
+        seen.add(p.id);
+        this.products.push(p);
+      }
+    });
   }
 
   productType(e:any){
@@ -39,11 +47,20 @@ export class ManufacturingRecipesComponent implements OnInit{
     })
   }
 
-  productChange(event) {
-    this.manufacturingService.getAllRecipes().subscribe((result:any)=>{
-      this.tableData= result.filter(elm=>elm.id == event.id);
-    })
+  productChange(event: { id?: number }) {
+    const productId = event?.id;
+    if (productId == null) {
+      return;
+    }
+    this.manufacturingService.getAllRecipes().subscribe((result) => {
+      this.tableData = result.filter(
+        elm => Number(elm.product_id) === Number(productId)
+      );
+    });
+  }
 
+  resetProductFilter() {
+    this.getData();
   }
 
 }

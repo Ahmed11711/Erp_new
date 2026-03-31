@@ -8,6 +8,7 @@ use App\Models\AccountEntry;
 use App\Models\DailyEntry;
 use App\Models\TreeAccount;
 use App\Services\Accounting\AccountingService;
+use App\Services\CategoryInventoryCostService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -470,7 +471,8 @@ class AccountingReportController extends Controller
      * Computes: Revenue → COGS → Gross Profit → Operating Expenses → Operating Income
      *         → Other Income/Expenses → EBIT → Interest → EBT → Tax → Net Income
      * Inputs: month=YYYY-MM or date_from/date_to
-     * Uses only leaf accounts to prevent double-counting in hierarchical chart of accounts
+     * Uses leaf accounts plus any parent that has direct postings when no child account has
+     * entries in the same period (so revenue posted on a parent "مبيعات" header is included).
      */
     public function incomeStatement(Request $request)
     {
@@ -493,27 +495,50 @@ class AccountingReportController extends Controller
                      ->where('created_at', '<=', $end . ' 23:59:59');
         };
 
-        // Leaf accounts only: prevents double-counting when parent balance = sum of children
-        $leafAccountIds = TreeAccount::whereDoesntHave('children')->pluck('id')->toArray();
-        $accounts = TreeAccount::select('id', 'name', 'name_en', 'code', 'type', 'detail_type')
-            ->whereIn('id', $leafAccountIds)
-            ->get()
-            ->keyBy('id');
-
-        $entrySums = AccountEntry::select('tree_account_id',
+        $entryRows = AccountEntry::select('tree_account_id',
                 DB::raw('SUM(debit) as total_debit'),
                 DB::raw('SUM(credit) as total_credit')
             )
-            ->whereIn('tree_account_id', $leafAccountIds)
             ->when(true, $withinPeriod)
             ->groupBy('tree_account_id')
+            ->get();
+
+        $idsWithEntries = $entryRows->pluck('tree_account_id');
+
+        $accountsWithChildren = TreeAccount::with('children:id,parent_id')
+            ->whereIn('id', $idsWithEntries)
             ->get()
-            ->mapWithKeys(function ($row) {
-                return [$row->tree_account_id => [
-                    'debit' => (float)$row->total_debit,
-                    'credit' => (float)$row->total_credit
-                ]];
-            });
+            ->keyBy('id');
+
+        $eligibleIds = [];
+        foreach ($idsWithEntries as $aid) {
+            $acc = $accountsWithChildren->get($aid);
+            if (!$acc) {
+                continue;
+            }
+            if ($acc->children->isEmpty()) {
+                $eligibleIds[] = (int) $aid;
+                continue;
+            }
+            if ($acc->children->pluck('id')->intersect($idsWithEntries)->isEmpty()) {
+                $eligibleIds[] = (int) $aid;
+            }
+        }
+
+        $accounts = TreeAccount::select('id', 'name', 'name_en', 'code', 'type', 'detail_type')
+            ->whereIn('id', $eligibleIds)
+            ->get()
+            ->keyBy('id');
+
+        $eligibleSet = array_fill_keys($eligibleIds, true);
+        $entrySums = $entryRows->filter(function ($row) use ($eligibleSet) {
+            return isset($eligibleSet[(int) $row->tree_account_id]);
+        })->mapWithKeys(function ($row) {
+            return [$row->tree_account_id => [
+                'debit' => (float) $row->total_debit,
+                'credit' => (float) $row->total_credit,
+            ]];
+        });
 
         $netByNature = function ($acc, $sum) {
             if (!$sum) return 0.0;
@@ -586,6 +611,12 @@ class AccountingReportController extends Controller
                     $operatingExpenses += $net;
                 }
             }
+        }
+
+        $cogsFromLedger = $cogs;
+        $cogsFromMovements = $this->netCogsFromCategoriesBalanceMovements($start, $end);
+        if ($cogsFromLedger < 0.01) {
+            $cogs = max(0, $cogsFromMovements);
         }
 
         // Inventory (for reference / COGS reconciliation)
@@ -716,89 +747,156 @@ class AccountingReportController extends Controller
             $salesByCategory[$cid]['amount'] += (float)$row->amount;
         }
 
-        // 2) Fetch COGS entries per order within the period and allocate across categories by sales weight
+        // 2) COGS من حركات المخزون: cost_total عند الشحن؛ إن لم يُحفظ: تقدير من total_price/qty أو unit_price أو متوسط طبقات warehouse_ratings
+        $wrAvgSubQuery = function () {
+            return DB::table('warehouse_ratings')
+                ->select('category_id', DB::raw('SUM(quantity * price) / NULLIF(SUM(quantity), 0) as wr_avg'))
+                ->where('quantity', '>', 0)
+                ->groupBy('category_id');
+        };
+
+        $costCase = 'CASE WHEN c.quantity > 0.0000001 AND IFNULL(c.total_price,0) != 0 THEN c.total_price / c.quantity WHEN IFNULL(c.unit_price,0) > 0.0000001 THEN c.unit_price WHEN IFNULL(wr.wr_avg,0) > 0.0000001 THEN wr.wr_avg ELSE 0 END';
+
+        $shipCogsRows = DB::table('categories_balance as cb')
+            ->join('categories as c', 'c.id', '=', 'cb.category_id')
+            ->leftJoinSub($wrAvgSubQuery(), 'wr', function ($join) {
+                $join->on('wr.category_id', '=', 'c.id');
+            })
+            ->where('cb.type', 'شحن طلب')
+            ->where('cb.created_at', '>=', $start . ' 00:00:00')
+            ->where('cb.created_at', '<=', $end . ' 23:59:59')
+            ->groupBy('cb.category_id')
+            ->select('cb.category_id', DB::raw("SUM(COALESCE(cb.cost_total, cb.quantity * ({$costCase}))) as cogs"))
+            ->get()
+            ->keyBy('category_id');
+
+        $retCogsRows = DB::table('categories_balance as cb')
+            ->join('categories as c', 'c.id', '=', 'cb.category_id')
+            ->leftJoinSub($wrAvgSubQuery(), 'wr', function ($join) {
+                $join->on('wr.category_id', '=', 'c.id');
+            })
+            ->where('cb.type', 'رفض استلام طلب')
+            ->where('cb.created_at', '>=', $start . ' 00:00:00')
+            ->where('cb.created_at', '<=', $end . ' 23:59:59')
+            ->groupBy('cb.category_id')
+            ->select('cb.category_id', DB::raw("SUM(COALESCE(cb.cost_total, cb.quantity * ({$costCase}))) as cogs"))
+            ->get()
+            ->keyBy('category_id');
+
+        $allocatedCogsFromMovements = [];
+        $movementKeys = array_unique(array_merge(
+            array_keys($shipCogsRows->toArray()),
+            array_keys($retCogsRows->toArray())
+        ));
+        foreach ($movementKeys as $cid) {
+            $cid = (int) $cid;
+            $ship = (float) (optional($shipCogsRows->get($cid))->cogs ?? 0);
+            $ret = (float) (optional($retCogsRows->get($cid))->cogs ?? 0);
+            $allocatedCogsFromMovements[$cid] = $ship - $ret;
+        }
+
+        // 3) تخصيص قيود تكلفة المبيعات من دفتر الأستاذ (عند وجودها) كبديل
         $cogsByOrder = [];
         $cogsEntries = AccountEntry::select('description', 'debit', 'credit', 'created_at')
             ->when(true, $withinPeriod)
             ->get();
 
         foreach ($cogsEntries as $entry) {
-            if (!$entry->description) continue;
+            if (!$entry->description) {
+                continue;
+            }
             if (mb_strpos($entry->description, 'تكلفة البضاعة المباعة للطلب رقم') !== false) {
                 if (preg_match('/الطلب رقم\s+(\d+)/u', $entry->description, $m)) {
                     $orderId = $m[1];
-                    $amount = (float)$entry->debit - (float)$entry->credit;
+                    $amount = (float) $entry->debit - (float) $entry->credit;
                     $cogsByOrder[$orderId] = ($cogsByOrder[$orderId] ?? 0.0) + $amount;
                 }
             }
         }
 
-        // Total sales per order (for weights)
         $salesByOrder = [];
         foreach ($shipments as $row) {
             $orderId = $row->invoice_number;
-            $salesByOrder[$orderId] = ($salesByOrder[$orderId] ?? 0.0) + (float)$row->amount;
+            $salesByOrder[$orderId] = ($salesByOrder[$orderId] ?? 0.0) + (float) $row->amount;
         }
 
-        // Allocate COGS to categories (from account_entries if available)
-        $allocatedCogs = []; // category_id => cogs
+        $allocatedCogsFromGl = [];
         foreach ($shipments as $row) {
             $orderId = $row->invoice_number;
             $orderCogs = $cogsByOrder[$orderId] ?? 0.0;
             $orderSales = $salesByOrder[$orderId] ?? 0.0;
-            if ($orderCogs <= 0 || $orderSales <= 0) continue;
+            if ($orderCogs <= 0 || $orderSales <= 0) {
+                continue;
+            }
 
-            $cid = (int)$row->category_id;
-            $weight = (float)$row->amount / $orderSales;
-            $allocatedCogs[$cid] = ($allocatedCogs[$cid] ?? 0.0) + ($orderCogs * $weight);
+            $cid = (int) $row->category_id;
+            $weight = (float) $row->amount / $orderSales;
+            $allocatedCogsFromGl[$cid] = ($allocatedCogsFromGl[$cid] ?? 0.0) + ($orderCogs * $weight);
         }
 
-        // Fallback: if no COGS from account_entries (e.g. cogs/inventory accounts not configured),
-        // calculate from categories table using avg cost (same formula as OrdersController)
-        if (empty($allocatedCogs)) {
-            $categories = DB::table('categories')->select('id', 'quantity', 'total_price', 'unit_price')->get()->keyBy('id');
-            foreach ($salesByCategory as $cid => $salesData) {
-                $salesQty = (float)($salesData['qty'] ?? 0);
-                $retQty = (float)(optional($returns->get($cid))->qty ?? 0);
-                $netQty = max(0, $salesQty - $retQty);
-                if ($netQty <= 0) continue;
+        // 4) احتياطي: متوسط التكلفة الحالي × صافي الكمية (مثل OrdersController::ship_order)
+        $categories = DB::table('categories')->select('id', 'quantity', 'total_price', 'unit_price')->get()->keyBy('id');
 
-                $cat = $categories->get($cid);
-                $avgCost = 0.0;
-                if ($cat) {
-                    $q = (float)($cat->quantity ?? 0);
-                    $tp = (float)($cat->total_price ?? 0);
-                    $up = (float)($cat->unit_price ?? 0);
-                    if ($q > 0 && $tp != 0) {
-                        $avgCost = $tp / $q;
-                    } elseif ($up > 0) {
-                        $avgCost = $up;
-                    }
-                }
-                $allocatedCogs[$cid] = $netQty * $avgCost;
+        $allocatedCogsFallback = [];
+        foreach ($salesByCategory as $cid => $salesData) {
+            $cid = (int) $cid;
+            $salesQty = (float) ($salesData['qty'] ?? 0);
+            $retQty = (float) (optional($returns->get($cid))->qty ?? 0);
+            $netQty = max(0, $salesQty - $retQty);
+            if ($netQty <= 0) {
+                continue;
+            }
+
+            $avgCost = CategoryInventoryCostService::resolveReferenceUnitCost($cid);
+            $allocatedCogsFallback[$cid] = $netQty * $avgCost;
+        }
+
+        $allocatedCogs = [];
+        $mergeIds = array_unique(array_merge(
+            array_keys($salesByCategory),
+            array_keys($returns->toArray()),
+            array_keys($allocatedCogsFromMovements),
+            array_keys($allocatedCogsFromGl),
+            array_keys($allocatedCogsFallback)
+        ));
+        foreach ($mergeIds as $cid) {
+            $cid = (int) $cid;
+            $fromMove = $allocatedCogsFromMovements[$cid] ?? 0.0;
+            $fromGl = $allocatedCogsFromGl[$cid] ?? 0.0;
+            $fromFb = $allocatedCogsFallback[$cid] ?? 0.0;
+
+            if (abs($fromMove) >= 0.000001) {
+                $allocatedCogs[$cid] = $fromMove;
+            } elseif (abs($fromGl) >= 0.000001) {
+                $allocatedCogs[$cid] = $fromGl;
+            } else {
+                $allocatedCogs[$cid] = $fromFb;
             }
         }
 
-        // 3) Build per-product rows
+        // 5) Build per-product rows
         $categoryNames = DB::table('categories')->select('id', 'category_name')->get()->keyBy('id');
 
         $productRows = [];
         $categoryIds = array_unique(array_merge(array_keys($salesByCategory), array_keys($returns->toArray()), array_keys($allocatedCogs)));
         foreach ($categoryIds as $cid) {
+            $cid = (int) $cid;
             $sales = $salesByCategory[$cid]['amount'] ?? 0.0;
             $salesQty = $salesByCategory[$cid]['qty'] ?? 0.0;
-            $ret = $returns->get($cid);
+            $ret = $returns->get($cid) ?? $returns->get((string) $cid);
             $retQty = $ret->qty ?? 0.0;
             $retAmount = $ret->amount ?? 0.0;
             $netSales = $sales - $retAmount;
             $cogs = $allocatedCogs[$cid] ?? 0.0;
             $gross = $netSales - $cogs;
             $name = optional($categoryNames->get($cid))->category_name ?? ('#' . $cid);
-            $code = null; // category_code column may not exist in categories table
+
+            $refUnitCost = CategoryInventoryCostService::resolveReferenceUnitCost($cid);
+            $netQtyForCost = max(0, $salesQty - $retQty);
+            $avgUnitCost = $netQtyForCost > 0.000001 ? round($cogs / $netQtyForCost, 2) : 0.0;
 
             $productRows[] = [
                 'category_id' => $cid,
-                'category_code' => $code,
                 'category_name' => $name,
                 'sales_qty' => round($salesQty, 3),
                 'sales_amount' => round($sales, 2),
@@ -806,12 +904,19 @@ class AccountingReportController extends Controller
                 'returns_amount' => round($retAmount, 2),
                 'net_sales' => round($netSales, 2),
                 'cogs' => round($cogs, 2),
+                'avg_unit_cost' => $avgUnitCost,
+                'ref_unit_cost' => round($refUnitCost, 2),
                 'gross_profit' => round($gross, 2),
                 'gross_margin_percent' => $netSales != 0 ? round(($gross / $netSales) * 100, 2) : 0,
             ];
         }
 
         // Totals
+        $sumNetQtyCost = 0.0;
+        foreach ($productRows as $pr) {
+            $nq = max(0, (float) ($pr['sales_qty'] ?? 0) - (float) ($pr['returns_qty'] ?? 0));
+            $sumNetQtyCost += $nq;
+        }
         $totals = [
             'sales_qty' => round(array_sum(array_column($productRows, 'sales_qty')), 3),
             'sales_amount' => round(array_sum(array_column($productRows, 'sales_amount')), 2),
@@ -819,6 +924,9 @@ class AccountingReportController extends Controller
             'returns_amount' => round(array_sum(array_column($productRows, 'returns_amount')), 2),
             'net_sales' => round(array_sum(array_column($productRows, 'net_sales')), 2),
             'cogs' => round(array_sum(array_column($productRows, 'cogs')), 2),
+            'avg_unit_cost' => $sumNetQtyCost > 0.000001
+                ? round(array_sum(array_column($productRows, 'cogs')) / $sumNetQtyCost, 2)
+                : 0,
             'gross_profit' => round(array_sum(array_column($productRows, 'gross_profit')), 2),
             'gross_margin_percent' => 0, // computed below
         ];
@@ -892,7 +1000,8 @@ class AccountingReportController extends Controller
                 'returns_qty' => $row['returns_qty'],
                 'rejected_qty' => $row['returns_qty'],
                 'avg_selling_price' => $avgSellingPrice,
-                'avg_cost' => $avgCost,
+                'avg_cost' => $row['avg_unit_cost'] ?? $avgCost,
+                'ref_unit_cost' => $row['ref_unit_cost'] ?? null,
                 'net_profit' => $row['gross_profit'],
                 'total_profit' => $row['gross_profit'],
                 'profit_margin' => $row['gross_margin_percent'],
@@ -906,5 +1015,61 @@ class AccountingReportController extends Controller
             'totals' => $data['totals'] ?? [],
             'data' => $rows
         ], 200);
+    }
+
+    /**
+     * Net COGS from categories_balance (same logic as product performance) when GL has no COGS lines.
+     */
+    private function netCogsFromCategoriesBalanceMovements(string $start, string $end): float
+    {
+        $wrAvgSubQuery = function () {
+            return DB::table('warehouse_ratings')
+                ->select('category_id', DB::raw('SUM(quantity * price) / NULLIF(SUM(quantity), 0) as wr_avg'))
+                ->where('quantity', '>', 0)
+                ->groupBy('category_id');
+        };
+
+        $costCase = 'CASE WHEN c.quantity > 0.0000001 AND IFNULL(c.total_price,0) != 0 THEN c.total_price / c.quantity WHEN IFNULL(c.unit_price,0) > 0.0000001 THEN c.unit_price WHEN IFNULL(wr.wr_avg,0) > 0.0000001 THEN wr.wr_avg ELSE 0 END';
+
+        $shipCogsRows = DB::table('categories_balance as cb')
+            ->join('categories as c', 'c.id', '=', 'cb.category_id')
+            ->leftJoinSub($wrAvgSubQuery(), 'wr', function ($join) {
+                $join->on('wr.category_id', '=', 'c.id');
+            })
+            ->where('cb.type', 'شحن طلب')
+            ->where('cb.created_at', '>=', $start . ' 00:00:00')
+            ->where('cb.created_at', '<=', $end . ' 23:59:59')
+            ->groupBy('cb.category_id')
+            ->select('cb.category_id', DB::raw("SUM(COALESCE(cb.cost_total, cb.quantity * ({$costCase}))) as cogs"))
+            ->get()
+            ->keyBy('category_id');
+
+        $retCogsRows = DB::table('categories_balance as cb')
+            ->join('categories as c', 'c.id', '=', 'cb.category_id')
+            ->leftJoinSub($wrAvgSubQuery(), 'wr', function ($join) {
+                $join->on('wr.category_id', '=', 'c.id');
+            })
+            ->where('cb.type', 'رفض استلام طلب')
+            ->where('cb.created_at', '>=', $start . ' 00:00:00')
+            ->where('cb.created_at', '<=', $end . ' 23:59:59')
+            ->groupBy('cb.category_id')
+            ->select('cb.category_id', DB::raw("SUM(COALESCE(cb.cost_total, cb.quantity * ({$costCase}))) as cogs"))
+            ->get()
+            ->keyBy('category_id');
+
+        $movementKeys = array_unique(array_merge(
+            array_keys($shipCogsRows->toArray()),
+            array_keys($retCogsRows->toArray())
+        ));
+
+        $total = 0.0;
+        foreach ($movementKeys as $cid) {
+            $cid = (int) $cid;
+            $ship = (float) (optional($shipCogsRows->get($cid))->cogs ?? 0);
+            $ret = (float) (optional($retCogsRows->get($cid))->cogs ?? 0);
+            $total += $ship - $ret;
+        }
+
+        return $total;
     }
 }

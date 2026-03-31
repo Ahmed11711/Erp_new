@@ -75,7 +75,6 @@ export class AddCategoryComponent {
 
   // // Append the category data to FormData
   formData.append('category_name', this.category_name);
-  formData.append('category_code', data.value.category_code); // <-- كود الصنف
   formData.append('category_price', data.value.price);
   formData.append('initial_balance', data.value.inital_price);
   formData.append('minimum_quantity', data.value.min_quantity);
