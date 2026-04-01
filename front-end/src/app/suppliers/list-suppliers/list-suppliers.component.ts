@@ -107,7 +107,10 @@ clrSearch(){
 
 openDialog(supplier): void {
   const dialogRef = this.dialog.open(DialogPayMoneyForSupplierComponent, {
-    width: '30%',data: {supplier,refreshData: ()=>this.getSuppliers()},
+    width: '420px',
+    maxWidth: '95vw',
+    panelClass: 'supplier-pay-dialog',
+    data: { supplier, refreshData: () => this.getSuppliers() },
   });
 
   dialogRef.afterClosed().subscribe(result => {

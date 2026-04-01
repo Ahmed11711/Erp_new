@@ -75,6 +75,12 @@
         <input class="d-none" type="checkbox" name="" id="total_postpone" (change)="sort('total_postpone')">
         <label class="mx-2" for="total_postpone"><i style="cursor: pointer;" class="fa-solid fa-arrow-up-wide-short"></i></label>
       </th>
+      <th scope="col">صافي المبيعات</th>
+      <th scope="col">تكلفة الوحدة (فترة)</th>
+      <th scope="col">تكلفة مرجعية (مخزون)</th>
+      <th scope="col">تكاليف البضاعة</th>
+      <th scope="col">مجمل الربح</th>
+      <th scope="col">هامش الربح %</th>
     </tr>
   </thead>
   <tbody>
@@ -85,6 +91,12 @@
       <td dir="ltr">{{elm.total_quantity_return | customNumber}}</td>
       <td dir="ltr">{{elm.total_new | customNumber}}</td>
       <td dir="ltr">{{elm.total_postpone | customNumber}}</td>
+      <td dir="ltr">{{ elm.net_sales != null ? (elm.net_sales | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ elm.avg_unit_cost != null ? (elm.avg_unit_cost | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ elm.ref_unit_cost != null ? (elm.ref_unit_cost | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ elm.cogs != null ? (elm.cogs | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ elm.gross_profit != null ? (elm.gross_profit | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ elm.gross_margin_percent != null ? (elm.gross_margin_percent | customNumber) : '—' }}</td>
     </tr>
   </tbody>
   <tfoot>
@@ -95,6 +107,12 @@
       <td>{{totalReturnedOrders | customNumber}}</td>
       <td>{{totalPriceNewOrders | customNumber}}</td>
       <td>{{totalPriceReturnedOrders | customNumber}}</td>
+      <td dir="ltr">{{ profitabilityTotals?.net_sales != null ? (profitabilityTotals.net_sales | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ profitabilityTotals?.avg_unit_cost != null ? (profitabilityTotals.avg_unit_cost | customNumber) : '—' }}</td>
+      <td>—</td>
+      <td dir="ltr">{{ profitabilityTotals?.cogs != null ? (profitabilityTotals.cogs | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ profitabilityTotals?.gross_profit != null ? (profitabilityTotals.gross_profit | customNumber) : '—' }}</td>
+      <td dir="ltr">{{ profitabilityTotals?.gross_margin_percent != null ? (profitabilityTotals.gross_margin_percent | customNumber) : '—' }}</td>
     </tr>
   </tfoot>
   </table>

@@ -113,6 +113,7 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/categoriesSellReports', [App\Http\Controllers\CategoriesController::class, 'categoriesSellReports']);
 
     Route::middleware(['department.access:Admin,Account Management,Logistics Specialist'])->group(function () {
+        Route::get('transactions/by-supplier-order/search', [SupplierController::class, 'supplierAccountsAggregated']);
         Route::get('categories/warehouse_balance', [CategoriesController::class, 'warehouse_balance']);
         Route::get('categories/categories_details/{id}', [CategoriesController::class, 'categories_details']);
         Route::get('categories/warehousedetails', [CategoriesController::class, 'warehouseDetails']);

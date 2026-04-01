@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\CategoryMonthlyInventory;
 use App\Http\Resources\V2\Category\CategoryResource;
 use App\Http\Requests\V2\Category\GetCategoryByStock;
+use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
 
 class CategoriesController extends Controller
@@ -107,18 +108,54 @@ class CategoriesController extends Controller
    return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
   }
 
-  $category = Category::create([
+  $cost = (float) request('category_price');
+  $openQty = (float) request('initial_balance');
+  $warehouse = request('warehouse');
+
+  $attrs = [
    'category_name' => request('category_name'),
    'category_price' => request('category_price'),
+   'unit_price' => $cost,
    'initial_balance' => request('initial_balance'),
    'minimum_quantity' => request('minimum_quantity'),
-   'warehouse' => request('warehouse'),
+   'warehouse' => $warehouse,
    'production_id' => request('production_id'),
    'measurement_id' => request('measurement_id'),
    'category_image' => $img_name,
    'stock_id' => request('stock_id'),
-  ]);
+  ];
 
+  // الرصيد الافتتاحي = كمية أولية؛ عمود «الرصيد» في القائمة يعرض quantity وليس initial_balance فقط
+  if ($openQty > 0.0000001) {
+   $attrs['quantity'] = $openQty;
+   if ($warehouse === 'مخزن منتج تام') {
+    $attrs['sell_total_price'] = $openQty * $cost;
+   } else {
+    $attrs['total_price'] = $openQty * $cost;
+   }
+  }
+
+  $category = Category::create($attrs);
+
+  if ($openQty > 0.0000001) {
+   DB::table('categories_balance')->insert([
+    'invoice_number' => 'OB',
+    'category_id' => $category->id,
+    'type' => 'رصيد افتتاحي',
+    'quantity' => $openQty,
+    'balance_before' => 0,
+    'balance_after' => $openQty,
+    'price' => $cost,
+    'total_price' => $cost * $openQty,
+    'unit_cost' => $cost,
+    'cost_total' => $cost * $openQty,
+    'by' => auth()->check() ? auth()->user()->name : 'النظام',
+    'created_at' => now(),
+   ]);
+   if ($warehouse !== 'مخزن منتج تام') {
+    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
+  }
 
   return response()->json($category, 201);
  }
@@ -467,7 +504,7 @@ class CategoriesController extends Controller
  }
 
 
- public function categoriesSellReports(Request $request)
+ public function categoriesSellReports(Request $request, ProductPerformanceReportService $productPerformanceReportService)
  {
   $itemsPerPage = $request->input('itemsPerPage', 15);
 
@@ -503,7 +540,29 @@ class CategoriesController extends Controller
   }
   $categorySales = $query->paginate($itemsPerPage);
 
-  return response()->json($categorySales, 200);
+  $profitabilityTotals = null;
+  $byCategoryId = [];
+  if ($request->filled('date_from') && $request->filled('date_to')) {
+   $period = $productPerformanceReportService->computeForPeriod($request->date_from, $request->date_to);
+   $profitabilityTotals = $period['totals'];
+   $byCategoryId = $period['by_category_id'];
+  }
+
+  foreach ($categorySales->items() as $item) {
+   $pid = (int) $item->category_id;
+   $p = $byCategoryId[$pid] ?? null;
+   $item->net_sales = $p['net_sales'] ?? null;
+   $item->avg_unit_cost = $p['avg_unit_cost'] ?? null;
+   $item->ref_unit_cost = $p['ref_unit_cost'] ?? null;
+   $item->cogs = $p['cogs'] ?? null;
+   $item->gross_profit = $p['gross_profit'] ?? null;
+   $item->gross_margin_percent = $p['gross_margin_percent'] ?? null;
+  }
+
+  $payload = $categorySales->toArray();
+  $payload['profitability_totals'] = $profitabilityTotals;
+
+  return response()->json($payload, 200);
  }
 
 

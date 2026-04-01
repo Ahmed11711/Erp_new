@@ -7,10 +7,54 @@
       <div><p class="title header m-auto">حسابات الموردين</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
+  <div class="container-fluid supplier-accounts-filters mb-4">
+    <div class="form-row align-items-end">
+      <div class="form-group col-md-3">
+        <label for="sa_name">اسم المورد</label>
+        <input
+          id="sa_name"
+          type="text"
+          class="form-control"
+          placeholder="بحث بالاسم"
+          [(ngModel)]="supplier_name"
+          name="supplier_name"
+          (keyup.enter)="runSearch()" />
+      </div>
+      <div class="form-group col-md-3">
+        <label for="sa_phone">رقم الموبايل</label>
+        <input
+          id="sa_phone"
+          type="text"
+          class="form-control"
+          placeholder="بحث بالهاتف"
+          [(ngModel)]="supplier_phone"
+          name="supplier_phone"
+          dir="ltr"
+          (keyup.enter)="runSearch()" />
+      </div>
+      <div class="form-group col-md-3">
+        <label>حالة الرصيد</label>
+        <div class="d-flex flex-wrap gap-3 align-items-center">
+          <label class="mb-0 d-flex align-items-center gap-1">
+            <input type="radio" name="bal_status_sa" value="" [(ngModel)]="selectedStatus" (ngModelChange)="runSearch()" /> الكل
+          </label>
+          <label class="mb-0 d-flex align-items-center gap-1">
+            <input type="radio" name="bal_status_sa" value="want" [(ngModel)]="selectedStatus" (ngModelChange)="runSearch()" /> مدين 
+          </label>
+          <label class="mb-0 d-flex align-items-center gap-1">
+            <input type="radio" name="bal_status_sa" value="own" [(ngModel)]="selectedStatus" (ngModelChange)="runSearch()" /> دائن
+          </label>
+        </div>
+      </div>
+      <div class="form-group col-md-3 d-flex flex-wrap gap-2">
+        <button type="button" class="btn bg-main text-white flex-grow-1" (click)="runSearch()">بحث</button>
+        <button type="button" class="btn btn-outline-secondary flex-grow-1" (click)="clearSearch()">مسح</button>
+      </div>
+    </div>
+  </div>
 
   <div class="container-fluid">
 
@@ -19,28 +63,35 @@
         <tr>
           <th scope="col"> اسم المورد</th>
           <th scope="col"> رقم الموبايل</th>
-          <th scope="col"> عدد الاوردرات</th>
+          <th scope="col"> عدد فواتير الشراء</th>
           <th scope="col">دائن</th>
           <th scope="col">مدين</th>
           <th scope="col"></th>
         </tr>
       </thead>
       <tbody>
+        <tr *ngIf="data.length === 0">
+          <td colspan="6" class="text-muted py-4">
+          </td>
+        </tr>
         <tr *ngFor="let item of data; let i = index">
-          <td>{{item?.customer_name}}</td>
-          <td>{{item?.customer_phone_1}}</td>
-          <td>{{item?.order_count}}</td>
-          <td dir="ltr">{{item?.credit ?? 0 | customNumber }}</td>
-          <td dir="ltr">{{item?.debit ?? 0 | customNumber }}</td>
+          <td>{{ item?.supplier_name }}</td>
+          <td dir="ltr">{{ item?.supplier_phone }}</td>
+          <td>{{ item?.order_count }}</td>
+          <td dir="ltr">{{ item?.credit ?? 0 | customNumber }}</td>
+          <td dir="ltr">{{ item?.debit ?? 0 | customNumber }}</td>
           <td>
             <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item >
-                <span>تفاصيل</span>
+              <button
+                mat-menu-item
+                [routerLink]="['/dashboard/suppliers/supplier_details', item.supplier_id]">
+                <span>تفاصيل حساب المورد</span>
               </button>
             </mat-menu>
+          </td>
         </tr>
       </tbody>
     </table>

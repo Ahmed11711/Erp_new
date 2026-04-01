@@ -14,6 +14,20 @@
 
   <div class="container-fluid">
 
+    <div class="row mb-3 justify-content-center">
+      <div class="col-md-8 col-lg-6">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center">
+          <input type="search" class="form-control" style="max-width: 22rem;"
+            [(ngModel)]="searchQuery"
+            placeholder="بحث بالاسم أو رقم الموبايل"
+            autocomplete="off"
+            (keyup.enter)="applySearch()" />
+          <button type="button" class="btn bg-main" (click)="applySearch()">بحث</button>
+          <button type="button" class="btn btn-outline-secondary" *ngIf="searchQuery.trim()" (click)="clearSearch()">مسح</button>
+        </div>
+      </div>
+    </div>
+
     <table class="table w-75 m-auto text-center table-hover">
       <thead class="bg-dark text-white">
         <tr>

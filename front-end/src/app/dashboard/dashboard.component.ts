@@ -28,11 +28,11 @@ export class DashboardComponent {
 
   /** True if the current user is assigned to at least one WhatsApp number */
   hasWhatsAppAccess = false;
+  /** صلاحية إدارة تعيين المستخدمين لأرقام الواتساب (صفحة admin/whatsapp-management) */
+  canAssignWhatsAppNumbers = false;
 
   openASide:boolean = true;
   asideMode:string = 'side';
-
-
 
   constructor(private loginService:AuthService , private notificationService:NotificationService, private route:Router,
     private orderFilter :FilterOrderService, private renderer: Renderer2,
@@ -53,6 +53,10 @@ export class DashboardComponent {
 
     this.user = this.loginService.getUser();
     this.userName = this.loginService.userName();
+
+    const perms = this.loginService.getPermission();
+    this.canAssignWhatsAppNumbers =
+      Array.isArray(perms) && perms.includes('assign to whatsapp number');
 
     this.whatsappService.getUserPhoneNumbers().subscribe({
       next: (res) => {

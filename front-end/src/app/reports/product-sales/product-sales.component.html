@@ -53,6 +53,12 @@
             <th>اجمالي قطع المرتجع</th>
             <th>اجمالي قيمة الجديد</th>
             <th>اجمالي قيمة المرتجع</th>
+            <th>صافي المبيعات</th>
+            <th>تكلفة الوحدة (فترة)</th>
+            <th>تكلفة مرجعية (مخزون)</th>
+            <th>تكاليف البضاعة</th>
+            <th>مجمل الربح</th>
+            <th>هامش الربح %</th>
           </tr>
         </thead>
         <tbody>
@@ -64,11 +70,28 @@
             <td>{{ r.total_quantity_return }}</td>
             <td>{{ r.total_new }}</td>
             <td>{{ r.total_postpone }}</td>
+            <td class="fw-bold">{{ r.net_sales ?? '—' }}</td>
+            <td>{{ r.avg_unit_cost ?? '—' }}</td>
+            <td>{{ r.ref_unit_cost ?? '—' }}</td>
+            <td>{{ r.cogs ?? '—' }}</td>
+            <td class="fw-bold">{{ r.gross_profit ?? '—' }}</td>
+            <td>{{ r.gross_margin_percent ?? '—' }}</td>
           </tr>
           <tr *ngIf="searchTerm && filteredData.length === 0" class="table-warning">
-            <td colspan="7" class="text-center">لا توجد نتائج تطابق البحث</td>
+            <td colspan="13" class="text-center">لا توجد نتائج تطابق البحث</td>
           </tr>
         </tbody>
+        <tfoot *ngIf="profitabilityTotals && !loading && data.length > 0">
+          <tr class="table-secondary fw-bold">
+            <td colspan="7" class="text-end">إجمالي الفترة (أداء المنتجات)</td>
+            <td>{{ profitabilityTotals.net_sales }}</td>
+            <td>{{ profitabilityTotals.avg_unit_cost }}</td>
+            <td>—</td>
+            <td>{{ profitabilityTotals.cogs }}</td>
+            <td>{{ profitabilityTotals.gross_profit }}</td>
+            <td>{{ profitabilityTotals.gross_margin_percent }}</td>
+          </tr>
+        </tfoot>
       </table>
       <div class="d-flex justify-content-center my-2">
         <mat-paginator [length]="length" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"

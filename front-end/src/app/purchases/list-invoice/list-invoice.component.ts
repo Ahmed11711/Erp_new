@@ -142,10 +142,6 @@ export class ListInvoiceComponent {
 
     this.invoice.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
       this.invoices = res.data;
-      const currentDate = new Date().toISOString().split('T')[0];
-      this.invoices.forEach(item => {
-        item.created_at = currentDate;
-      });
       this.length=res.total;
       this.pageSize=res.per_page;
     })

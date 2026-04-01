@@ -296,11 +296,21 @@ private function sendStaticReply($to)
 
     private function processStatus($statusData)
     {
-        $id = $statusData['id'];
-        $status = $statusData['status'];
-        // $recipient_id = $statusData['recipient_id'];
+        $id = $statusData['id'] ?? null;
+        $status = $statusData['status'] ?? '';
+        $errors = $statusData['errors'] ?? null;
+        $recipientId = $statusData['recipient_id'] ?? null;
 
-        $message = Message::where('twilio_message_sid', $id)->first();
+        if (in_array($status, ['failed', 'undelivered'], true)) {
+            Log::warning('Meta WhatsApp delivery not completed', [
+                'id' => $id,
+                'status' => $status,
+                'recipient_id' => $recipientId,
+                'errors' => $errors,
+            ]);
+        }
+
+        $message = $id ? Message::where('twilio_message_sid', $id)->first() : null;
 
         if ($message && $message->status !== $status) {
             $message->status = $status;

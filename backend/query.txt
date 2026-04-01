@@ -1,0 +1,9 @@
+UPDATE orders
+SET order_status = 'تم التحصيل'
+WHERE order_status = 'تم شحن'
+AND order_date < '2026-01-01';
+
+UPDATE categories
+SET unit_price = category_price
+WHERE ABS(IFNULL(unit_price, 0)) < 0.0000001
+  AND category_price IS NOT NULL;

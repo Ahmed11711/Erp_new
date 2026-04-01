@@ -69,6 +69,7 @@
        <th>فرع الانتاج</th>
        <th>الوحدة</th>
        <th>التكلفة او سعر البيع</th>
+       <th>متوسط التكلفة</th>
        <th>الرصيد</th>
        <th>صورة الصنف</th>
        <th>الخيارات</th>
@@ -82,6 +83,7 @@
        <td>{{ item.production.production_line }}</td>
        <td>{{ item.measurement.unit }}</td>
        <td>{{ item.category_price | customNumber }}</td>
+       <td dir="ltr">{{ averageUnitCost(item) | customNumber }}</td>
 
        <!-- العمود الجديد للرصد مع تعديل اللون والتحديث -->
        <td dir="ltr">

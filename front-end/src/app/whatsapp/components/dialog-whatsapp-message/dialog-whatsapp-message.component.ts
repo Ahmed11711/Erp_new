@@ -83,6 +83,9 @@ export class DialogWhatsAppMessageComponent implements OnInit {
       if (n === 'client_review') {
         return 2;
       }
+      if (n === 'feedback') {
+        return 3;
+      }
       return 9;
     };
     const langPrio = (x: any): number => {

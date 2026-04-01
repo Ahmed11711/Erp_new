@@ -1,0 +1,235 @@
+/* ألوان النظام: #0E4057 (navy) — #82225e (main) */
+
+:host {
+  display: block;
+  min-width: 300px;
+}
+
+.supplier-pay-dialog {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.supplier-pay-dialog__hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  background: linear-gradient(135deg, #0e4057 0%, #153d52 50%, #1a4a63 100%);
+  color: #fff;
+}
+
+.supplier-pay-dialog__hero-text {
+  flex: 1;
+  min-width: 160px;
+}
+
+.supplier-pay-dialog__title {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #fff;
+}
+
+.supplier-pay-dialog__supplier-name {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.92;
+  font-weight: 500;
+}
+
+.supplier-pay-dialog__balance-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.5rem 0.85rem;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  min-width: 120px;
+}
+
+.supplier-pay-dialog__balance-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.supplier-pay-dialog__balance {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.supplier-pay-dialog__hint {
+  margin: 0;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.82rem;
+  color: #4a5568;
+  background: #f7f5f8;
+  border-bottom: 1px solid #ece8ee;
+}
+
+.supplier-pay-dialog .mat-dialog-content,
+.supplier-pay-dialog .mat-mdc-dialog-content,
+.supplier-pay-dialog__content {
+  margin: 0;
+  padding: 1.15rem 1.25rem 1.25rem;
+  max-height: min(65vh, 480px);
+  overflow-y: auto;
+}
+
+.supplier-pay-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.supplier-pay-dialog__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.supplier-pay-dialog__section-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #82225e;
+  letter-spacing: 0.02em;
+}
+
+/* أزرار اختيار نوع الدفع */
+.supplier-pay-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.supplier-pay-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.45rem 1rem;
+  margin: 0;
+  border: 2px solid #e2e0e5;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  flex: 1 1 90px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.supplier-pay-pill input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+.supplier-pay-pill:hover {
+  border-color: #c4b8c9;
+  background: #faf8fb;
+}
+
+.supplier-pay-pill--active {
+  border-color: #82225e;
+  background: rgba(130, 34, 94, 0.08);
+  color: #82225e;
+  box-shadow: 0 0 0 1px rgba(130, 34, 94, 0.15);
+}
+
+.supplier-pay-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.supplier-pay-dialog__label {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.supplier-pay-dialog__select,
+.supplier-pay-dialog__input-amount {
+  border-radius: 10px;
+  border: 1px solid #d8d4dc;
+  padding: 0.55rem 0.75rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.supplier-pay-dialog__select:focus,
+.supplier-pay-dialog__input-amount:focus {
+  border-color: #82225e;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15);
+  outline: none;
+}
+
+.supplier-pay-dialog__input-amount {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.supplier-pay-dialog__empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #c05621;
+}
+
+.supplier-pay-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  padding-top: 0.5rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid #eee9ef;
+}
+
+.supplier-pay-dialog__btn-cancel {
+  min-width: 100px;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #cbd5e0;
+  background: #fff;
+  color: #4a5568;
+  font-weight: 600;
+}
+
+.supplier-pay-dialog__btn-cancel:hover {
+  background: #f7fafc;
+  border-color: #a0aec0;
+}
+
+.supplier-pay-dialog__btn-submit {
+  min-width: 140px;
+  padding: 0.5rem 1.15rem;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(180deg, #96326f 0%, #82225e 100%);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(130, 34, 94, 0.35);
+}
+
+.supplier-pay-dialog__btn-submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 4px 12px rgba(130, 34, 94, 0.4);
+}
+
+.supplier-pay-dialog__btn-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}

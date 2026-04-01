@@ -171,6 +171,29 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
  // ------------------------
  // دوال لتلوين وتحديث الرصيد
  // ------------------------
+ /**
+  * متوسط تكلفة الوحدة (مرجّح): total_price/quantity عند وجود رصيد، وإلا unit_price — يطابق CategoryInventoryCostService.
+  */
+ averageUnitCost(item: { quantity?: number; total_price?: number; unit_price?: number }): number {
+  const q = Number(item?.quantity ?? 0);
+  const tp = Number(item?.total_price ?? 0);
+  const up = Number(item?.unit_price ?? 0);
+  if (q > 0.0000001) {
+   if (tp > 0.0000001) {
+    return tp / q;
+   }
+   // مخزن منتج تام وغيره: قد تُحفظ القيمة في sell_total_price فقط فيُبقى total_price صفراً
+   if (up > 0.0000001) {
+    return up;
+   }
+   return 0;
+  }
+  if (up > 0.0000001) {
+   return up;
+  }
+  return 0;
+ }
+
  getQuantityColor(quantity: number): string {
   if (quantity === 0) return '#ffcccc';
   if (quantity < 10) return '#ffe5b4';

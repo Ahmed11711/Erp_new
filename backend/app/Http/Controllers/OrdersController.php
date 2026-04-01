@@ -2111,6 +2111,7 @@ class OrdersController extends Controller
                     $isExist = Category::create([
                         'category_name' => $category->category_name,
                         'category_price' => $category->category_price,
+                        'unit_price' => (float) ($category->unit_price ?? $category->category_price),
                         'quantity' => 0,
                         'minimum_quantity' => 0,
                         'initial_balance' => 0,
@@ -2459,7 +2460,15 @@ class OrdersController extends Controller
         ->groupBy('customer_phone_1')
         ->orderByDesc(DB::raw('MAX(orders.id)'));
 
-    $customers = $query->simplePaginate($itemsPerPage);
+    if ($request->filled('search')) {
+        $term = '%' . addcslashes($request->input('search'), '%_\\') . '%';
+        $query->where(function ($q) use ($term) {
+            $q->where('customer_name', 'like', $term)
+                ->orWhere('customer_phone_1', 'like', $term);
+        });
+    }
+
+    $customers = $query->paginate($itemsPerPage);
 
     return response()->json($customers);
 }

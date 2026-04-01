@@ -1,4 +1,0 @@
-UPDATE orders
-SET order_status = 'تم التحصيل'
-WHERE order_status = 'تم شحن'
-AND order_date < '2026-01-01';

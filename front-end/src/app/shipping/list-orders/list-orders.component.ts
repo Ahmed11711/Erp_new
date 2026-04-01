@@ -28,6 +28,8 @@ export class ListOrdersComponent {
   user!:string;
   /** True if the current user is assigned to at least one WhatsApp number */
   hasWhatsAppAccess = false;
+  /** قائمة الإجراءات بجانب رقم الطلب — Spatie: assign to whatsapp number، أو مستخدم معيّن لرقم واتساب (hasWhatsAppAccess) */
+  canAssignWhatsAppNumbers = false;
   orders :any = [];
   banks :any = [];
   currentPageData :any = [];
@@ -59,6 +61,9 @@ export class ListOrdersComponent {
 
   ngOnInit(): void {
     this.user = this.authService.getUser();
+    const perms = this.authService.getPermission();
+    this.canAssignWhatsAppNumbers =
+      Array.isArray(perms) && perms.includes('assign to whatsapp number');
     this.whatsappService.getUserPhoneNumbers().subscribe({
       next: (res) => {
         const list = res?.data ?? res ?? [];

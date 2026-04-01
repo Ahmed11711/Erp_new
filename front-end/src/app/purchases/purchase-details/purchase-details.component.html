@@ -22,7 +22,7 @@
 
       <div class="form-group col-md-2">
         <p>المورد</p>
-        <h3>{{ invoice?.supplier.supplier_name || '' }}</h3>
+        <h3>{{ invoice?.supplier?.supplier_name || '' }}</h3>
       </div>
 
       <div class="form-group col-md-2">
@@ -92,7 +92,7 @@
 
       <div class="form-group col-md-3">
         <p> الخزينة</p>
-        <h3>{{ invoice?.bank.name || '' }}</h3>
+        <h3>{{ invoice?.safe?.name || invoice?.bank?.name || '' }}</h3>
       </div>
 
     </div>
@@ -115,7 +115,7 @@
               <td>
                 <span [id]="item.id">{{item?.created_at | date}}</span>
               </td>
-              <td>{{item?.user.name}}</td>
+              <td>{{ item?.user?.name }}</td>
             </tr>
         </tbody>
         </table>

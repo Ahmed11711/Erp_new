@@ -69,14 +69,15 @@
           <th scope="col">الشحن</th>
           <th scope="col">السعر معدل </th>
           <th scope="col">عدد التعديلات </th>
+          <th scope="col">إجمالي كمية البنود</th>
           <th scope="col">تاريخ الاستلام</th>
-          <th scope="col"></th>
+          <th scope="col">الخيارات</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let item of invoices; let i = index" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
           <td>{{item?.invoice_number}}</td>
-          <td>{{item?.supplier.supplier_name}}</td>
+          <td>{{item?.supplier?.supplier_name}}</td>
           <td>{{item?.invoice_type}}</td>
           <td dir="ltr">{{!item?.updated_purchase ?  (item?.total_price | customNumber ): (item?.updated_purchase?.total_price | customNumber )}}</td>
           <td dir="ltr">{{!item?.updated_purchase ?  (item?.paid_amount | customNumber ): (item?.updated_purchase?.paid_amount | customNumber )}}</td>
@@ -94,12 +95,11 @@
             </i>
           </td>
           <td>{{item?.edits}}</td>
+          <td dir="ltr">{{ item?.invoice_lines_qty != null ? item?.invoice_lines_qty : '—' }}</td>
           <td>{{item?.receipt_date}}</td>
           <td>
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
-              <mat-icon>more_vert</mat-icon>
-            </span>
-            <mat-menu #menu="matMenu">
+            <span [matMenuTriggerFor]="rowMenu" style="cursor: pointer; font-size: 1.25rem; line-height: 1;" class="text-secondary" title="خيارات">&#8942;</span>
+            <mat-menu #rowMenu="matMenu">
               <button mat-menu-item (click)="invoiceDetails(item?.id)">
                 <span>تفاصيل</span>
               </button>
@@ -110,6 +110,7 @@
                 <span>حذف</span>
               </button>
             </mat-menu>
+          </td>
         </tr>
       </tbody>
     </table>

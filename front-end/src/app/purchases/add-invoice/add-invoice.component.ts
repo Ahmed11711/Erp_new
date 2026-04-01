@@ -175,9 +175,18 @@ export class AddInvoiceComponent {
   date : any;
   productSelected = false;
   selectEvent(item) {
-    this.originalPrice = item.category_price;
     this.productname = item.category_name;
-    this.productprice = item.category_price;
+    const qty = Number(item.quantity) || 0;
+    const tp = Number(item.total_price) || 0;
+    const wac = qty > 0 ? tp / qty : 0;
+    if (wac > 0) {
+      this.productprice = Math.round(wac * 10000) / 10000;
+    } else if (item.unit_price != null && Number(item.unit_price) > 0) {
+      this.productprice = Number(item.unit_price);
+    } else {
+      this.productprice = item.category_price;
+    }
+    this.originalPrice = this.productprice;
     this.productUnit = item.measurement.unit
     this.productSelected = true;
   }

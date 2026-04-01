@@ -18,26 +18,45 @@ export class CustomerAccountsComponent {
   pageSizeOptions = [15,50,100];
   user: any;
 
+  /** بحث داخل الصفحة (اسم أو موبايل) */
+  searchQuery = '';
+
   constructor(private TransactionService : TransactionService, private route:Router, private authService:AuthService ) {
   }
 
   ngOnInit(){
     this.user = this.authService.getUser();
-    this.search(arguments);
+    this.load();
   }
 
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
-    this.search(arguments);
+    this.load();
   }
 
   param = {};
-  search(event:any){
-    this.TransactionService.searchCustomer(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
+  applySearch(): void {
+    this.page = 0;
+    this.load();
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
+    this.page = 0;
+    this.load();
+  }
+
+  private load(): void {
+    const params: Record<string, string> = { ...this.param } as Record<string, string>;
+    const q = this.searchQuery.trim();
+    if (q) {
+      params['search'] = q;
+    }
+    this.TransactionService.searchCustomer(this.pageSize, this.page + 1, params).subscribe((res:any)=>{
       this.data = res.data;
-      this.length=res.total;
-      this.pageSize=res.per_page;
+      this.length = res.total ?? res.data?.length ?? 0;
+      this.pageSize = res.per_page ?? this.pageSize;
     })
   }
 }

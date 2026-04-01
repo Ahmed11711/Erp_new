@@ -31,6 +31,8 @@ export class ProductSalesComponent implements OnInit {
     this.load();
   }
 
+  profitabilityTotals: any = null;
+
   load(): void {
     this.loading = true;
     this.loadError = false;
@@ -39,6 +41,7 @@ export class ProductSalesComponent implements OnInit {
       next: (res: any) => {
         this.data = res?.data || [];
         this.length = res?.total || 0;
+        this.profitabilityTotals = res?.profitability_totals ?? null;
         this.applyFilter();
         this.loading = false;
       },

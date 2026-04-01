@@ -21,6 +21,7 @@ export class CategoriesReportComponent {
   totalReturnedOrders:number=0;
   totalPriceNewOrders:number=0;
   totalPriceReturnedOrders:number=0;
+  profitabilityTotals: any = null;
 
   constructor(private categoryService:CategoryService , private production:ProductionService , private route:Router , private authService:AuthService, private pdfService:PdfService,
     private excelService:ExcelService
@@ -97,11 +98,12 @@ export class CategoriesReportComponent {
     this.param['date_to'] = this.dateTo;
     this.categoryService.categoriesSellReports(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
       this.soldCategories=res.data;
+      this.profitabilityTotals = res.profitability_totals ?? null;
       this.totalOrders = this.soldCategories.reduce((sum, elm) => sum + elm.total_orders, 0);
       this.totalNewOrders = this.soldCategories.reduce((sum, elm) => sum + elm.total_quantity_new, 0);
       this.totalReturnedOrders = this.soldCategories.reduce((sum, elm) => sum + elm.total_quantity_return, 0);
       this.totalPriceNewOrders = this.soldCategories.reduce((sum, elm) => sum + elm.total_new, 0);
-      this.totalReturnedOrders = this.soldCategories.reduce((sum, elm) => sum + elm.total_postpone, 0);
+      this.totalPriceReturnedOrders = this.soldCategories.reduce((sum, elm) => sum + elm.total_postpone, 0);
       this.length=res.total;
       this.pageSize=res.per_page;
     });

@@ -94,35 +94,70 @@ class SupplierController extends Controller
         return response()->json($response, 200);
     }
 
+    /**
+     * صفحة «حسابات الموردين» — نفس شكل pagination لـ transactions/by-customer-order/search.
+     * رصيد موجب = مستحق للمورد؛ رصيد سالب = زيادة سداد / دائن.
+     */
+    public function supplierAccountsAggregated(Request $request)
+    {
+        $itemsPerPage = (int) $request->get('itemsPerPage', 15);
+
+        $query = Supplier::query()
+            ->select(['id', 'supplier_name', 'supplier_phone', 'balance'])
+            ->withCount('purchases');
+
+        if ($request->filled('supplier_name')) {
+            $query->where('supplier_name', 'like', '%'.$request->supplier_name.'%');
+        }
+        if ($request->filled('supplier_phone')) {
+            $query->where('supplier_phone', 'like', '%'.$request->supplier_phone.'%');
+        }
+        if ($request->has('status') && $request->status !== '' && $request->status !== null) {
+            if ($request->status === 'own') {
+                $query->where('balance', '<', 0);
+            } elseif ($request->status === 'want') {
+                $query->where('balance', '>', 0);
+            }
+        }
+
+        $paginator = $query->orderBy('supplier_name')->paginate($itemsPerPage);
+
+        $paginator->getCollection()->transform(function (Supplier $s) {
+            $bal = (float) $s->balance;
+
+            return [
+                'supplier_id' => $s->id,
+                'supplier_name' => $s->supplier_name,
+                'supplier_phone' => $s->supplier_phone ?? '',
+                'order_count' => $s->purchases_count,
+                'debit' => $bal > 0 ? $bal : 0,
+                'credit' => $bal < 0 ? abs($bal) : 0,
+            ];
+        });
+
+        return response()->json($paginator);
+    }
 
     public function supplier_details(Request $request, $id)
 {
-    $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 15;
+    $itemsPerPage = (int) (request('itemsPerPage') ?: 15);
+    $supplierId = (int) $id;
 
-    $supplierId = $id;
-    $name = Supplier::where('id', $id)->value('supplier_name');
+    $supplier = Supplier::find($supplierId);
+    $name = $supplier?->supplier_name;
 
-    // $invoicesWithBalances = DB::table('purchases as p')
-    //     ->select(
-    //         'p.id as invoice_id',
-    //         'sb.balance_before as balance_before',
-    //         'sb.balance_after as balance_after',
-    //         'u.name as user_name',
-    //         'p.invoice_number as invoice_number',
-    //         'p.receipt_date as receipt_date',
-    //         'p.total_price as total_price',
-    //         'p.paid_amount as paid_amount',
-    //         'p.due_amount as due_amount',
-    //         'p.invoice_type'
-    //     )
-    //     ->leftJoin('supplier_balance as sb', 'p.id', '=', 'sb.invoice_id')
-    //     ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
-    //     ->where('p.supplier_id', $supplierId)
-    //     ->paginate($itemsPerPage);
+    // أحدث سجل في supplier_balance لكل فاتورة شراء (تفادي تكرار الصفوف عند وجود أكثر من سجل)
+    $latestPurchaseSb = DB::table('supplier_balance')
+        ->select('invoice_id', DB::raw('MAX(id) as latest_sb_id'))
+        ->whereNotNull('invoice_id')
+        ->groupBy('invoice_id');
 
+    $latestPaySb = DB::table('supplier_balance')
+        ->select('supplierpay_id', DB::raw('MAX(id) as latest_sb_id'))
+        ->whereNotNull('supplierpay_id')
+        ->groupBy('supplierpay_id');
 
-
-    $invoicesAndPays = DB::table('purchases as p')
+    $purchases = DB::table('purchases as p')
         ->select(
             'p.id as invoice_id',
             'sb.balance_before as balance_before',
@@ -136,11 +171,14 @@ class SupplierController extends Controller
             'p.invoice_type',
             'p.created_at as created_at'
         )
-        ->leftJoin('supplier_balance as sb', 'p.id', '=', 'sb.invoice_id')
+        ->leftJoinSub($latestPurchaseSb, 'sbm', function ($join) {
+            $join->on('p.id', '=', 'sbm.invoice_id');
+        })
+        ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbm.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
         ->where('p.supplier_id', $supplierId);
 
-    $payWithBalances = DB::table('supplier_pays as sp')
+    $pays = DB::table('supplier_pays as sp')
         ->select(
             'sp.id as invoice_id',
             'sb.balance_before as balance_before',
@@ -151,21 +189,26 @@ class SupplierController extends Controller
             'sp.amount as total_price',
             'sp.amount as paid_amount',
             'sp.amount as due_amount',
-            'sp.pay_number',
+            DB::raw("'سداد' as invoice_type"),
             'sp.created_at as created_at'
         )
-        ->leftJoin('supplier_balance as sb', 'sp.id', '=', 'sb.supplierpay_id') // adjust the foreign key
+        ->leftJoinSub($latestPaySb, 'sbsp', function ($join) {
+            $join->on('sp.id', '=', 'sbsp.supplierpay_id');
+        })
+        ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbsp.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
         ->where('sp.supplier_id', $supplierId);
 
-    // Combine the queries with union
-    $invoicesAndPays = $invoicesAndPays->union($payWithBalances)->orderBy('created_at','desc')->paginate($itemsPerPage);
-
-
+    $invoicesAndPays = $purchases->union($pays)->orderBy('created_at', 'desc')->paginate($itemsPerPage);
 
     $result = [
         'data' => $invoicesAndPays,
-        'name'=>$name,
+        'name' => $name,
+        'supplier' => $supplier ? [
+            'id' => $supplier->id,
+            'supplier_name' => $supplier->supplier_name,
+            'balance' => $supplier->balance,
+        ] : null,
     ];
 
     return response()->json($result, 200);
@@ -304,11 +347,11 @@ class SupplierController extends Controller
 
             $supplierTreeId = $supplier->tree_account_id;
             if ($supplierTreeId && $creditTreeId) {
-                $lastEntry = DailyEntry::orderByDesc('entry_number')->first();
-                $entryNumber = $lastEntry ? (int) $lastEntry->entry_number + 1 : 1;
+                // max + lock داخل المعاملة — ترتيب entry_number كنص كان يعطي رقماً مكرراً (Duplicate 000007)
+                $entryNumberStr = DailyEntry::getNextEntryNumber();
                 $dailyEntry = DailyEntry::create([
                     'date' => now(),
-                    'entry_number' => str_pad($entryNumber, 6, '0', STR_PAD_LEFT),
+                    'entry_number' => $entryNumberStr,
                     'description' => 'سداد مورد - ' . $supplier->supplier_name . ' - ' . $sourceName,
                     'user_id' => auth()->id(),
                 ]);

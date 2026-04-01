@@ -62,20 +62,29 @@ class ApprovalsController extends Controller
                     $oldCategories = DB::table('invoice_categories')->where('purchase_id', $purchase->id)->get();
 
                     foreach($oldCategories as $product){
-                        DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $product->product_quantity*-1);
-                        DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $product->total*-1);
+                        $qty = (float) $product->product_quantity;
+                        $lineTotal = (float) $product->total;
+                        $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
+
+                        DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $qty * -1);
+                        DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $lineTotal * -1);
+
+                        $apCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
+                        if ($apCatId) {
+                            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($apCatId);
+                        }
 
                         DB::table('categories_balance')->insert([
                             'invoice_number' => $purchase->invoice_number,
-                            'category_id' => DB::table('categories')->where('category_name', $product->product_name)->value('id'),
+                            'category_id' => $apCatId,
                             'type' => 'حذف فواتير مشتريات',
-                            'quantity' => $product->product_quantity*-1,
-                            'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity')- ($product->product_quantity*-1),
+                            'quantity' => $qty * -1,
+                            'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity') - ($qty * -1),
                             'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
-                            'price' => $product->product_price*-1,
-                            'total_price' => $product->total*-1,
-                            'unit_cost' => $product->product_price*-1,
-                            'cost_total' => $product->total*-1,
+                            'price' => $effectiveUnit * -1,
+                            'total_price' => $lineTotal * -1,
+                            'unit_cost' => $effectiveUnit,
+                            'cost_total' => $lineTotal * -1,
                             'by' => auth()->user()->name,
                             'created_at' =>now()
                         ]
@@ -83,18 +92,14 @@ class ApprovalsController extends Controller
 
 
                         DB::table('warehouse_ratings')->insert([
-                            'category_id' => DB::table('categories')->where('category_name', $product->product_name)->value('id'),
-                            'price' => $product->product_price*-1,
-                            'quantity' => $product->product_quantity*-1,
+                            'category_id' => $apCatId,
+                            'price' => $effectiveUnit * -1,
+                            'quantity' => $qty * -1,
                             'ref' => $purchase->invoice_number,
                             'invoice_id' => $purchase->id,
-                            'fixed_quantity' => $product->product_quantity*-1,
+                            'fixed_quantity' => $qty * -1,
                             'created_at' =>now()
                         ]);
-                        $apCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
-                        if ($apCatId) {
-                            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($apCatId);
-                        }
                     }
 
                     $mainPurchase = Purchase::where('invoice_number' , $data->column_values['invoice_number'])->first();

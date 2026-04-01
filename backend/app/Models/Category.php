@@ -11,6 +11,9 @@ class Category extends Model
  protected  $fillable = [
   'category_name',
   'category_price',
+  'unit_price',
+  'total_price',
+  'sell_total_price',
   'initial_balance',
   'quantity',
   'minimum_quantity',

@@ -21,7 +21,8 @@ class CategoryInventoryCostService
         $q = (float) ($cat->quantity ?? 0);
         $tp = (float) ($cat->total_price ?? 0);
         $up = (float) ($cat->unit_price ?? 0);
-        if ($q > 0.0000001 && abs($tp) > 0.0000001) {
+        // متوسط التكلفة المرجح من قيمة المخزون / الكمية (دائماً عند وجود كمية)
+        if ($q > 0.0000001) {
             return $tp / $q;
         }
         if ($up > 0.0000001) {
@@ -50,5 +51,17 @@ class CategoryInventoryCostService
                 'unit_price' => $tp / $qty,
             ]);
         }
+    }
+
+    /**
+     * تكلفة وحدة البند في فاتورة المشتريات (إجمالي السطر ÷ الكمية) لتتوافق طبقات warehouse_ratings مع قيمة المخزون.
+     */
+    public static function purchaseLineUnitCost(float $lineTotal, float $quantity, float $fallbackUnitPrice): float
+    {
+        if ($quantity > 0.0000001) {
+            return $lineTotal / $quantity;
+        }
+
+        return $fallbackUnitPrice;
     }
 }

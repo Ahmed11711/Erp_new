@@ -9,90 +9,88 @@
       </div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container-fluid">
 
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
-        <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
-        </div>
-        <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
-        </div>
-        <div class="col-md-4 d-flex align-items-end">
-          <input class="form-control border rounded-pill" type="search" placeholder="البحث..."
-            id="example-search-input">
-          <button class="btn btn-primary rounded-pill mx-2" type="submit">
-            بحث
-          </button>
-        </div>
+    <div class="row my-4 align-items-end">
+      <div class="col-md-2">
+        <label for="ind-date-from">من تاريخ</label>
+        <input id="ind-date-from" class="form-control" type="date" [(ngModel)]="dateFrom" disabled
+          title="قريباً: تصفية حسب التاريخ">
       </div>
-    </form>
-
+      <div class="col-md-2">
+        <label for="ind-date-to">الى تاريخ</label>
+        <input id="ind-date-to" class="form-control" type="date" [(ngModel)]="dateTo" disabled
+          title="قريباً: تصفية حسب التاريخ">
+      </div>
+      <div class="col-md-5 d-flex flex-wrap gap-2 align-items-center">
+        <input class="form-control border rounded-pill flex-grow-1" type="search" placeholder="البحث بالاسم أو رقم الموبايل..."
+          [(ngModel)]="searchQuery" autocomplete="off" (keyup.enter)="applySearch()" />
+        <button class="btn btn-primary rounded-pill" type="button" (click)="applySearch()">بحث</button>
+        <button class="btn btn-outline-secondary rounded-pill" type="button" *ngIf="searchQuery.trim()" (click)="clearSearch()">مسح</button>
+      </div>
+    </div>
 
     <table class="table table-bordered m-auto text-center">
       <thead class="bg-dark text-white">
-        <th>اسم العميل</th>
-        <th>نوع العميل</th>
-        <th> عدد الطلبات</th>
-        <th>المبلغ المستحق</th>
-        <th>المبلغ المقدم</th>
-        <th>اجمالي الطلبات</th>
-        <th>تاريخ الشحن</th>
-        <th>-</th>
+        <tr>
+          <th>اسم العميل</th>
+          <th>نوع العميل</th>
+          <th> عدد الطلبات</th>
+          <th>المبلغ المستحق</th>
+          <th>المبلغ المقدم</th>
+          <th>اجمالي الطلبات</th>
+          <th>تاريخ الشحن</th>
+          <th>-</th>
+        </tr>
       </thead>
 
       <tbody>
-        <tr>
-          <td></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
+        <tr *ngFor="let item of data">
+          <td>{{ item?.customer_name }}</td>
+          <td>فرد</td>
+          <td>{{ item?.orders_count }}</td>
+          <td dir="ltr">{{ sumDue(item) | customNumber }}</td>
+          <td dir="ltr">{{ item?.total_credit ?? 0 | customNumber }}</td>
+          <td dir="ltr">{{ item?.total_debit ?? 0 | customNumber }}</td>
+          <td>—</td>
           <td>
-            <button class="btn" mat-icon-button [matMenuTriggerFor]="menu" aria-label="Example icon-button with a menu">
-              <mat-icon>more_vert</mat-icon>
-            </button>
-            <mat-menu #menu="matMenu">
-              <button mat-menu-item>
-                <a><span>تفاصيل الحساب</span></a>
-              </button>
-              <button mat-menu-item>
-                <a><span>تحصيل</span></a>
-              </button>
-              <button mat-menu-item>
-                <a><span>مرتجع</span></a>
-              </button>
-              <button mat-menu-item>
-                <a><span>شحن الطلب</span></a>
-              </button>
-            </mat-menu>
-
+            <a class="btn btn-sm bg-main text-white"
+              [routerLink]="['/dashboard/financial/customer-accounts/customer-account-details']"
+              [queryParams]="{ customer: item.customer_phone_1 }">
+              تفاصيل الحساب
+            </a>
           </td>
+        </tr>
+        <tr *ngIf="!data?.length">
+          <td colspan="8" class="text-muted py-4">لا توجد بيانات</td>
         </tr>
       </tbody>
 
-
-      <tfoot>
+      <tfoot *ngIf="data?.length">
         <tr>
           <td>الاجمالى</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
+          <td></td>
+          <td>{{ footOrdersCount() }}</td>
+          <td dir="ltr">{{ footSumDue() | customNumber }}</td>
+          <td dir="ltr">{{ footSumPrepaid() | customNumber }}</td>
+          <td dir="ltr">{{ footSumNet() | customNumber }}</td>
+          <td colspan="2"></td>
         </tr>
       </tfoot>
     </table>
+
+    <div class="mt-4">
+      <mat-paginator
+        class="demo-paginator"
+        [length]="length"
+        showFirstLastButtons
+        (page)="onPageChange($event)"
+        [pageSizeOptions]="pageSizeOptions"
+        aria-label="ترقيم الصفحات">
+      </mat-paginator>
+    </div>
   </div>
+</div>

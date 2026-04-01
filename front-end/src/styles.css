@@ -214,3 +214,12 @@ tfoot td{
   color: #495057 !important;
   border-color: #ced4da !important;
 }
+
+/* نافذة سداد المورد — حاوية الـ overlay (Material) */
+.cdk-overlay-pane.supplier-pay-dialog .mat-mdc-dialog-container,
+.cdk-overlay-pane.supplier-pay-dialog .mat-dialog-container {
+  border-radius: 12px !important;
+  padding: 0 !important;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(14, 64, 87, 0.22) !important;
+}

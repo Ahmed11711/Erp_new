@@ -33,10 +33,23 @@ class MetaWhatsAppService
         if ($to === '') {
             return '';
         }
+        // مصر: رقم دولي كامل يبدأ بـ 20 وطوله 12 (مثل 2010xxxxxxxx)
+        if (str_starts_with($to, '20') && strlen($to) >= 12) {
+            return $to;
+        }
+        // مصر محلي: 01xxxxxxxxx (11 رقم يبدأ بصفر)
+        if (strlen($to) === 11 && str_starts_with($to, '0')) {
+            return '20'.substr($to, 1);
+        }
         if (strlen($to) === 10 && str_starts_with($to, '0')) {
-            $to = '20'.substr($to, 1);
-        } elseif (strlen($to) === 9 && str_starts_with($to, '1')) {
-            $to = '20'.$to;
+            return '20'.substr($to, 1);
+        }
+        if (strlen($to) === 9 && str_starts_with($to, '1')) {
+            return '20'.$to;
+        }
+        // 10 أرقام تبدأ بـ 1 بدون كود دولة (مثل 10xxxxxxxx)
+        if (strlen($to) === 10 && str_starts_with($to, '1')) {
+            return '20'.$to;
         }
 
         return $to;
@@ -239,8 +252,10 @@ class MetaWhatsAppService
         }
 
         try {
-            // Format phone number (remove + if present, ensure code)
-            $to = ltrim($to);
+            $to = $this->normalizeRecipientPhoneForMeta($to);
+            if ($to === '') {
+                return ['success' => false, 'error' => 'Invalid phone number'];
+            }
 
             $response = Http::withToken($this->accessToken)
                 ->post("https://graph.facebook.com/{$this->metaVersion}/{$this->phoneNumberId}/messages", [
@@ -297,7 +312,10 @@ class MetaWhatsAppService
         }
 
         try {
-            $to = ltrim($to, '+');
+            $to = $this->normalizeRecipientPhoneForMeta($to);
+            if ($to === '') {
+                return ['success' => false, 'error' => 'Invalid phone number'];
+            }
             if (! $languageCodeAsIs) {
                 $languageCode = $this->normalizeWhatsAppTemplateLanguageCode($languageCode);
             }
@@ -327,7 +345,8 @@ class MetaWhatsAppService
                 Log::info('Meta WhatsApp template sent', [
                     'to' => $to,
                     'template' => $templateName,
-                    'message_id' => $data['messages'][0]['id'] ?? null
+                    'message_id' => $data['messages'][0]['id'] ?? null,
+                    'contacts' => $data['contacts'] ?? null,
                 ]);
 
                 return [

@@ -66,6 +66,10 @@
                 <span class="d-flex"><mat-icon class="mx-2">chat</mat-icon>محادثات واتساب</span>
             </mat-list-item>
 
+            <mat-list-item routerLink="/dashboard/admin/whatsapp-management" *ngIf="canAssignWhatsAppNumbers && user != 'Admin'">
+                <span class="d-flex"><mat-icon class="mx-2">settings_phone</mat-icon>إدارة أرقام الواتساب</span>
+            </mat-list-item>
+
             <mat-accordion>
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
                     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
@@ -258,6 +262,11 @@
                                         <a mat-list-item routerLink="/dashboard/financial/individualsclients"
                                             routerLinkActive="active" *ngIf="user == 'Admin'">
                                             <span>العملاء الافراد</span>
+                                        </a>
+                                        <a mat-list-item routerLink="/dashboard/shipping/companies"
+                                            routerLinkActive="active"
+                                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                            <span>عملاء الشركات</span>
                                         </a>
                                         <a mat-list-item routerLink="/dashboard/financial/report-order-new"
                                             routerLinkActive="active"
