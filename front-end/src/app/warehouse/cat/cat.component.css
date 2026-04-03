@@ -29,3 +29,14 @@ table th{
   cursor: pointer;
   color: #82225e;
 }
+
+td .btn-link {
+  color: #82225e;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+td .btn-link:focus {
+  outline: 2px solid #82225e;
+  outline-offset: 2px;
+}

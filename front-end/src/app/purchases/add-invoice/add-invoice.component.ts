@@ -174,8 +174,11 @@ export class AddInvoiceComponent {
   originalPrice = 0;
   date : any;
   productSelected = false;
+  /** يُرسل مع فاتورة المشتريات لربط السطر بصف واحد في categories (مخزن مواد خام) */
+  categoryId: number | null = null;
   selectEvent(item) {
     this.productname = item.category_name;
+    this.categoryId = item.id != null ? Number(item.id) : null;
     const qty = Number(item.quantity) || 0;
     const tp = Number(item.total_price) || 0;
     const wac = qty > 0 ? tp / qty : 0;
@@ -216,8 +219,15 @@ export class AddInvoiceComponent {
       this.priceEdited = true;
       this.invoicePriceEdited = 1;
     }
-    this.products.push({product_quantity:this.productQuantity,price_edited:this.priceEdited,
-      product_price:this.productprice,product_name:this.productname,total:this.productprice*this.productQuantity,product_unit:this.productUnit});
+    this.products.push({
+      product_quantity: this.productQuantity,
+      price_edited: this.priceEdited,
+      product_price: this.productprice,
+      product_name: this.productname,
+      total: this.productprice * this.productQuantity,
+      product_unit: this.productUnit,
+      category_id: this.categoryId,
+    });
     this.calc();
     this.priceEdited = false;
   }
@@ -270,6 +280,7 @@ export class AddInvoiceComponent {
   resetInp(){
     this.productprice = 0;
     this.productQuantity = 0;
+    this.categoryId = null;
   }
 
   ngOnDestroy(): void {

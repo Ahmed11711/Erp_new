@@ -11,6 +11,9 @@ import { TreeAccount } from '../interfaces/tree-account.interface';
 export class AccountingTreeComponent implements OnInit {
   accounts: TreeAccount[] = [];
   treeData: TreeAccount[] = [];
+  /** شجرة العرض: كاملة أو بعد تطبيق البحث */
+  displayTree: TreeAccount[] = [];
+  searchTerm = '';
   loading = false;
   recalculating = false;
   showAddDialog = false;
@@ -76,6 +79,7 @@ export class AccountingTreeComponent implements OnInit {
             console.error('Error loading accounts:', error);
             this.accounts = [];
             this.treeData = [];
+            this.displayTree = [];
             this.loading = false;
           }
         });
@@ -118,6 +122,85 @@ export class AccountingTreeComponent implements OnInit {
 
       this.treeData = rootAccounts;
       this.sortTreeByCode(this.treeData);
+    }
+    this.applySearchFilter();
+  }
+
+  clearSearch(): void {
+    this.searchTerm = '';
+    this.applySearchFilter();
+  }
+
+  /** هل يطابق الحساب نص البحث (كود أو اسم عربي/إنجليزي) */
+  isSearchMatch(node: TreeAccount): boolean {
+    const q = this.searchTerm.trim().toLowerCase();
+    if (!q) {
+      return false;
+    }
+    return this.nodeMatchesTerm(node, q);
+  }
+
+  private nodeMatchesTerm(node: TreeAccount, lower: string): boolean {
+    const code = String(node.code ?? '');
+    if (code.toLowerCase().includes(lower)) {
+      return true;
+    }
+    if ((node.name || '').toLowerCase().includes(lower)) {
+      return true;
+    }
+    if ((node.name_en || '').toLowerCase().includes(lower)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * يبقي الفروع التي فيها تطابق (اسم/كود) أو فرع يحتوي تطابقاً.
+   * إذا طابق الحساب الأب دون أبناء مطابقين، تُعرض الأبناء كاملة لسياق واضح.
+   */
+  private filterTree(nodes: TreeAccount[], q: string): TreeAccount[] {
+    const lower = q.trim().toLowerCase();
+    if (!lower) {
+      return nodes;
+    }
+
+    const walk = (list: TreeAccount[]): TreeAccount[] => {
+      const out: TreeAccount[] = [];
+      for (const node of list) {
+        const matchSelf = this.nodeMatchesTerm(node, lower);
+        const childFiltered = node.children?.length ? walk(node.children) : [];
+        if (matchSelf || childFiltered.length > 0) {
+          const children =
+            childFiltered.length > 0
+              ? childFiltered
+              : matchSelf && node.children?.length
+                ? [...node.children]
+                : [];
+          out.push({ ...node, children });
+        }
+      }
+      return out;
+    };
+
+    return walk(nodes);
+  }
+
+  applySearchFilter(): void {
+    const q = this.searchTerm.trim();
+    if (!q) {
+      this.displayTree = this.treeData;
+      return;
+    }
+    this.displayTree = this.filterTree(this.treeData, q);
+    this.expandAllInTree(this.displayTree);
+  }
+
+  private expandAllInTree(nodes: TreeAccount[]): void {
+    for (const n of nodes) {
+      if (n.id != null && n.children && n.children.length > 0) {
+        this.expandedNodes.add(n.id);
+        this.expandAllInTree(n.children);
+      }
     }
   }
 

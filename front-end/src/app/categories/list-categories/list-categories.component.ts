@@ -160,9 +160,16 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
    cancelButtonText: 'لا',
   }).then((result: any) => {
    if (result.isConfirmed) {
-    this.category.deleteCategory(id).subscribe(res => {
-     this.search();
-     Swal.fire({ icon: 'success', timer: 3000, showConfirmButton: false });
+    this.category.deleteCategory(id).subscribe({
+     next: () => {
+      this.search();
+      Swal.fire({ icon: 'success', timer: 3000, showConfirmButton: false });
+     },
+     error: (err) => {
+      const msg =
+       err?.error?.message ?? err?.error?.error ?? err?.message ?? 'تعذر تنفيذ الحذف';
+      Swal.fire({ icon: 'error', title: 'فشل الحذف', text: String(msg) });
+     },
     });
    }
   });
@@ -172,21 +179,15 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
  // دوال لتلوين وتحديث الرصيد
  // ------------------------
  /**
-  * متوسط تكلفة الوحدة (مرجّح): total_price/quantity عند وجود رصيد، وإلا unit_price — يطابق CategoryInventoryCostService.
+  * متوسط تكلفة الوحدة (مرجّح): عند وجود كمية = total_price/quantity فقط (يطابق CategoryInventoryCostService).
+  * عند رصيد صفر يُستخدم unit_price ثم 0.
   */
  averageUnitCost(item: { quantity?: number; total_price?: number; unit_price?: number }): number {
   const q = Number(item?.quantity ?? 0);
   const tp = Number(item?.total_price ?? 0);
   const up = Number(item?.unit_price ?? 0);
   if (q > 0.0000001) {
-   if (tp > 0.0000001) {
-    return tp / q;
-   }
-   // مخزن منتج تام وغيره: قد تُحفظ القيمة في sell_total_price فقط فيُبقى total_price صفراً
-   if (up > 0.0000001) {
-    return up;
-   }
-   return 0;
+   return tp / q;
   }
   if (up > 0.0000001) {
    return up;

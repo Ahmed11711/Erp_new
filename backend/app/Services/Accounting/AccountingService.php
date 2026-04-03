@@ -157,6 +157,18 @@ class AccountingService
     }
 
     /**
+     * بعد تعديل أرصدة حساب طرفي يدوياً (مع وجود قيود + أرصدة قديمة غير مُمثَّلة في account_entries)،
+     * حدّث الحسابات الأب فقط دون إعادة حساب الطرفي من مجموع القيود — وإلا تُمسح أرصدة legacy.
+     */
+    public function propagateBalancesUpFromLeaf(int $leafAccountId): void
+    {
+        $account = TreeAccount::findOrFail($leafAccountId);
+        if ($account->parent_id) {
+            $this->updateParentAccountBalance($account->parent_id);
+        }
+    }
+
+    /**
      * Update parent account balance based on own entries + children (best practice: parent = own + children)
      * يضمن أن الحساب الفرعي يؤثر في الحساب الأب وجميع المستويات الأعلى في الشجرة
      */

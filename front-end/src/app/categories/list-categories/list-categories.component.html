@@ -103,17 +103,10 @@
         <ng-container
          *ngIf="user == 'Admin' || (user =='Data Entry' && item.warehouse == 'مخزن منتج تام') || ((user =='Account Management' || user == 'Logistics Specialist') && item.warehouse != 'مخزن منتج تام')">
          <ng-container *ngIf="['مخزن مواد خام', 'مخزن منتج تحت التشغيل', 'مخزن منتج تام'].includes(item.warehouse)">
-          <button class="btn" mat-icon-button [matMenuTriggerFor]="menu" aria-label="menu">
+          <button class="btn" mat-icon-button [matMenuTriggerFor]="categoryActionsMenu"
+           [matMenuTriggerData]="{ item: item }" aria-label="menu">
            <mat-icon>more_vert</mat-icon>
           </button>
-          <mat-menu #menu="matMenu">
-           <button mat-menu-item [routerLink]="['/dashboard/categories/edit_category',item.id]">
-            <span>تعديل</span>
-           </button>
-           <button mat-menu-item (click)="deleteCategory(item.id)">
-            <span>حذف</span>
-           </button>
-          </mat-menu>
          </ng-container>
         </ng-container>
        </td>
@@ -125,6 +118,17 @@
    <mat-paginator #paginator class="demo-paginator" [length]="length" showFirstLastButtons (page)="onPageChange($event)"
     [pageSizeOptions]="pageSizeOptions" aria-label="Select page">
    </mat-paginator>
+
+   <mat-menu #categoryActionsMenu="matMenu">
+    <ng-template matMenuContent let-item="item">
+     <button mat-menu-item type="button" [routerLink]="['/dashboard/categories/edit_category', item.id]">
+      <span>تعديل</span>
+     </button>
+     <button mat-menu-item type="button" (click)="deleteCategory(item.id)">
+      <span>حذف</span>
+     </button>
+    </ng-template>
+   </mat-menu>
 
   </div>
  </div>

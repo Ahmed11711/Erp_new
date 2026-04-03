@@ -23,7 +23,8 @@ export class SafesComponent implements OnInit {
     balance: 0,
     is_inside_branch: false,
     branch_name: '',
-    account_id: null
+    account_id: null,
+    counter_account_id: null
   };
 
   selectedSafe: any = null;
@@ -90,7 +91,8 @@ export class SafesComponent implements OnInit {
       balance: 0,
       is_inside_branch: false,
       branch_name: '',
-      account_id: null
+      account_id: null,
+      counter_account_id: null
     };
     this.showAddDialog = true;
   }
@@ -122,6 +124,15 @@ export class SafesComponent implements OnInit {
   saveSafe() {
     if (!this.newSafe.name) {
       alert('الرجاء تعبئة الاسم');
+      return;
+    }
+    if (!this.newSafe.account_id) {
+      alert('الرجاء اختيار الحساب المرتبط في شجرة الحسابات');
+      return;
+    }
+    const bal = Number(this.newSafe.balance) || 0;
+    if (bal > 0 && !this.newSafe.counter_account_id) {
+      alert('عند وجود رصيد افتتاحي يجب اختيار الحساب المقابل (مثل رأس المال أو الجاري) لإثبات القيد في الدفاتر');
       return;
     }
 

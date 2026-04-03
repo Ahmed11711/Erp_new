@@ -66,21 +66,23 @@ class ApprovalsController extends Controller
                         $lineTotal = (float) $product->total;
                         $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
 
-                        DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $qty * -1);
-                        DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $lineTotal * -1);
-
-                        $apCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
-                        if ($apCatId) {
-                            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($apCatId);
+                        $apCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
+                        if (! $apCatId) {
+                            throw new \Exception('تعذر ربط الصنف عند الموافقة على الحذف: ' . $product->product_name);
                         }
+
+                        DB::table('categories')->where('id', $apCatId)->increment('quantity', $qty * -1);
+                        DB::table('categories')->where('id', $apCatId)->increment('total_price', $lineTotal * -1);
+
+                        CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($apCatId);
 
                         DB::table('categories_balance')->insert([
                             'invoice_number' => $purchase->invoice_number,
                             'category_id' => $apCatId,
                             'type' => 'حذف فواتير مشتريات',
                             'quantity' => $qty * -1,
-                            'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity') - ($qty * -1),
-                            'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
+                            'balance_before' => DB::table('categories')->where('id', $apCatId)->value('quantity') - ($qty * -1),
+                            'balance_after' => DB::table('categories')->where('id', $apCatId)->value('quantity'),
                             'price' => $effectiveUnit * -1,
                             'total_price' => $lineTotal * -1,
                             'unit_cost' => $effectiveUnit,

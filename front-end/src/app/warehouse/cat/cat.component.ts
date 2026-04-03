@@ -81,61 +81,80 @@ export class CatComponent implements OnInit, OnDestroy {
     this.getData();
   }
 
-  addQuantiy(id , name){
+  private parseQuantityInput(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    const n = typeof value === 'number' ? value : Number(String(value).trim());
+    if (Number.isNaN(n)) {
+      return null;
+    }
+    return n;
+  }
+
+  addQuantiy(id: number, name: string) {
     Swal.fire({
       title: ` ( ${name} ) اضافة كمية الى  `,
       input: 'number',
+      inputAttributes: { min: '0', step: 'any' },
       showCancelButton: true,
-      inputValidator: (value) => {
-        if (!value) {
-          return 'يجب ادخال قيمة'
-        }
-        if (value !== '') {
-          this.category.changeCategoryQuantity(id , 'add' , value).subscribe(res =>{
-            console.log(res);
-
-            this.getData();
-
-          })
-        }
-        return undefined
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
       }
+      const qty = this.parseQuantityInput(result.value);
+      if (qty === null || qty <= 0) {
+        Swal.fire({ icon: 'warning', text: 'يجب ادخال قيمة صحيحة أكبر من صفر' });
+        return;
+      }
+      this.category.changeCategoryQuantity(id, 'add', qty).subscribe({
+        next: () => this.getData(),
+        error: () => Swal.fire({ icon: 'error', title: 'فشل تحديث الكمية' }),
+      });
     });
   }
 
-  removeQuantiy(id , name){
+  removeQuantiy(id: number, name: string) {
     Swal.fire({
       title: ` ( ${name} )  تقليل كمية من `,
       input: 'number',
+      inputAttributes: { min: '0', step: 'any' },
       showCancelButton: true,
-      inputValidator: (value) => {
-        if (!value) {
-          return 'يجب ادخال قيمة'
-        }
-        if (value !== '') {
-          this.category.changeCategoryQuantity(id , 'add' , -value).subscribe(res =>{
-            this.getData();
-          })
-        }
-        return undefined
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
       }
+      const qty = this.parseQuantityInput(result.value);
+      if (qty === null || qty <= 0) {
+        Swal.fire({ icon: 'warning', text: 'يجب ادخال قيمة صحيحة أكبر من صفر' });
+        return;
+      }
+      this.category.changeCategoryQuantity(id, 'add', -qty).subscribe({
+        next: () => this.getData(),
+        error: () => Swal.fire({ icon: 'error', title: 'فشل تحديث الكمية' }),
+      });
     });
   }
 
-  editQuantiy(id , name){
+  editQuantiy(id: number, name: string) {
     Swal.fire({
       title: ` ( ${name} )  تعديل كمية  `,
       input: 'number',
+      inputAttributes: { min: '0', step: 'any' },
       showCancelButton: true,
-      inputValidator: (value) => {
-        if (!value) {
-          return 'يجب ادخال قيمة'
-        }
-        if (value !== '') {
-          this.category.changeCategoryQuantity(id , 'edit' , value).subscribe(res =>this.getData());
-        }
-        return undefined
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
       }
+      const qty = this.parseQuantityInput(result.value);
+      if (qty === null || qty < 0) {
+        Swal.fire({ icon: 'warning', text: 'يجب ادخال قيمة صحيحة' });
+        return;
+      }
+      this.category.changeCategoryQuantity(id, 'edit', qty).subscribe({
+        next: () => this.getData(),
+        error: () => Swal.fire({ icon: 'error', title: 'فشل تحديث الكمية' }),
+      });
     });
   }
 

@@ -12,55 +12,135 @@
     </div>
   </div>
 
-
   <div class="container-fluid">
+    <ul class="nav nav-tabs fs-statement-tabs mb-0 px-2 pt-2" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="activeTab === 'ledger'"
+          (click)="setTab('ledger')"
+          role="tab">
+          كشف حساب — كل الحسابات (الشجرة)
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="activeTab === 'cash'"
+          (click)="setTab('cash')"
+          role="tab">
+          حركات الخزن والبنوك والحسابات الخدمية
+        </button>
+      </li>
+    </ul>
 
-    <form class="my-5 border p-3 rounded" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row align-items-end">
-        <div class="col-md-2">
-          <label>نوع الحساب</label>
-          <select class="form-control" formControlName="type">
-            <option value="safe">خزينة</option>
-            <option value="bank">بنك</option>
-            <option value="account">حساب خدمي</option>
-          </select>
+    <!-- تبويب الشجرة المحاسبية -->
+    <div class="border border-top-0 rounded-bottom p-3 mb-3" *ngIf="activeTab === 'ledger'">
+      <form [formGroup]="ledgerForm" (ngSubmit)="submitLedgerForm()">
+        <div class="row align-items-end">
+          <div class="col-md-2">
+            <label>تصفية حسب الطبيعة</label>
+            <select class="form-control" formControlName="source_type">
+              <option *ngFor="let opt of accountSourceOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label>بحث (كود أو اسم)</label>
+            <input
+              type="text"
+              class="form-control"
+              [(ngModel)]="accountSearchTerm"
+              [ngModelOptions]="{standalone: true}"
+              (ngModelChange)="onAccountSearchChange()"
+              placeholder="اختياري"
+              dir="rtl"
+            />
+          </div>
+          <div class="col-md-2">
+            <label>الحساب (الشجرة)</label>
+            <select class="form-control" formControlName="account_id">
+              <option [ngValue]="null">-- اختر الحساب --</option>
+              <option *ngFor="let acc of filteredAccounts" [ngValue]="acc.id">
+                {{ acc.code }} — {{ acc.name }}
+              </option>
+            </select>
+            <small class="text-muted" *ngIf="allLeafAccounts.length && !filteredAccounts.length">
+              لا يوجد حساب يطابق التصفية الحالية.
+            </small>
+          </div>
+          <div class="col-md-2">
+            <label>من تاريخ</label>
+            <input class="form-control" type="date" formControlName="date_from" (change)="onDateChange('ledger', 'from', $event)">
+          </div>
+          <div class="col-md-2">
+            <label>الى تاريخ</label>
+            <input class="form-control" type="date" formControlName="date_to" (change)="onDateChange('ledger', 'to', $event)">
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100" type="submit" [disabled]="loading">
+              {{ loading ? 'جاري التحميل...' : 'عرض التقرير' }}
+            </button>
+          </div>
         </div>
+      </form>
+    </div>
 
-        <div class="col-md-3">
-          <label>اسم الحساب</label>
-          <select class="form-control" formControlName="entity_id">
-            <option [ngValue]="null">-- اختر الحساب --</option>
-            <ng-container *ngIf="form.get('type')?.value == 'safe'">
-              <option *ngFor="let item of safes" [value]="item.id">{{ item.name }}</option>
-            </ng-container>
-            <ng-container *ngIf="form.get('type')?.value == 'bank'">
-              <option *ngFor="let item of banks" [value]="item.id">{{ item.name }}</option>
-            </ng-container>
-            <ng-container *ngIf="form.get('type')?.value == 'account'">
-              <option *ngFor="let item of accounts" [value]="item.id">{{ item.name }}</option>
-            </ng-container>
-          </select>
+    <!-- تبويب الخزن / البنوك / الخدمات -->
+    <div class="border border-top-0 rounded-bottom p-3 mb-3" *ngIf="activeTab === 'cash'">
+      <form [formGroup]="cashForm" (ngSubmit)="submitCashForm()">
+        <div class="row align-items-end">
+          <div class="col-md-2">
+            <label>نوع الحساب</label>
+            <select class="form-control" formControlName="entity_type">
+              <option *ngFor="let opt of entityTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label>اختر الخزنة / البنك / الحساب الخدمي</label>
+            <select class="form-control" formControlName="entity_id">
+              <option [ngValue]="null">-- اختر --</option>
+              <ng-container *ngIf="cashForm.get('entity_type')?.value === 'safe'">
+                <option *ngFor="let item of safes" [ngValue]="item.id">{{ item.name }}</option>
+              </ng-container>
+              <ng-container *ngIf="cashForm.get('entity_type')?.value === 'bank'">
+                <option *ngFor="let item of banks" [ngValue]="item.id">{{ item.name }}</option>
+              </ng-container>
+              <ng-container *ngIf="cashForm.get('entity_type')?.value === 'service'">
+                <option *ngFor="let item of serviceAccounts" [ngValue]="item.id">{{ item.name }}</option>
+              </ng-container>
+            </select>
+            <small class="text-muted d-block mt-1" *ngIf="cashForm.get('entity_type')?.value === 'safe' && safes.length === 0">
+              لا توجد خزن مسجّلة.
+            </small>
+            <small class="text-muted d-block mt-1" *ngIf="cashForm.get('entity_type')?.value === 'bank' && banks.length === 0">
+              لا توجد بنوك مسجّلة.
+            </small>
+            <small class="text-muted d-block mt-1" *ngIf="cashForm.get('entity_type')?.value === 'service' && serviceAccounts.length === 0">
+              لا توجد حسابات خدمية مسجّلة.
+            </small>
+          </div>
+          <div class="col-md-2">
+            <label>من تاريخ</label>
+            <input class="form-control" type="date" formControlName="date_from" (change)="onDateChange('cash', 'from', $event)">
+          </div>
+          <div class="col-md-2">
+            <label>الى تاريخ</label>
+            <input class="form-control" type="date" formControlName="date_to" (change)="onDateChange('cash', 'to', $event)">
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100" type="submit" [disabled]="loading">
+              {{ loading ? 'جاري التحميل...' : 'عرض التقرير' }}
+            </button>
+          </div>
         </div>
+      </form>
+    </div>
 
-        <div class="col-md-2">
-          <label>من تاريخ</label>
-          <input class="form-control" type="date" formControlName="date_from" (change)="onDateFromChange($event)">
-        </div>
-        <div class="col-md-2">
-          <label>الى تاريخ</label>
-          <input class="form-control" type="date" formControlName="date_to" (change)="onDateToChange($event)">
-        </div>
-        <div class="col-md-2">
-          <button class="btn btn-primary w-100" type="submit" [disabled]="loading">
-            {{ loading ? 'جاري التحميل...' : 'عرض التقرير' }}
-          </button>
-        </div>
-      </div>
-      <div *ngIf="errorMessage" class="alert alert-danger mt-2 mb-0">
-        {{ errorMessage }}
-      </div>
-    </form>
-
+    <div *ngIf="errorMessage" class="alert alert-danger">
+      {{ errorMessage }}
+    </div>
 
     <div *ngIf="details" class="card mb-4">
       <div class="card-header bg-info text-white">
@@ -81,7 +161,7 @@
             <h4 class="text-danger">{{ totals?.credit | number:'1.2-2' }}</h4>
           </div>
           <div class="col-md-3">
-            <h6>الرصيد الختامي</h6>
+            <h6>الرصيد الحالي</h6>
             <h4 class="text-primary">{{ details.closing_balance | number:'1.2-2' }}</h4>
           </div>
         </div>
@@ -114,3 +194,4 @@
     </div>
 
   </div>
+</div>

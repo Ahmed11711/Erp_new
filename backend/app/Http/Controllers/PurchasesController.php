@@ -15,6 +15,7 @@ use App\Models\Supplier;
 use Illuminate\Http\Request;
 use App\Models\Approvals;
 use Illuminate\Support\Facades\DB;
+use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\CategoryInventoryCostService;
 use Validator;
 class PurchasesController extends Controller
@@ -196,21 +197,23 @@ class PurchasesController extends Controller
                 $lineTotal = (float) $product->total;
                 $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
 
-                DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $qty * -1);
-                DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $lineTotal * -1);
-
-                $revCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
-                if ($revCatId) {
-                    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
+                $revCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
+                if (! $revCatId) {
+                    throw new \Exception('تعذر ربط الصنف عند عكس التعديل: ' . $product->product_name);
                 }
+
+                DB::table('categories')->where('id', $revCatId)->increment('quantity', $qty * -1);
+                DB::table('categories')->where('id', $revCatId)->increment('total_price', $lineTotal * -1);
+
+                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
 
                 DB::table('categories_balance')->insert([
                     'invoice_number' => $oldInvice->invoice_number,
                     'category_id' => $revCatId,
                     'type' => 'تعديل فواتير مشتريات',
                     'quantity' => $qty * -1,
-                    'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity') - ($qty * -1),
-                    'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
+                    'balance_before' => DB::table('categories')->where('id', $revCatId)->value('quantity') - ($qty * -1),
+                    'balance_after' => DB::table('categories')->where('id', $revCatId)->value('quantity'),
                     'price' => $effectiveUnit * -1,
                     'total_price' => $lineTotal * -1,
                     'unit_cost' => $effectiveUnit,
@@ -280,14 +283,22 @@ class PurchasesController extends Controller
         }
         $products = $request->products;
         $products = json_decode($products, true);
+        $linesSum = 0;
         foreach($products as $product){
             $qty = (float) $product['product_quantity'];
             $lineTotal = (float) $product['total'];
+            $linesSum += $lineTotal;
             $declaredUnit = (float) $product['product_price'];
             $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, $declaredUnit);
 
+            $newCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product['product_name']);
+            if (! $newCatId) {
+                throw new \Exception('تعذر ربط الصنف بالمخزن (مخزن مواد خام): ' . $product['product_name']);
+            }
+
             DB::table('invoice_categories')->insert([
                 'purchase_id' => $purchase->id,
+                'category_id' => $newCatId,
                 'product_name' => $product['product_name'],
                 'product_quantity' => $product['product_quantity'],
                 'product_unit' => $product['product_unit'],
@@ -296,14 +307,11 @@ class PurchasesController extends Controller
                 'price_edited' => $product['price_edited'],
             ]);
 
-            DB::table('categories')->where('category_name', $product['product_name'])->increment('quantity', $qty);
-            DB::table('categories')->where('category_name', $product['product_name'])->increment('total_price', $lineTotal);
+            DB::table('categories')->where('id', $newCatId)->increment('quantity', $qty);
+            DB::table('categories')->where('id', $newCatId)->increment('total_price', $lineTotal);
 
-            $newCatId = (int) DB::table('categories')->where('category_name', $product['product_name'])->value('id');
-            if ($newCatId) {
-                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($newCatId);
-            }
-            $avgUnit = $newCatId ? CategoryInventoryCostService::resolveReferenceUnitCost($newCatId) : 0.0;
+            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($newCatId);
+            $avgUnit = CategoryInventoryCostService::resolveReferenceUnitCost($newCatId);
 
             DB::table('categories_balance')->insert([
                 'invoice_number' => $purchase->invoice_number,
@@ -345,9 +353,44 @@ class PurchasesController extends Controller
             'user_id'=> auth()->user()->id
         ]);
 
+        /** @var InventoryGlPostingService $glService */
+        $glService = app(InventoryGlPostingService::class);
+        $transport = (float) $request->transport_cost;
+        $newReceiptAmount = $linesSum + $transport;
+
+        if ($request->has('invoiceId')) {
+            $oldSupplier = Supplier::find($oldInvice->supplier_id);
+            $oldLinesSum = 0;
+            foreach ($oldCategories as $oc) {
+                $oldLinesSum += (float) $oc->total;
+            }
+            $oldReceiptAmount = $oldLinesSum + (float) $oldInvice->transport_cost;
+            if ($oldReceiptAmount > 0.00001 && $oldSupplier) {
+                $glService->reversePurchaseReceipt(
+                    $oldReceiptAmount,
+                    $oldSupplier,
+                    'عكس استلام مخزون — تعديل فاتورة ' . $oldInvice->invoice_number,
+                    auth()->id()
+                );
+            }
+            if ($old_paid_amount > 0.00001 && $oldSupplier) {
+                $glService->reversePurchasePaymentGl($oldInvice, $oldSupplier, (float) $old_paid_amount, auth()->id());
+            }
+        }
+
         if ($request->has('invoiceId') && $old_paid_amount > 0) {
             $this->refundPurchasePayment($oldInvice, $old_paid_amount);
         }
+
+        if ($newReceiptAmount > 0.00001) {
+            $glService->postPurchaseReceipt(
+                $newReceiptAmount,
+                $supplier,
+                'استلام مخزون — فاتورة مشتريات ' . $purchase->invoice_number,
+                auth()->id()
+            );
+        }
+
         if ((double)$request->paid_amount > 0) {
             $this->processPurchasePayment($purchase, $supplier, (double)$request->paid_amount, $paymentType, $request, $oldInvice ?? null);
         }
@@ -527,27 +570,33 @@ class PurchasesController extends Controller
             $approval = Approvals::create($appData);
             return response()->json($approval, 201);
         }
+        DB::beginTransaction();
+        try {
         $oldCategories = DB::table('invoice_categories')->where('purchase_id', $purchase->id)->get();
+        $linesSumDelete = 0;
         foreach($oldCategories as $product){
             $qty = (float) $product->product_quantity;
             $lineTotal = (float) $product->total;
+            $linesSumDelete += $lineTotal;
             $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
 
-            DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $qty * -1);
-            DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $lineTotal * -1);
-
-            $delCatId = (int) DB::table('categories')->where('category_name', $product->product_name)->value('id');
-            if ($delCatId) {
-                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
+            $delCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
+            if (! $delCatId) {
+                throw new \Exception('تعذر ربط الصنف عند الحذف: ' . $product->product_name);
             }
+
+            DB::table('categories')->where('id', $delCatId)->increment('quantity', $qty * -1);
+            DB::table('categories')->where('id', $delCatId)->increment('total_price', $lineTotal * -1);
+
+            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
 
             DB::table('categories_balance')->insert([
                 'invoice_number' => $purchase->invoice_number,
                 'category_id' => $delCatId,
                 'type' => 'حذف فواتير مشتريات',
                 'quantity' => $qty * -1,
-                'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity') - ($qty * -1),
-                'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
+                'balance_before' => DB::table('categories')->where('id', $delCatId)->value('quantity') - ($qty * -1),
+                'balance_after' => DB::table('categories')->where('id', $delCatId)->value('quantity'),
                 'price' => $effectiveUnit * -1,
                 'total_price' => $lineTotal * -1,
                 'unit_cost' => $effectiveUnit,
@@ -592,10 +641,29 @@ class PurchasesController extends Controller
             'user_id'=> auth()->user()->id
         ]);
 
+        $glService = app(InventoryGlPostingService::class);
+        $receiptDelete = $linesSumDelete + (float) $purchase->transport_cost;
+        if ($receiptDelete > 0.00001 && $supplier) {
+            $glService->reversePurchaseReceipt(
+                $receiptDelete,
+                $supplier,
+                'عكس استلام مخزون — حذف فاتورة ' . $purchase->invoice_number,
+                auth()->id()
+            );
+        }
+        if ((double) $purchase->paid_amount > 0.00001 && $supplier) {
+            $glService->reversePurchasePaymentGl($purchase, $supplier, (double) $purchase->paid_amount, auth()->id());
+        }
+
         if ((double)$purchase->paid_amount > 0) {
             $this->refundPurchasePayment($purchase, (double)$purchase->paid_amount);
         }
 
+        DB::commit();
         return response()->json(['success' => true], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

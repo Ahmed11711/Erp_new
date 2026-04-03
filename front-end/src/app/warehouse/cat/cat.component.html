@@ -62,7 +62,12 @@
         <tr *ngFor="let item of categories; let i = index">
           <td>{{item.category_name}}</td>
           <td >{{item.measurement.unit}}</td>
-          <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'"><i (click)="editQuantiy(item.id , item.category_name)" class="fa-solid fa-pen ml-2"></i>{{item.quantity | customNumber}}</td>
+          <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'">
+            <button type="button" class="btn btn-link p-0 align-baseline border-0 mr-1" (click)="editQuantiy(item.id, item.category_name)">
+              <i class="fa-solid fa-pen ml-2" aria-hidden="true"></i>
+            </button>
+            <span>{{ item.quantity | customNumber }}</span>
+          </td>
           <td dir="ltr" *ngIf="warehouse =='مخزن منتج تام'">{{item.category_price | customNumber}}</td>
           <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'">{{item.total_price | customNumber}}</td>
           <td dir="ltr" *ngIf="warehouse =='مخزن منتج تام'">{{item.sell_total_price | customNumber}}</td>

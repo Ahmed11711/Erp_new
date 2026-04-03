@@ -116,4 +116,26 @@ class TreeAccount extends Model
             ->orderBy('code')
             ->first();
     }
+
+    /**
+     * حساب موازنة لرصيد مخزون افتتاحي (دائن) — حقوق ملكية أو جاري.
+     */
+    public static function resolveOpeningInventoryOffsetAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'opening_inventory_offset')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        return static::where('type', 'equity')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%رأس المال%')
+                    ->orWhere('name', 'like', '%جاري%')
+                    ->orWhere('name_en', 'like', '%equity%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first()
+            ?? static::where('type', 'equity')->whereDoesntHave('children')->orderBy('id')->first();
+    }
 }

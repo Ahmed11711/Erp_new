@@ -3,6 +3,27 @@
     <div class="col-12">
       <div class="header-section">
         <h2>شجرة الحسابات</h2>
+        <div class="header-search-wrap">
+          <input
+            type="search"
+            class="form-control tree-search-input"
+            [(ngModel)]="searchTerm"
+            (ngModelChange)="applySearchFilter()"
+            placeholder="بحث تلقائي بالكود أو الاسم..."
+            dir="rtl"
+            autocomplete="off"
+          />
+          <button
+            type="button"
+            class="btn-clear-search"
+            *ngIf="searchTerm.trim()"
+            (click)="clearSearch()"
+            title="مسح البحث"
+            aria-label="مسح البحث"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
         <div class="header-actions">
           <button class="btn btn-outline-secondary" (click)="recalculateAllBalances()" [disabled]="loading || recalculating" title="إعادة حساب جميع الأرصدة وتحديث الشجرة">
             <i class="fas fa-sync-alt" [class.fa-spin]="recalculating"></i> إعادة حساب الأرصدة
@@ -24,8 +45,13 @@
           <p>لا توجد حسابات. ابدأ بإضافة حساب رئيسي.</p>
         </div>
 
-        <ul class="tree-list" *ngIf="treeData.length > 0">
-          <ng-container *ngTemplateOutlet="renderNode; context: { $implicit: treeData, indent: 0 }"></ng-container>
+        <div *ngIf="treeData.length > 0 && displayTree.length === 0" class="empty-state">
+          <p>لا توجد حسابات تطابق البحث.</p>
+          <button type="button" class="btn btn-link p-0" (click)="clearSearch()">مسح البحث</button>
+        </div>
+
+        <ul class="tree-list" *ngIf="displayTree.length > 0">
+          <ng-container *ngTemplateOutlet="renderNode; context: { $implicit: displayTree, indent: 0 }"></ng-container>
         </ul>
       </div>
     </div>
@@ -35,7 +61,7 @@
 <!-- Recursive node renderer -->
 <ng-template #renderNode let-nodes let-indent="indent">
   <li *ngFor="let node of nodes" class="tree-node">
-    <div class="node-content" [style.padding-left.px]="indent">
+    <div class="node-content" [style.padding-left.px]="indent" [class.search-match]="isSearchMatch(node)">
       <span class="expand-icon" (click)="toggleNode(node.id!)" *ngIf="node.children && node.children.length > 0">
         <i class="fas" [ngClass]="isExpanded(node.id!) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
       </span>

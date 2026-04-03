@@ -64,4 +64,32 @@ class CategoryInventoryCostService
 
         return $fallbackUnitPrice;
     }
+
+    /**
+     * صنف واحد لكل سطر فاتورة مشتريات (واجهة المشتريات تختار من مخزن مواد خام).
+     * يفضّل category_id المُرسل من الواجهة؛ وإلا يُطابق الاسم مع مخزن مواد خام فقط (أول صف عند التكرار).
+     * تحديث categories باسم الصنف فقط كان يُحدّث كل الصفوف ذات الاسم في كل المخازن فيفسد total_price ومتوسط التكلفة.
+     *
+     * @param  array|object  $product
+     */
+    public static function resolveCategoryIdForPurchaseLine($product, string $productName): ?int
+    {
+        $cid = null;
+        if (is_array($product) && ! empty($product['category_id'])) {
+            $cid = (int) $product['category_id'];
+        } elseif (is_object($product) && isset($product->category_id) && (int) $product->category_id > 0) {
+            $cid = (int) $product->category_id;
+        }
+        if ($cid && $cid > 0 && DB::table('categories')->where('id', $cid)->exists()) {
+            return $cid;
+        }
+
+        $row = DB::table('categories')
+            ->where('category_name', $productName)
+            ->where('warehouse', 'مخزن مواد خام')
+            ->orderBy('id')
+            ->first();
+
+        return $row ? (int) $row->id : null;
+    }
 }

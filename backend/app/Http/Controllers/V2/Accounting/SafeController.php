@@ -7,6 +7,7 @@ use App\Models\Safe;
 use App\Models\SafeTransaction;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -40,32 +41,96 @@ class SafeController extends Controller
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $balance = (float) ($request->input('balance', 0));
+
+        $rules = [
             'name' => 'required|string',
             'type' => 'required|in:main,branch',
             'balance' => 'nullable|numeric|min:0',
             'is_inside_branch' => 'nullable|boolean',
             'branch_name' => 'nullable|string',
             'account_id' => 'required|exists:tree_accounts,id',
-        ]);
+            'counter_account_id' => 'nullable|exists:tree_accounts,id|different:account_id',
+        ];
+
+        if ($balance > 0.000001) {
+            $rules['counter_account_id'] = 'required|exists:tree_accounts,id|different:account_id';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $safe = Safe::create([
-            'name' => $request->name,
-            'type' => $request->type,
-            'balance' => $request->balance ?? 0,
-            'is_inside_branch' => $request->is_inside_branch ?? false,
-            'branch_name' => $request->branch_name,
-            'account_id' => $request->account_id,
-        ]);
+        DB::beginTransaction();
+        try {
+            $safe = Safe::create([
+                'name' => $request->name,
+                'type' => $request->type,
+                'balance' => $balance,
+                'is_inside_branch' => $request->is_inside_branch ?? false,
+                'branch_name' => $request->branch_name,
+                'account_id' => $request->account_id,
+            ]);
 
-        return response()->json([
-            'message' => 'تم إنشاء الخزينة بنجاح',
-            'data' => $safe->load('account')
-        ], 201);
+            if ($balance > 0.000001) {
+                $safeAccountId = (int) $safe->account_id;
+                $counterId = (int) $request->counter_account_id;
+                $now = now();
+                $desc = 'رصيد افتتاحي خزينة - ' . $safe->name;
+
+                AccountEntry::create([
+                    'tree_account_id' => $safeAccountId,
+                    'debit' => $balance,
+                    'credit' => 0,
+                    'description' => $desc,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                AccountEntry::create([
+                    'tree_account_id' => $counterId,
+                    'debit' => 0,
+                    'credit' => $balance,
+                    'description' => $desc,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+                // تراكمي مثل CapitalController — لا نستخدم updateAccountHierarchyBalances هنا لأنه يعيد
+                // كتابة debit/credit/balance من مجموع القيود فقط ويمسح أرصدة قديمة غير مُثبتة بقيود.
+                $safeTree = TreeAccount::find($safeAccountId);
+                $safeTree->increment('debit_balance', $balance);
+                if (in_array($safeTree->type, ['asset', 'expense'], true)) {
+                    $safeTree->increment('balance', $balance);
+                } else {
+                    $safeTree->decrement('balance', $balance);
+                }
+
+                $counterTree = TreeAccount::find($counterId);
+                $counterTree->increment('credit_balance', $balance);
+                if (in_array($counterTree->type, ['asset', 'expense'], true)) {
+                    $counterTree->decrement('balance', $balance);
+                } else {
+                    $counterTree->increment('balance', $balance);
+                }
+
+                /** @var AccountingService $accService */
+                $accService = app(AccountingService::class);
+                $accService->propagateBalancesUpFromLeaf($safeAccountId);
+                $accService->propagateBalancesUpFromLeaf($counterId);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'تم إنشاء الخزينة بنجاح',
+                'data' => $safe->load('account'),
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     // ... (show method remains unchanged) ...

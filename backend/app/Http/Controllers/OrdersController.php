@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Log;
 use Twilio\TwiML\MessagingResponse;
 use Illuminate\Support\Facades\Cache;
 use App\Models\shippingCompanyDetails;
+use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\CategoryInventoryCostService;
 
 class OrdersController extends Controller
@@ -503,8 +504,22 @@ class OrdersController extends Controller
 
                 if ($request->getorder == 'true') {
                     $products = OrderProduct::where('order_id', $request->id)->get();
+                    $totalCogsReturn = 0;
+                    foreach ($products as $op) {
+                        if ($op->quantity > 0 && (float) $op->shipped_quantity > 0) {
+                            $avgCost = CategoryInventoryCostService::resolveReferenceUnitCost((int) $op->category_id);
+                            $totalCogsReturn += $avgCost * (float) $op->shipped_quantity;
+                        }
+                    }
+                    if ($totalCogsReturn > 0.00001) {
+                        app(InventoryGlPostingService::class)->postSalesReturnInventoryRestore(
+                            $totalCogsReturn,
+                            'رفض استلام — إرجاع تكلفة للمخزون — طلب ' . $id,
+                            auth()->id()
+                        );
+                    }
                     foreach ($products as $product) {
-                        if ($product['quantity'] > 0) {
+                        if ($product->quantity > 0) {
 
                             $category_id = (int)$product->category_id;
                             $invoice_number = $id;

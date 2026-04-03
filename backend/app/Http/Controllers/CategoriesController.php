@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\CategoryMonthlyInventory;
 use App\Http\Resources\V2\Category\CategoryResource;
 use App\Http\Requests\V2\Category\GetCategoryByStock;
+use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
 
@@ -154,6 +155,14 @@ class CategoriesController extends Controller
    ]);
    if ($warehouse !== 'مخزن منتج تام') {
     CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
+   $openingValue = $openQty * $cost;
+   if ($openingValue > 0.00001) {
+    app(InventoryGlPostingService::class)->postOpeningInventory(
+     $openingValue,
+     'رصيد افتتاحي — ' . $category->category_name . ' (صنف #' . $category->id . ')',
+     auth()->id()
+    );
    }
   }
 
@@ -319,7 +328,7 @@ class CategoriesController extends Controller
    return response()->json('success', 200);
   }
 
-  if ($request->status == 'edit' && $quantity > 0) {
+  if ($request->status == 'edit' && is_numeric($quantity) && (float) $quantity >= 0) {
    $cat_details =  DB::table('categories_balance')->where('category_id', $request->id)->latest()->first();
    if ($cat_details) {
     $categorPrice = $cat_details->price;
