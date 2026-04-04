@@ -63,8 +63,8 @@
                 </span>
               </td>
               <td>{{ account.account_type || '-' }}</td>
-              <td class="balance" [class.negative]="(account.balance || 0) < 0">
-                {{ account.balance || 0 | number:'1.2-2' }}
+              <td class="balance" [class.negative]="getDisplayBalance(account) < 0" [title]="'مدين−دائن خام: ' + (account.balance ?? 0)">
+                {{ getDisplayBalance(account) | number:'1.2-2' }}
               </td>
               <td>
                 <span class="status-badge" [class.trading]="account.is_trading_account">

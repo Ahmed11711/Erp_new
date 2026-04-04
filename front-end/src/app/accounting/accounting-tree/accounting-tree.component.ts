@@ -341,6 +341,18 @@ export class AccountingTreeComponent implements OnInit {
     return accountType ? accountType.label : type;
   }
 
+  /**
+   * الرصيد المخزَّن = مدين − دائن. للخصوم/الإيرادات/حقوق الملكية نعرض الرصيد الطبيعي (−balance)
+   * ليتوافق مع «ما على الشركة للمورد» مثل رصيد المورد في شاشة الموردين.
+   */
+  getDisplayBalance(node: TreeAccount): number {
+    const b = node.balance ?? 0;
+    if (node.type === 'liability' || node.type === 'equity' || node.type === 'revenue') {
+      return -b;
+    }
+    return b;
+  }
+
   getIndentLevel(level: number): string {
     return `${level * 20}px`;
   }

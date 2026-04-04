@@ -72,7 +72,7 @@
       <span class="account-type-badge" [class]="'type-' + node.type">
         {{ getAccountTypeLabel(node.type) }}
       </span>
-      <span class="account-balance">{{ node.balance || 0 | number:'1.2-2' }}</span>
+      <span class="account-balance" [title]="'مدين−دائن خام: ' + (node.balance ?? 0)">{{ getDisplayBalance(node) | number:'1.2-2' }}</span>
 
       <div class="node-actions">
         <button class="btn btn-sm btn-success" *ngIf="canAddChild(node)" (click)="openAddDialog(node.id!)" title="إضافة حساب فرعي">

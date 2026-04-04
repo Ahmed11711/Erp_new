@@ -485,7 +485,7 @@ class PurchasesController extends Controller
                 'account_id' => $supplierTreeId,
                 'debit' => $amount,
                 'credit' => 0,
-                'notes' => 'زيادة (فاتورة مشتريات)',
+                'notes' => 'سداد ذمة مورد (تخفيض التزام — مدين حساب خصوم)',
             ]);
             DailyEntryItem::create([
                 'daily_entry_id' => $dailyEntry->id,

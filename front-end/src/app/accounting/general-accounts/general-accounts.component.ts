@@ -62,6 +62,15 @@ export class GeneralAccountsComponent implements OnInit {
     return found ? found.label : type;
   }
 
+  /** نفس منطق شجرة الحسابات: للخصوم/الإيرادات/حقوق الملكية عرض الرصيد الطبيعي (−balance). */
+  getDisplayBalance(account: TreeAccount): number {
+    const b = account.balance ?? 0;
+    if (account.type === 'liability' || account.type === 'equity' || account.type === 'revenue') {
+      return -b;
+    }
+    return b;
+  }
+
   refresh() {
     this.loadAccounts();
   }

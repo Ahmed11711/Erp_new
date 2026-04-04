@@ -383,12 +383,7 @@ class SupplierController extends Controller
                     'description' => 'سداد مورد - ' . $supplier->supplier_name,
                     'daily_entry_id' => $dailyEntry->id,
                 ]);
-                $supplierAcc = TreeAccount::find($supplierTreeId);
-                $supplierAcc->increment('debit_balance', $amount);
-                $supplierAcc->decrement('balance', $amount);
-                $creditAcc = TreeAccount::find($creditTreeId);
-                $creditAcc->increment('credit_balance', $amount);
-                $creditAcc->decrement('balance', $amount);
+                // الأرصدة تُحسب من account_entries عبر AccountingService (لا حاجة لتحديث يدوي)
                 // تحديث الحساب والحسابات الأب في الشجرة
                 $accService = app(\App\Services\Accounting\AccountingService::class);
                 $accService->updateAccountHierarchyBalances($supplierTreeId);
