@@ -16,8 +16,9 @@ export class PurchaseDetailsComponent implements OnInit{
 
 
   constructor(private route:ActivatedRoute , private invoiceService:InvoiceService){
-    // this.id = this.route.snapshot.params['id'];
-    this.id = sessionStorage.getItem('invoiceId');
+    this.id =
+      this.route.snapshot.paramMap.get('id') ||
+      this.route.snapshot.queryParamMap.get('invoiceId');
   }
 
   ngOnInit(): void {
@@ -35,7 +36,4 @@ export class PurchaseDetailsComponent implements OnInit{
     });
   }
 
-  ngOnDestroy(): void {
-    sessionStorage.removeItem('invoiceId');
-  }
 }

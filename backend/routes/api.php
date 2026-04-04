@@ -362,10 +362,11 @@ Route::middleware('auth')->group(function () {
 // http://127.0.0.1:8000/api/transactions/by-customer-order/detailed?itemsPerPage=15&page=1&customer=01018816899
 
 
-Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
-Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
-// new
-Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
+Route::middleware('auth')->group(function () {
+    Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
+    Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
+    Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
+});
 
 // Accounting Routes
 Route::prefix('accounting/')->middleware('auth')->group(function () {
@@ -393,6 +394,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'index']);
         Route::post('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'store']);
         Route::post('/transfer', [App\Http\Controllers\V2\Accounting\SafeController::class, 'transfer']);
+        Route::post('/direct-transaction', [App\Http\Controllers\V2\Accounting\SafeController::class, 'directTransaction']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'update']);
         Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'destroy']);
@@ -441,12 +443,10 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/category-profitability', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'categoryProfitability']);
     });
 
-    // Accounting Transactions
-    Route::prefix('accounting/')->group(function () {
-        Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
-        Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
-        Route::post('/recalculate-all-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'recalculateAllHierarchyBalances']);
-    });
+    // Accounting Transactions (no nested accounting/ prefix)
+    Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
+    Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
+    Route::post('/recalculate-all-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'recalculateAllHierarchyBalances']);
     // Service Accounts
     Route::prefix('service-accounts/')->group(function () {
         Route::get('/', [App\Http\Controllers\ServiceAccountsController::class, 'index']);
@@ -462,12 +462,9 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
     Route::post('/settings/update-existing', [App\Http\Controllers\SettingController::class, 'updateExistingEntities']);
 });
 
-Route::prefix('report/')->group(function () {
+Route::prefix('report/')->middleware('auth')->group(function () {
     Route::get('order', [ReportOrderController::class, 'AllOrder']);
     Route::get('getByOrderId', [ReportOrderController::class, 'getByOrderId']);
 });
 
 
-Route::get('ahmed', function () {
-    Log::info("ddd", ["ddd"]);
-});

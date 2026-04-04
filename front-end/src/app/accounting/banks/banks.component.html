@@ -1,179 +1,275 @@
-<div class="banks-container">
-  <div class="header-section">
-    <h2>البنوك</h2>
+<div class="banks-container" dir="rtl">
+
+  <!-- Page Header -->
+  <div class="erp-page__header">
+    <h2 class="erp-page__title">
+      <i class="fas fa-university"></i>
+      إدارة البنوك
+    </h2>
     <div class="header-actions">
+      <button class="btn btn-outline-secondary" (click)="openTransferDialog()">
+        <i class="fas fa-exchange-alt"></i> تحويل مالي
+      </button>
       <button class="btn btn-primary" (click)="openAddDialog()">
         <i class="fas fa-plus"></i> إضافة بنك
       </button>
-      <button class="btn btn-secondary" (click)="openTransferDialog()">
-        <i class="fas fa-exchange-alt"></i> تحويل مالي
-      </button>
-      <!-- <button class="btn btn-warning" routerLink="/accounting/banks/deposit-withdraw">
-        <i class="fas fa-money-bill-wave"></i> سحب/إيداع
-      </button> -->
     </div>
   </div>
 
-  <div class="loading-spinner" *ngIf="loading">
-    <p>جاري التحميل...</p>
+  <!-- Stats Cards -->
+  <div class="erp-stats">
+    <div class="erp-stat-card">
+      <div class="erp-stat-card__icon erp-stat-card__icon--success">
+        <i class="fas fa-coins"></i>
+      </div>
+      <div>
+        <div class="erp-stat-card__label">إجمالي الأرصدة</div>
+        <div class="erp-stat-card__value erp-amount" [class.erp-amount--positive]="totalBalance > 0">
+          {{ totalBalance | number:'1.2-2' }}
+        </div>
+      </div>
+    </div>
+    <div class="erp-stat-card">
+      <div class="erp-stat-card__icon erp-stat-card__icon--navy">
+        <i class="fas fa-building"></i>
+      </div>
+      <div>
+        <div class="erp-stat-card__label">عدد البنوك</div>
+        <div class="erp-stat-card__value">{{ banks.length }}</div>
+      </div>
+    </div>
   </div>
 
-  <div class="list-container" *ngIf="!loading">
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>اسم البنك</th>
-          <!-- <th>النوع</th> -->
-          <th>الاستخدام</th>
-          <th>الرصيد</th>
-          <th>الحساب المرتبط</th>
-          <th>الإجراءات</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let bank of banks">
-          <td>{{ bank.name }}</td>
-          <!-- <td>{{ bank.type }}</td> -->
-          <td>{{ bank.usage }}</td>
-          <td>{{ bank.balance | number:'1.2-2' }}</td>
-          <td>{{ bank.asset ? bank.asset.name : '-' }}</td>
-          <td>
-            <button class="btn btn-sm btn-info" (click)="openEditDialog(bank)">تعديل</button>
-            <button class="btn btn-sm btn-danger" (click)="deleteBank(bank.id)">حذف</button>
-            <button class="btn btn-sm btn-success" (click)="openTransferDialog(bank)">تحويل</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div *ngIf="banks.length === 0" class="empty-state">
-      <p>لا يوجد بنوك مضافة.</p>
+  <!-- Main Card -->
+  <div class="erp-card">
+    <div class="search-row">
+      <div class="erp-search">
+        <i class="fas fa-search erp-search__icon"></i>
+        <input type="text"
+               class="form-control erp-search__input"
+               placeholder="بحث بالاسم أو الاستخدام..."
+               [(ngModel)]="searchTerm"
+               (input)="onSearch()">
+      </div>
+      <button *ngIf="searchTerm" class="btn btn-sm btn-outline-secondary" (click)="clearSearch()">
+        <i class="fas fa-times"></i> مسح البحث
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="erp-loading">
+      <div class="erp-loading__spinner"></div>
+      <span>جاري تحميل البنوك...</span>
+    </div>
+
+    <!-- Table -->
+    <div *ngIf="!loading && filteredBanks.length > 0" class="table-responsive">
+      <table class="table table-hover mb-0 mobile-cards">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم البنك</th>
+            <th>الاستخدام</th>
+            <th>الرصيد</th>
+            <th>الحساب المرتبط</th>
+            <th class="text-center" style="width: 120px;">الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let bank of filteredBanks; let i = index; trackBy: trackByBank">
+            <td data-label="#" class="text-muted">{{ i + 1 }}</td>
+            <td data-label="اسم البنك"><strong>{{ bank.name }}</strong></td>
+            <td data-label="الاستخدام">
+              <span *ngIf="bank.usage" class="text-muted">{{ bank.usage }}</span>
+              <span *ngIf="!bank.usage" class="text-muted">—</span>
+            </td>
+            <td data-label="الرصيد">
+              <span class="erp-amount" [ngClass]="{
+                'erp-amount--positive': bank.balance > 0,
+                'erp-amount--negative': bank.balance < 0
+              }">
+                {{ bank.balance | number:'1.2-2' }}
+              </span>
+            </td>
+            <td data-label="الحساب المرتبط">
+              <span *ngIf="bank.asset" class="account-link">
+                <i class="fas fa-sitemap"></i> {{ bank.asset.name }}
+              </span>
+              <span *ngIf="!bank.asset" class="text-muted">—</span>
+            </td>
+            <td class="text-center">
+              <button class="erp-action-btn erp-action-btn--primary" title="تعديل"
+                      (click)="openEditDialog(bank)">
+                <i class="fas fa-pen"></i>
+              </button>
+              <button class="erp-action-btn" title="تحويل"
+                      (click)="openTransferDialog(bank)">
+                <i class="fas fa-exchange-alt"></i>
+              </button>
+              <button class="erp-action-btn erp-action-btn--danger" title="حذف"
+                      [disabled]="bank.balance != 0"
+                      [class.disabled-action]="bank.balance != 0"
+                      (click)="deleteBank(bank)">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!loading && filteredBanks.length === 0" class="erp-empty">
+      <div class="erp-empty__icon"><i class="fas fa-university"></i></div>
+      <p class="erp-empty__text" *ngIf="banks.length === 0">لا يوجد بنوك مضافة بعد</p>
+      <p class="erp-empty__text" *ngIf="banks.length > 0">لا توجد بنوك تطابق بحثك</p>
+      <p class="erp-empty__hint" *ngIf="banks.length === 0">اضغط على "إضافة بنك" للبدء</p>
+      <button *ngIf="banks.length > 0" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearSearch()">
+        مسح البحث
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Add Dialog -->
-<div class="modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>إضافة بنك جديد</h3>
-      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+<!-- ===== ADD DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
+  <div class="erp-modal" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title"><i class="fas fa-plus-circle color-main"></i> إضافة بنك جديد</h3>
+      <button class="erp-modal__close" (click)="closeDialogs()">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="erp-modal__body">
       <div class="form-group">
-        <label>اسم البنك *</label>
-        <input type="text" class="form-control" [(ngModel)]="newBank.name">
+        <label class="form-label">اسم البنك <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" [(ngModel)]="newBank.name"
+               placeholder="مثال: البنك الأهلي" autofocus>
       </div>
-      <!-- <div class="form-group">
-        <label>النوع</label>
-        <input type="text" class="form-control" [(ngModel)]="newBank.type" placeholder="مثال: جاري، توفير">
-      </div> -->
-      <div class="form-group">
-        <label>الوصف/الاستخدام</label>
-        <input type="text" class="form-control" [(ngModel)]="newBank.usage">
+      <div class="form-row">
+        <div class="form-group form-half">
+          <label class="form-label">الاستخدام</label>
+          <input type="text" class="form-control" [(ngModel)]="newBank.usage"
+                 placeholder="مثال: عمليات الشراء">
+        </div>
+        <div class="form-group form-half">
+          <label class="form-label">الرصيد الافتتاحي</label>
+          <input type="number" class="form-control" [(ngModel)]="newBank.balance"
+                 min="0" step="0.01" placeholder="0.00" dir="ltr">
+        </div>
       </div>
       <div class="form-group">
-        <label>الرصيد الافتتاحي</label>
-        <input type="number" class="form-control" [(ngModel)]="newBank.balance">
-      </div>
-      <div class="form-group">
-        <label>الحساب المرتبط (شجرة الحسابات) *</label>
+        <label class="form-label">الحساب المرتبط (شجرة الحسابات) <span class="text-danger">*</span></label>
         <select class="form-control" [(ngModel)]="newBank.asset_id">
-          <option [ngValue]="null">اختر الحساب</option>
-          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+          <option [ngValue]="null" disabled>اختر الحساب</option>
+          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
-      <button class="btn btn-primary" (click)="saveBank()">حفظ</button>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeDialogs()" [disabled]="saving">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveBank()"
+              [disabled]="saving || !canSaveNew()">
+        <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ saving ? 'جاري الحفظ...' : 'حفظ' }}
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Edit Dialog -->
-<div class="modal-overlay" *ngIf="showEditDialog && selectedBank" (click)="closeDialogs()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>تعديل بيانات البنك</h3>
-      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+<!-- ===== EDIT DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showEditDialog && selectedBank" (click)="closeDialogs()">
+  <div class="erp-modal" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title"><i class="fas fa-pen color-main"></i> تعديل بيانات البنك</h3>
+      <button class="erp-modal__close" (click)="closeDialogs()">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="erp-modal__body">
       <div class="form-group">
-        <label>اسم البنك *</label>
-        <input type="text" class="form-control" [(ngModel)]="selectedBank.name">
+        <label class="form-label">اسم البنك <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" [(ngModel)]="selectedBank.name" autofocus>
       </div>
-      <!-- <div class="form-group">
-        <label>النوع</label>
-        <input type="text" class="form-control" [(ngModel)]="selectedBank.type">
-      </div> -->
       <div class="form-group">
-        <label>الوصف/الاستخدام</label>
+        <label class="form-label">الاستخدام</label>
         <input type="text" class="form-control" [(ngModel)]="selectedBank.usage">
       </div>
       <div class="form-group">
-        <label>الحساب المرتبط *</label>
+        <label class="form-label">الحساب المرتبط <span class="text-danger">*</span></label>
         <select class="form-control" [(ngModel)]="selectedBank.asset_id">
-          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }}</option>
+          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
-      <button class="btn btn-primary" (click)="updateBank()">تحديث</button>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeDialogs()" [disabled]="saving">إلغاء</button>
+      <button class="btn btn-primary" (click)="updateBank()"
+              [disabled]="saving || !canSaveEdit()">
+        <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ saving ? 'جاري التحديث...' : 'تحديث' }}
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Transfer Dialog -->
-<div class="modal-overlay" *ngIf="showTransferDialog" (click)="closeDialogs()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>تحويل مالي</h3>
-      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+<!-- ===== TRANSFER DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showTransferDialog" (click)="closeDialogs()">
+  <div class="erp-modal" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title"><i class="fas fa-exchange-alt color-main"></i> تحويل مالي</h3>
+      <button class="erp-modal__close" (click)="closeDialogs()">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="erp-modal__body">
       <div class="form-group">
-        <label>نوع التحويل</label>
-        <select class="form-control" [(ngModel)]="transferData.type">
-          <option value="transfer_bank_to_bank">من بنك إلى بنك</option>
-          <!-- Safes options will be enabled when we support Safes in dropdown -->
-          <!-- <option value="transfer_bank_to_safe">من بنك إلى خزينة</option>
-                <option value="transfer_safe_to_bank">من خزينة إلى بنك</option> -->
-        </select>
-      </div>
-
-      <div class="form-group" *ngIf="transferData.type == 'transfer_bank_to_bank'">
-        <label>من بنك</label>
+        <label class="form-label">من بنك</label>
         <select class="form-control" [(ngModel)]="transferData.from_id">
-          <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }} ({{bank.balance}})</option>
+          <option [ngValue]="null" disabled>اختر البنك</option>
+          <option *ngFor="let bank of banks" [ngValue]="bank.id">
+            {{ bank.name }} — رصيد: {{ bank.balance | number:'1.2-2' }}
+          </option>
         </select>
+        <div *ngIf="transferData.from_id" class="balance-hint">
+          <i class="fas fa-info-circle"></i>
+          الرصيد المتاح: <strong class="erp-amount">{{ getFromBankBalance() | number:'1.2-2' }}</strong>
+        </div>
       </div>
 
-      <div class="form-group" *ngIf="transferData.type == 'transfer_bank_to_bank'">
-        <label>إلى بنك</label>
+      <div class="form-group">
+        <label class="form-label">إلى بنك</label>
         <select class="form-control" [(ngModel)]="transferData.to_id">
-          <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }}</option>
+          <option [ngValue]="null" disabled>اختر البنك</option>
+          <option *ngFor="let bank of banks" [ngValue]="bank.id"
+                  [disabled]="bank.id == transferData.from_id">
+            {{ bank.name }}
+          </option>
         </select>
       </div>
 
-      <div class="form-group">
-        <label>المبلغ</label>
-        <input type="number" class="form-control" [(ngModel)]="transferData.amount">
+      <div class="form-row">
+        <div class="form-group form-half">
+          <label class="form-label">المبلغ</label>
+          <input type="number" class="form-control" [(ngModel)]="transferData.amount"
+                 min="0.01" step="0.01" placeholder="0.00" dir="ltr">
+          <div class="erp-field-error" *ngIf="transferData.amount > getFromBankBalance() && transferData.from_id">
+            <i class="fas fa-exclamation-circle"></i> المبلغ أكبر من الرصيد المتاح
+          </div>
+        </div>
+        <div class="form-group form-half">
+          <label class="form-label">التاريخ</label>
+          <input type="date" class="form-control" [(ngModel)]="transferData.date" dir="ltr">
+        </div>
       </div>
 
       <div class="form-group">
-        <label>التاريخ</label>
-        <input type="date" class="form-control" [(ngModel)]="transferData.date">
-      </div>
-
-      <div class="form-group">
-        <label>ملاحظات</label>
-        <textarea class="form-control" [(ngModel)]="transferData.notes"></textarea>
+        <label class="form-label">ملاحظات <span class="text-muted">(اختياري)</span></label>
+        <textarea class="form-control" [(ngModel)]="transferData.notes" rows="2"
+                  placeholder="أضف ملاحظات حول التحويل..."></textarea>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
-      <button class="btn btn-success" (click)="submitTransfer()">إتمام التحويل</button>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeDialogs()" [disabled]="saving">إلغاء</button>
+      <button class="btn btn-success" (click)="submitTransfer()"
+              [disabled]="saving || !canSubmitTransfer() || transferData.amount > getFromBankBalance()">
+        <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ saving ? 'جاري التحويل...' : 'إتمام التحويل' }}
+      </button>
     </div>
   </div>
 </div>

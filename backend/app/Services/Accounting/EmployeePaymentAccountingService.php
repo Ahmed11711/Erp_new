@@ -7,13 +7,15 @@ use App\Models\TreeAccount;
 use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Models\AccountEntry;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
-/**
- * Creates daily entry + account entries for employee payments (advance, salary)
- * Debit: salary expense account, Credit: bank (or safe/service when supported)
- */
 class EmployeePaymentAccountingService
 {
+    public function __construct(
+        private AccountingService $accountingService
+    ) {}
+
     public function getSalaryExpenseAccountId(): ?int
     {
         $id = \App\Models\Setting::where('key', 'salary_expense_account_id')->value('value');
@@ -27,68 +29,71 @@ class EmployeePaymentAccountingService
         return $account ? $account->id : null;
     }
 
-    /**
-     * Post accounting for employee payment: debit expense, credit bank.
-     * Returns true if entry was created.
-     */
     public function postPayment(string $description, float $amount, int $bankId, ?string $date = null): bool
     {
         $bank = Bank::find($bankId);
         if (!$bank || !$bank->asset_id) {
+            Log::warning('EmployeePayment: bank missing or no asset_id', ['bank_id' => $bankId]);
             return false;
         }
         $expenseAccountId = $this->getSalaryExpenseAccountId();
         if (!$expenseAccountId) {
+            Log::warning('EmployeePayment: salary expense account not found');
             return false;
         }
 
         $date = $date ?: now();
-        $lastEntry = DailyEntry::orderByDesc('entry_number')->first();
-        $entryNumber = $lastEntry ? (int) $lastEntry->entry_number + 1 : 1;
-        $dailyEntry = DailyEntry::create([
-            'date' => $date,
-            'entry_number' => str_pad($entryNumber, 6, '0', STR_PAD_LEFT),
-            'description' => $description,
-            'user_id' => auth()->id(),
-        ]);
 
-        DailyEntryItem::create([
-            'daily_entry_id' => $dailyEntry->id,
-            'account_id' => $expenseAccountId,
-            'debit' => $amount,
-            'credit' => 0,
-            'notes' => 'زيادة (مصروف رواتب/سلف)',
-        ]);
-        DailyEntryItem::create([
-            'daily_entry_id' => $dailyEntry->id,
-            'account_id' => $bank->asset_id,
-            'debit' => 0,
-            'credit' => $amount,
-            'notes' => 'نقصان (صرف من البنك)',
-        ]);
+        DB::beginTransaction();
+        try {
+            $entryNumber = DailyEntry::getNextEntryNumber();
 
-        AccountEntry::create([
-            'tree_account_id' => $expenseAccountId,
-            'debit' => $amount,
-            'credit' => 0,
-            'description' => $description,
-            'daily_entry_id' => $dailyEntry->id,
-        ]);
-        AccountEntry::create([
-            'tree_account_id' => $bank->asset_id,
-            'debit' => 0,
-            'credit' => $amount,
-            'description' => $description,
-            'daily_entry_id' => $dailyEntry->id,
-        ]);
+            $dailyEntry = DailyEntry::create([
+                'date' => $date,
+                'entry_number' => $entryNumber,
+                'description' => $description,
+                'user_id' => auth()->id(),
+            ]);
 
-        $expenseAcc = TreeAccount::find($expenseAccountId);
-        $expenseAcc->increment('balance', $amount);
-        $expenseAcc->increment('debit_balance', $amount);
-        $bankAcc = TreeAccount::find($bank->asset_id);
-        $bankAcc->decrement('balance', $amount);
-        $bankAcc->increment('credit_balance', $amount);
+            DailyEntryItem::create([
+                'daily_entry_id' => $dailyEntry->id,
+                'account_id' => $expenseAccountId,
+                'debit' => $amount,
+                'credit' => 0,
+                'notes' => 'مصروف رواتب/سلف',
+            ]);
+            DailyEntryItem::create([
+                'daily_entry_id' => $dailyEntry->id,
+                'account_id' => $bank->asset_id,
+                'debit' => 0,
+                'credit' => $amount,
+                'notes' => 'صرف من البنك',
+            ]);
 
-        return true;
+            AccountEntry::create([
+                'tree_account_id' => $expenseAccountId,
+                'debit' => $amount,
+                'credit' => 0,
+                'description' => $description,
+                'daily_entry_id' => $dailyEntry->id,
+            ]);
+            AccountEntry::create([
+                'tree_account_id' => $bank->asset_id,
+                'debit' => 0,
+                'credit' => $amount,
+                'description' => $description,
+                'daily_entry_id' => $dailyEntry->id,
+            ]);
+
+            $this->accountingService->updateAccountHierarchyBalances($expenseAccountId);
+            $this->accountingService->updateAccountHierarchyBalances($bank->asset_id);
+
+            DB::commit();
+            return true;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('EmployeePayment posting failed: ' . $e->getMessage());
+            return false;
+        }
     }
 }

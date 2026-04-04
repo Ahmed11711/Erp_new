@@ -26,8 +26,15 @@ class AccountingService
             // Get cash account
             $cashAccount = TreeAccount::findOrFail($transactionData['cash_account_id']);
             
-            // Validate that cash account is actually a cash/bank account
-            if (!in_array($cashAccount->type, ['asset']) || !str_contains(strtolower($cashAccount->name), 'خزينة') && !str_contains(strtolower($cashAccount->name), 'بنك')) {
+            $isCashOrBank = $cashAccount->type === 'asset' && (
+                str_contains(strtolower($cashAccount->name), 'خزينة') ||
+                str_contains(strtolower($cashAccount->name), 'بنك') ||
+                str_contains(strtolower($cashAccount->name_en ?? ''), 'cash') ||
+                str_contains(strtolower($cashAccount->name_en ?? ''), 'bank') ||
+                \App\Models\Safe::where('account_id', $cashAccount->id)->exists() ||
+                \App\Models\Bank::where('asset_id', $cashAccount->id)->exists()
+            );
+            if (!$isCashOrBank) {
                 throw new \Exception('الحساب المحدد ليس حساب خزينة أو بنك');
             }
 
@@ -94,22 +101,25 @@ class AccountingService
         $targetAccount = TreeAccount::findOrFail($transactionData['account_id']);
 
         $entries = [];
+        $txType = $transactionData['transaction_type'] ?? '';
 
-        // Cash account entry (credit for cash out, debit for cash in)
+        if (!in_array($txType, ['cash_in', 'cash_out'])) {
+            throw new \Exception('نوع العملية غير صالح — يجب أن يكون cash_in أو cash_out');
+        }
+
         $cashEntry = AccountEntry::create([
             'tree_account_id' => $cashAccount->id,
-            'debit' => $transactionData['transaction_type'] === 'cash_in' ? $amount : 0,
-            'credit' => $transactionData['transaction_type'] === 'cash_out' ? $amount : 0,
+            'debit' => $txType === 'cash_in' ? $amount : 0,
+            'credit' => $txType === 'cash_out' ? $amount : 0,
             'description' => $description,
             'created_at' => now(),
             'updated_at' => now()
         ]);
 
-        // Target account entry (debit for cash out, credit for cash in)
         $targetEntry = AccountEntry::create([
             'tree_account_id' => $targetAccount->id,
-            'debit' => $transactionData['transaction_type'] === 'cash_out' ? $amount : 0,
-            'credit' => $transactionData['transaction_type'] === 'cash_in' ? $amount : 0,
+            'debit' => $txType === 'cash_out' ? $amount : 0,
+            'credit' => $txType === 'cash_in' ? $amount : 0,
             'description' => $description,
             'created_at' => now(),
             'updated_at' => now()
@@ -265,7 +275,7 @@ class AccountingService
         $movementCredit = round($data->sum('movement_credit'), 2);
         $movementDiff = abs($movementDebit - $movementCredit);
 
-        $isBalanced = $closingDiff <= $tolerance && $movementDiff <= $tolerance;
+        $isBalanced = $closingDiff <= $tolerance && $movementDiff <= $tolerance && $openingDiff <= $tolerance;
 
         return [
             'is_balanced' => $isBalanced,

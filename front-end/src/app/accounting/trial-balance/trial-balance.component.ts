@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { FormGroup, FormControl } from '@angular/forms';
 import { AccountingReportService } from '../services/accounting-report.service';
 import * as XLSX from 'xlsx';
 
@@ -13,28 +13,26 @@ export class TrialBalanceComponent implements OnInit {
     trialBalanceData: any[] = [];
     totals: any = {};
     validation: any = {};
-    loading: boolean = false;
-    error: string = '';
-    showValidation: boolean = false;
+    loading = false;
+    error = '';
+    showValidation = false;
 
-    filterForm: FormGroup = new FormGroup({
-        date_from: new FormControl(null),
-        date_to: new FormControl(null),
+    get isBalanced(): boolean {
+        if (!this.totals) return true;
+        return (
+            (this.totals.opening_difference || 0) === 0 &&
+            (this.totals.movement_difference || 0) === 0 &&
+            (this.totals.closing_difference || 0) === 0
+        );
+    }
+
+    filterForm = new FormGroup({
+        date_from: new FormControl<string | null>(null),
+        date_to: new FormControl<string | null>(null),
         search: new FormControl(''),
         account_type: new FormControl(''),
         level: new FormControl('')
     });
-
-    displayedColumns: string[] = [
-        'account_code',
-        'account_name',
-        'opening_debit',
-        'opening_credit',
-        'movement_debit',
-        'movement_credit',
-        'closing_debit',
-        'closing_credit'
-    ];
 
     accountTypes = [
         { value: '', label: 'جميع الأنواع' },
@@ -54,13 +52,9 @@ export class TrialBalanceComponent implements OnInit {
         { value: 5, label: 'المستوى 5' }
     ];
 
-    constructor(
-        private accountingReportService: AccountingReportService
-    ) {
-        // Set default dates
+    constructor(private accountingReportService: AccountingReportService) {
         const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
         this.filterForm.patchValue({
             date_from: this.formatDate(firstDayOfMonth),
             date_to: this.formatDate(today)
@@ -75,27 +69,14 @@ export class TrialBalanceComponent implements OnInit {
         this.loading = true;
         this.error = '';
 
-        const params: any = {};
+        const params: Record<string, any> = {};
+        const formVal = this.filterForm.value;
 
-        if (this.filterForm.value.date_from) {
-            params.date_from = this.filterForm.value.date_from;
-        }
-
-        if (this.filterForm.value.date_to) {
-            params.date_to = this.filterForm.value.date_to;
-        }
-
-        if (this.filterForm.value.search) {
-            params.search = this.filterForm.value.search;
-        }
-
-        if (this.filterForm.value.account_type) {
-            params.account_type = this.filterForm.value.account_type;
-        }
-
-        if (this.filterForm.value.level) {
-            params.level = this.filterForm.value.level;
-        }
+        if (formVal.date_from) params['date_from'] = formVal.date_from;
+        if (formVal.date_to) params['date_to'] = formVal.date_to;
+        if (formVal.search) params['search'] = formVal.search;
+        if (formVal.account_type) params['account_type'] = formVal.account_type;
+        if (formVal.level) params['level'] = formVal.level;
 
         this.accountingReportService.getTrialBalance(params).subscribe({
             next: (response: any) => {
@@ -107,7 +88,7 @@ export class TrialBalanceComponent implements OnInit {
             },
             error: (err) => {
                 console.error('Error loading trial balance:', err);
-                this.error = 'حدث خطأ أثناء تحميل ميزان المراجعة';
+                this.error = err?.error?.message || 'حدث خطأ أثناء تحميل ميزان المراجعة';
                 this.loading = false;
             }
         });
@@ -120,7 +101,6 @@ export class TrialBalanceComponent implements OnInit {
     onReset(): void {
         const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
         this.filterForm.patchValue({
             date_from: this.formatDate(firstDayOfMonth),
             date_to: this.formatDate(today),
@@ -128,33 +108,63 @@ export class TrialBalanceComponent implements OnInit {
             account_type: '',
             level: ''
         });
-
         this.loadTrialBalance();
     }
 
     exportToExcel(): void {
-        const worksheet = XLSX.utils.json_to_sheet(
-            this.trialBalanceData.map(item => ({
-                'كود الحساب': item.account_code,
-                'اسم الحساب': item.account_name,
-                'رصيد أول المدة - مدين': item.opening_debit,
-                'رصيد أول المدة - دائن': item.opening_credit,
-                'الحركة - مدين': item.movement_debit,
-                'الحركة - دائن': item.movement_credit,
-                'رصيد آخر المدة - مدين': item.closing_debit,
-                'رصيد آخر المدة - دائن': item.closing_credit
-            }))
-        );
+        const data = this.trialBalanceData.map(item => ({
+            'كود الحساب': item.account_code,
+            'اسم الحساب': item.account_name,
+            'رصيد أول المدة - مدين': item.opening_debit,
+            'رصيد أول المدة - دائن': item.opening_credit,
+            'الحركة - مدين': item.movement_debit,
+            'الحركة - دائن': item.movement_credit,
+            'رصيد آخر المدة - مدين': item.closing_debit,
+            'رصيد آخر المدة - دائن': item.closing_credit
+        }));
 
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'ميزان المراجعة');
+        data.push({
+            'كود الحساب': '',
+            'اسم الحساب': 'الإجمالي',
+            'رصيد أول المدة - مدين': this.totals.opening_debit,
+            'رصيد أول المدة - دائن': this.totals.opening_credit,
+            'الحركة - مدين': this.totals.movement_debit,
+            'الحركة - دائن': this.totals.movement_credit,
+            'رصيد آخر المدة - مدين': this.totals.closing_debit,
+            'رصيد آخر المدة - دائن': this.totals.closing_credit
+        });
 
-        const fileName = `trial_balance_${this.filterForm.value.date_from}_${this.filterForm.value.date_to}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'ميزان المراجعة');
+
+        const dateFrom = this.filterForm.value.date_from || '';
+        const dateTo = this.filterForm.value.date_to || '';
+        XLSX.writeFile(wb, `ميزان_المراجعة_${dateFrom}_${dateTo}.xlsx`);
     }
 
     print(): void {
         window.print();
+    }
+
+    trackByAccount(index: number, item: any): any {
+        return item?.account_id;
+    }
+
+    isZeroRow(account: any): boolean {
+        return (
+            account.opening_debit === 0 &&
+            account.opening_credit === 0 &&
+            account.movement_debit === 0 &&
+            account.movement_credit === 0 &&
+            account.closing_debit === 0 &&
+            account.closing_credit === 0
+        );
+    }
+
+    formatNumber(num: number): string {
+        if (num === null || num === undefined) return '0.00';
+        return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     private formatDate(date: Date): string {
@@ -162,71 +172,5 @@ export class TrialBalanceComponent implements OnInit {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
-    }
-
-    formatNumber(num: number): string {
-        return num ? num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
-    }
-
-    updateHierarchyBalances(): void {
-        this.loading = true;
-        this.accountingReportService.updateHierarchyBalances(0).subscribe({
-            next: (response: any) => {
-                if (response.success) {
-                    this.loadTrialBalance(); // Reload data after update
-                } else {
-                    this.error = response.message;
-                    this.loading = false;
-                }
-            },
-            error: (err) => {
-                this.error = 'فشل تحديث الأرصدة الهرمية';
-                this.loading = false;
-            }
-        });
-    }
-
-    validateIncomeStructure(): void {
-        this.loading = true;
-        this.accountingReportService.validateIncomeStructure().subscribe({
-            next: (response: any) => {
-                if (!response.is_valid) {
-                    console.warn('Income structure issues found:', response.issues);
-                }
-                this.loading = false;
-            },
-            error: (err) => {
-                this.error = 'فشل التحقق من هيكل الإيرادات';
-                this.loading = false;
-            }
-        });
-    }
-
-    processCashTransaction(): void {
-        // This would typically open a modal or navigate to a form
-        // For now, showing a basic implementation
-        const transactionData = {
-            cash_account_id: 1, // Would be selected by user
-            account_id: 2, // Would be selected by user
-            amount: 1000,
-            description: 'Test transaction',
-            transaction_type: 'cash_out'
-        };
-
-        this.loading = true;
-        this.accountingReportService.processCashTransaction(transactionData).subscribe({
-            next: (response: any) => {
-                if (response.success) {
-                    this.loadTrialBalance(); // Reload to show updated balances
-                } else {
-                    this.error = response.message;
-                    this.loading = false;
-                }
-            },
-            error: (err) => {
-                this.error = 'فشل عملية الدفع';
-                this.loading = false;
-            }
-        });
     }
 }

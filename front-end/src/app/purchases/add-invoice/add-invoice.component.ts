@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
-import { Component, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { th } from 'date-fns/locale';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
@@ -15,8 +14,9 @@ import { InvoiceService } from '../service/invoice.service';
   templateUrl: './add-invoice.component.html',
   styleUrls: ['./add-invoice.component.css']
 })
-export class AddInvoiceComponent {
+export class AddInvoiceComponent implements OnInit {
   invoiceId;
+  errorMessage = '';
   products:any[] = [];
   categories : any[] = [];
   suppliers : any[] = [];
@@ -37,12 +37,13 @@ export class AddInvoiceComponent {
     private invoice: InvoiceService,
     private supplier: SuppliersService,
     private cat: CategoryService,
-    private activeRoute: ActivatedRoute
+    private route: ActivatedRoute
   ) { }
 
   ngOnInit(): void {
-    // this.invoiceId = this.activeRoute.snapshot.queryParams['invoiceId'];
-    this.invoiceId = sessionStorage.getItem('editInvoiceId');
+    this.invoiceId =
+      this.route.snapshot.paramMap.get('id') ||
+      this.route.snapshot.queryParamMap.get('editId');
     this.supplier.suppliersname().subscribe((res:any)=>{
       this.suppliers = res;
     })
@@ -63,7 +64,6 @@ export class AddInvoiceComponent {
 
     if (this.invoiceId) {
       this.invoice.getInvoiceById(this.invoiceId,true).subscribe(res=>{
-        console.log(res);
         this.products = res['categories'];
         let status:any = document.getElementById('status');
         status.value = res['invoice'].invoice_type;
@@ -269,10 +269,14 @@ export class AddInvoiceComponent {
       invoice.append('invoice_image', this.selectedImg, this.selectedImg.name);
     }
     invoice.append('products', JSON.stringify(this.products));
-    this.invoice.addInvoice(invoice).subscribe((res:any)=>{
-      console.log(res);
-      if(res.success==true){
-        this.router.navigate(['/dashboard/purchases/list_invoice']);
+    this.invoice.addInvoice(invoice).subscribe({
+      next: (res:any)=>{
+        if(res.success==true){
+          this.router.navigate(['/dashboard/purchases/list_invoice']);
+        }
+      },
+      error: (err) => {
+        this.errorMessage = err.error?.message || 'حدث خطأ أثناء حفظ الفاتورة';
       }
     })
   }
@@ -283,7 +287,4 @@ export class AddInvoiceComponent {
     this.categoryId = null;
   }
 
-  ngOnDestroy(): void {
-    sessionStorage.removeItem('editInvoiceId');
-  }
 }

@@ -164,7 +164,27 @@ class SafeController extends Controller
         ], 200);
     }
 
-    // ... (destroy method remains unchanged) ...
+    public function show($id)
+    {
+        $safe = Safe::with('account')->find($id);
+        if (!$safe) {
+            return response()->json(['message' => 'الخزينة غير موجودة'], 404);
+        }
+        return response()->json($safe, 200);
+    }
+
+    public function destroy($id)
+    {
+        $safe = Safe::find($id);
+        if (!$safe) {
+            return response()->json(['message' => 'الخزينة غير موجودة'], 404);
+        }
+        if ((float) $safe->balance != 0) {
+            return response()->json(['message' => 'لا يمكن حذف خزينة لها رصيد'], 422);
+        }
+        $safe->delete();
+        return response()->json(['message' => 'تم حذف الخزينة بنجاح'], 200);
+    }
 
     public function transfer(Request $request)
     {
@@ -203,24 +223,17 @@ class SafeController extends Controller
             $fromSafe->decrement('balance', $request->amount);
             $toSafe->increment('balance', $request->amount);
 
-            // Create accounting entries if accounts are set
+            $desc = "تحويل من خزينة {$fromSafe->name} إلى خزينة {$toSafe->name}" . ($request->notes ? " - {$request->notes}" : "");
+            $accService = app(AccountingService::class);
+
             if ($fromSafe->account_id) {
                 AccountEntry::create([
                     'tree_account_id' => $fromSafe->account_id,
                     'debit' => 0,
                     'credit' => $request->amount,
-                    'description' => "تحويل من خزينة {$fromSafe->name} إلى خزينة {$toSafe->name}" . ($request->notes ? " - {$request->notes}" : ""),
+                    'description' => $desc,
                 ]);
-                $fromTree = TreeAccount::find($fromSafe->account_id);
-                if ($fromTree) {
-                    $fromTree->increment('credit_balance', $request->amount);
-                    if (in_array($fromTree->type, ['asset', 'expense'])) {
-                        $fromTree->decrement('balance', $request->amount);
-                    } else {
-                        $fromTree->increment('balance', $request->amount);
-                    }
-                    $fromTree->save();
-                }
+                $accService->updateAccountHierarchyBalances($fromSafe->account_id);
             }
 
             if ($toSafe->account_id) {
@@ -228,18 +241,9 @@ class SafeController extends Controller
                     'tree_account_id' => $toSafe->account_id,
                     'debit' => $request->amount,
                     'credit' => 0,
-                    'description' => "تحويل من خزينة {$fromSafe->name} إلى خزينة {$toSafe->name}" . ($request->notes ? " - {$request->notes}" : ""),
+                    'description' => $desc,
                 ]);
-                $toTree = TreeAccount::find($toSafe->account_id);
-                if ($toTree) {
-                    $toTree->increment('debit_balance', $request->amount);
-                    if (in_array($toTree->type, ['asset', 'expense'])) {
-                        $toTree->increment('balance', $request->amount);
-                    } else {
-                        $toTree->decrement('balance', $request->amount);
-                    }
-                    $toTree->save();
-                }
+                $accService->updateAccountHierarchyBalances($toSafe->account_id);
             }
 
             DB::commit();

@@ -26,8 +26,6 @@ export class ListInvoiceComponent {
   pageSizeOptions = [15,50,100];
 
   constructor(private invoice : InvoiceService, private supplier:SuppliersService, private route:Router, private authService:AuthService ) {
-    sessionStorage.removeItem('editInvoiceId');
-    sessionStorage.removeItem('invoiceId');
   }
 
   ngOnInit(){
@@ -61,15 +59,11 @@ export class ListInvoiceComponent {
   }
 
   editInvoice(id){
-    sessionStorage.setItem('editInvoiceId', id);
-    // this.route.navigateByUrl(`/dashboard/purchases/add_invoice?invoiceId=${id}`);
-    this.route.navigateByUrl(`/dashboard/purchases/add_invoice`);
+    this.route.navigate(['/dashboard/purchases/add_invoice', id]);
   }
 
   invoiceDetails(id){
-    sessionStorage.setItem('invoiceId', id);
-    // this.route.navigateByUrl(`/dashboard/purchases/add_invoice?invoiceId=${id}`);
-    this.route.navigateByUrl(`/dashboard/purchases/invoice`);
+    this.route.navigate(['/dashboard/purchases/invoice', id]);
   }
 
   deleteInvoice(id){

@@ -36,7 +36,9 @@ export class AccountingReportService {
     getTrialBalance(params: any): Observable<any> {
         let httpParams = new HttpParams();
         Object.keys(params).forEach(key => {
-            if (params[key]) httpParams = httpParams.append(key, params[key]);
+            if (params[key] !== null && params[key] !== undefined && params[key] !== '') {
+                httpParams = httpParams.append(key, params[key]);
+            }
         });
         return this.http.get(`${this.apiUrl}/trial-balance`, { params: httpParams });
     }

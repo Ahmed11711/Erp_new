@@ -83,13 +83,11 @@ export class ProcurementReportComponent implements OnInit {
   }
 
   invoiceDetails(id: number): void {
-    sessionStorage.setItem('invoiceId', String(id));
-    this.router.navigateByUrl('/dashboard/purchases/invoice');
+    this.router.navigate(['/dashboard/purchases/invoice', id]);
   }
 
   editInvoice(id: number): void {
-    sessionStorage.setItem('editInvoiceId', String(id));
-    this.router.navigateByUrl('/dashboard/purchases/add_invoice');
+    this.router.navigate(['/dashboard/purchases/add_invoice', id]);
   }
 
   getTotals(): { total: number; paid: number; due: number } {

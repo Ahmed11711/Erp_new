@@ -15,9 +15,10 @@
 </div>
 
 <div class="container content">
-    <!-- <div class="alert-danger alert" *ngIf="errorMessage">
+    <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
       {{ errorMessage }}
-    </div> -->
+      <button type="button" class="btn-close" (click)="errorMessage = ''"></button>
+    </div>
     <form #invoices="ngForm" (ngSubmit)="addInvoice(invoices)">
       <div class="form-row">
         <div class="form-group col-md-5">
@@ -115,7 +116,7 @@
       />
         </div>
         <div class="form-group col-md-3">
-            <button type="button" (click)="addToTabel()" [disabled]="!productQuantity|| !productprice || !productSelected" class="btn btn-success">add</button>
+            <button type="button" (click)="addToTabel()" [disabled]="!productQuantity|| !productprice || !productSelected" class="btn btn-success">إضافة</button>
         </div>
 
     </div>

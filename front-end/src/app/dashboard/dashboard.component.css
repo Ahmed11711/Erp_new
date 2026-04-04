@@ -124,6 +124,45 @@ a span::before {
   color: white;
 }
 
+.sub-accordion .mat-expansion-panel {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sub-accordion .mat-expansion-panel-header {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  padding: 0 12px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+}
+
+.sub-accordion .mat-expansion-panel-header .mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px !important;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.sub-accordion .mat-expansion-panel-body {
+  padding: 0 !important;
+}
+
+::ng-deep .sub-accordion .mat-expansion-panel-body {
+  padding: 0 !important;
+}
+
+.sub-accordion .mat-nav-list {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.sub-accordion .mat-nav-list a {
+  padding-right: 24px !important;
+}
+
 mat-sidenav-content{
   position: relative;
 }
@@ -141,4 +180,57 @@ i{
   border-radius: 50%;
   padding: 10px;
   z-index: 99999;
+}
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .app-sidenav {
+    width: 80vw;
+    max-width: 300px;
+  }
+
+  .app-container {
+    height: calc(100vh - 56px);
+  }
+
+  .mat-expansion-panel-header {
+    font-size: 0.95rem;
+    padding: 0 12px !important;
+  }
+
+  span {
+    font-size: 0.9rem;
+  }
+
+  .sub-accordion .mat-expansion-panel-header {
+    font-size: 0.82rem !important;
+    padding: 0 8px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .app-sidenav {
+    width: 85vw;
+    max-width: 280px;
+  }
+
+  i {
+    width: 40px;
+    height: 40px;
+    font-size: 1.4rem;
+    padding: 9px;
+    left: 0.5rem;
+    top: 0.5rem;
+  }
+
+  .mat-toolbar {
+    padding: 0 8px !important;
+  }
+
+  .mat-expansion-panel-header .mat-icon {
+    margin-left: 6px;
+    font-size: 20px;
+  }
 }

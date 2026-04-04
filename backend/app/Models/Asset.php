@@ -25,6 +25,7 @@ class Asset extends Model
         'asset_account_id',
         'depreciation_account_id',
         'expense_account_id',
+        'last_depreciation_date',
     ];
 
     public function bank(){

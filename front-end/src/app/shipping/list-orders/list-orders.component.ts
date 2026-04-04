@@ -28,6 +28,10 @@ export class ListOrdersComponent {
   user!:string;
   /** True if the current user is assigned to at least one WhatsApp number */
   hasWhatsAppAccess = false;
+
+  trackById(index: number, item: any): number {
+    return item?.id;
+  }
   /** قائمة الإجراءات بجانب رقم الطلب — Spatie: assign to whatsapp number، أو مستخدم معيّن لرقم واتساب (hasWhatsAppAccess) */
   canAssignWhatsAppNumbers = false;
   orders :any = [];

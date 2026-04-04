@@ -42,4 +42,9 @@ class DailyEntry extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function accountEntries()
+    {
+        return $this->hasMany(AccountEntry::class);
+    }
 }

@@ -6,13 +6,16 @@ import { PurchaseDetailsComponent } from './purchase-details/purchase-details.co
 import { departmentGuard } from '../guards/department.guard';
 
 const routes: Routes = [
+  {path :'add_invoice/:id', component: AddInvoiceComponent,
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  },
   {path :'add_invoice', component: AddInvoiceComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
   {path :'list_invoice', component: ListInvoiceComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
-  {path :'invoice', component: PurchaseDetailsComponent,
+  {path :'invoice/:id', component: PurchaseDetailsComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
 ];

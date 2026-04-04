@@ -1,207 +1,356 @@
-<div class="safes-container">
-  <div class="header-section">
-    <h2>الخزن</h2>
+<div class="safes-container" dir="rtl">
+
+  <!-- Page Header -->
+  <div class="erp-page__header">
+    <h2 class="erp-page__title">
+      <i class="fas fa-vault"></i>
+      إدارة الخزن
+    </h2>
     <div class="header-actions">
+      <button class="btn btn-outline-secondary" (click)="openTransferDialog()">
+        <i class="fas fa-exchange-alt"></i> تحويل مالي
+      </button>
       <button class="btn btn-primary" (click)="openAddDialog()">
         <i class="fas fa-plus"></i> إضافة خزنة
       </button>
-      <button class="btn btn-secondary" (click)="openTransferDialog()">
-        <i class="fas fa-exchange-alt"></i> تحويل مالي
-      </button>
-      <!-- <button class="btn btn-warning" routerLink="/accounting/safes/deposit-withdraw">
-        <i class="fas fa-money-bill-wave"></i> سحب/إيداع
-      </button> -->
     </div>
   </div>
 
-  <div class="loading-spinner" *ngIf="loading">
-    <p>جاري التحميل...</p>
+  <!-- Stats Cards -->
+  <div class="erp-stats">
+    <div class="erp-stat-card">
+      <div class="erp-stat-card__icon erp-stat-card__icon--primary">
+        <i class="fas fa-wallet"></i>
+      </div>
+      <div>
+        <div class="erp-stat-card__label">إجمالي الرصيد</div>
+        <div class="erp-stat-card__value erp-amount" [class.erp-amount--positive]="totalBalance > 0">
+          {{ totalBalance | number:'1.2-2' }}
+        </div>
+      </div>
+    </div>
+    <div class="erp-stat-card">
+      <div class="erp-stat-card__icon erp-stat-card__icon--navy">
+        <i class="fas fa-box"></i>
+      </div>
+      <div>
+        <div class="erp-stat-card__label">خزن رئيسية</div>
+        <div class="erp-stat-card__value">{{ mainSafesCount }}</div>
+      </div>
+    </div>
+    <div class="erp-stat-card">
+      <div class="erp-stat-card__icon erp-stat-card__icon--info">
+        <i class="fas fa-code-branch"></i>
+      </div>
+      <div>
+        <div class="erp-stat-card__label">خزن فرعية</div>
+        <div class="erp-stat-card__value">{{ branchSafesCount }}</div>
+      </div>
+    </div>
   </div>
 
-  <div class="list-container" *ngIf="!loading">
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>اسم الخزنة</th>
-          <th>النوع</th>
-          <th>داخل فرع</th>
-          <th>الرصيد</th>
-          <th>الحساب المرتبط</th>
-          <th>الإجراءات</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let safe of safes">
-          <td>{{ safe.name }}</td>
-          <td>{{ safe.type == 'main' ? 'رئيسية' : 'فرعية' }}</td>
-          <td>
-            <span *ngIf="safe.is_inside_branch">نعم - {{ safe.branch_name }}</span>
-            <span *ngIf="!safe.is_inside_branch">لا</span>
-          </td>
-          <td>{{ safe.balance | number:'1.2-2' }}</td>
-          <td>{{ safe.account ? safe.account.name : '-' }}</td>
-          <td>
-            <button class="btn btn-sm btn-info" (click)="openEditDialog(safe)">تعديل</button>
-            <button class="btn btn-sm btn-danger" (click)="deleteSafe(safe.id)"
-              [disabled]="safe.balance != 0">حذف</button>
-            <button class="btn btn-sm btn-success" (click)="openTransferDialog(safe)">تحويل</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div *ngIf="safes.length === 0" class="empty-state">
-      <p>لا يوجد خزن مضافة.</p>
+  <!-- Search Bar -->
+  <div class="erp-card">
+    <div class="search-row">
+      <div class="erp-search">
+        <i class="fas fa-search erp-search__icon"></i>
+        <input type="text"
+               class="form-control erp-search__input"
+               placeholder="بحث بالاسم أو الفرع..."
+               [(ngModel)]="searchTerm"
+               (input)="onSearch()">
+      </div>
+      <button *ngIf="searchTerm" class="btn btn-sm btn-outline-secondary" (click)="clearSearch()">
+        <i class="fas fa-times"></i> مسح البحث
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div *ngIf="loading" class="erp-loading">
+      <div class="erp-loading__spinner"></div>
+      <span>جاري تحميل الخزن...</span>
+    </div>
+
+    <!-- Data Table -->
+    <div *ngIf="!loading && filteredSafes.length > 0" class="table-responsive">
+      <table class="table table-hover mb-0 mobile-cards">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم الخزنة</th>
+            <th>النوع</th>
+            <th>الفرع</th>
+            <th>الرصيد</th>
+            <th>الحساب المرتبط</th>
+            <th class="text-center" style="width: 120px;">الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let safe of filteredSafes; let i = index; trackBy: trackBySafe">
+            <td data-label="#" class="text-muted">{{ i + 1 }}</td>
+            <td data-label="اسم الخزنة">
+              <strong>{{ safe.name }}</strong>
+            </td>
+            <td data-label="النوع">
+              <span class="erp-badge" [ngClass]="safe.type === 'main' ? 'erp-badge--info' : 'erp-badge--neutral'">
+                {{ safe.type === 'main' ? 'رئيسية' : 'فرعية' }}
+              </span>
+            </td>
+            <td data-label="الفرع">
+              <span *ngIf="safe.is_inside_branch" class="branch-tag">
+                <i class="fas fa-map-marker-alt"></i> {{ safe.branch_name }}
+              </span>
+              <span *ngIf="!safe.is_inside_branch" class="text-muted">—</span>
+            </td>
+            <td data-label="الرصيد">
+              <span class="erp-amount" [ngClass]="{
+                'erp-amount--positive': safe.balance > 0,
+                'erp-amount--negative': safe.balance < 0
+              }">
+                {{ safe.balance | number:'1.2-2' }}
+              </span>
+            </td>
+            <td data-label="الحساب المرتبط">
+              <span *ngIf="safe.account" class="account-link">
+                <i class="fas fa-sitemap"></i> {{ safe.account.name }}
+              </span>
+              <span *ngIf="!safe.account" class="text-muted">—</span>
+            </td>
+            <td class="text-center">
+              <button class="erp-action-btn erp-action-btn--primary" title="تعديل"
+                      (click)="openEditDialog(safe)">
+                <i class="fas fa-pen"></i>
+              </button>
+              <button class="erp-action-btn" title="تحويل"
+                      (click)="openTransferDialog(safe)">
+                <i class="fas fa-exchange-alt"></i>
+              </button>
+              <button class="erp-action-btn erp-action-btn--danger" title="حذف"
+                      [disabled]="safe.balance != 0"
+                      [class.disabled-action]="safe.balance != 0"
+                      (click)="deleteSafe(safe)">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!loading && filteredSafes.length === 0" class="erp-empty">
+      <div class="erp-empty__icon">
+        <i class="fas fa-vault"></i>
+      </div>
+      <p class="erp-empty__text" *ngIf="safes.length === 0">لا يوجد خزن مضافة بعد</p>
+      <p class="erp-empty__text" *ngIf="safes.length > 0">لا توجد خزن تطابق بحثك</p>
+      <p class="erp-empty__hint" *ngIf="safes.length === 0">اضغط على "إضافة خزنة" للبدء</p>
+      <button *ngIf="safes.length > 0" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearSearch()">
+        مسح البحث
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Add Dialog -->
-<div class="modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>إضافة خزنة جديدة</h3>
-      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+<!-- ===== ADD DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showAddDialog" (click)="closeDialogs()">
+  <div class="erp-modal" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title"><i class="fas fa-plus-circle color-main"></i> إضافة خزنة جديدة</h3>
+      <button class="erp-modal__close" (click)="closeDialogs()">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="erp-modal__body">
       <div class="form-group">
-        <label>اسم الخزنة *</label>
-        <input type="text" class="form-control" [(ngModel)]="newSafe.name">
+        <label class="form-label">اسم الخزنة <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" [(ngModel)]="newSafe.name"
+               placeholder="مثال: الخزنة الرئيسية" autofocus>
+        <div class="erp-field-error" *ngIf="!newSafe.name?.trim() && newSafe.name !== undefined">
+          <i class="fas fa-exclamation-circle"></i> اسم الخزنة مطلوب
+        </div>
       </div>
-      <div class="form-group">
-        <label>النوع *</label>
-        <select class="form-control" [(ngModel)]="newSafe.type">
-          <option value="main">رئيسية</option>
-          <option value="branch">فرع</option>
-        </select>
+
+      <div class="form-row">
+        <div class="form-group form-half">
+          <label class="form-label">النوع <span class="text-danger">*</span></label>
+          <select class="form-control" [(ngModel)]="newSafe.type">
+            <option value="main">رئيسية</option>
+            <option value="branch">فرعية</option>
+          </select>
+        </div>
+        <div class="form-group form-half">
+          <label class="form-label">الرصيد الافتتاحي</label>
+          <input type="number" class="form-control" [(ngModel)]="newSafe.balance"
+                 min="0" step="0.01" placeholder="0.00" dir="ltr">
+        </div>
       </div>
+
       <div class="form-group">
-        <label>
+        <label class="checkbox-label">
           <input type="checkbox" [(ngModel)]="newSafe.is_inside_branch">
-          داخل فرع
+          <span>داخل فرع</span>
         </label>
       </div>
+
       <div class="form-group" *ngIf="newSafe.is_inside_branch">
-        <label>اسم الفرع</label>
-        <input type="text" class="form-control" [(ngModel)]="newSafe.branch_name">
+        <label class="form-label">اسم الفرع</label>
+        <input type="text" class="form-control" [(ngModel)]="newSafe.branch_name"
+               placeholder="أدخل اسم الفرع">
       </div>
+
       <div class="form-group">
-        <label>الرصيد الافتتاحي</label>
-        <input type="number" class="form-control" [(ngModel)]="newSafe.balance" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>الحساب المرتبط (شجرة الحسابات) *</label>
+        <label class="form-label">الحساب المرتبط (شجرة الحسابات) <span class="text-danger">*</span></label>
         <select class="form-control" [(ngModel)]="newSafe.account_id">
-          <option [ngValue]="null">اختر الحساب</option>
-          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+          <option [ngValue]="null" disabled>اختر الحساب</option>
+          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
       </div>
+
       <div class="form-group" *ngIf="newSafe.balance > 0">
-        <label>الحساب المقابل للرصيد الافتتاحي *</label>
+        <label class="form-label">الحساب المقابل للرصيد الافتتاحي <span class="text-danger">*</span></label>
         <select class="form-control" [(ngModel)]="newSafe.counter_account_id">
-          <option [ngValue]="null">اختر الحساب المقابل</option>
-          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} - {{ acc.code }}</option>
+          <option [ngValue]="null" disabled>اختر الحساب المقابل</option>
+          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
-        <small class="text-muted">يُسجَّل قيد: مدين حساب الخزينة، دائن هذا الحساب (مثل رأس المال أو الجاري).</small>
+        <small class="form-text text-muted">
+          <i class="fas fa-info-circle"></i>
+          يُسجَّل قيد: مدين حساب الخزينة، دائن هذا الحساب
+        </small>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
-      <button class="btn btn-primary" (click)="saveSafe()">حفظ</button>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeDialogs()" [disabled]="saving">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveSafe()"
+              [disabled]="saving || !canSaveNewSafe()">
+        <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ saving ? 'جاري الحفظ...' : 'حفظ' }}
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Edit Dialog -->
-<div class="modal-overlay" *ngIf="showEditDialog && selectedSafe" (click)="closeDialogs()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>تعديل بيانات الخزنة</h3>
-      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+<!-- ===== EDIT DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showEditDialog && selectedSafe" (click)="closeDialogs()">
+  <div class="erp-modal" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title"><i class="fas fa-pen color-main"></i> تعديل بيانات الخزنة</h3>
+      <button class="erp-modal__close" (click)="closeDialogs()">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="erp-modal__body">
       <div class="form-group">
-        <label>اسم الخزنة *</label>
-        <input type="text" class="form-control" [(ngModel)]="selectedSafe.name">
+        <label class="form-label">اسم الخزنة <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" [(ngModel)]="selectedSafe.name" autofocus>
       </div>
       <div class="form-group">
-        <label>
+        <label class="checkbox-label">
           <input type="checkbox" [(ngModel)]="selectedSafe.is_inside_branch">
-          داخل فرع
+          <span>داخل فرع</span>
         </label>
       </div>
       <div class="form-group" *ngIf="selectedSafe.is_inside_branch">
-        <label>اسم الفرع</label>
+        <label class="form-label">اسم الفرع</label>
         <input type="text" class="form-control" [(ngModel)]="selectedSafe.branch_name">
       </div>
       <div class="form-group">
-        <label>الحساب المرتبط</label>
+        <label class="form-label">الحساب المرتبط</label>
         <select class="form-control" [(ngModel)]="selectedSafe.account_id">
-          <option *ngFor="let acc of treeAccounts" [value]="acc.id">{{ acc.name }}</option>
+          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
-      <button class="btn btn-primary" (click)="updateSafe()">تحديث</button>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeDialogs()" [disabled]="saving">إلغاء</button>
+      <button class="btn btn-primary" (click)="updateSafe()"
+              [disabled]="saving || !canSaveEdit()">
+        <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ saving ? 'جاري التحديث...' : 'تحديث' }}
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Transfer Dialog -->
-<div class="modal-overlay" *ngIf="showTransferDialog" (click)="closeDialogs()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>تحويل مالي</h3>
-      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+<!-- ===== TRANSFER DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showTransferDialog" (click)="closeDialogs()">
+  <div class="erp-modal" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title"><i class="fas fa-exchange-alt color-main"></i> تحويل مالي</h3>
+      <button class="erp-modal__close" (click)="closeDialogs()">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>نوع التحويل</label>
-        <select class="form-control" [(ngModel)]="transferData.type">
-          <option value="safe_to_safe">من خزينة إلى خزينة</option>
-          <option value="safe_to_bank">من خزينة إلى بنك</option>
-        </select>
+    <div class="erp-modal__body">
+      <!-- Transfer Type Selector -->
+      <div class="transfer-type-selector">
+        <button class="transfer-type-btn"
+                [class.active]="transferData.type === 'safe_to_safe'"
+                (click)="transferData.type = 'safe_to_safe'; transferData.to_id = null">
+          <i class="fas fa-vault"></i> خزنة → خزنة
+        </button>
+        <button class="transfer-type-btn"
+                [class.active]="transferData.type === 'safe_to_bank'"
+                (click)="transferData.type = 'safe_to_bank'; transferData.to_id = null">
+          <i class="fas fa-university"></i> خزنة → بنك
+        </button>
       </div>
 
       <div class="form-group">
-        <label>من خزينة</label>
+        <label class="form-label">من خزنة</label>
         <select class="form-control" [(ngModel)]="transferData.from_id">
-          <option *ngFor="let safe of safes" [value]="safe.id">{{ safe.name }} ({{safe.balance}})</option>
+          <option [ngValue]="null" disabled>اختر الخزنة</option>
+          <option *ngFor="let safe of safes" [ngValue]="safe.id">
+            {{ safe.name }} — رصيد: {{ safe.balance | number:'1.2-2' }}
+          </option>
         </select>
+        <div *ngIf="transferData.from_id" class="balance-hint">
+          <i class="fas fa-info-circle"></i>
+          الرصيد المتاح: <strong class="erp-amount">{{ getFromSafeBalance() | number:'1.2-2' }}</strong>
+        </div>
       </div>
 
-      <div class="form-group" *ngIf="transferData.type == 'safe_to_safe'">
-        <label>إلى خزينة</label>
+      <div class="form-group" *ngIf="transferData.type === 'safe_to_safe'">
+        <label class="form-label">إلى خزنة</label>
         <select class="form-control" [(ngModel)]="transferData.to_id">
-          <option *ngFor="let safe of safes" [value]="safe.id">{{ safe.name }}</option>
+          <option [ngValue]="null" disabled>اختر الخزنة</option>
+          <option *ngFor="let safe of safes" [ngValue]="safe.id"
+                  [disabled]="safe.id == transferData.from_id">
+            {{ safe.name }}
+          </option>
         </select>
       </div>
 
-      <div class="form-group" *ngIf="transferData.type == 'safe_to_bank'">
-        <label>إلى بنك</label>
+      <div class="form-group" *ngIf="transferData.type === 'safe_to_bank'">
+        <label class="form-label">إلى بنك</label>
         <select class="form-control" [(ngModel)]="transferData.to_id">
-          <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }}</option>
+          <option [ngValue]="null" disabled>اختر البنك</option>
+          <option *ngFor="let bank of banks" [ngValue]="bank.id">{{ bank.name }}</option>
         </select>
       </div>
 
-      <div class="form-group">
-        <label>المبلغ</label>
-        <input type="number" class="form-control" [(ngModel)]="transferData.amount">
+      <div class="form-row">
+        <div class="form-group form-half">
+          <label class="form-label">المبلغ</label>
+          <input type="number" class="form-control" [(ngModel)]="transferData.amount"
+                 min="0.01" step="0.01" placeholder="0.00" dir="ltr">
+          <div class="erp-field-error" *ngIf="transferData.amount > getFromSafeBalance() && transferData.from_id">
+            <i class="fas fa-exclamation-circle"></i> المبلغ أكبر من الرصيد المتاح
+          </div>
+        </div>
+        <div class="form-group form-half">
+          <label class="form-label">التاريخ</label>
+          <input type="date" class="form-control" [(ngModel)]="transferData.date" dir="ltr">
+        </div>
       </div>
 
       <div class="form-group">
-        <label>التاريخ</label>
-        <input type="date" class="form-control" [(ngModel)]="transferData.date">
-      </div>
-
-      <div class="form-group">
-        <label>ملاحظات</label>
-        <textarea class="form-control" [(ngModel)]="transferData.notes"></textarea>
+        <label class="form-label">ملاحظات <span class="text-muted">(اختياري)</span></label>
+        <textarea class="form-control" [(ngModel)]="transferData.notes" rows="2"
+                  placeholder="أضف ملاحظات حول التحويل..."></textarea>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
-      <button class="btn btn-success" (click)="submitTransfer()">إتمام التحويل</button>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeDialogs()" [disabled]="saving">إلغاء</button>
+      <button class="btn btn-success" (click)="submitTransfer()"
+              [disabled]="saving || !canSubmitTransfer() || transferData.amount > getFromSafeBalance()">
+        <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ saving ? 'جاري التحويل...' : 'إتمام التحويل' }}
+      </button>
     </div>
   </div>
 </div>
