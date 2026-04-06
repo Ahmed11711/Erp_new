@@ -32,6 +32,8 @@ use App\Services\CategoryInventoryCostService;
 
 class OrdersController extends Controller
 {
+    /** أنواع الطلبات التي تُنقص المخزون عبر category_procedure وتُثبت COGS/الإيراد كمسار «جديد». */
+    private const ORDER_TYPES_INVENTORY_SHIP = ['جديد', 'طلب استبدال'];
 
     public function index()
     {
@@ -1181,14 +1183,14 @@ class OrdersController extends Controller
         DB::beginTransaction();
         try {
             $user_id = auth()->user()->id;
-            if ($order->order_type == 'جديد') {
+            if (in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
                 $total = 0;
                 $finshied = true;
                 $productsToShip = json_decode($request->productsToShip, true);
                 $totalCogs = 0;
                 foreach ($productsToShip as $product) {
                     $order_product = OrderProduct::find($product['id']);
-                    $avgCost = CategoryInventoryCostService::resolveReferenceUnitCost((int) $order_product->category_id);
+                    $avgCost = CategoryInventoryCostService::averageCostForCategoryIssue((int) $order_product->category_id);
                     $totalCogs += $avgCost * (float)$product['quantity'];
                     $order_product = OrderProduct::find($product['id']);
                     $order_product->shipped_quantity += (float)$product['quantity'];
@@ -1385,7 +1387,18 @@ class OrdersController extends Controller
                             $accService->updateAccountHierarchyBalances($cogsAcc->id);
                             $accService->updateAccountHierarchyBalances($inventoryAcc->id);
                         } catch (\Exception $e) {
+                            Log::warning('COGS ship_order: updateAccountHierarchyBalances failed', [
+                                'order_id' => $order->id,
+                                'error' => $e->getMessage(),
+                            ]);
                         }
+                    } else {
+                        Log::warning('COGS ship_order: missing tree accounts', [
+                            'order_id' => $order->id,
+                            'totalCogs' => $totalCogs,
+                            'cogs_resolved' => (bool) $cogsAcc,
+                            'inventory_resolved' => (bool) $inventoryAcc,
+                        ]);
                     }
                 }
                 $salesAcc = \App\Models\TreeAccount::resolveSalesRevenueAccount();
@@ -1470,7 +1483,7 @@ class OrdersController extends Controller
                 ]);
             }
 
-            if ($order->customer_type != 'شركة' && $order->order_type != 'جديد') {
+            if ($order->customer_type != 'شركة' && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
 
                 $action = 'تم شحن الطلب';
                 $this->insertTracking($order->id, $action, $user_id, now());
@@ -1526,7 +1539,7 @@ class OrdersController extends Controller
             }
 
 
-            if ($order->order_type != 'طلب صيانة' && ($order->customer_type != 'شركة' && $order->order_type != 'جديد')) {
+            if ($order->order_type != 'طلب صيانة' && ($order->customer_type != 'شركة' && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true))) {
                 $order_products = OrderProduct::where('order_id', $id)->get();
                 foreach ($order_products as $op) {
                     if ($op->quantity > 0) {

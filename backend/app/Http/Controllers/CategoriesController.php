@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\stock;
+use App\Models\TreeAccount;
 use Validator;
 use Carbon\Carbon;
 use App\Models\OrderProduct;
@@ -92,7 +94,6 @@ class CategoriesController extends Controller
    'production_id' => 'required|numeric|exists:productions,id',
    'measurement_id' => 'required|numeric|exists:measurements,id',
    'category_image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:500',
-   'stock_id' => 'required|integer|exists:stocks,id', // add this line for stock_id validation
   ]);
   $img_name = '';
   if ($request->hasFile('category_image')) {
@@ -109,6 +110,11 @@ class CategoriesController extends Controller
    return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
   }
 
+  $stockId = $this->resolveStockIdForCategory($request);
+  if (!$stockId) {
+   return response()->json(['message' => 'تعذر تحديد المخزن.'], 422);
+  }
+
   $cost = (float) request('category_price');
   $openQty = (float) request('initial_balance');
   $warehouse = request('warehouse');
@@ -123,7 +129,7 @@ class CategoriesController extends Controller
    'production_id' => request('production_id'),
    'measurement_id' => request('measurement_id'),
    'category_image' => $img_name,
-   'stock_id' => request('stock_id'),
+   'stock_id' => $stockId,
   ];
 
   // الرصيد الافتتاحي = كمية أولية؛ عمود «الرصيد» في القائمة يعرض quantity وليس initial_balance فقط
@@ -180,9 +186,13 @@ class CategoriesController extends Controller
    'production_id' => 'required|numeric|exists:productions,id',
    'measurement_id' => 'required|numeric|exists:measurements,id',
    'category_image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:500',
-   'stock_id' => 'required|integer|exists:stocks,id',
 
   ]);
+
+  $stockId = $this->resolveStockIdForCategory($request);
+  if (!$stockId) {
+   return response()->json(['message' => 'تعذر تحديد المخزن.'], 422);
+  }
 
   $category = Category::find($id);
 
@@ -210,7 +220,7 @@ class CategoriesController extends Controller
    'production_id' => $request->input('production_id'),
    'measurement_id' => $request->input('measurement_id'),
    'category_image' => $img_name,
-   'stock_id' => $request->input('stock_id'),
+   'stock_id' => $stockId,
 
   ]);
 
@@ -218,6 +228,63 @@ class CategoriesController extends Controller
   return response()->json($category, 200);
  }
 
+ /**
+  * يعتمد على stock_id المرسل إن وُجد، أو اسم المخزن، أو ينشئ صفاً في stocks للمخازن الخمسة المعتمدة.
+  */
+ private function resolveStockIdForCategory(Request $request): ?int
+ {
+  $inputId = $request->input('stock_id');
+  if ($inputId !== null && $inputId !== '' && $inputId !== '0') {
+   $id = (int) $inputId;
+   if (stock::where('id', $id)->exists()) {
+    return $id;
+   }
+  }
+  $warehouse = trim((string) $request->input('warehouse', ''));
+  if ($warehouse === '') {
+   return null;
+  }
+  $existing = stock::where('name', $warehouse)->first();
+  if ($existing) {
+   return (int) $existing->id;
+  }
+
+  return $this->ensureStockRowForStandardWarehouse($warehouse);
+ }
+
+ /**
+  * @return int|null رقم السجل أو null إن لم يكن اسماً معتمداً
+  */
+ private function ensureStockRowForStandardWarehouse(string $warehouse): ?int
+ {
+  $allowed = [
+   'مخزن مواد خام',
+   'مخزن منتج تحت التشغيل',
+   'مخزن منتج تام',
+   'مخزن صيانة',
+   'مخزن تالف',
+  ];
+  if (!in_array($warehouse, $allowed, true)) {
+   return null;
+  }
+  $assetId = stock::query()->value('asset_id');
+  if ($assetId === null) {
+   $assetId = TreeAccount::query()->min('id');
+  }
+  if ($assetId === null) {
+   $assetId = 1;
+  }
+  $row = stock::firstOrCreate(
+   ['name' => $warehouse],
+   [
+    'balance' => 0,
+    'asset_id' => (int) $assetId,
+    'active' => true,
+   ]
+  );
+
+  return (int) $row->id;
+ }
 
 
  public function search(Request $request)

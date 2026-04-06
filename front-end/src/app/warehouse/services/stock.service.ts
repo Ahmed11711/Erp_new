@@ -33,4 +33,18 @@ export class StockService {
     return this.http.delete<any>(`${environment.Url}/stocks/${id}`)
   }
 
+  /**
+   * Laravel JsonResource::collection يضع الصفوف في res.data.data وليس res.data مباشرة.
+   */
+  parseListResponse(res: any): any[] {
+    const payload = res?.data;
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (payload && Array.isArray(payload.data)) {
+      return payload.data;
+    }
+    return [];
+  }
+
 }

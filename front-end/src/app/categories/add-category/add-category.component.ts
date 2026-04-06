@@ -5,11 +5,13 @@ import { SnackBarComponent } from 'src/app/shared/snack-bar/snack-bar.component'
 import { CategoryService } from '../services/category.service';
 import { ProductionService } from '../services/production.service';
 import { UnitsService } from '../services/units.service';
-import { map, startWith } from 'rxjs/operators';
+import { catchError, map, startWith } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { AuthService } from 'src/app/auth/auth.service';
 import { OrderService } from 'src/app/shipping/services/order.service';
 import { AssetService } from 'src/app/financial/services/asset.service';
 import { StockService } from 'src/app/warehouse/services/stock.service';
+import { warehouseOptionsFromStocks } from 'src/app/shared/constants/warehouse-stock-rows';
 
 @Component({
  selector: 'app-add-category',
@@ -38,11 +40,12 @@ export class AddCategoryComponent {
  }
 
  getStockData() {
-  this.StockService.list().subscribe(res => {
-   this.stockData = res.data;
-   console.log(this.stockData);
-
-  })
+  this.StockService.list()
+   .pipe(catchError(() => of({ data: { data: [] as any[] } })))
+   .subscribe(res => {
+    const stockList = this.StockService.parseListResponse(res);
+    this.stockData = warehouseOptionsFromStocks(stockList);
+   });
  }
 
  products: any[] = [];
@@ -81,7 +84,10 @@ export class AddCategoryComponent {
   formData.append('warehouse', data.value.warehouse);
   formData.append('measurement_id', data.value.unit);
   formData.append('production_id', data.value.production);
-  formData.append('stock_id', this.stockData.find(elm => elm.name == data.value.warehouse).id);
+  const stockRow = this.stockData.find((elm: { name: string; id?: number }) => elm.name === data.value.warehouse);
+  if (stockRow?.id) {
+   formData.append('stock_id', String(stockRow.id));
+  }
 
   // Append the image file to FormData
   if (this.selectedFile) {

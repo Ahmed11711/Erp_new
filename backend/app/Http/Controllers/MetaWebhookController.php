@@ -118,6 +118,8 @@ class MetaWebhookController extends Controller
                                                 'Yes, cancel order', 'No, keep order',
                                                 'In two days', 'In one week', 'Another date',
                                                 'Within 3 days', 'Schedule a date',
+                                                'Write review', 'Leave a quick review', 'Leave a review', 'Quick review',
+                                                'اكتب تقييمك', 'اكتب رأيك', 'تقييم سريع',
                                             ];
                                             if (in_array($body, $knownTitles, true)) {
                                                 $buttonTitle = $body;

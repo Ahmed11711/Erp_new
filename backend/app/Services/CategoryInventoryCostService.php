@@ -12,7 +12,11 @@ class CategoryInventoryCostService
     /**
      * تكلفة مرجعية للوحدة: total_price/qty ثم unit_price ثم متوسط طبقات warehouse_ratings (أسعار الشراء/الدفعات).
      */
-    public static function resolveReferenceUnitCost(int $categoryId): float
+    /**
+     * متوسط تكلفة إخراج وحدة من المخزون — مطابق لمنطق procedure `category_procedure` قبل تطبيق الكمية.
+     * يُستخدم لترحيل COGS ليطابق ما تخصمه الإجراء من total_price.
+     */
+    public static function averageCostForCategoryIssue(int $categoryId): float
     {
         $cat = DB::table('categories')->where('id', $categoryId)->first();
         if (! $cat) {
@@ -21,12 +25,21 @@ class CategoryInventoryCostService
         $q = (float) ($cat->quantity ?? 0);
         $tp = (float) ($cat->total_price ?? 0);
         $up = (float) ($cat->unit_price ?? 0);
-        // متوسط التكلفة المرجح من قيمة المخزون / الكمية (دائماً عند وجود كمية)
         if ($q > 0.0000001) {
             return $tp / $q;
         }
         if ($up > 0.0000001) {
             return $up;
+        }
+
+        return 0.0;
+    }
+
+    public static function resolveReferenceUnitCost(int $categoryId): float
+    {
+        $fromIssue = static::averageCostForCategoryIssue($categoryId);
+        if ($fromIssue > 0.0000001) {
+            return $fromIssue;
         }
 
         $v = DB::table('warehouse_ratings')

@@ -2,13 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\Customer;
 use App\Models\Message;
 use App\Models\Order;
 use App\Models\OrderConfirmationSession;
 use Illuminate\Support\Facades\Log;
 
 /**
- * فلو أزرار قوالب واتساب (تأكيد / تأجيل / إلغاء / رفض استلام): ردود رسائل فقط — لا تعديل على الطلبات في ERP.
+ * فلو أزرار قوالب واتساب (تأكيد / تأجيل / إلغاء / رفض استلام / Write review): ردود رسائل فقط — لا تعديل على الطلبات في ERP.
  */
 class OrderConfirmationFlowService
 {
@@ -23,9 +24,18 @@ class OrderConfirmationFlowService
 
     /**
      * استنتاج لغة الفلو من أزرار قالب order_flow (en) مقابل القوالب العربية.
+     * أزرار التقييم (Write review / اكتب تقييمك…): منطق منفصل عربي/إنجليزي.
+     *
+     * @param  string|null  $contextMessageId  wamid رسالة القالب (لتمييز عربي/إنجليزي عندما يكون عنوان الزر نفسه "Write Review").
+     * @param  string|null  $customerPhone       رقم واتساب للاحتياط: آخر قالب تقييم في الدردشة.
      */
-    private function detectFlowLocale(?string $buttonId, ?string $buttonTitle): string
+    private function detectFlowLocale(?string $buttonId, ?string $buttonTitle, ?string $contextMessageId = null, ?string $customerPhone = null): string
     {
+        $reviewLocale = $this->detectReviewLocaleFromButton($buttonId, $buttonTitle, $contextMessageId, $customerPhone);
+        if ($reviewLocale !== null) {
+            return $reviewLocale;
+        }
+
         $title = $this->normalizeButtonTitle($buttonTitle);
         if ($title !== null) {
             if (preg_match('/^(recharge|reship(ping)?|confirm\s+preparation|confirm\s+shipping|delay\s+shipping|within\s+3\s+days|schedule\s+a\s+date)$/iu', $title)) {
@@ -47,6 +57,135 @@ class OrderConfirmationFlowService
         }
 
         return 'ar';
+    }
+
+    /**
+     * لغة رسائل فلو التقييم/الفيد باك فقط: قوالب client_review و feedback (عربي / إنجليزي).
+     * عندما يكون عنوان الزر "Write Review" في كل القوالب: اللغة تُستنتج من نص رسالة القالب في ERP (بالعربية / بالإنجليزية).
+     */
+    private function detectReviewLocaleFromButton(?string $buttonId, ?string $buttonTitle, ?string $contextMessageId = null, ?string $customerPhone = null): ?string
+    {
+        $id = $this->normalizeButtonPayloadId($buttonId);
+        $title = $this->normalizeButtonTitle($buttonTitle);
+
+        $reviewIdKeys = ['write_review', 'write_review_ar', 'write_review_ara', 'write_review_en'];
+        $isReviewId = $id !== null && in_array($id, $reviewIdKeys, true);
+
+        $isReviewTitle = false;
+        if ($title !== null) {
+            if (preg_match('/^write\s+review$/iu', $title)) {
+                $isReviewTitle = true;
+            }
+            if (preg_match('/leave\s+a\s+quick\s+review|leave\s+a\s+review|^quick\s+review$/iu', $title)) {
+                $isReviewTitle = true;
+            }
+            if (preg_match('/\p{Arabic}/u', $title) && preg_match('/اكتب|تقييم|رأي|سريع|أخبرنا|تجربتك/u', $title)) {
+                $isReviewTitle = true;
+            }
+        }
+
+        if (! $isReviewId && ! $isReviewTitle) {
+            return null;
+        }
+
+        if ($id === 'write_review_en') {
+            return 'en';
+        }
+        if ($id === 'write_review_ar' || $id === 'write_review_ara') {
+            return 'ar';
+        }
+
+        if ($title !== null) {
+            if (preg_match('/\p{Arabic}/u', $title) && preg_match('/اكتب|تقييم|رأي|سريع|أخبرنا|تجربتك/u', $title)) {
+                return 'ar';
+            }
+        }
+
+        // نفس نص الزر "Write Review" في القالبين العربي والإنجليزي — اللغة من رسالة القالب المحفوظة أو آخر قالب تقييم.
+        if ($title !== null && preg_match('/^write\s+review$/iu', $title)) {
+            $fromOutbound = $this->inferReviewLocaleFromContextOrChat($contextMessageId, $customerPhone);
+
+            return $fromOutbound ?? 'ar';
+        }
+
+        if ($title !== null && preg_match('/leave\s+a\s+quick\s+review|leave\s+a\s+review|^quick\s+review$/iu', $title)) {
+            return 'en';
+        }
+
+        if ($id === 'write_review') {
+            $fromOutbound = $this->inferReviewLocaleFromContextOrChat($contextMessageId, $customerPhone);
+
+            return $fromOutbound ?? 'ar';
+        }
+
+        return 'ar';
+    }
+
+    /**
+     * من محتوى رسالة القالب الصادرة: "…بالعربية" مقابل "…بالإنجليزية" (نفس صيغة WhatsAppMessageController).
+     */
+    private function inferReviewLocaleFromMessageContent(?string $content): ?string
+    {
+        if ($content === null || $content === '') {
+            return null;
+        }
+        if (str_contains($content, 'بالإنجليزية')) {
+            return 'en';
+        }
+        if (str_contains($content, 'بالعربية')) {
+            return 'ar';
+        }
+
+        return null;
+    }
+
+    /**
+     * السياق (رسالة القالب التي ضُغط زرها) ثم احتياطياً آخر قالب تقييم/فيد باك صادر لنفس الرقم.
+     */
+    private function inferReviewLocaleFromContextOrChat(?string $contextMessageId, ?string $customerPhone): ?string
+    {
+        if ($contextMessageId) {
+            $msg = Message::where('twilio_message_sid', $contextMessageId)->first();
+            $loc = $this->inferReviewLocaleFromMessageContent($msg?->content);
+            if ($loc !== null) {
+                return $loc;
+            }
+        }
+
+        if ($customerPhone === null || $customerPhone === '') {
+            return null;
+        }
+
+        $variants = $this->phoneDigitsVariants($customerPhone);
+        $customer = null;
+        if ($variants !== []) {
+            $customer = Customer::where(function ($q) use ($variants) {
+                foreach ($variants as $v) {
+                    $q->orWhere('phone', 'like', '%'.$v.'%');
+                }
+            })->orderByDesc('id')->first();
+        }
+        if (! $customer) {
+            $digitsOnly = preg_replace('/\D/', '', $customerPhone);
+            if ($digitsOnly !== '') {
+                $customer = Customer::where('phone', '+'.$digitsOnly)->first();
+            }
+        }
+        if (! $customer) {
+            return null;
+        }
+
+        $msg = Message::where('customer_id', $customer->id)
+            ->where('direction', 'outbound')
+            ->where(function ($q) {
+                $q->where('content', 'like', '%تقييم العميل%')
+                    ->orWhere('content', 'like', '%فيد باك%')
+                    ->orWhere('content', 'like', '%طلب تقييم%');
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        return $this->inferReviewLocaleFromMessageContent($msg?->content);
     }
 
     /**
@@ -147,6 +286,14 @@ class OrderConfirmationFlowService
             'Reship order' => 'reject_reship',
             'Change order' => 'reject_modify',
             'Cancel delivery' => 'reject_cancel_from_rejection',
+            'Write review' => 'write_review_click',
+            'Leave a quick review' => 'write_review_click',
+            'Leave a review' => 'write_review_click',
+            'Quick review' => 'write_review_click',
+            'اكتب تقييمك' => 'write_review_click',
+            'اكتب رأيك' => 'write_review_click',
+            'كتابة تقييم' => 'write_review_click',
+            'تقييم سريع' => 'write_review_click',
         ];
 
         foreach ($titleMap as $key => $mappedAction) {
@@ -176,6 +323,10 @@ class OrderConfirmationFlowService
             'reject_reship' => 'reject_reship',
             'reject_modify' => 'reject_modify',
             'reject_cancel_from_rejection' => 'reject_cancel_from_rejection',
+            'write_review' => 'write_review_click',
+            'write_review_ar' => 'write_review_click',
+            'write_review_ara' => 'write_review_click',
+            'write_review_en' => 'write_review_click',
         ];
 
         if ($id !== null && isset($idMap[$id])) {
@@ -275,6 +426,18 @@ class OrderConfirmationFlowService
         }
         if (preg_match('/^cancel\s+order$/iu', $t)) {
             return 'cancel_order';
+        }
+        if (preg_match('/^write\s+review$/iu', $t)) {
+            return 'write_review_click';
+        }
+        if (preg_match('/leave\s+a\s+quick\s+review|leave\s+a\s+review|^quick\s+review$/iu', $t)) {
+            return 'write_review_click';
+        }
+        if (preg_match('/اكتب/u', $t) && (preg_match('/تقييم/u', $t) || preg_match('/رأي/u', $t))) {
+            return 'write_review_click';
+        }
+        if (preg_match('/تقييم\s+سريع/u', $t) || preg_match('/أخبرنا/u', $t)) {
+            return 'write_review_click';
         }
 
         return null;
@@ -419,17 +582,15 @@ class OrderConfirmationFlowService
             $order = Order::find($session->order_id);
         }
 
-        $localeHint = $this->detectFlowLocale($buttonId, $buttonTitle);
+        $localeHint = $this->detectFlowLocale($buttonId, $buttonTitle, $contextMessageId, $customerPhone);
 
         if (! $order) {
             Log::warning('OrderConfirmationFlow: Could not resolve order', [
                 'phone' => $customerPhone,
                 'button_id' => $buttonId,
+                'context_id' => $contextMessageId,
             ]);
-            $err = $localeHint === 'en'
-                ? "Sorry, we couldn't find your order. Please contact us."
-                : 'عذراً، لم نتمكن من العثور على الطلب. يرجى التواصل معنا.';
-            $this->whatsappService->sendMessage($customerPhone, $err);
+            $this->whatsappService->sendMessage($customerPhone, $this->orderNotFoundMessage($localeHint));
 
             return true;
         }
@@ -468,6 +629,7 @@ class OrderConfirmationFlowService
             ->first();
         if ($sessionRefresh && in_array($action, [
             'confirm_preparation', 'confirm_shipping', 'postpone_order', 'postpone_shipping_delay', 'cancel_order', 'delivery_rejection_start',
+            'write_review_click',
         ], true)) {
             $sessionRefresh->delete();
         }
@@ -479,6 +641,7 @@ class OrderConfirmationFlowService
             'postpone_shipping_delay' => $this->handleShippingDelayStart($order, $customerPhone, $localeHint),
             'cancel_order' => $this->handleCancelStart($order, $customerPhone, $localeHint),
             'delivery_rejection_start' => $this->handleDeliveryRejectionStart($order, $customerPhone, $localeHint),
+            'write_review_click' => $this->handleWriteReviewClick($order, $customerPhone, $localeHint),
             default => false,
         };
     }
@@ -510,6 +673,14 @@ class OrderConfirmationFlowService
         }
 
         $flowLocale = $session->flow_locale ?? 'ar';
+
+        if ($session->flow_state === 'pending_review_text') {
+            $loc = ($session->flow_locale ?? 'ar') === 'en' ? 'en' : 'ar';
+            $session->delete();
+            $msg = $this->reviewFollowupThanksMessage($loc);
+
+            return $this->whatsappService->sendMessage($customerPhone, $msg)['success'] ?? false;
+        }
 
         if ($session->flow_state === 'pending_shipping_delay_choice') {
             $a = $this->mapTextToShippingDelayChoice($text);
@@ -854,6 +1025,61 @@ class OrderConfirmationFlowService
         return $this->sendInteractiveWithTextFallback($phone, $body, $buttons, $fallback);
     }
 
+    /**
+     * زر Write review في قوالب client_review / feedback: رسالة ترحيب ثم انتظار نص التقييم.
+     */
+    private function handleWriteReviewClick(Order $order, string $phone, string $locale = 'ar'): bool
+    {
+        $phoneKey = $this->normalizePhoneKey($phone);
+        OrderConfirmationSession::where('customer_phone', $phoneKey)
+            ->where('order_id', $order->id)
+            ->delete();
+
+        $flowLocale = $locale === 'en' ? 'en' : 'ar';
+
+        OrderConfirmationSession::create([
+            'customer_phone' => $phoneKey,
+            'order_id' => $order->id,
+            'flow_state' => 'pending_review_text',
+            'flow_locale' => $flowLocale,
+        ]);
+
+        $msg = $this->reviewWelcomeMessage($flowLocale);
+
+        return $this->whatsappService->sendMessage($phone, $msg)['success'] ?? false;
+    }
+
+    /** ترحيب بعد Write review — عربي أو إنجليزي حسب قالب ميتا. */
+    private function reviewWelcomeMessage(string $locale): string
+    {
+        return $locale === 'en'
+            ? "Thank you 🤍\nWe'd love to hear your thoughts — even a few words mean a lot!"
+            : "شكراً 🤍\nنحب نسمع رأيك — حتى بضع كلمات بتفرّق معانا كتير!";
+    }
+
+    /** شكر بعد كتابة التقييم — نفس لغة جلسة التقييم. */
+    private function reviewFollowupThanksMessage(string $locale): string
+    {
+        return $locale === 'en'
+            ? "Thank you for sharing your feedback with us 💙 It truly helps us improve — we're grateful for your time 🙏"
+            : "شكراً إنك شاركتنا رأيك 💙 ده فعلاً بيساعدنا نتحسّن — بنقدّر وقتك جداً 🙏";
+    }
+
+    /**
+     * عند عدم ربط الضغط على الزر بطلب (سياق أو رقم): نفس النص المعتمد في واتساب.
+     */
+    private function orderNotFoundMessage(string $locale): string
+    {
+        $loc = $locale === 'en' ? 'en' : 'ar';
+
+        return $loc === 'en'
+            ? "Sorry, we couldn't find the order. Please contact us."
+            : 'عذراً، لم نتمكن من العثور على الطلب. يرجى التواصل معنا.';
+    }
+
+    /**
+     * ربط الطلب عند الضغط على أزرار القالب: السياق (wamid) ثم رقم الجوال ثم آخر رسالة صادرة في الدردشة.
+     */
     private function resolveOrder(string $customerPhone, ?string $contextMessageId): ?Order
     {
         if ($contextMessageId) {
@@ -866,19 +1092,133 @@ class OrderConfirmationFlowService
             }
         }
 
-        $digits = preg_replace('/\D/', '', $customerPhone);
-        if (strlen($digits) === 10 && str_starts_with($digits, '0')) {
-            $digits = '20' . substr($digits, 1);
-        } elseif (strlen($digits) === 9 && str_starts_with($digits, '1')) {
-            $digits = '20' . $digits;
+        $order = $this->resolveOrderByPhoneDigits($customerPhone);
+        if ($order) {
+            return $order;
         }
-        $mobilePart = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
 
-        return Order::where(function ($q) use ($digits, $mobilePart) {
-            $q->where('customer_phone_1', 'like', "%{$digits}%")
-                ->orWhere('customer_phone_1', 'like', "%{$mobilePart}%");
+        return $this->resolveOrderFromLatestOutboundChat($customerPhone);
+    }
+
+    /**
+     * @return list<string> أرقام للبحث بـ LIKE على حقول الطلب
+     */
+    private function phoneDigitsVariants(string $customerPhone): array
+    {
+        $digits = preg_replace('/\D/', '', $customerPhone);
+        if ($digits === '') {
+            return [];
+        }
+
+        $variants = [$digits];
+
+        // مصر: 01xxxxxxxxx (11 رقم) → 20 + 10 أرقام وطنية
+        if (strlen($digits) === 11 && str_starts_with($digits, '01')) {
+            $variants[] = '20' . substr($digits, 1);
+        }
+        if (strlen($digits) === 10 && str_starts_with($digits, '0')) {
+            $variants[] = '20' . substr($digits, 1);
+        }
+        if (strlen($digits) === 9 && str_starts_with($digits, '1')) {
+            $variants[] = '20' . $digits;
+        }
+
+        $extra = [];
+        foreach ($variants as $d) {
+            if (strlen($d) >= 12 && str_starts_with($d, '20')) {
+                $extra[] = '0'.substr($d, 2);
+            }
+        }
+        $variants = array_merge($variants, $extra);
+
+        $long = $digits;
+        foreach ($variants as $v) {
+            if (strlen($v) > strlen($long)) {
+                $long = $v;
+            }
+        }
+        if (strlen($long) >= 10) {
+            $variants[] = substr($long, -10);
+        }
+        if (strlen($long) >= 9) {
+            $variants[] = substr($long, -9);
+        }
+
+        $variants = array_values(array_unique(array_filter($variants, fn ($v) => $v !== '' && strlen($v) >= 7)));
+
+        return $variants;
+    }
+
+    private function resolveOrderByPhoneDigits(string $customerPhone): ?Order
+    {
+        $variants = $this->phoneDigitsVariants($customerPhone);
+        if ($variants === []) {
+            return null;
+        }
+
+        return Order::where(function ($q) use ($variants) {
+            foreach ($variants as $v) {
+                $q->orWhere(function ($q2) use ($v) {
+                    $q2->where('customer_phone_1', 'like', "%{$v}%")
+                        ->orWhere('customer_phone_2', 'like', "%{$v}%")
+                        ->orWhere('tel', 'like', "%{$v}%");
+                });
+            }
         })
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * عندما لا يطابق السياق سجل الرسالة (أو لا يُرسل): آخر رسالة صادرة من النظام لنفس رقم واتساب عادةً مرتبطة بنفس قالب التقييم.
+     */
+    private function resolveOrderFromLatestOutboundChat(string $customerPhone): ?Order
+    {
+        $variants = $this->phoneDigitsVariants($customerPhone);
+        if ($variants === []) {
+            return null;
+        }
+
+        $customer = Customer::where(function ($q) use ($variants) {
+            foreach ($variants as $v) {
+                $q->orWhere('phone', 'like', '%'.$v.'%');
+            }
+        })->orderByDesc('id')->first();
+
+        if (! $customer) {
+            $digitsOnly = preg_replace('/\D/', '', $customerPhone);
+            if ($digitsOnly !== '') {
+                $customer = Customer::where('phone', '+'.$digitsOnly)->first();
+            }
+        }
+
+        if (! $customer) {
+            return null;
+        }
+
+        $msg = Message::where('customer_id', $customer->id)
+            ->whereNotNull('order_id')
+            ->where('direction', 'outbound')
+            ->where(function ($q) {
+                $q->where('content', 'like', '%تقييم العميل%')
+                    ->orWhere('content', 'like', '%فيد باك%')
+                    ->orWhere('content', 'like', '%طلب تقييم%');
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $msg) {
+            $msg = Message::where('customer_id', $customer->id)
+                ->whereNotNull('order_id')
+                ->where('direction', 'outbound')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        if (! $msg || ! $msg->order_id) {
+            return null;
+        }
+
+        return Order::find($msg->order_id);
     }
 }

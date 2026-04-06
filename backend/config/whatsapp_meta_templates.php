@@ -84,6 +84,7 @@ return [
         ],
 
         // client_review — header صورة متغيرة في Meta: يُرسل image.link (الافتراضي من default_header_image_url).
+        // زر Quick Reply: write_review أو write_review_ar / write_review_en حسب لغة القالب — العناوين: Write review، Leave a quick review، اكتب تقييمك…
         [
             'name' => 'client_review',
             'language' => 'ar',
@@ -94,6 +95,7 @@ return [
             'body_params' => ['اسم العميل'],
             'body_param_keys' => ['customer_name'],
             'phone_number_id' => null,
+            'button_ids' => ['write_review', 'write_review_ar'],
         ],
         [
             'name' => 'client_review',
@@ -107,6 +109,7 @@ return [
             'body_params' => ['اسم العميل'],
             'body_param_keys' => ['customer_name'],
             'phone_number_id' => null,
+            'button_ids' => ['write_review', 'write_review_en'],
         ],
 
         // feedback — نفس الـ header (صورة متغيرة في القالب المعتمد).
@@ -120,6 +123,7 @@ return [
             'body_params' => [],
             'body_param_keys' => [],
             'phone_number_id' => null,
+            'button_ids' => ['write_review', 'write_review_ar'],
         ],
         [
             'name' => 'feedback',
@@ -132,6 +136,7 @@ return [
             'body_params' => [],
             'body_param_keys' => [],
             'phone_number_id' => null,
+            'button_ids' => ['write_review', 'write_review_en'],
         ],
     ],
 ];

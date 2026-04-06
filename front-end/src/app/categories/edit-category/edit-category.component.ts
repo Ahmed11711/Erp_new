@@ -9,6 +9,9 @@ import { UnitsService } from '../services/units.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { environment } from 'src/env/env';
 import { StockService } from 'src/app/warehouse/services/stock.service';
+import { catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
+import { warehouseOptionsFromStocks } from 'src/app/shared/constants/warehouse-stock-rows';
 
 @Component({
   selector: 'app-edit-category',
@@ -56,11 +59,12 @@ export class EditCategoryComponent {
   }
 
   getStockData(){
-    this.StockService.list().subscribe(res=>{
-      this.stockData = res.data;
-      console.log(this.stockData);
-
-    })
+    this.StockService.list()
+      .pipe(catchError(() => of({ data: { data: [] as any[] } })))
+      .subscribe(res=>{
+        const stockList = this.StockService.parseListResponse(res);
+        this.stockData = warehouseOptionsFromStocks(stockList);
+      });
   }
 
   form:FormGroup = new FormGroup({
@@ -101,7 +105,10 @@ export class EditCategoryComponent {
     formData.append('warehouse', data.warehouse);
     formData.append('measurement_id', data.measurement_id);
     formData.append('production_id', data.production_id);
-    formData.append('stock_id', this.stockData.find(elm=>elm.name == data.warehouse).id);
+    const stockRow = this.stockData.find((elm: { name: string; id?: number }) => elm.name === data.warehouse);
+    if (stockRow?.id) {
+      formData.append('stock_id', String(stockRow.id));
+    }
 
 
     if (this.selectedFile) {
