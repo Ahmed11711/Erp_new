@@ -19,7 +19,7 @@ class SafeController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Safe::with('account');
+        $query = Safe::with(['account', 'account.parent']);
 
         if ($request->has('type')) {
             $query->where('type', $request->type);
@@ -49,12 +49,12 @@ class SafeController extends Controller
             'balance' => 'nullable|numeric|min:0',
             'is_inside_branch' => 'nullable|boolean',
             'branch_name' => 'nullable|string',
-            'account_id' => 'required|exists:tree_accounts,id',
-            'counter_account_id' => 'nullable|exists:tree_accounts,id|different:account_id',
+            'parent_account_id' => 'required|exists:tree_accounts,id',
+            'counter_account_id' => 'nullable|exists:tree_accounts,id',
         ];
 
         if ($balance > 0.000001) {
-            $rules['counter_account_id'] = 'required|exists:tree_accounts,id|different:account_id';
+            $rules['counter_account_id'] = 'required|exists:tree_accounts,id';
         }
 
         $validator = Validator::make($request->all(), $rules);
@@ -65,18 +65,72 @@ class SafeController extends Controller
 
         DB::beginTransaction();
         try {
+            $parentAccount = TreeAccount::find($request->parent_account_id);
+
+            $lastChild = TreeAccount::where('parent_id', $parentAccount->id)
+                ->orderByDesc('code')
+                ->lockForUpdate()
+                ->first();
+
+            switch ($parentAccount->level) {
+                case 1:
+                    $newCode = $lastChild ? $lastChild->code + 1 : ($parentAccount->code * 10 + 1);
+                    $newLevel = 2;
+                    break;
+                case 2:
+                    if (!$lastChild) {
+                        if ($parentAccount->code < 100) {
+                            $parentCode = (string) $parentAccount->code;
+                            $newCode = (int) ($parentCode[0] . '0' . $parentCode[1]);
+                        } else {
+                            $newCode = $parentAccount->code * 10 + 1;
+                        }
+                    } else {
+                        $newCode = $lastChild->code + 1;
+                    }
+                    $newLevel = 3;
+                    break;
+                case 3:
+                    $newCode = $lastChild ? $lastChild->code + 1 : ($parentAccount->code * 10 + 1);
+                    $newLevel = 4;
+                    break;
+                default:
+                    $newCode = $lastChild ? $lastChild->code + 1 : ($parentAccount->code * 10 + 1);
+                    $newLevel = ($parentAccount->level ?? 1) + 1;
+                    break;
+            }
+
+            $childAccount = TreeAccount::create([
+                'name' => 'خزينة - ' . $request->name,
+                'name_en' => 'Safe - ' . $request->name,
+                'code' => $newCode,
+                'type' => $parentAccount->type,
+                'account_type' => 'فرعي',
+                'level' => $newLevel,
+                'parent_id' => $parentAccount->id,
+                'balance' => 0,
+                'debit_balance' => 0,
+                'credit_balance' => 0,
+                'is_trading_account' => false,
+                'detail_type' => 'safe',
+            ]);
+
             $safe = Safe::create([
                 'name' => $request->name,
                 'type' => $request->type,
                 'balance' => $balance,
                 'is_inside_branch' => $request->is_inside_branch ?? false,
                 'branch_name' => $request->branch_name,
-                'account_id' => $request->account_id,
+                'account_id' => $childAccount->id,
             ]);
 
             if ($balance > 0.000001) {
-                $safeAccountId = (int) $safe->account_id;
+                $safeAccountId = (int) $childAccount->id;
                 $counterId = (int) $request->counter_account_id;
+
+                if ($safeAccountId === $counterId) {
+                    throw new \Exception('الحساب المقابل يجب أن يكون مختلفاً عن حساب الخزينة');
+                }
                 $now = now();
                 $desc = 'رصيد افتتاحي خزينة - ' . $safe->name;
 
@@ -147,16 +201,26 @@ class SafeController extends Controller
             'name' => 'sometimes|string',
             'is_inside_branch' => 'nullable|boolean',
             'branch_name' => 'nullable|string',
-            'account_id' => 'required|exists:tree_accounts,id',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $oldName = $safe->name;
         $safe->update($request->only([
-            'name', 'is_inside_branch', 'branch_name', 'account_id'
+            'name', 'is_inside_branch', 'branch_name'
         ]));
+
+        if ($request->has('name') && $request->name !== $oldName && $safe->account_id) {
+            $treeAccount = TreeAccount::find($safe->account_id);
+            if ($treeAccount) {
+                $treeAccount->update([
+                    'name' => 'خزينة - ' . $request->name,
+                    'name_en' => 'Safe - ' . $request->name,
+                ]);
+            }
+        }
 
         return response()->json([
             'message' => 'تم تحديث الخزينة بنجاح',
@@ -182,8 +246,28 @@ class SafeController extends Controller
         if ((float) $safe->balance != 0) {
             return response()->json(['message' => 'لا يمكن حذف خزينة لها رصيد'], 422);
         }
-        $safe->delete();
-        return response()->json(['message' => 'تم حذف الخزينة بنجاح'], 200);
+
+        DB::beginTransaction();
+        try {
+            $accountId = $safe->account_id;
+            $safe->delete();
+
+            if ($accountId) {
+                $treeAccount = TreeAccount::find($accountId);
+                if ($treeAccount && $treeAccount->detail_type === 'safe') {
+                    $hasEntries = AccountEntry::where('tree_account_id', $accountId)->exists();
+                    if (!$hasEntries) {
+                        $treeAccount->delete();
+                    }
+                }
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'تم حذف الخزينة بنجاح'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     public function transfer(Request $request)

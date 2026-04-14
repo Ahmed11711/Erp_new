@@ -10,21 +10,35 @@
   </div>
 
   <div class="container-fluid">
-    <form class="my-3">
+    <form class="my-3" (ngSubmit)="$event.preventDefault()">
       <div class="row g-3 align-items-end">
         <div class="col-md-2">
           <label class="form-label">من تاريخ</label>
-          <input class="form-control" type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="load()">
+          <input
+            class="form-control"
+            type="date"
+            [(ngModel)]="dateFrom"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="load()"
+          >
         </div>
         <div class="col-md-2">
           <label class="form-label">إلى تاريخ</label>
-          <input class="form-control" type="date" [(ngModel)]="dateTo" name="dateTo" (change)="load()">
+          <input
+            class="form-control"
+            type="date"
+            [(ngModel)]="dateTo"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="load()"
+          >
         </div>
         <div class="col-md-2">
           <button class="btn btn-primary w-100" type="button" (click)="load()" [disabled]="loading">تحديث</button>
         </div>
       </div>
     </form>
+
+    <div *ngIf="loadError" class="alert alert-danger my-2" role="alert">{{ loadError }}</div>
 
     <div *ngIf="loading" class="text-center my-4">
       <div class="spinner-border text-primary" role="status"></div>

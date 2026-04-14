@@ -42,6 +42,7 @@ import { ReportNewOrdersComponentDetails } from './V2/report-new-order-details/r
 import { ServiceAccountsListComponent } from './service-accounts/service-accounts-list/service-accounts-list.component';
 import { ServiceAccountsCreateComponent } from './service-accounts/service-accounts-create/service-accounts-create.component';
 import { ServiceAccountsTransferComponent } from './service-accounts/service-accounts-transfer/service-accounts-transfer.component';
+import { CashFlowHubComponent } from './cash-flow-hub/cash-flow-hub.component';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -86,7 +87,8 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
     ReportNewOrdersComponentDetails,
     ServiceAccountsListComponent,
     ServiceAccountsCreateComponent,
-    ServiceAccountsTransferComponent
+    ServiceAccountsTransferComponent,
+    CashFlowHubComponent
 
 
   ],

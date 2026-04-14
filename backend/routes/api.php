@@ -53,6 +53,8 @@ Route::get('/test', function () {
 Route::get('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'verify']);
 Route::post('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'handle']);
 
+Route::post('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'handle']);
+
 
 Route::group(['middleware' => 'api', 'prefix' => 'auth'], function ($router) {
     Route::post('login', [AuthController::class, 'login']);
@@ -111,6 +113,7 @@ Route::middleware('auth')->group(function () {
 
     // Reports and charts
     Route::get('reports/categoriesSellReports', [App\Http\Controllers\CategoriesController::class, 'categoriesSellReports']);
+    Route::get('reports/shipping-companies', [ShippingCompanyController::class, 'shippingCompaniesReport']);
 
     Route::middleware(['department.access:Admin,Account Management,Logistics Specialist'])->group(function () {
         Route::get('transactions/by-supplier-order/search', [SupplierController::class, 'supplierAccountsAggregated']);
@@ -365,6 +368,8 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
     Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
+    Route::post('tree_accounts/{id}/balance-adjustment', [TreeAccountController::class, 'balanceAdjustment']);
+    Route::post('tree_accounts/bulk-balance-adjustment', [TreeAccountController::class, 'bulkBalanceAdjustment']);
     Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
 });
 

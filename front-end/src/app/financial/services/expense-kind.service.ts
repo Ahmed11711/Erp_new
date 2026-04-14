@@ -27,4 +27,8 @@ export class ExpenseKindService {
   deleteUser(id:number){
     return this.http.delete<any>(`${environment.Url}/expense_kind/${id}`)
   }
+
+  update(id: number, body: { expense_type: string; expense_kind: string }): Observable<any> {
+    return this.http.put<any>(`${environment.Url}/expense_kind/${id}`, body);
+  }
 }

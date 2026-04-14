@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
-use App\Models\stock;
+use App\Models\Stock;
 use App\Models\TreeAccount;
 use Validator;
 use Carbon\Carbon;
@@ -236,7 +236,7 @@ class CategoriesController extends Controller
   $inputId = $request->input('stock_id');
   if ($inputId !== null && $inputId !== '' && $inputId !== '0') {
    $id = (int) $inputId;
-   if (stock::where('id', $id)->exists()) {
+   if (Stock::where('id', $id)->exists()) {
     return $id;
    }
   }
@@ -244,7 +244,7 @@ class CategoriesController extends Controller
   if ($warehouse === '') {
    return null;
   }
-  $existing = stock::where('name', $warehouse)->first();
+  $existing = Stock::where('name', $warehouse)->first();
   if ($existing) {
    return (int) $existing->id;
   }
@@ -267,14 +267,14 @@ class CategoriesController extends Controller
   if (!in_array($warehouse, $allowed, true)) {
    return null;
   }
-  $assetId = stock::query()->value('asset_id');
+  $assetId = Stock::query()->value('asset_id');
   if ($assetId === null) {
    $assetId = TreeAccount::query()->min('id');
   }
   if ($assetId === null) {
    $assetId = 1;
   }
-  $row = stock::firstOrCreate(
+  $row = Stock::firstOrCreate(
    ['name' => $warehouse],
    [
     'balance' => 0,
@@ -558,25 +558,63 @@ class CategoriesController extends Controller
   return response()->json($data, 200);
  }
 
+ /**
+  * إغلاق جرد شهري: لقطة من رصيد المخزون الفعلي (categories.quantity) وتقييم متسق مع حركات الإخراج/الشحن (متوسط التكلفة المرجح).
+  * يدعم ?month=YYYY-MM (الشهر المُغلَق)، وإلا يُغلق الشهر السابق تقويمياً.
+  * يستخدم updateOrCreate حتى يمكن إعادة تسجيل نفس الشهر بعد تصحيح الجرد دون خطأ تكرار.
+  */
  public function monthlyInventory(Request $request)
  {
+  $request->validate([
+   'warehouse' => 'required|string',
+   'month' => 'nullable|date_format:Y-m',
+  ]);
+
+  $month = $request->filled('month')
+   ? Carbon::createFromFormat('Y-m', (string) $request->input('month'))->format('Y-m')
+   : Carbon::now()->subMonth()->format('Y-m');
+
   $categories = Category::where('warehouse', $request->warehouse)->get();
-  $transformedCategories = $categories->map(function ($category) {
-   $previousMonthDate = Carbon::now()->subMonth()->format('Y-m');
-   return [
-    'category_id' => $category->id,
-    'quantity' => $category->quantity,
-    'total_price' => $category->total_price,
-    'sell_total_price' => $category->sell_total_price,
-    'month' => $previousMonthDate,
-    'by' => auth()->user()->name,
-    'created_at' => now(),
-   ];
-  })->toArray();
 
-  DB::table('category_monthly_inventories')->insert($transformedCategories);
+  $closedBy = auth()->user()?->name ?? 'system';
 
-  return response()->json('success', 200);
+  DB::transaction(function () use ($categories, $month, $closedBy) {
+   foreach ($categories as $category) {
+    $qty = max(0, (float) ($category->quantity ?? 0));
+    $cid = (int) $category->id;
+
+    // قيمة المخزون بالتكلفة: نفس منطق إخراج الصنف للشحن/COGS (متوسط مرجح من categories.total_price ÷ quantity)
+    $avgCost = CategoryInventoryCostService::averageCostForCategoryIssue($cid);
+    $inventoryAtCost = round($qty * $avgCost, 2);
+
+    // مخزن منتج تام: إجمالي سعر البيع المرجّح = كمية × سعر البيع للوحدة
+    $isFinished = $category->warehouse === 'مخزن منتج تام';
+    $unitSell = (float) ($category->category_price ?? 0);
+    $sellTotal = $isFinished
+     ? round($qty * $unitSell, 2)
+     : round((float) ($category->sell_total_price ?? 0), 2);
+
+    CategoryMonthlyInventory::updateOrCreate(
+     [
+      'category_id' => $cid,
+      'month' => $month,
+     ],
+     [
+      'quantity' => $qty,
+      'total_price' => $inventoryAtCost,
+      'sell_total_price' => $sellTotal,
+      'by' => $closedBy,
+     ]
+    );
+   }
+  });
+
+  return response()->json([
+   'success' => true,
+   'month' => $month,
+   'warehouse' => $request->warehouse,
+   'lines' => $categories->count(),
+  ], 200);
  }
 
 

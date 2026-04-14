@@ -14,5 +14,11 @@ class ShippingCompany extends Model
         'type',
         'orders_count',
         'refused_orders_percentage',
+        'tree_account_id',
     ];
+
+    public function treeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
+    }
 }

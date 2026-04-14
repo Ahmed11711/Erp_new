@@ -113,6 +113,9 @@
             <td data-label="الحساب المرتبط">
               <span *ngIf="safe.account" class="account-link">
                 <i class="fas fa-sitemap"></i> {{ safe.account.name }}
+                <small *ngIf="safe.account?.parent" class="text-muted d-block">
+                  تحت: {{ safe.account.parent.name }}
+                </small>
               </span>
               <span *ngIf="!safe.account" class="text-muted">—</span>
             </td>
@@ -198,11 +201,15 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label">الحساب المرتبط (شجرة الحسابات) <span class="text-danger">*</span></label>
-        <select class="form-control" [(ngModel)]="newSafe.account_id">
-          <option [ngValue]="null" disabled>اختر الحساب</option>
+        <label class="form-label">الحساب الأب (شجرة الحسابات) <span class="text-danger">*</span></label>
+        <select class="form-control" [(ngModel)]="newSafe.parent_account_id">
+          <option [ngValue]="null" disabled>اختر الحساب الأب</option>
           <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
+        <small class="form-text text-muted">
+          <i class="fas fa-info-circle"></i>
+          سيتم إنشاء حساب فرعي تلقائياً تحت هذا الحساب في شجرة الحسابات
+        </small>
       </div>
 
       <div class="form-group" *ngIf="newSafe.balance > 0">
@@ -252,9 +259,13 @@
       </div>
       <div class="form-group">
         <label class="form-label">الحساب المرتبط</label>
-        <select class="form-control" [(ngModel)]="selectedSafe.account_id">
-          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
-        </select>
+        <p class="form-control-plaintext border rounded px-2 py-1 bg-light" *ngIf="selectedSafe.account">
+          <i class="fas fa-sitemap"></i> {{ selectedSafe.account.name }} — {{ selectedSafe.account.code }}
+        </p>
+        <small class="form-text text-muted">
+          <i class="fas fa-info-circle"></i>
+          تم إنشاء هذا الحساب تلقائياً عند إضافة الخزنة ولا يمكن تغييره
+        </small>
       </div>
     </div>
     <div class="erp-modal__footer">

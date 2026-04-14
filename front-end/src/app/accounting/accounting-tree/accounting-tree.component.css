@@ -177,6 +177,11 @@
   color: #721c24;
 }
 
+.type-settlement {
+  background: #e2e3f3;
+  color: #38386b;
+}
+
 .account-balance {
   min-width: 100px;
   text-align: left;
@@ -210,7 +215,7 @@
   background: #e9ecef;
 }
 
-/* Modal Styles */
+/* Modal Styles — فوق القائمة الجانبية */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -221,14 +226,16 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 100100;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .modal-content {
   background: white;
   border-radius: 8px;
   width: 90%;
-  max-width: 600px;
+  max-width: min(600px, calc(100vw - 40px));
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);

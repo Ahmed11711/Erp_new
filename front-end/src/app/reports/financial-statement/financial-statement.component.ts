@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import { filter, distinctUntilChanged } from 'rxjs/operators';
 import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
@@ -25,7 +26,8 @@ export class FinancialStatementComponent implements OnInit {
   errorMessage: string | null = null;
 
   // ——— تبويب الشجرة ———
-  allLeafAccounts: any[] = [];
+  /** كل عُقد الشجرة (رئيسية وفرعية) لاختيار كشف الحساب */
+  allTreeAccounts: any[] = [];
   filteredAccounts: any[] = [];
   accountSearchTerm = '';
 
@@ -121,6 +123,17 @@ export class FinancialStatementComponent implements OnInit {
       this.cashForm.patchValue({ entity_id: null });
       this.clearReportOnly();
     });
+
+    /** عند اختيار حساب من الشجرة: جلب كشف الحساب مباشرة دون الضغط على «عرض التقرير» */
+    this.ledgerForm.get('account_id')?.valueChanges.pipe(
+      distinctUntilChanged(),
+      filter((id): id is number => id != null && Number.isFinite(Number(id)))
+    ).subscribe(() => {
+      if (this.activeTab !== 'ledger') {
+        return;
+      }
+      this.submitLedgerForm();
+    });
   }
 
   setTab(tab: 'ledger' | 'cash'): void {
@@ -170,14 +183,12 @@ export class FinancialStatementComponent implements OnInit {
     this.accountingReportService.getAccountingTree().subscribe({
       next: (response: any) => {
         const tree = Array.isArray(response) ? response : [];
-        this.allLeafAccounts = this.flattenTree(tree).filter(
-          (a) => !a.children || a.children.length === 0
-        );
+        this.allTreeAccounts = this.flattenTree(tree);
         this.updateFilteredAccounts();
       },
       error: (err) => {
         console.error('خطأ في تحميل الشجرة المحاسبية:', err);
-        this.allLeafAccounts = [];
+        this.allTreeAccounts = [];
         this.filteredAccounts = [];
         if (this.activeTab === 'ledger') {
           this.errorMessage = 'تعذر تحميل شجرة الحسابات';
@@ -239,7 +250,7 @@ export class FinancialStatementComponent implements OnInit {
 
   updateFilteredAccounts(): void {
     const sourceType = this.ledgerForm.get('source_type')?.value;
-    let base: any[] = [...this.allLeafAccounts];
+    let base: any[] = [...this.allTreeAccounts];
 
     if (sourceType === 'asset') {
       base = base.filter((a) => a.type === 'asset');
@@ -358,7 +369,9 @@ export class FinancialStatementComponent implements OnInit {
         this.details = {
           opening_balance: res?.opening_balance ?? 0,
           closing_balance: res?.closing_balance ?? 0,
-          account: res?.account
+          account: res?.account,
+          consolidated: res?.consolidated === true,
+          accounts_in_scope: res?.accounts_in_scope
         };
         this.totals = {
           debit: res?.total_debit ?? 0,

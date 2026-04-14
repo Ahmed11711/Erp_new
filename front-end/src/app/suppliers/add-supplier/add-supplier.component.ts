@@ -28,7 +28,6 @@ export class AddSupplierComponent {
   }
 
   addSupplier(form:any){
-  
     if(form.invalid){
       return;
     }

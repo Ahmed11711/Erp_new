@@ -1,0 +1,57 @@
+<div class="cash-flow-hub container-fluid" dir="rtl">
+  <header class="cash-flow-hub__header">
+    <h1 class="cash-flow-hub__title">{{ title }}</h1>
+    <p class="cash-flow-hub__en">{{ enLabel }}</p>
+    <p class="cash-flow-hub__subtitle">{{ subtitle }}</p>
+  </header>
+
+  <div class="cash-flow-hub__grid" *ngIf="mode === 'in'">
+    <a class="cash-flow-hub__tile cash-flow-hub__tile--accent" routerLink="/dashboard/financial/cash/receive">
+      <span class="cash-flow-hub__tile-icon" aria-hidden="true"><i class="fas fa-hand-holding-usd"></i></span>
+      <span class="cash-flow-hub__tile-label">استلام نقدي (قبض)</span>
+      <span class="cash-flow-hub__tile-hint">عميل أو مورد — خزنة، بنك، أو حساب خدمي</span>
+    </a>
+  </div>
+
+  <div class="cash-flow-hub__grid" *ngIf="mode === 'out'">
+    <a class="cash-flow-hub__tile cash-flow-hub__tile--accent" routerLink="/dashboard/financial/addexpense">
+      <span class="cash-flow-hub__tile-icon" aria-hidden="true"><i class="fas fa-file-invoice-dollar"></i></span>
+      <span class="cash-flow-hub__tile-label">تسجيل مصاريف</span>
+      <span class="cash-flow-hub__tile-hint">خزنة، بنك، أو حساب خدمي</span>
+    </a>
+    <a class="cash-flow-hub__tile" routerLink="/dashboard/financial/cash/give-to-client">
+      <span class="cash-flow-hub__tile-icon" aria-hidden="true"><i class="fas fa-user-clock"></i></span>
+      <span class="cash-flow-hub__tile-label">دفعة مقدمة لعميل</span>
+      <span class="cash-flow-hub__tile-hint">نقدي</span>
+    </a>
+    <a class="cash-flow-hub__tile" routerLink="/dashboard/financial/cash/pay-to-supplier">
+      <span class="cash-flow-hub__tile-icon" aria-hidden="true"><i class="fas fa-money-bill-wave"></i></span>
+      <span class="cash-flow-hub__tile-label">دفع نقدي لمورد</span>
+      <span class="cash-flow-hub__tile-hint">خزنة</span>
+    </a>
+    <a class="cash-flow-hub__tile" routerLink="/dashboard/financial/bank/pay-to-supplier">
+      <span class="cash-flow-hub__tile-icon" aria-hidden="true"><i class="fas fa-building"></i></span>
+      <span class="cash-flow-hub__tile-label">دفع بنكي لمورد</span>
+      <span class="cash-flow-hub__tile-hint">تحويل بنكي</span>
+    </a>
+  </div>
+
+  <section class="cash-flow-hub__secondary" *ngIf="mode === 'out'">
+    <h2 class="cash-flow-hub__secondary-title">المصاريف</h2>
+    <a class="cash-flow-hub__link" routerLink="/dashboard/financial/expenses">
+      <i class="fas fa-list-ul"></i> عرض المصاريف
+    </a>
+  </section>
+
+  <section class="cash-flow-hub__secondary">
+    <h2 class="cash-flow-hub__secondary-title">دفعات سابقة</h2>
+    <div class="cash-flow-hub__links-row">
+      <a class="cash-flow-hub__link" routerLink="/dashboard/financial/cash/previous/clients">
+        <i class="fas fa-users"></i> عملاء
+      </a>
+      <a class="cash-flow-hub__link" routerLink="/dashboard/financial/cash/previous/suppliers">
+        <i class="fas fa-people-carry"></i> موردين
+      </a>
+    </div>
+  </section>
+</div>

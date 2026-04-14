@@ -43,11 +43,12 @@
   margin-bottom: 0;
 }
 
+/* أعلى تحديداً من thead العام؛ نص الهيدر أبيض على خلفية الكحلي */
 .table thead th {
-  background-color: #f8f9fa;
+  background-color: var(--clr-navy) !important;
   font-weight: 600;
-  color: #495057;
-  border-bottom: 2px solid #dee2e6;
+  color: #fff !important;
+  border-bottom: 2px solid var(--clr-navy-dark) !important;
   text-align: right;
 }
 
@@ -79,7 +80,7 @@
   font-size: 14px;
 }
 
-/* Modal Styles */
+/* Modal Styles — فوق القائمة الجانبية (mat-sidenav) وأزرار الـ dashboard (z-index ~99999) */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -90,20 +91,23 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 100100;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 .modal-content {
   background: #fff;
   border-radius: 8px;
   width: 100%;
-  max-width: 1200px;
+  max-width: min(1200px, calc(100vw - 40px));
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
 }
 
 .modal-header {
@@ -207,10 +211,12 @@
 }
 
 .items-table thead th {
-  background-color: #e9ecef;
+  background-color: var(--clr-navy) !important;
+  color: #fff !important;
   font-weight: 600;
   text-align: center;
   white-space: nowrap;
+  border-bottom: 2px solid var(--clr-navy-dark) !important;
 }
 
 .items-table tbody td {

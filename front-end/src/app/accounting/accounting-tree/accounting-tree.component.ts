@@ -26,7 +26,8 @@ export class AccountingTreeComponent implements OnInit {
     { value: 'liability', label: 'خصوم' },
     { value: 'equity', label: 'حقوق ملكية' },
     { value: 'revenue', label: 'إيرادات' },
-    { value: 'expense', label: 'مصروفات' }
+    { value: 'expense', label: 'مصروفات' },
+    { value: 'settlement', label: 'تسوية' }
   ];
 
   accountTypeOptions = [
@@ -253,7 +254,13 @@ export class AccountingTreeComponent implements OnInit {
     }
 
     this.loading = true;
-    this.treeAccountService.create(this.newAccount).subscribe({
+    const payload = {
+      ...this.newAccount,
+      balance: 0,
+      debit_balance: 0,
+      credit_balance: 0
+    };
+    this.treeAccountService.create(payload).subscribe({
       next: (response) => {
         this.loadAccounts();
         this.closeDialogs();
@@ -276,7 +283,18 @@ export class AccountingTreeComponent implements OnInit {
     }
 
     this.loading = true;
-    this.treeAccountService.update(this.selectedAccount.id!, this.selectedAccount).subscribe({
+    const a = this.selectedAccount;
+    const payload: Partial<TreeAccount> = {
+      name: a.name,
+      name_en: a.name_en,
+      type: a.type,
+      account_type: a.account_type,
+      is_trading_account: a.is_trading_account,
+      budget_type: a.budget_type,
+      budget_amount: a.budget_amount,
+      budget_period: a.budget_period
+    };
+    this.treeAccountService.update(a.id!, payload as TreeAccount).subscribe({
       next: (response) => {
         this.loadAccounts();
         this.closeDialogs();
@@ -347,7 +365,7 @@ export class AccountingTreeComponent implements OnInit {
    */
   getDisplayBalance(node: TreeAccount): number {
     const b = node.balance ?? 0;
-    if (node.type === 'liability' || node.type === 'equity' || node.type === 'revenue') {
+    if (node.type === 'liability' || node.type === 'equity' || node.type === 'revenue' || node.type === 'settlement') {
       return -b;
     }
     return b;

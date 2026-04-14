@@ -210,12 +210,23 @@
                                 <a mat-list-item routerLink="/dashboard/accounting/safes" routerLinkActive="active">
                                     <span>الخزن</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/accounting/banks" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/accounting/banks" routerLinkActive="active"
+                                    [routerLinkActiveOptions]="{ exact: true }">
                                     <span>البنوك</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/banks" routerLinkActive="active">
-                                    <span>وسائل الدفع</span>
+                                <a mat-list-item routerLink="/dashboard/accounting/banks/transfer-to-safe" routerLinkActive="active">
+                                    <span>تحويل من بنك إلى خزينة</span>
                                 </a>
+                                <a mat-list-item routerLink="/dashboard/accounting/banks/transfer-from-safe" routerLinkActive="active">
+                                    <span>تحويل من خزينة إلى بنك</span>
+                                </a>
+                                <a mat-list-item routerLink="/dashboard/financial/service-accounts" routerLinkActive="active"
+                                    *ngIf="user == 'Admin' || user == 'Account Management'">
+                                    <span>حسابات الخدمات</span>
+                                </a>
+                                <!-- <a mat-list-item routerLink="/dashboard/financial/banks" routerLinkActive="active">
+                                    <span>وسائل الدفع</span>
+                                </a> -->
                                 <a mat-list-item routerLink="/dashboard/accounting/banks/deposit-withdraw" routerLinkActive="active">
                                     <span>سحب وإيداع</span>
                                 </a>
@@ -223,10 +234,7 @@
                                     *ngIf="user == 'Admin'">
                                     <span>قيد الانتظار</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/service-accounts" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management'">
-                                    <span>حسابات الخدمات</span>
-                                </a>
+                               
                             </mat-nav-list>
                         </mat-expansion-panel>
 
@@ -277,35 +285,14 @@
                                 <mat-icon>payments</mat-icon> العمليات المالية
                             </mat-expansion-panel-header>
                             <mat-nav-list>
-                                <a mat-list-item routerLink="/dashboard/financial/addexpense" routerLinkActive="active">
-                                    <span>تسجيل مصاريف</span>
+                                <a mat-list-item routerLink="/dashboard/financial/cash-in" routerLinkActive="active">
+                                    <span>نقد وارد <small class="text-muted">(Cash In)</small></span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/expenses" routerLinkActive="active">
-                                    <span>عرض المصاريف</span>
+                                <a mat-list-item routerLink="/dashboard/financial/cash-out" routerLinkActive="active">
+                                    <span>نقد صادر <small class="text-muted">(Cash Out)</small></span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/cash/receive-from-client" routerLinkActive="active">
-                                    <span>استلام نقدية من عميل</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/cash/give-to-client" routerLinkActive="active">
-                                    <span>دفعة مقدمة لعميل</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/cash/pay-to-supplier" routerLinkActive="active">
-                                    <span>دفع نقدي لمورد</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/cash/receive-from-supplier" routerLinkActive="active">
-                                    <span>دفعة مقدمة من مورد</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/bank/receive-from-client" routerLinkActive="active">
-                                    <span>دفع بنكي من عميل</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/bank/pay-to-supplier" routerLinkActive="active">
-                                    <span>دفع بنكي لمورد</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/cash/previous/clients" routerLinkActive="active">
-                                    <span>دفعات سابقة - عملاء</span>
-                                </a>
-                                <a mat-list-item routerLink="/dashboard/financial/cash/previous/suppliers" routerLinkActive="active">
-                                    <span>دفعات سابقة - موردين</span>
+                                <a mat-list-item routerLink="/dashboard/financial/expenseskind" routerLinkActive="active">
+                                    <span>فئات المصروف</span>
                                 </a>
                             </mat-nav-list>
                         </mat-expansion-panel>
@@ -446,7 +433,7 @@
                     *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Operation Specialist'">
                     <mat-expansion-panel-header>
                         <mat-icon>badge</mat-icon>
-                        الموارد البشرية
+                        HR
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/hr/addemployee" routerLinkActive="active"

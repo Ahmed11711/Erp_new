@@ -21,8 +21,23 @@ class ExpenseKindController extends Controller
             "expense_type"=>"in:مصروف ادارى,مصروف تسويق,مصروف تشغيل",
             "expense_kind"=>"required|string",
         ]);
-        $data = ExpenseKind::create($request->all());
-         return response()->json($data,2010);
+        $data = ExpenseKind::create($request->only(['expense_type', 'expense_kind']));
+        return response()->json($data, 201);
+    }
+
+    /**
+     * تحديث فئة مصروف وربطها بنوع رئيسي (أو تعديل الاسم).
+     */
+    public function update(Request $request, ExpenseKind $expense_kind)
+    {
+        $request->validate([
+            'expense_type' => 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل',
+            'expense_kind' => 'required|string|max:255',
+        ]);
+
+        $expense_kind->update($request->only(['expense_type', 'expense_kind']));
+
+        return response()->json($expense_kind->fresh(), 200);
     }
 
     public function search(Request $request){

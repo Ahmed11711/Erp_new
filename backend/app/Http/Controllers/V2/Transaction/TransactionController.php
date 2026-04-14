@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\V2\Transaction;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccountEntry;
 use App\Models\Order;
 use App\Models\Transaction;
+use App\Services\Accounting\AccountLinkingService;
 use Illuminate\Http\Request;
 
 class TransactionController extends Controller
@@ -16,8 +18,12 @@ class TransactionController extends Controller
   }
 
     /**
-     * تفاصيل أوامر عميل (حسب رقم الموبايل) — من جدول الطلبات مباشرةً
-     * لأن جدول transactions قد لا يحتوي على كل الطلبات القديمة.
+     * تفاصيل حركة عميل حسب الموبايل.
+     *
+     * عند وجود حساب في شجرة الحسابات: يُرجع مجموع القيود على حساب العميل لكل طلب
+     * (من account_entries) — متوافق مع بطاقة الحساب في الشجرة بعد التحصيل.
+     *
+     * إن لم يُوجد حساب شجرة: احتياطي من جدول الطلبات (net_total / prepaid) للبيانات القديمة.
      */
     public function index(Request $request)
     {
@@ -36,12 +42,64 @@ class TransactionController extends Controller
 
         $variants = $this->phoneSearchVariants($phone);
 
+        $sampleOrder = Order::query()
+            ->whereIn('customer_phone_1', $variants)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $sampleOrder) {
+            return response()->json([
+                'data' => [],
+                'total' => 0,
+                'per_page' => $itemsPerPage,
+                'current_page' => 1,
+            ], 200);
+        }
+
+        $linking = app(AccountLinkingService::class);
+        $tree = $linking->findExistingCustomerTreeAccount(
+            (string) ($sampleOrder->customer_type ?? 'فرد'),
+            (string) ($sampleOrder->customer_name ?? ''),
+            $sampleOrder->customer_phone_1,
+            $sampleOrder->company_id ? (int) $sampleOrder->company_id : null
+        );
+
+        if ($tree) {
+            $paginator = AccountEntry::query()
+                ->where('tree_account_id', $tree->id)
+                ->whereNotNull('order_id')
+                ->selectRaw('order_id')
+                ->selectRaw('SUM(debit) as total_debit')
+                ->selectRaw('SUM(credit) as total_credit')
+                ->selectRaw('MIN(created_at) as created_at')
+                ->groupBy('order_id')
+                ->orderByDesc('order_id')
+                ->paginate($itemsPerPage, ['*'], 'page', $page);
+
+            return response()->json($paginator, 200);
+        }
+
         $query = Order::query()
             ->whereIn('customer_phone_1', $variants)
-            ->select('id as order_id', 'created_at', 'prepaid_amount', 'net_total')
+            ->select(
+                'id as order_id',
+                'created_at',
+                'prepaid_amount',
+                'net_total',
+            )
             ->orderBy('id', 'desc');
 
-        return response()->json($query->paginate($itemsPerPage, ['*'], 'page', $page), 200);
+        $legacy = $query->paginate($itemsPerPage, ['*'], 'page', $page);
+        $legacy->getCollection()->transform(function ($row) {
+            return (object) [
+                'order_id' => $row->order_id,
+                'created_at' => $row->created_at,
+                'total_debit' => (float) ($row->net_total ?? 0),
+                'total_credit' => (float) ($row->prepaid_amount ?? 0),
+            ];
+        });
+
+        return response()->json($legacy, 200);
     }
 
     /**

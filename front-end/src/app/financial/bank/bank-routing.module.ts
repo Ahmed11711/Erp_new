@@ -1,15 +1,13 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { ReceiveFromClientComponent } from './receive-from-client/receive-from-client.component';
 import { PayToSupplierComponent } from './pay-to-supplier/pay-to-supplier.component';
 import { departmentGuard } from '../../guards/department.guard';
 
 const routes: Routes = [
     {
         path: 'receive-from-client',
-        component: ReceiveFromClientComponent,
-        canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+        redirectTo: '/dashboard/financial/cash/receive',
+        pathMatch: 'full'
     },
     {
         path: 'pay-to-supplier',

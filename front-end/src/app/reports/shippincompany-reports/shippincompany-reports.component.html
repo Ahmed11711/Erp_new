@@ -7,52 +7,61 @@
       <div><p class="title header w-50 m-auto">تقرير شركات الشحن</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
 
   <div class="container-fluid">
 
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
+    <div class="my-5">
       <div class="row">
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label for="ship-from">من تاريخ</label>
+          <input id="ship-from" class="form-control" type="date" name="dateFrom"
+            [(ngModel)]="dateFrom" (ngModelChange)="onDatesChange()">
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label for="ship-to">الى تاريخ</label>
+          <input id="ship-to" class="form-control" type="date" name="dateTo"
+            [(ngModel)]="dateTo" (ngModelChange)="onDatesChange()">
         </div>
         <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..."
+            name="shipSearch" [(ngModel)]="searchKeyword" (ngModelChange)="onSearchInput()">
         </div>
       </div>
-    </form>
+    </div>
 
 
     <table class="table table-bordered w-75 m-auto text-center">
       <thead class="bg-dark text-white">
-        <th>الاسم</th>
-        <th>نوع</th>
-        <th>عدد الطلبات</th>
-        <th>عدد الطلبات تم التحصيل</th>
-        <th>عدد الطلبات رفض الاستلام</th>
-        <th>نسبة تم التحصيل</th>
-        <th>سبب رفض الاستلام</th>
-        <th>التاريخ</th>
+        <tr>
+          <th>الاسم</th>
+          <th>نوع</th>
+          <th>عدد الطلبات</th>
+          <th>عدد الطلبات تم التحصيل</th>
+          <th>عدد الطلبات رفض الاستلام</th>
+          <th>نسبة تم التحصيل</th>
+          <th>سبب رفض الاستلام</th>
+          <th>التاريخ</th>
+        </tr>
       </thead>
       <tbody>
-        <tr >
-          <td></td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
+        <tr *ngIf="loading">
+          <td colspan="8">جاري التحميل...</td>
+        </tr>
+        <tr *ngIf="!loading && data.length === 0">
+          <td colspan="8">لا توجد بيانات في هذه الفترة</td>
+        </tr>
+        <tr *ngFor="let row of data">
+          <td>{{ row.name }}</td>
+          <td>{{ row.type }}</td>
+          <td>{{ row.orders_count }}</td>
+          <td>{{ row.collected_count }}</td>
+          <td>{{ row.refused_count }}</td>
+          <td>{{ row.collection_percentage }}%</td>
+          <td class="text-wrap" style="max-width: 220px;">{{ row.refusal_reasons || '—' }}</td>
+          <td>{{ row.period_from }} — {{ row.period_to }}</td>
         </tr>
       </tbody>
     </table>

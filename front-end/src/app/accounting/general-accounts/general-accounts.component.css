@@ -131,6 +131,11 @@
     color: #ef6c00;
 }
 
+.type-settlement {
+    background-color: #ede7f6;
+    color: #4527a0;
+}
+
 .balance {
     font-family: monospace;
     font-weight: 600;

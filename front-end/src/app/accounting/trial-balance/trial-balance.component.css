@@ -216,6 +216,7 @@
 .dot-equity { background: #8b5cf6; }
 .dot-revenue { background: #10b981; }
 .dot-expense { background: #f59e0b; }
+.dot-settlement { background: #6366f1; }
 
 /* Footer */
 .totals-row td {

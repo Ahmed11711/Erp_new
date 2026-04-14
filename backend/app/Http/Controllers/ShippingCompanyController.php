@@ -197,4 +197,107 @@ class ShippingCompanyController extends Controller
 
         return response()->json("deleted", 200);
     }
+
+    /**
+     * تقرير أداء شركات الشحن حسب فترة (من سجلات shipping_company_details).
+     */
+    public function shippingCompaniesReport(Request $request)
+    {
+        $validated = $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+            'q' => 'nullable|string|max:255',
+        ]);
+
+        $from = $validated['date_from'];
+        $to = $validated['date_to'];
+        $q = isset($validated['q']) ? trim($validated['q']) : '';
+
+        $bindings = [$from, $to, $from, $to, $from, $to];
+        $where = '';
+        if ($q !== '') {
+            $where = 'WHERE sc.name LIKE ?';
+            $bindings[] = '%'.$q.'%';
+        }
+
+        $sql = "
+            SELECT sc.id,
+                sc.name,
+                sc.type,
+                COUNT(DISTINCT CASE
+                    WHEN scd.status = 'تم شحن'
+                    AND DATE(COALESCE(NULLIF(scd.shipping_date, '0000-00-00'), scd.created_at)) BETWEEN ? AND ?
+                    THEN scd.order_id END) AS shipped_count,
+                COUNT(DISTINCT CASE
+                    WHEN scd.status = 'تم التحصيل'
+                    AND DATE(COALESCE(NULLIF(scd.collect_date, '0000-00-00'), scd.created_at)) BETWEEN ? AND ?
+                    THEN scd.order_id END) AS collected_count,
+                COUNT(DISTINCT CASE
+                    WHEN scd.status = 'رفض استلام'
+                    AND DATE(COALESCE(NULLIF(scd.collect_date, '0000-00-00'), scd.created_at)) BETWEEN ? AND ?
+                    THEN scd.order_id END) AS refused_count
+            FROM shipping_companies sc
+            LEFT JOIN shipping_company_details scd ON scd.shipping_company_id = sc.id
+            {$where}
+            GROUP BY sc.id, sc.name, sc.type
+            ORDER BY sc.name
+        ";
+
+        $rows = DB::select($sql, $bindings);
+
+        $reasonWhere = '';
+        $reasonParams = [$from, $to];
+        if ($q !== '') {
+            $reasonWhere = 'AND sc.name LIKE ?';
+            $reasonParams[] = '%'.$q.'%';
+        }
+
+        $reasonSql = "
+            SELECT scd.shipping_company_id AS id,
+                GROUP_CONCAT(DISTINCT NULLIF(TRIM(n.note), '') SEPARATOR ' | ') AS refusal_reasons
+            FROM shipping_company_details scd
+            INNER JOIN shipping_companies sc ON sc.id = scd.shipping_company_id
+            INNER JOIN notes n ON n.order_id = scd.order_id AND n.added_from = 'رفض استلام'
+            WHERE scd.status = 'رفض استلام'
+            AND DATE(COALESCE(NULLIF(scd.collect_date, '0000-00-00'), scd.created_at)) BETWEEN ? AND ?
+            {$reasonWhere}
+            GROUP BY scd.shipping_company_id
+        ";
+
+        $reasonRows = DB::select($reasonSql, $reasonParams);
+
+        $reasonByCompany = [];
+        foreach ($reasonRows as $r) {
+            $reasonByCompany[(int) $r->id] = $r->refusal_reasons ?? '';
+        }
+
+        $data = [];
+        foreach ($rows as $r) {
+            $shipped = (int) $r->shipped_count;
+            $collected = (int) $r->collected_count;
+            $refused = (int) $r->refused_count;
+            $pct = $shipped > 0
+                ? round(100.0 * $collected / $shipped, 2)
+                : 0.0;
+
+            $data[] = [
+                'id' => (int) $r->id,
+                'name' => $r->name,
+                'type' => $r->type,
+                'orders_count' => $shipped,
+                'collected_count' => $collected,
+                'refused_count' => $refused,
+                'collection_percentage' => $pct,
+                'refusal_reasons' => $reasonByCompany[(int) $r->id] ?? '',
+                'period_from' => $from,
+                'period_to' => $to,
+            ];
+        }
+
+        return response()->json([
+            'data' => $data,
+            'date_from' => $from,
+            'date_to' => $to,
+        ], 200);
+    }
 }

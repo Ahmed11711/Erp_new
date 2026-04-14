@@ -122,10 +122,9 @@
             <option *ngFor="let option of accountTypeOptions" [value]="option.value">{{ option.label }}</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>الرصيد الافتتاحي</label>
-          <input type="number" class="form-control" [(ngModel)]="newAccount.balance" name="balance" step="0.01">
-        </div>
+        <p class="small text-muted mb-0">
+          الرصيد يُبنى من <strong>القيود المحاسبية</strong> فقط (قيد يومي، سند، …). الحساب الجديد يبدأ بصفر.
+        </p>
         <div class="form-group">
           <label>
             <input type="checkbox" [(ngModel)]="newAccount.is_trading_account" name="is_trading_account">
@@ -170,9 +169,16 @@
             <option *ngFor="let option of accountTypeOptions" [value]="option.value">{{ option.label }}</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>الرصيد الافتتاحي</label>
-          <input type="number" class="form-control" [(ngModel)]="selectedAccount.balance" name="balance" step="0.01">
+        <div class="form-group mb-0">
+          <label>الرصيد الحالي (من القيود)</label>
+          <p class="form-control-plaintext border rounded px-2 py-1 mb-1 bg-light">
+            {{ getDisplayBalance(selectedAccount) | number:'1.2-2' }}
+          </p>
+          <small class="text-muted d-block">
+            <strong>لا يُعدَّل الرصيد من هذه الشاشة.</strong> أي تغيير يكون عبر
+            <a routerLink="/dashboard/accounting/daily-entries">قيد يومي</a>
+            أو السندات والعمليات المحاسبية الأخرى حتى يبقى أثر واضح في الدفاتر.
+          </small>
         </div>
         <div class="form-group">
           <label>

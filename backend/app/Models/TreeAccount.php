@@ -9,6 +9,8 @@ class TreeAccount extends Model
 {
     use HasFactory;
 
+    /** أنواع الشجرة: asset, liability, equity, revenue, expense, settlement (تسوية — غالباً طبيعتها دائنة للعرض مثل الخصوم) */
+
     protected $guarded = [];
 
     protected $casts = [
@@ -39,6 +41,11 @@ class TreeAccount extends Model
         return $this->hasMany(AccountEntry::class, 'tree_account_id');
     }
 
+    public function safes()
+    {
+        return $this->hasMany(Safe::class, 'account_id');
+    }
+
     /**
      * Total balance = debit - credit (مطابق لأفضل أنظمة المحاسبة)
      */
@@ -66,6 +73,276 @@ class TreeAccount extends Model
             ->orderByRaw('LENGTH(code) DESC')
             ->orderBy('code')
             ->first();
+    }
+
+    /**
+     * مصروف شحن مشتريات (Freight-in) — لا يُدمج في المخزون في القيد المحاسبي.
+     * detail_type المقترح: freight_in
+     */
+    public static function resolveFreightInExpenseAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'freight_in')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $withDetail = static::where('detail_type', 'freight_in')->orderBy('id')->first();
+        if ($withDetail) {
+            return static::firstLeafUnderAccount($withDetail);
+        }
+
+        return static::where('type', 'expense')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%شحن مشتريات%')
+                    ->orWhere('name', 'like', '%شحن توريد%')
+                    ->orWhere('name_en', 'like', '%freight in%')
+                    ->orWhere('name_en', 'like', '%freight-in%')
+                    ->orWhere('name_en', 'like', '%purchase freight%')
+                    ->orWhere('name_en', 'like', '%purchase shipping%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * إنشاء حساب شحن مشتريات تلقائياً تحت مجموعة مصروفات تشغيلية عند غيابه (مثل تشغيل الـ seeder).
+     *
+     * @throws \RuntimeException إن تعذر العثور على أب مناسب في شجرة المصروفات
+     */
+    public static function ensureFreightInExpenseAccount(): self
+    {
+        $acc = static::resolveFreightInExpenseAccount();
+        if ($acc) {
+            return $acc;
+        }
+
+        $parent = static::resolveDefaultOperatingExpenseParent();
+        if (! $parent) {
+            throw new \RuntimeException(
+                'حساب «شحن مشتريات» غير معرّف في شجرة الحسابات (detail_type=freight_in أو اسم يحتوي شحن مشتريات)، ولم يُعثر على مجموعة «مصروفات تشغيلية» لإنشائه تلقائياً. أضف الحساب يدوياً أو شغّل: php artisan db:seed --class=AccountingInventoryShippingAccountsSeeder'
+            );
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = static::nextNumericAccountCodeUnderParent($parent);
+
+        return static::create([
+            'name' => 'شحن مشتريات (توريد)',
+            'name_en' => 'Purchase freight-in',
+            'code' => (string) $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'freight_in',
+        ]);
+    }
+
+    /**
+     * أب شائع لمصروفات تشغيلية (إدراج حسابات شحن افتراضية تحته).
+     */
+    public static function resolveDefaultOperatingExpenseParent(): ?self
+    {
+        foreach ([50001, '50001', 5001, '5001'] as $code) {
+            $a = static::where('code', (string) $code)->where('type', 'expense')->first();
+            if ($a) {
+                return $a;
+            }
+        }
+
+        return static::where('type', 'expense')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%تشغيل%')
+                    ->orWhere('name', 'like', '%Operating%')
+                    ->orWhere('name_en', 'like', '%operating%');
+            })
+            ->orderBy('level')
+            ->orderBy('id')
+            ->first()
+            ?? static::where('type', 'expense')->where('level', 2)->orderBy('id')->first();
+    }
+
+    private static function firstLeafUnderAccount(self $account): self
+    {
+        $current = $account;
+        while (true) {
+            $child = $current->children()->orderBy('id')->first();
+            if (! $child) {
+                return $current;
+            }
+            $current = $child;
+        }
+    }
+
+    private static function nextNumericAccountCodeUnderParent(self $parent): int
+    {
+        $row = static::where('parent_id', $parent->id)
+            ->selectRaw('MAX(CAST(code AS UNSIGNED)) as mx')
+            ->first();
+        $max = $row && $row->mx !== null ? (int) $row->mx : 0;
+        if ($max > 0) {
+            return $max + 1;
+        }
+
+        $p = (int) preg_replace('/\D/', '', (string) $parent->code);
+        if ($p <= 0) {
+            $p = 50001;
+        }
+
+        return $p * 10 + 1;
+    }
+
+    /**
+     * ذمم شركات الشحن / مندوبين (دائن).
+     * detail_type المقترح: shipping_courier_payable
+     */
+    public static function resolveShippingCourierPayableAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'shipping_courier_payable')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $withDetail = static::where('detail_type', 'shipping_courier_payable')->orderBy('id')->first();
+        if ($withDetail) {
+            return static::firstLeafUnderAccount($withDetail);
+        }
+
+        return static::where('type', 'liability')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%ذمم شركات شحن%')
+                    ->orWhere('name', 'like', '%مستحق شحن%')
+                    ->orWhere('name_en', 'like', '%shipping%payable%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * ذمم شركات الشحن — إنشاء تلقائي عند غياب الحساب (مثل AccountingInventoryShippingAccountsSeeder).
+     *
+     * @throws \RuntimeException إن تعذر العثور على مجموعة خصوم متداولة مناسبة
+     */
+    public static function ensureShippingCourierPayableAccount(): self
+    {
+        $acc = static::resolveShippingCourierPayableAccount();
+        if ($acc) {
+            return $acc;
+        }
+
+        $parent = static::where('code', '20001')->first()
+            ?? static::where('type', 'liability')->where('level', 2)->orderBy('id')->first();
+
+        if (! $parent) {
+            throw new \RuntimeException(
+                'حساب «ذمم شركات شحن» غير معرّف (detail_type=shipping_courier_payable)، ولم يُعثر على مجموعة خصوم متداولة لإنشائه تلقائياً. حدد حساب ذمم لشركة الشحن (tree_account_id) أو أضف الحساب يدوياً أو شغّل: php artisan db:seed --class=AccountingInventoryShippingAccountsSeeder'
+            );
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = static::nextNumericAccountCodeUnderParent($parent);
+
+        return static::create([
+            'name' => 'ذمم شركات شحن',
+            'name_en' => 'Shipping companies payable',
+            'code' => (string) $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'liability',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'shipping_courier_payable',
+        ]);
+    }
+
+    /**
+     * إيراد شحن/توصيل يُحصّل من العميل (ليس مصروف الناقل).
+     * detail_type المقترح: shipping_revenue
+     */
+    public static function resolveShippingRevenueAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'shipping_revenue')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        return static::where('type', 'revenue')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%إيراد شحن%')
+                    ->orWhere('name', 'like', '%شحن محصل%')
+                    ->orWhere('name_en', 'like', '%shipping%revenue%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * مصروف شحن صادر (دفع لشركة شحن/مندوب) — بند بيع/توزيع.
+     * detail_type المقترح: freight_out
+     */
+    public static function resolveFreightOutExpenseAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'freight_out')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $withDetail = static::where('detail_type', 'freight_out')->orderBy('id')->first();
+        if ($withDetail) {
+            return static::firstLeafUnderAccount($withDetail);
+        }
+
+        return static::where('type', 'expense')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%شحن صادر%')
+                    ->orWhere('name', 'like', '%مصروف شحن بيع%')
+                    ->orWhere('name_en', 'like', '%freight out%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * إنشاء حساب مصروف شحن صادر تلقائياً تحت مجموعة مصروفات تشغيلية عند غيابه.
+     *
+     * @throws \RuntimeException إن تعذر العثور على أب مناسب في شجرة المصروفات
+     */
+    public static function ensureFreightOutExpenseAccount(): self
+    {
+        $acc = static::resolveFreightOutExpenseAccount();
+        if ($acc) {
+            return $acc;
+        }
+
+        $parent = static::resolveDefaultOperatingExpenseParent();
+        if (! $parent) {
+            throw new \RuntimeException(
+                'حساب «مصروف شحن صادر» غير معرّف في شجرة الحسابات (detail_type=freight_out)، ولم يُعثر على مجموعة «مصروفات تشغيلية» لإنشائه تلقائياً. أضف الحساب يدوياً أو شغّل: php artisan db:seed --class=AccountingInventoryShippingAccountsSeeder'
+            );
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = static::nextNumericAccountCodeUnderParent($parent);
+
+        return static::create([
+            'name' => 'مصروف شحن صادر (توصيل)',
+            'name_en' => 'Outbound freight / delivery',
+            'code' => (string) $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'freight_out',
+        ]);
     }
 
     /**

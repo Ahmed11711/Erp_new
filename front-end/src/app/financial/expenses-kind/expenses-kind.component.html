@@ -7,12 +7,13 @@
       <div><p class="title header w-50 m-auto">فئات المصروف</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container">
+    <p class="text-muted small mb-2">
+      كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري). إذا ظهر عمود «نوع المصروف» فارغاً للسجلات القديمة، اختر النوع من القائمة ثم اضغط «حفظ».
+    </p>
     <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
 
     <div *ngIf="formdiv" class="w-50 m-auto mt-5">
@@ -21,37 +22,37 @@
       </div>
       <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
         <div class="form-group">
-          <select name="" id="" class="form-control" formControlName='expense_type'>
-            <option disabled selected>نوع المصروف</option>
-            <option value="مصروف تشغيل">مصروف تشغيل</option>
-            <option value="مصروف تسويق">مصروف تسويق</option>
-            <option value="مصروف ادارى">مصروف ادارى</option>
+          <label class="form-label">نوع المصروف الرئيسي <span class="text-danger">*</span></label>
+          <select class="form-control" formControlName="expense_type">
+            <option [ngValue]="null" disabled>— اختر النوع —</option>
+            <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
+            <option ngValue="مصروف تسويق">مصروف تسويق</option>
+            <option ngValue="مصروف ادارى">مصروف ادارى</option>
           </select>
         </div>
         <div class="form-group">
-          <input class="form-control"   placeholder="فئة المصروف"
-          [class.is-valid]="form.get('expense_kind')?.errors ==null && form.get('expense_kind')?.touched"
-          formControlName='expense_kind' type="text" class="form-control">
+          <label class="form-label">اسم فئة المصروف <span class="text-danger">*</span></label>
+          <input class="form-control" placeholder="مثال: إيجار، كهرباء، شحن..."
+            formControlName="expense_kind" type="text">
           <p *ngIf="form.get('expense_kind')?.errors !=null && form.get('expense_kind')?.touched"
             class="error mb-0 text-danger">مطلوب</p>
         </div>
         <div class="text-center my-3">
-          <button [disabled]="form.invalid || form.get('expense_type')?.value=== 'نوع المصروف'" *ngIf="addbtn" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
+          <button [disabled]="form.invalid" *ngIf="addbtn" type="submit" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
         </div>
       </form>
-
     </div>
   </div>
 
   <div class="container text-center">
     <div class="row my-2">
       <div class="col-md-3 offset-md-3">
-        <select id="state"  class="form-control type" (change)="search($event)">
+        <select id="state" class="form-control type" (change)="search($event)">
           <option disabled selected value="فئة المصروف">فئة المصروف</option>
           <option *ngFor="let elm of expenseKind" [value]="elm.id">{{elm.expense_kind}}</option>
         </select>
       </div>
-      <div  class="col-md-3">
+      <div class="col-md-3">
         <select id="type" class="form-control type" (change)="search($event)">
           <option disabled selected value="نوع المصروف">نوع المصروف</option>
           <option value="مصروف تشغيل">مصروف تشغيل</option>
@@ -60,17 +61,36 @@
         </select>
       </div>
     </div>
-    <table class="table w-75 m-auto">
+    <table class="table w-75 m-auto table-bordered">
       <thead class="bg-dark text-white">
-        <th>فئة المصروف</th>
-        <th>نوع المصروف</th>
-        <th>-</th>
+        <tr>
+          <th>فئة المصروف</th>
+          <th>نوع المصروف (الربط)</th>
+          <th style="width: 140px;">—</th>
+        </tr>
       </thead>
       <tbody>
         <tr *ngFor="let elm of data">
-          <td>{{elm.expense_kind}}</td>
-          <td>{{elm.expense_type}}</td>
-          <td><i (click)="deleteData(elm.id)" class="fa-solid fa-trash text-danger"></i></td>
+          <td>
+            <input type="text" class="form-control form-control-sm" [(ngModel)]="elm.expense_kind"
+              [ngModelOptions]="{standalone: true}" [name]="'k'+elm.id">
+          </td>
+          <td>
+            <select class="form-control form-control-sm" [(ngModel)]="elm.expense_type"
+              [ngModelOptions]="{standalone: true}" [name]="'t'+elm.id">
+              <option [ngValue]="null" disabled>— اختر النوع —</option>
+              <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
+              <option ngValue="مصروف تسويق">مصروف تسويق</option>
+              <option ngValue="مصروف ادارى">مصروف ادارى</option>
+            </select>
+          </td>
+          <td class="text-nowrap">
+            <button type="button" class="btn btn-sm btn-primary mr-1" (click)="saveRow(elm)"
+              [disabled]="savingRowId === elm.id">
+              {{ savingRowId === elm.id ? '...' : 'حفظ' }}
+            </button>
+            <i (click)="deleteData(elm.id)" class="fa-solid fa-trash text-danger" title="حذف" style="cursor:pointer;"></i>
+          </td>
         </tr>
       </tbody>
     </table>
@@ -85,8 +105,4 @@
       aria-label="Select page">
     </mat-paginator>
   </div>
-
-
-
-
 </div>

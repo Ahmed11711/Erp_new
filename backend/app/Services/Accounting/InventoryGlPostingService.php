@@ -260,4 +260,130 @@ class InventoryGlPostingService
             'updated_at' => now(),
         ]);
     }
+
+    /**
+     * استلام مشتريات مع فصل تكلفة البضاعة عن شحن التوريد (لا يُرحّل الشحن إلى المخزون).
+     * Dr Inventory (منتجات) + Dr Freight-in expense (شحن) / Cr Supplier (الإجمالي).
+     */
+    public function postPurchaseReceiptSplit(
+        float $inventoryAmount,
+        float $freightInAmount,
+        Supplier $supplier,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $inventoryAmount = max(0, $inventoryAmount);
+        $freightInAmount = max(0, $freightInAmount);
+        if ($inventoryAmount <= 0.00001 && $freightInAmount <= 0.00001) {
+            return;
+        }
+
+        $inventory = TreeAccount::resolveInventoryAccount();
+        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (!$inventory || !$supplierAccId) {
+            return;
+        }
+
+        if ($freightInAmount > 0.00001 && ! $freightIn) {
+            $freightIn = TreeAccount::ensureFreightInExpenseAccount();
+        }
+
+        $lines = [];
+        if ($inventoryAmount > 0.00001) {
+            $lines[] = ['id' => $inventory->id, 'debit' => $inventoryAmount, 'credit' => 0.0, 'note' => 'استلام مخزون — تكلفة بضاعة فقط'];
+        }
+        if ($freightInAmount > 0.00001) {
+            $lines[] = ['id' => $freightIn->id, 'debit' => $freightInAmount, 'credit' => 0.0, 'note' => 'شحن مشتريات (منفصل عن المخزون)'];
+        }
+        $total = $inventoryAmount + $freightInAmount;
+        $lines[] = ['id' => $supplierAccId, 'debit' => 0.0, 'credit' => $total, 'note' => 'ذمة مورد — إجمالي الفاتورة'];
+
+        $this->postBalancedJournal($description, $lines, $userId);
+
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances($ln['id']);
+        }
+    }
+
+    public function reversePurchaseReceiptSplit(
+        float $inventoryAmount,
+        float $freightInAmount,
+        Supplier $supplier,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $inventoryAmount = max(0, $inventoryAmount);
+        $freightInAmount = max(0, $freightInAmount);
+        if ($inventoryAmount <= 0.00001 && $freightInAmount <= 0.00001) {
+            return;
+        }
+
+        $inventory = TreeAccount::resolveInventoryAccount();
+        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (!$inventory || !$supplierAccId) {
+            return;
+        }
+
+        $lines = [];
+        if ($inventoryAmount > 0.00001) {
+            $lines[] = ['id' => $inventory->id, 'debit' => 0.0, 'credit' => $inventoryAmount, 'note' => 'عكس استلام مخزون'];
+        }
+        if ($freightInAmount > 0.00001 && $freightIn) {
+            $lines[] = ['id' => $freightIn->id, 'debit' => 0.0, 'credit' => $freightInAmount, 'note' => 'عكس شحن مشتريات'];
+        }
+        $total = $inventoryAmount + $freightInAmount;
+        $lines[] = ['id' => $supplierAccId, 'debit' => $total, 'credit' => 0.0, 'note' => 'تخفيض ذمة مورد'];
+
+        $this->postBalancedJournal($description, $lines, $userId);
+
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances($ln['id']);
+        }
+    }
+
+    /**
+     * @param array<int, array{id:int, debit:float, credit:float, note:string}> $lines
+     */
+    private function postBalancedJournal(string $description, array $lines, ?int $userId): void
+    {
+        $sumDr = 0.0;
+        $sumCr = 0.0;
+        foreach ($lines as $ln) {
+            $sumDr += (float) $ln['debit'];
+            $sumCr += (float) $ln['credit'];
+        }
+        if (abs($sumDr - $sumCr) > 0.02) {
+            throw new \InvalidArgumentException('القيد غير متوازن: مدين ' . $sumDr . ' دائن ' . $sumCr);
+        }
+
+        $uid = $userId ?? auth()->id();
+        $entryNumber = DailyEntry::getNextEntryNumber();
+        $dailyEntry = DailyEntry::create([
+            'date' => now(),
+            'entry_number' => $entryNumber,
+            'description' => $description,
+            'user_id' => $uid,
+        ]);
+
+        foreach ($lines as $ln) {
+            DailyEntryItem::create([
+                'daily_entry_id' => $dailyEntry->id,
+                'account_id' => $ln['id'],
+                'debit' => $ln['debit'],
+                'credit' => $ln['credit'],
+                'notes' => $ln['note'],
+            ]);
+            AccountEntry::create([
+                'tree_account_id' => $ln['id'],
+                'debit' => $ln['debit'],
+                'credit' => $ln['credit'],
+                'description' => $description . ' — ' . $ln['note'],
+                'daily_entry_id' => $dailyEntry->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
 }

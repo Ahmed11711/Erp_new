@@ -19,7 +19,8 @@ export class GeneralAccountsComponent implements OnInit {
     { value: 'liability', label: 'التزامات' },
     { value: 'equity', label: 'حقوق ملكية' },
     { value: 'revenue', label: 'إيرادات' },
-    { value: 'expense', label: 'مصروفات' }
+    { value: 'expense', label: 'مصروفات' },
+    { value: 'settlement', label: 'تسوية' }
   ];
 
   constructor(private treeAccountService: TreeAccountService) { }
@@ -65,7 +66,7 @@ export class GeneralAccountsComponent implements OnInit {
   /** نفس منطق شجرة الحسابات: للخصوم/الإيرادات/حقوق الملكية عرض الرصيد الطبيعي (−balance). */
   getDisplayBalance(account: TreeAccount): number {
     const b = account.balance ?? 0;
-    if (account.type === 'liability' || account.type === 'equity' || account.type === 'revenue') {
+    if (account.type === 'liability' || account.type === 'equity' || account.type === 'revenue' || account.type === 'settlement') {
       return -b;
     }
     return b;

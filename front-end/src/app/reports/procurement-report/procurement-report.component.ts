@@ -82,6 +82,35 @@ export class ProcurementReportComponent implements OnInit {
     return v != null ? Number(v) : 0;
   }
 
+  private lineSrc(inv: any): any {
+    return inv?.updated_purchase ?? inv?.updatedPurchase ?? inv;
+  }
+
+  /** تكلفة البضاعة فقط (للمخزون) */
+  displayProductTotal(inv: any): number {
+    const src = this.lineSrc(inv);
+    if (src?.product_total != null && src.product_total !== '') {
+      return Number(src.product_total);
+    }
+    return Number(src?.total_price ?? 0);
+  }
+
+  displayShippingTotal(inv: any): number {
+    const src = this.lineSrc(inv);
+    if (src?.shipping_total != null && src.shipping_total !== '') {
+      return Number(src.shipping_total);
+    }
+    return Number(src?.transport_cost ?? 0);
+  }
+
+  displayGrandTotal(inv: any): number {
+    const src = this.lineSrc(inv);
+    if (src?.grand_total != null && src.grand_total !== '') {
+      return Number(src.grand_total);
+    }
+    return this.displayProductTotal(inv) + this.displayShippingTotal(inv);
+  }
+
   invoiceDetails(id: number): void {
     this.router.navigate(['/dashboard/purchases/invoice', id]);
   }
@@ -90,14 +119,16 @@ export class ProcurementReportComponent implements OnInit {
     this.router.navigate(['/dashboard/purchases/add_invoice', id]);
   }
 
-  getTotals(): { total: number; paid: number; due: number } {
+  getTotals(): { product: number; shipping: number; grand: number; paid: number; due: number } {
     return this.invoices.reduce(
       (acc, item) => ({
-        total: acc.total + this.displayAmount(item, 'total_price'),
+        product: acc.product + this.displayProductTotal(item),
+        shipping: acc.shipping + this.displayShippingTotal(item),
+        grand: acc.grand + this.displayGrandTotal(item),
         paid: acc.paid + this.displayAmount(item, 'paid_amount'),
         due: acc.due + this.displayAmount(item, 'due_amount'),
       }),
-      { total: 0, paid: 0, due: 0 }
+      { product: 0, shipping: 0, grand: 0, paid: 0, due: 0 }
     );
   }
 }

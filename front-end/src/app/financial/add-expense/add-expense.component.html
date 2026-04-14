@@ -42,25 +42,30 @@
           </select>
         </div>
         <div class="col-md-2">
-          <select formControlName='expense_type' class="form-control type">
-            <option disabled selected value="نوع المصروف">نوع المصروف</option>
-            <option value="مصروف تشغيل">مصروف تشغيل</option>
-            <option value="مصروف تسويق">مصروف تسويق</option>
-            <option value="مصروف ادارى">مصروف ادارى</option>
+          <label class="form-label small text-muted">نوع المصروف</label>
+          <select formControlName="expense_type" (change)="onExpenseTypeChange()" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر النوع —</option>
+            <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
+            <option ngValue="مصروف تسويق">مصروف تسويق</option>
+            <option ngValue="مصروف ادارى">مصروف ادارى</option>
           </select>
         </div>
         <div class="col-md-2">
-          <select formControlName='kind_id' class="form-control type">
-            <option disabled selected value="فئة المصروف">فئة المصروف</option>
-            <option *ngFor="let elm of expenseKind" [value]="elm.id">{{ elm.expense_kind }}</option>
+          <label class="form-label small text-muted">فئة المصروف</label>
+          <select formControlName="kind_id" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر الفئة —</option>
+            <option *ngFor="let elm of filteredExpenseKinds" [ngValue]="elm.id">{{ elm.expense_kind }}</option>
           </select>
+          <small class="text-muted" *ngIf="form.get('expense_type')?.value && filteredExpenseKinds.length === 0">
+            لا توجد فئات مسجّلة لهذا النوع. أضفها من القائمة: العمليات المالية ← فئات المصروف.
+          </small>
         </div>
       </div>
 
       <div class="row mt-3">
         <div class="col-md-6">
           <div class="mb-3">
-            <input class="form-control"    placeholder="بيان المصرف "
+            <input class="form-control"    placeholder="بيان المصروف"
             [class.is-valid]="form.get('expens_statement')?.errors ==null && form.get('expens_statement')?.touched"
             formControlName='expens_statement' type="text" class="form-control">
             <p *ngIf="form.get('expens_statement')?.errors !=null && form.get('expens_statement')?.touched"
@@ -76,18 +81,11 @@
               class="error mb-0 text-danger">رقم غير صحيح</p>
           </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-12">
           <textarea placeholder="ملاحظات" name="" id="" formControlName='note'
           [class.is-valid]="form.get('note')?.errors ==null && form.get('note')?.touched"
           ></textarea>
           <p *ngIf="form.get('note')?.errors !=null && form.get('note')?.touched"
-              class="error mb-0 text-danger">مطلوب</p>
-        </div>
-        <div class="col-md-6">
-          <textarea placeholder="الوصف" name="" id="" cols="97%" formControlName='address'
-          [class.is-valid]="form.get('address')?.errors ==null && form.get('address')?.touched"
-          ></textarea>
-          <p *ngIf="form.get('address')?.errors !=null && form.get('address')?.touched"
               class="error mb-0 text-danger">مطلوب</p>
         </div>
       </div>
@@ -111,10 +109,7 @@
       </div>
       <div class="text-center mt-2">
         <button
-          [disabled]="form.get('expense_type')?.value == 'نوع المصروف' ||
-          form.get('kind_id')?.value == 'فئة المصروف' ||
-          !isSourceSelected ||
-          form.invalid"
+          [disabled]="!isSourceSelected || form.invalid"
           type="submit" class="btn submit text-white">صرف</button>
       </div>
 

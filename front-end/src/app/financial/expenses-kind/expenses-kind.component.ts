@@ -1,14 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
-import { ShippingCompanyService } from 'src/app/shipping/services/shipping-company.service';
 import { ExpenseKindService } from '../services/expense-kind.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-expenses-kind',
   templateUrl: './expenses-kind.component.html',
   styleUrls: ['./expenses-kind.component.css']
 })
-export class ExpensesKindComponent {
+export class ExpensesKindComponent implements OnInit {
 
   openbtn:boolean=true;
   formdiv:boolean=false;
@@ -19,6 +19,7 @@ export class ExpensesKindComponent {
 
   errorMessage!:string;
   data:any[]=[];
+  savingRowId: number | null = null;
 
 
   length = 50;
@@ -26,9 +27,10 @@ export class ExpensesKindComponent {
   page = 0;
   pageSizeOptions = [15,50];
 
-  constructor(private expenseService:ExpenseKindService , private expenseKindService:ExpenseKindService,){
-
-  }
+  constructor(
+    private expenseKindService: ExpenseKindService,
+    private toast: ToastService
+  ) {}
 
   ngOnInit(){
     this.expenseKindService.data().subscribe(result=>this.expenseKind=result);
@@ -56,8 +58,11 @@ export class ExpensesKindComponent {
   param = {};
   getData(){
 
-    this.expenseService.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
-      this.data = res.data;
+    this.expenseKindService.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
+      this.data = (res.data || []).map((row: any) => ({
+        ...row,
+        expense_type: row.expense_type || null
+      }));
       this.length=res.total;
       this.pageSize=res.per_page;
     })
@@ -78,31 +83,60 @@ export class ExpensesKindComponent {
     this.addForm = true;
     this.addbtn = true;
     this.form.patchValue({
-      expense_type:'نوع المصروف'
-    })
+      expense_type: null,
+      expense_kind: null
+    });
   }
 
   submitform(){
     if (this.addForm) {
       if (this.form.valid) {
-        this.expenseService.add(this.form.value).subscribe(result=>{
-          if (result) {
+        const v = this.form.value;
+        this.expenseKindService.add(v).subscribe({
+          next: () => {
+            this.toast.success('تمت إضافة الفئة وربطها بالنوع');
             this.openbtn = true;
             this.formdiv = false;
+            this.expenseKindService.data().subscribe((r) => (this.expenseKind = r));
             this.getData();
-            this.form.reset();
+            this.form.reset({ expense_type: null, expense_kind: null });
+          },
+          error: (err) => {
+            this.toast.error(err.error?.message || 'تعذر الحفظ');
           }
-        },
-        (error)=>{
-
-        }
-        )
+        });
       }
     }
   }
 
+  saveRow(elm: any): void {
+    const expense_kind = (elm.expense_kind || '').toString().trim();
+    const expense_type = elm.expense_type;
+    if (!expense_kind) {
+      this.toast.warning('أدخل اسم فئة المصروف');
+      return;
+    }
+    if (!expense_type) {
+      this.toast.warning('اختر نوع المصروف الرئيسي');
+      return;
+    }
+    this.savingRowId = elm.id;
+    this.expenseKindService.update(elm.id, { expense_type, expense_kind }).subscribe({
+      next: () => {
+        this.toast.success('تم حفظ الربط');
+        this.savingRowId = null;
+        this.expenseKindService.data().subscribe((r) => (this.expenseKind = r));
+        this.getData();
+      },
+      error: (err) => {
+        this.savingRowId = null;
+        this.toast.error(err.error?.message || 'تعذر التحديث');
+      }
+    });
+  }
+
   deleteData(id:number){
-    this.expenseService.deleteUser(id).subscribe(result=>{
+    this.expenseKindService.deleteUser(id).subscribe(result=>{
       if (result == "deleted sucuessfully") {
         this.getData();
       }

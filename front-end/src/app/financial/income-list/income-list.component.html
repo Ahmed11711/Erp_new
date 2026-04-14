@@ -43,15 +43,20 @@
           <td dir="ltr">{{ formatNumber(data?.sales_returns) }}</td>
           <td></td>
         </tr>
+        <tr>
+          <td>(+) إيراد شحن وتوصيل محصل من العميل</td>
+          <td dir="ltr">{{ formatNumber(data?.shipping_revenue) }}</td>
+          <td></td>
+        </tr>
         <tr class="subtotal-row">
-          <td><strong>صافي إيراد المبيعات</strong></td>
+          <td><strong>صافي إيراد المبيعات (بعد المردودات) + إيراد الشحن</strong></td>
           <td></td>
           <td dir="ltr">{{ formatNumber(incomeSales) }}</td>
         </tr>
 
         <!-- تكلفة المبيعات والمخزون -->
         <tr class="section-header">
-          <td colspan="3"><strong>ثانياً: تكلفة المبيعات (من المخزون)</strong></td>
+          <td colspan="3"><strong>ثانياً: تكلفة المبيعات (مخزون فقط — بدون شحن توريد)</strong></td>
         </tr>
         <tr>
           <td>بداية المخزون</td>
@@ -99,7 +104,17 @@
           <td></td>
         </tr>
         <tr>
-          <td>مصروفات مشتريات</td>
+          <td>مصروف شحن صادر (شركات شحن / توصيل)</td>
+          <td dir="ltr">{{ formatNumber(data?.freight_out_expense) }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>شحن مشتريات (توريد) — منفصل عن المخزون</td>
+          <td dir="ltr">{{ formatNumber(data?.freight_in_expense) }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>مصروفات مشتريات (أخرى)</td>
           <td dir="ltr">{{ formatNumber(data?.purchase_expenses) }}</td>
           <td></td>
         </tr>

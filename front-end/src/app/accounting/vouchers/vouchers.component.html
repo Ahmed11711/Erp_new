@@ -59,7 +59,7 @@
                 </span>
               </td>
               <td>{{ voucher.client_or_supplier_name || '-' }}</td>
-              <td>{{ voucher.date | date:'yyyy-MM-dd' }}</td>
+              <td dir="ltr">{{ voucher.date | date:'dd/MM/yyyy' }}</td>
               <td class="amount">{{ calculateTotal(voucher) | number:'1.2-2' }}</td>
               <td class="description">{{ voucher.notes || '-' }}</td>
               <td>

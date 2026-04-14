@@ -40,7 +40,8 @@ export class TrialBalanceComponent implements OnInit {
         { value: 'liability', label: 'التزامات' },
         { value: 'equity', label: 'حقوق ملكية' },
         { value: 'revenue', label: 'إيرادات' },
-        { value: 'expense', label: 'مصروفات' }
+        { value: 'expense', label: 'مصروفات' },
+        { value: 'settlement', label: 'تسوية' }
     ];
 
     levels = [

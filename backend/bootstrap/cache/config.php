@@ -744,6 +744,27 @@
       'access_token_2' => NULL,
       'verify_token_2' => NULL,
     ),
+    'shopify' => 
+    array (
+      'webhook_secret' => '',
+      'allowed_shop_domains' => 
+      array (
+      ),
+      'accepted_topics' => 
+      array (
+        0 => 'orders/create',
+      ),
+      'default_order_source_id' => 0,
+      'default_shipping_method_id' => 0,
+      'fallback_category_id' => 0,
+      'default_governorate' => '',
+      'default_address' => '-',
+      'default_customer_type' => 'فرد',
+      'default_customer_name' => 'عميل Shopify',
+      'order_type' => 'جديد',
+      'placeholder_phone' => '0000000000',
+      'tracking_user_id' => NULL,
+    ),
   ),
   'session' => 
   array (
@@ -951,6 +972,11 @@
           0 => 'customer_name',
         ),
         'phone_number_id' => NULL,
+        'button_ids' => 
+        array (
+          0 => 'write_review',
+          1 => 'write_review_ar',
+        ),
       ),
       5 => 
       array (
@@ -972,6 +998,11 @@
           0 => 'customer_name',
         ),
         'phone_number_id' => NULL,
+        'button_ids' => 
+        array (
+          0 => 'write_review',
+          1 => 'write_review_en',
+        ),
       ),
       6 => 
       array (
@@ -990,6 +1021,11 @@
         array (
         ),
         'phone_number_id' => NULL,
+        'button_ids' => 
+        array (
+          0 => 'write_review',
+          1 => 'write_review_ar',
+        ),
       ),
       7 => 
       array (
@@ -1009,6 +1045,11 @@
         array (
         ),
         'phone_number_id' => NULL,
+        'button_ids' => 
+        array (
+          0 => 'write_review',
+          1 => 'write_review_en',
+        ),
       ),
     ),
   ),

@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use App\Models\Approvals;
 use Illuminate\Support\Facades\DB;
 use App\Services\Accounting\InventoryGlPostingService;
+use App\Services\Accounting\LandedCostService;
 use App\Services\CategoryInventoryCostService;
 use Validator;
 class PurchasesController extends Controller
@@ -132,6 +133,7 @@ class PurchasesController extends Controller
             'invoice' => $invoice,
             'tracking' => $tracking,
             'categories' => $categories,
+            'cost_breakdown' => LandedCostService::purchaseBreakdown($invoice),
         ];
 
         return response()->json($data, 200);
@@ -152,7 +154,7 @@ class PurchasesController extends Controller
             'due_amount' => 'required',
             'transport_cost' => 'required',
             'price_edited' => 'required',
-            'products' => 'required',
+            'products' => 'required|array|min:1',
             'products.*.product_name' => 'required|string',
             'products.*.product_unit' => 'required|string',
             'products.*.product_quantity' => 'required|numeric',
@@ -170,7 +172,14 @@ class PurchasesController extends Controller
                 $rules['service_account_id'] = 'required|exists:service_accounts,id';
             }
         }
-        Validator::make($request->all(), $rules)->validate();
+        $data = $request->all();
+        if (isset($data['products']) && is_string($data['products'])) {
+            $decodedProducts = json_decode($data['products'], true);
+            if (is_array($decodedProducts)) {
+                $data['products'] = $decodedProducts;
+            }
+        }
+        Validator::make($data, $rules)->validate();
 
         DB::beginTransaction();
         try {
@@ -238,6 +247,12 @@ class PurchasesController extends Controller
             $old_due_amount = $oldInvice->due_amount;
             $status = '0';
         }
+        $linesSumPreview = 0;
+        $productsPreview = json_decode($request->products, true) ?: [];
+        foreach ($productsPreview as $product) {
+            $linesSumPreview += (float) $product['total'];
+        }
+        $transportPreview = (float) request('transport_cost');
         $purchaseData = [
             'supplier_id' => request('supplier_id'),
             'invoice_type' => request('invoice_type'),
@@ -246,6 +261,9 @@ class PurchasesController extends Controller
             'paid_amount' => request('paid_amount'),
             'due_amount' => request('due_amount'),
             'transport_cost' => request('transport_cost'),
+            'product_total' => $linesSumPreview,
+            'shipping_total' => $transportPreview,
+            'grand_total' => $linesSumPreview + $transportPreview,
             'price_edited' => request('price_edited'),
             'invoice_image' => $img_name,
             'payment_type' => $paymentType,
@@ -358,16 +376,23 @@ class PurchasesController extends Controller
         $transport = (float) $request->transport_cost;
         $newReceiptAmount = $linesSum + $transport;
 
+        $purchase->product_total = $linesSum;
+        $purchase->shipping_total = $transport;
+        $purchase->grand_total = $newReceiptAmount;
+        $purchase->save();
+
         if ($request->has('invoiceId')) {
             $oldSupplier = Supplier::find($oldInvice->supplier_id);
             $oldLinesSum = 0;
             foreach ($oldCategories as $oc) {
                 $oldLinesSum += (float) $oc->total;
             }
-            $oldReceiptAmount = $oldLinesSum + (float) $oldInvice->transport_cost;
-            if ($oldReceiptAmount > 0.00001 && $oldSupplier) {
-                $glService->reversePurchaseReceipt(
-                    $oldReceiptAmount,
+            $oldShip = (float) ($oldInvice->shipping_total ?? $oldInvice->transport_cost);
+            $oldProduct = (float) ($oldInvice->product_total ?? $oldLinesSum);
+            if (($oldProduct + $oldShip) > 0.00001 && $oldSupplier) {
+                $glService->reversePurchaseReceiptSplit(
+                    $oldProduct,
+                    $oldShip,
                     $oldSupplier,
                     'عكس استلام مخزون — تعديل فاتورة ' . $oldInvice->invoice_number,
                     auth()->id()
@@ -383,10 +408,11 @@ class PurchasesController extends Controller
         }
 
         if ($newReceiptAmount > 0.00001) {
-            $glService->postPurchaseReceipt(
-                $newReceiptAmount,
+            $glService->postPurchaseReceiptSplit(
+                $linesSum,
+                $transport,
                 $supplier,
-                'استلام مخزون — فاتورة مشتريات ' . $purchase->invoice_number,
+                'استلام مشتريات — فاتورة ' . $purchase->invoice_number,
                 auth()->id()
             );
         }
@@ -642,10 +668,13 @@ class PurchasesController extends Controller
         ]);
 
         $glService = app(InventoryGlPostingService::class);
-        $receiptDelete = $linesSumDelete + (float) $purchase->transport_cost;
+        $delShip = (float) ($purchase->shipping_total ?? $purchase->transport_cost);
+        $delProduct = (float) ($purchase->product_total ?? $linesSumDelete);
+        $receiptDelete = $delProduct + $delShip;
         if ($receiptDelete > 0.00001 && $supplier) {
-            $glService->reversePurchaseReceipt(
-                $receiptDelete,
+            $glService->reversePurchaseReceiptSplit(
+                $delProduct,
+                $delShip,
                 $supplier,
                 'عكس استلام مخزون — حذف فاتورة ' . $purchase->invoice_number,
                 auth()->id()

@@ -7,6 +7,7 @@ import { SafeService } from 'src/app/accounting/services/safe.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 import { SuppliersService } from 'src/app/suppliers/services/suppliers.service';
 import { InvoiceService } from '../service/invoice.service';
+import { finalize } from 'rxjs/operators';
 
 
 @Component({
@@ -17,6 +18,8 @@ import { InvoiceService } from '../service/invoice.service';
 export class AddInvoiceComponent implements OnInit {
   invoiceId;
   errorMessage = '';
+  /** يمنع النقر المتكرر أثناء إرسال الفاتورة */
+  isSubmitting = false;
   products:any[] = [];
   categories : any[] = [];
   suppliers : any[] = [];
@@ -238,6 +241,9 @@ export class AddInvoiceComponent implements OnInit {
   totalInvice = 0;
 
   addInvoice(form:any){
+    if (this.isSubmitting) {
+      return;
+    }
     let paidamount = this.paidamount;
     if (this.status === 'مرتجع') {
       paidamount = paidamount * -1;
@@ -269,7 +275,11 @@ export class AddInvoiceComponent implements OnInit {
       invoice.append('invoice_image', this.selectedImg, this.selectedImg.name);
     }
     invoice.append('products', JSON.stringify(this.products));
-    this.invoice.addInvoice(invoice).subscribe({
+    this.errorMessage = '';
+    this.isSubmitting = true;
+    this.invoice.addInvoice(invoice).pipe(
+      finalize(() => { this.isSubmitting = false; })
+    ).subscribe({
       next: (res:any)=>{
         if(res.success==true){
           this.router.navigate(['/dashboard/purchases/list_invoice']);

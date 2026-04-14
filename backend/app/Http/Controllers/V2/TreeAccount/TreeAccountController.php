@@ -12,6 +12,8 @@ use App\Http\Resources\V2\TreeAccount\TreeAccountResource;
 use App\Http\Requests\V2\TreeAccount\TreeAccountStoreRequest;
 use App\Http\Requests\V2\TreeAccount\TreeAccountUpdateRequest;
 use App\Repositories\TreeAccount\TreeAccountRepositoryInterface;
+use App\Services\Accounting\ManualBalanceAdjustmentService;
+use Illuminate\Support\Facades\Validator;
 
 class TreeAccountController extends BaseController
 {
@@ -22,6 +24,126 @@ class TreeAccountController extends BaseController
         $this->storeRequestClass = TreeAccountStoreRequest::class;
         $this->updateRequestClass = TreeAccountUpdateRequest::class;
         $this->resourceClass = TreeAccountResource::class;
+    }
+
+    /**
+     * تسوية رصيد حساب شجري عبر قيد يومي مع حساب مقابل (قيد مزدوج + وصف تدقيق).
+     * body: target_balance, counter_account_id, reason?, date?
+     */
+    public function balanceAdjustment(Request $request, int $id): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'target_balance' => 'required|numeric',
+            'counter_account_id' => 'required|integer|exists:tree_accounts,id',
+            'reason' => 'nullable|string|max:2000',
+            'date' => 'nullable|date',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse($validator->errors()->first(), 422);
+        }
+
+        $account = $this->repository->find($id);
+        if (!$account) {
+            return $this->errorResponse('Record not found', 404);
+        }
+
+        $counter = TreeAccount::find((int) $request->counter_account_id);
+        if (!$counter) {
+            return $this->errorResponse('الحساب المقابل غير موجود', 404);
+        }
+
+        $service = app(ManualBalanceAdjustmentService::class);
+        $date = $request->input('date') ? \Carbon\Carbon::parse($request->input('date'))->format('Y-m-d') : now()->format('Y-m-d');
+
+        try {
+            $result = $service->adjustToTarget(
+                $account,
+                (float) $request->target_balance,
+                $counter,
+                $request->input('reason'),
+                $date,
+                (int) auth()->id()
+            );
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\RuntimeException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Throwable $e) {
+            Log::error('balanceAdjustment failed', ['e' => $e->getMessage()]);
+
+            return $this->errorResponse('فشل إنشاء قيد التسوية: ' . $e->getMessage(), 500);
+        }
+
+        return $this->successResponse(
+            [
+                'daily_entry' => $result['daily_entry'],
+                'previous_net_from_entries' => $result['previous_net'],
+                'delta_posted' => $result['delta'],
+                'target_balance' => $result['target_balance'],
+            ],
+            'تم تسجيل تسوية الرصيد كقيد يومي بنجاح'
+        );
+    }
+
+    /**
+     * مطابقة عدة أرصدة مع الواقع في قيد يومي واحد.
+     * body: counter_account_id, lines: [{ tree_account_id, target_balance }, ...], reason?, date?
+     */
+    public function bulkBalanceAdjustment(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'counter_account_id' => 'required|integer|exists:tree_accounts,id',
+            'lines' => 'required|array|min:1',
+            'lines.*.tree_account_id' => 'required|integer|exists:tree_accounts,id',
+            'lines.*.target_balance' => 'required|numeric',
+            'reason' => 'nullable|string|max:2000',
+            'date' => 'nullable|date',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse($validator->errors()->first(), 422);
+        }
+
+        $merged = [];
+        foreach ($request->lines as $line) {
+            $aid = (int) $line['tree_account_id'];
+            $merged[$aid] = ($merged[$aid] ?? 0.0) + (float) $line['target_balance'];
+        }
+
+        $counter = TreeAccount::find((int) $request->counter_account_id);
+        if (!$counter) {
+            return $this->errorResponse('الحساب المقابل غير موجود', 404);
+        }
+
+        $service = app(ManualBalanceAdjustmentService::class);
+        $date = $request->input('date') ? \Carbon\Carbon::parse($request->input('date'))->format('Y-m-d') : now()->format('Y-m-d');
+
+        try {
+            $result = $service->adjustBatchToTargets(
+                $merged,
+                $counter,
+                $request->input('reason'),
+                $date,
+                (int) auth()->id()
+            );
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\RuntimeException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Throwable $e) {
+            Log::error('bulkBalanceAdjustment failed', ['e' => $e->getMessage()]);
+
+            return $this->errorResponse('فشل إنشاء قيد المطابقة: ' . $e->getMessage(), 500);
+        }
+
+        return $this->successResponse(
+            [
+                'daily_entry' => $result['daily_entry'],
+                'posted_accounts' => $result['posted'],
+            ],
+            'تم تسجيل مطابقة الأرصدة في قيد يومي واحد'
+        );
     }
 
     public function index(Request $request): JsonResponse
@@ -40,7 +162,7 @@ class TreeAccountController extends BaseController
             'name' => 'required|string',
             'name_en' => 'nullable|string',
             'parent_id' => 'nullable|exists:tree_accounts,id',
-            'type' => 'required|in:asset,liability,equity,revenue,expense',
+            'type' => 'required|in:asset,liability,equity,revenue,expense,settlement',
             'account_type' => 'nullable|in:رئيسي,فرعي,مستوى أول',
             'budget_type' => 'nullable|string',
             'budget_amount' => 'nullable|numeric|min:0',

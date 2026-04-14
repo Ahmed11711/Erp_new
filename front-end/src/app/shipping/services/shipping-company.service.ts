@@ -43,4 +43,8 @@ export class ShippingCompanyService {
     return this.http.get(`${environment.Url}/shippingcompany/search?itemsPerPage=${items}&page=${page}`,{params:search});
   }
 
+  shippingCompaniesReport(params: { date_from: string; date_to: string; q?: string }) {
+    return this.http.get<any>(`${environment.Url}/reports/shipping-companies`, { params: params as any });
+  }
+
 }

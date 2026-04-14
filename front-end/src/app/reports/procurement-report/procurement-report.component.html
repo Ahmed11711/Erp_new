@@ -38,7 +38,9 @@
         <th>الصنف</th>
         <th>وحدة القياس</th>
         <th>المورد</th>
-        <th>المبلغ</th>
+        <th>تكلفة البضاعة</th>
+        <th>شحن التوريد</th>
+        <th>إجمالي الفاتورة</th>
         <th>المدفوع</th>
         <th>رصيد سابق المورد</th>
         <th>رصيد سابق للخامة</th>
@@ -48,14 +50,16 @@
       </thead>
       <tbody>
         <tr *ngIf="!invoices?.length">
-          <td colspan="11">لا توجد بيانات</td>
+          <td colspan="13">لا توجد بيانات</td>
         </tr>
         <tr *ngFor="let item of invoices" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
           <td>{{ item?.invoice_number }}</td>
           <td>{{ item?.first_product_name || '—' }}</td>
           <td>{{ item?.first_product_unit || '—' }}</td>
           <td>{{ item?.supplier?.supplier_name }}</td>
-          <td dir="ltr">{{ displayAmount(item, 'total_price') | customNumber }}</td>
+          <td dir="ltr">{{ displayProductTotal(item) | customNumber }}</td>
+          <td dir="ltr">{{ displayShippingTotal(item) | customNumber }}</td>
+          <td dir="ltr">{{ displayGrandTotal(item) | customNumber }}</td>
           <td dir="ltr">{{ displayAmount(item, 'paid_amount') | customNumber }}</td>
           <td dir="ltr">0</td>
           <td dir="ltr">0</td>
@@ -74,7 +78,9 @@
           <td>—</td>
           <td>—</td>
           <td>—</td>
-          <td dir="ltr">{{ getTotals().total | customNumber }}</td>
+          <td dir="ltr">{{ getTotals().product | customNumber }}</td>
+          <td dir="ltr">{{ getTotals().shipping | customNumber }}</td>
+          <td dir="ltr">{{ getTotals().grand | customNumber }}</td>
           <td dir="ltr">{{ getTotals().paid | customNumber }}</td>
           <td dir="ltr">0</td>
           <td dir="ltr">0</td>

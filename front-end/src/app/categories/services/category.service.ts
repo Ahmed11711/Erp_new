@@ -70,8 +70,12 @@ export class CategoryService {
   return this.http.get(`${environment.Url}/allcategories`)
  }
 
- monthlyInventory(warehouse) {
-  return this.http.get(`${environment.Url}/categories/monthlyinventory?warehouse=${warehouse}`)
+ monthlyInventory(warehouse: string, month?: string) {
+  let url = `${environment.Url}/categories/monthlyinventory?warehouse=${encodeURIComponent(warehouse)}`;
+  if (month) {
+   url += `&month=${encodeURIComponent(month)}`;
+  }
+  return this.http.get(`${url}`);
  }
 
  changeCategoryQuantity(id, status, quantity) {

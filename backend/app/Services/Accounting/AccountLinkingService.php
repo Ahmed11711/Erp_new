@@ -158,4 +158,104 @@ class AccountLinkingService
 
         return $this->createChildAccount($parent, $name, $parent->type ?? 'asset');
     }
+
+    /**
+     * Canonical method to find-or-create an individual customer tree account.
+     * ALL code paths MUST use this to avoid duplicate accounts.
+     *
+     * Canonical name format: "اسم العميل - رقم الموبايل"
+     * Search order: canonical name → name only (legacy) → create new with canonical name
+     */
+    public function ensureIndividualCustomerAccount(string $customerName, ?string $phone): TreeAccount
+    {
+        $canonicalName = $this->buildCanonicalCustomerName($customerName, $phone);
+
+        // 1. Try canonical name (name + phone)
+        $account = TreeAccount::where('name', $canonicalName)->first();
+        if ($account) {
+            return $account;
+        }
+
+        // 2. Try name-only (legacy accounts created before this fix)
+        $legacyAccount = TreeAccount::where('name', $customerName)
+            ->where('level', 4)
+            ->where('type', 'asset')
+            ->first();
+
+        if ($legacyAccount) {
+            // Rename legacy account to canonical format to prevent future duplicates
+            if ($phone && $canonicalName !== $customerName) {
+                $legacyAccount->name = $canonicalName;
+                $legacyAccount->save();
+            }
+            return $legacyAccount;
+        }
+
+        // 3. Create new account with canonical name
+        return $this->createCustomerAccount($canonicalName, 'فرد');
+    }
+
+    /**
+     * Build the canonical customer account name.
+     * Format: "اسم العميل - رقم الموبايل" or just "اسم العميل" if no phone.
+     */
+    public function buildCanonicalCustomerName(string $customerName, ?string $phone): string
+    {
+        $phone = trim($phone ?? '');
+        if ($phone !== '') {
+            return $customerName . ' - ' . $phone;
+        }
+        return $customerName;
+    }
+
+    /**
+     * Universal resolver: works for both company and individual customers.
+     * Use this from OrderObserver, SalesOrderAccountingService, and OrdersController.
+     */
+    public function resolveOrderCustomerAccount(
+        string $customerType,
+        string $customerName,
+        ?string $phone,
+        ?int $companyId
+    ): ?TreeAccount {
+        if ($customerType === 'شركة' && $companyId) {
+            $company = customerCompany::find($companyId);
+            if ($company) {
+                return $this->ensureCustomerCompanyAccount($company);
+            }
+        }
+
+        return $this->ensureIndividualCustomerAccount($customerName, $phone);
+    }
+
+    /**
+     * يعثر على حساب عميل في الشجرة إن وُجد فقط — لا ينشئ حسابات جديدة (قوائم، تقارير).
+     * يُستخدم لعرض مدين/دائن متطابقين مع شجرة الحسابات بعد التحصيل (رصيد صافٍ = 0).
+     */
+    public function findExistingCustomerTreeAccount(
+        string $customerType,
+        string $customerName,
+        ?string $phone,
+        ?int $companyId
+    ): ?TreeAccount {
+        if ($customerType === 'شركة' && $companyId) {
+            $company = customerCompany::find($companyId);
+            if ($company && $company->tree_account_id) {
+                return TreeAccount::find($company->tree_account_id);
+            }
+
+            return null;
+        }
+
+        $canonicalName = $this->buildCanonicalCustomerName($customerName, $phone);
+        $byCanonical = TreeAccount::where('name', $canonicalName)->first();
+        if ($byCanonical) {
+            return $byCanonical;
+        }
+
+        return TreeAccount::where('name', $customerName)
+            ->where('level', 4)
+            ->where('type', 'asset')
+            ->first();
+    }
 }

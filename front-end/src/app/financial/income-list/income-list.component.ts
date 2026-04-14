@@ -73,7 +73,10 @@ export class IncomeListComponent implements OnInit{
   getData() {
     this.IncomeListService.get(this.filter).subscribe((res: any) => {
       this.data = res || {};
-      this.incomeSales = res?.net_sales ?? 0;
+      this.incomeSales =
+        res?.total_revenue != null
+          ? res.total_revenue
+          : (res?.net_sales ?? 0) + (res?.shipping_revenue ?? 0);
       this.costSales = res?.cogs ?? 0;
       this.totalWin = res?.gross_profit ?? 0;
       this.operatingIncome = res?.operating_income ?? 0;

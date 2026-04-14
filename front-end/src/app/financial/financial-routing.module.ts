@@ -29,9 +29,22 @@ import { AssetSubSubCategoryComponent } from './asset-sub-categoryEnd/asset-sub-
 import { ReportNewOrdersComponent } from './V2/report-new-order/report-new-order.component';
 import { ReportNewOrdersComponentDetails } from './V2/report-new-order-details/report-new-order-details.component';
 import { ServiceAccountsListComponent } from './service-accounts/service-accounts-list/service-accounts-list.component';
+import { CashFlowHubComponent } from './cash-flow-hub/cash-flow-hub.component';
 
 
 const routes: Routes = [
+  {
+    path: 'cash-in',
+    component: CashFlowHubComponent,
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'], hub: 'in' }
+  },
+  {
+    path: 'cash-out',
+    component: CashFlowHubComponent,
+    canActivate: [departmentGuard],
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'], hub: 'out' }
+  },
   {
     path: 'banks', component: ListBanksComponent,
     canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }

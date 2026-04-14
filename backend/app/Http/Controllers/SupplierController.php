@@ -35,12 +35,12 @@ class SupplierController extends Controller
     }
     public function store(Request $request){
         Validator::make($request->all(),[
-            'supplier_name' => 'required|string',
+            'supplier_name' => 'required|string|max:255',
             // 'supplier_phone' => 'required|string|unique:suppliers,supplier_phone|regex:/^01[0125][0-9]{8}$/',
-            'supplier_address' => 'required|string',
-            'supplier_type' => 'required|numeric|exists:supplier_types,id',
-            'supplier_rate' => 'required|numeric|min:0|max:10',
-            'price_rate' => 'required|numeric|min:0|max:10',
+            'supplier_address' => 'nullable|string|max:255',
+            'supplier_type' => 'nullable|numeric|exists:supplier_types,id',
+            'supplier_rate' => 'nullable|numeric|min:0|max:10',
+            'price_rate' => 'nullable|numeric|min:0|max:10',
         ])->validate();
 
         $supplier = Supplier::create([

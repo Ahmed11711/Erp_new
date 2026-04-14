@@ -159,32 +159,43 @@ export class CatComponent implements OnInit, OnDestroy {
   }
 
   monthlyInventory(){
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
     Swal.fire({
       title: ' تأكيد الجرد الشهري ؟',
+      html: `سيتم تسجيل لقطة مخزون لشهر <strong>${month}</strong> بناءً على الأرصدة الحالية والتكلفة المرجّحة (مثل منطق الشحن).`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'نعم',
       cancelButtonText: 'لا',
     }).then((result:any) => {
       if (result.isConfirmed) {
-        this.category.monthlyInventory(this.warehouse).subscribe(res =>{
-          if (res == 'success') {
-            Swal.fire({
-              icon:'success',
-              showConfirmButton:false,
-              timer:1500,
-            });
+        this.category.monthlyInventory(this.warehouse, month).subscribe({
+          next: (res: any) => {
+            if (res?.success) {
+              Swal.fire({
+                icon:'success',
+                title: 'تم التسجيل',
+                text: `الشهر: ${res.month} — ${res.lines ?? 0} صنفاً`,
+                timer: 2200,
+                showConfirmButton: false,
+              });
+            } else {
+              Swal.fire({ icon: 'success', title: 'تم', timer: 1500, showConfirmButton: false });
+            }
+          },
+          error: (err: any) => {
+            const msg = err?.error?.message
+              || (err?.error?.errors && typeof err.error.errors === 'object'
+                ? Object.values(err.error.errors).flat().join(', ')
+                : null)
+              || err?.message
+              || 'تعذر تسجيل الجرد';
+            Swal.fire({ icon: 'error', text: msg, showConfirmButton: true });
           }
-        } ,
-        (err:any) =>{
-          Swal.fire({
-            icon:'error',
-            text:"!!تم الجرد بالفعل",
-            showConfirmButton:false,
-            timer:2000,
-          });
-        }
-      );
+        });
       }
     })
 

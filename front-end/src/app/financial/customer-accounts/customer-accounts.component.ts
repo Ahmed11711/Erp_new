@@ -53,10 +53,16 @@ export class CustomerAccountsComponent {
     if (q) {
       params['search'] = q;
     }
-    this.TransactionService.searchCustomer(this.pageSize, this.page + 1, params).subscribe((res:any)=>{
-      this.data = res.data;
-      this.length = res.total ?? res.data?.length ?? 0;
-      this.pageSize = res.per_page ?? this.pageSize;
-    })
+    this.TransactionService.searchCustomer(this.pageSize, this.page + 1, params).subscribe({
+      next: (res: any) => {
+        this.data = res.data ?? [];
+        this.length = res.total ?? res.data?.length ?? 0;
+        this.pageSize = res.per_page ?? this.pageSize;
+      },
+      error: () => {
+        this.data = [];
+        this.length = 0;
+      }
+    });
   }
 }

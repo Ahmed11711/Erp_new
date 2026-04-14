@@ -61,7 +61,7 @@ export class SafesComponent implements OnInit {
       balance: 0,
       is_inside_branch: false,
       branch_name: '',
-      account_id: null,
+      parent_account_id: null,
       counter_account_id: null
     };
   }
@@ -159,7 +159,7 @@ export class SafesComponent implements OnInit {
 
   canSaveNewSafe(): boolean {
     if (!this.newSafe.name?.trim()) return false;
-    if (!this.newSafe.account_id) return false;
+    if (!this.newSafe.parent_account_id) return false;
     const bal = Number(this.newSafe.balance) || 0;
     if (bal > 0 && !this.newSafe.counter_account_id) return false;
     return true;

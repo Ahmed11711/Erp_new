@@ -19,9 +19,12 @@ public function rules(): array
 
     return [
         'name' => 'sometimes|string|max:255',
+        'name_en' => 'nullable|string|max:255',
         'parent_id' => 'nullable|integer|exists:tree_accounts,id',
-        'type' => 'nullable|in:asset,liability,equity,revenue,expense',
-        'balance' => 'nullable',
+        'type' => 'nullable|in:asset,liability,equity,revenue,expense,settlement',
+        'account_type' => 'nullable|in:رئيسي,فرعي,مستوى أول',
+        'is_trading_account' => 'nullable|boolean',
+        // لا تُضمَّن حقول الرصيد هنا — التعديل يتم عبر القيود / balance-adjustment
         'budget_type' => 'nullable|string',
         'budget_amount' => 'nullable|numeric|min:0',
         'budget_period' => 'nullable|in:yearly,monthly',

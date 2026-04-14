@@ -2,352 +2,253 @@
 
 namespace App\Observers;
 
+use App\Models\AccountEntry;
 use App\Models\Order;
 use App\Models\TreeAccount;
-use App\Models\AccountEntry;
+use App\Models\Transaction;
+use App\Services\Accounting\LedgerJournalService;
+use App\Services\Accounting\SalesOrderAccountingService;
+use App\Services\Accounting\AccountingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Services\TreeAccount\AddRecordedService;
-use App\Http\Controllers\V2\TreeAccount\AddAssetController;
-use App\Models\Transaction;
-use Illuminate\Support\Facades\Request;
-
 class OrderObserver
 {
-    public function __construct(public AddAssetController $addAssetRepo, public AddRecordedService $AddRecordedService) {}
+    public function __construct(
+        private SalesOrderAccountingService $salesOrderAccounting
+    ) {
+    }
 
-    public function created(Order $order)
+    public function created(Order $order): void
     {
         try {
-            $this->recordAccountingEntries($order);
+            $this->salesOrderAccounting->recordInitialOrderRecognition($order);
+            $this->storeInTransaction($order, 'create', (float) $order->total_invoice);
         } catch (\Throwable $e) {
-            Log::error("OrderObserver: Failed to create account entries", [
+            Log::error('OrderObserver: Failed to create account entries', [
                 'order_id' => $order->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }
 
-    public function updated(Order $order)
+    public function updated(Order $order): void
     {
-        Log::alert("Observer Triggered");
-
         try {
-
-            if ($order->wasChanged('order_status') && $order->order_status === 'تم التحصيل') {
-                Log::alert("Full Collection");
-                // $this->recordAccountingEntries($order, true);
-            }
-
             if ($order->wasChanged('prepaid_amount')) {
-                $bankIdFromPayload = Request::input('bank_id');
+                $old = (float) ($order->getOriginal('prepaid_amount') ?? 0);
+                $new = (float) $order->prepaid_amount;
+                $diff = round($new - $old, 2);
+                if ($diff > 0.009) {
+                    $this->recordAdditionalPrepaidCollection($order, $diff);
+                } elseif ($diff < -0.009) {
+                    $this->recordPrepaidReductionReversal($order, abs($diff));
+                }
 
-                $diff = $order->prepaid_amount - ($order->getOriginal('prepaid_amount') ?: 0);
-
-                $this->partcollectOrder($order, $diff, $bankIdFromPayload);
-                Log::alert("Partial Collection", [
-                    "old" => $order->getOriginal('prepaid_amount'),
-                    "new" => $order->prepaid_amount,
+                Log::info('OrderObserver: prepaid change', [
+                    'order_id' => $order->id,
+                    'old' => $old,
+                    'new' => $new,
+                    'diff' => $diff,
                 ]);
             }
+
+            if ($order->wasChanged([
+                'total_invoice',
+                'discount',
+                'shipping_revenue',
+                'shipping_cost',
+                'customer_name',
+                'customer_phone_1',
+                'customer_type',
+                'company_id',
+            ])) {
+                DB::afterCommit(function () use ($order) {
+                    $fresh = Order::with('order_products')->find($order->id);
+                    if (!$fresh) {
+                        return;
+                    }
+                    try {
+                        $this->salesOrderAccounting->refreshOrderRecognition($fresh);
+                    } catch (\Throwable $e) {
+                        Log::error('OrderObserver: refreshOrderRecognition failed', [
+                            'order_id' => $fresh->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
+            }
         } catch (\Throwable $e) {
-            Log::error("OrderObserver accounting error", [
+            Log::error('OrderObserver accounting error', [
                 'order_id' => $order->id,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ]);
         }
     }
 
-
-    protected function recordAccountingEntries(Order $order, $isUpdate = false)
+    /**
+     * Additional cash-in after order exists: Dr Cash/Bank/Safe, Cr Customer (same as collection on account).
+     */
+    private function recordAdditionalPrepaidCollection(Order $order, float $amount): void
     {
-        DB::transaction(function () use ($order, $isUpdate) {
+        if ($amount <= 0) {
+            return;
+        }
 
-            if ($isUpdate) {
-                AccountEntry::where('order_id', $order->id)->delete();
-            }
-
-            $codeCustomer = TreeAccount::where('name', $order->customer_name)
-                ->where('level', 4)
-                ->first()?->code;
-
-            if (!$codeCustomer) {
-                $add = $this->addAssetRepo->Addcustomer($order->customer_name, $order->customer_type ?? 'شركة');
-                $codeCustomer = $add?->code;
-            }
-
-            $accounts = [
-                'customer'        => $codeCustomer,
-                'sales'           => '4011001',
-                'vat'             => '3071001',
-                'shipping'        => '4031001',
-                'prepaid_amount'  => '1011001',
-                'discount'        => '1051001',
-                'tax_authority'   => '2021001'
-
-            ];
-
-            $accountModels = TreeAccount::whereIn('code', array_values($accounts))
-                ->get()
-                ->keyBy('code');
-
-            $batchCode = 'ORD-' . $order->id . '-' . now()->format('YmdHis');
-
-            $finalEntries = [];
-
-
-
-
-
-
-            if ($order->total_invoice > 0) {
-                $finalEntries[] = [
-                    'account_id' => $accountModels[$accounts['sales']]->id ?? null,
-                    'debit'      => 0,
-                    'credit'     => $order->sales,
-                    'description' => "ايردات المبيعات",
-                ];
-            }
-            if ($order->discount > 0) {
-                $finalEntries[] = [
-                    'account_id' => $accountModels[$accounts['discount']]->id ?? null,
-                    'debit'      => $order->discount,
-                    'credit'     => 0,
-                    'description' => "خصم للعميل - ",
-                ];
-            }
-            if ($order->shipping_cost > 0) {
-                $finalEntries[] = [
-                    'account_id' => $accountModels[$accounts['shipping']]->id ?? null,
-                    'debit'      => 0,
-                    'credit'     => $order->shipping_cost,
-                    'description' => "مصاريف شحن -  ",
-                ];
-            }
-
-            $finalEntries[] = [
-                'account_id' => $accountModels[$accounts['vat']]->id ?? null,
-                'debit'      => 0,
-                'credit'     => ($order->sales - $order->discount) * 0.14,
-                'description' => "القيمة المضافة",
-            ];
-            // ا ت ص
-            $finalEntries[] = [
-                'account_id' => $accountModels[$accounts['tax_authority']]->id ?? null,
-                'debit' => ($order->sales - $order->discount) * 0.01,
-                'credit'     => 0,
-                'description' => " ا ت ص",
-            ];
-            $totalDebit  = array_sum(array_column($finalEntries, 'debit'));
-            Log::alert("totalDebit", [$totalDebit]);
-            $totalCredit = array_sum(array_column($finalEntries, 'credit'));
-            Log::alert("totalCredit", [$totalCredit]);
-
-
-            $netAmount = $totalCredit - $totalDebit;
-
-
-            $finalEntries[] = [
-                'account_id' => $accountModels[$accounts['customer']]->id ?? null,
-                'credit'      => $netAmount > 0 ? 0 : abs($netAmount),
-                'debit'     => $netAmount > 0 ? $netAmount : 0,
-                'description' => "العميل مدين ",
-            ];
-            $this->storeInTransaction($order, 'create', $netAmount); // for model transaction
-
-            Log::alert("Net Amount", ['netAmount' => $order]);
-
-            if ($order->prepaid_amount > 0) {
-
-
-
-                // for customer credit
-                $finalEntries[] = [
-                    'account_id' => $accountModels[$accounts['customer']]->id ?? null,
-                    'debit'      => 0,
-                    'credit'     => $order->prepaid_amount,
-                    'description' => "العميل دائن",
-                ];
-
-                // for bank credit
-                $bankName = $this->AddRecordedService->getBankById($order->bank_id);
-                Log::alert("Bank Name", [$this->AddRecordedService->checkFoundBank($bankName)]);
-
-                $finalEntries[] = [
-                    'account_id' => $this->AddRecordedService->checkFoundBank($bankName) ?? null,
-                    'debit'      => $order->prepaid_amount,
-                    'credit'     => 0,
-                    'description' => $bankName,
-                ];
-                $this->storeInTransaction($order, 'update', $netAmount); // for model transaction
-            }
-            foreach ($finalEntries as $entry) {
-                if (!$entry['account_id']) continue;
-
-                AccountEntry::create([
-                    'tree_account_id'  => $entry['account_id'],
-                    'debit'            => $entry['debit'],
-                    'credit'           => $entry['credit'],
-                    'description'      => $entry['description'],
-                    'order_id'         => $order->id,
-                    'entry_batch_code' => $batchCode,
+        DB::transaction(function () use ($order, $amount) {
+            $customerAccount = $this->resolveCustomerAccount($order);
+            if (!$customerAccount) {
+                Log::error('OrderObserver: cannot resolve customer account for prepaid increase', [
+                    'order_id' => $order->id,
                 ]);
 
-                $type = $entry['debit'] > 0 ? 'debit' : 'credit';
-                $this->updateBalance($entry['account_id'], max($entry['debit'], $entry['credit']), $type);
+                return;
             }
+
+            $cashAccountId = $this->salesOrderAccounting->resolveCashTreeAccountIdForOrder($order);
+            if (!$cashAccountId) {
+                Log::error('OrderObserver: cannot resolve cash account for prepaid increase', [
+                    'order_id' => $order->id,
+                ]);
+
+                return;
+            }
+
+            $batchCode = 'PARTCOLLECT-' . $order->id . '-' . now()->format('YmdHis');
+            $desc = 'تحصيل جزئي / زيادة دفعة مقدمة — طلب رقم ' . $order->id;
+
+            app(LedgerJournalService::class)->postCustomerCollection(
+                $customerAccount->id,
+                $cashAccountId,
+                $amount,
+                $desc,
+                $order->id,
+                $batchCode
+            );
+
+            $this->storeInTransaction($order, 'update');
         });
     }
 
     /**
+     * Prepaid reduced on edit: Dr Customer, Cr Cash (refund / reclass).
      */
-    protected function updateBalance($accountId, $amount, $type)
+    private function recordPrepaidReductionReversal(Order $order, float $amount): void
     {
-        $account = TreeAccount::find($accountId);
-        if (!$account) return;
-
-        $isDebitNormal = in_array($account->type, ['asset', 'expense']);
-
-        if ($type === 'debit') {
-            $account->balance += $isDebitNormal ? $amount : -$amount;
-        } else { // credit
-            $account->balance += $isDebitNormal ? -$amount : $amount;
+        if ($amount <= 0) {
+            return;
         }
 
-        $account->save();
-
-        $parent = $account->parent;
-        while ($parent) {
-            if ($type === 'debit') {
-                $parent->balance += $isDebitNormal ? $amount : -$amount;
-            } else {
-                $parent->balance += $isDebitNormal ? -$amount : $amount;
-            }
-            $parent->save();
-
-            $parent = $parent->parent;
-        }
-    }
-
-    public function partcollectOrder(Order $order, $diff, $bankIdFromPayload)
-    {
-
-
-        DB::transaction(function () use ($order, $diff, $bankIdFromPayload) {
-
-            $finalEntries = [];
-
-            $customerAccount = TreeAccount::where('name', $order->customer_name)
-                ->where('level', 4)
-                ->first();
-            Log::alert("Customer Account Found", ['customerAccount' => $customerAccount?->toArray()]);
-
+        DB::transaction(function () use ($order, $amount) {
+            $customerAccount = $this->resolveCustomerAccount($order);
             if (!$customerAccount) {
-                $add = $this->addAssetRepo->Addcustomer($order->customer_name, $order->customer_type ?? 'شركة');
-                $customerAccount = $add;
-                Log::alert("Customer Account Created", ['customerAccount' => $customerAccount?->toArray()]);
-            }
-
-            $finalEntries[] = [
-                'account_id' => $customerAccount->id,
-                'debit'      => $diff,
-                'credit'     => 0,
-                'description' => "العميل مدين",
-            ];
-
-            $bankName = $this->AddRecordedService->getBankById($bankIdFromPayload);
-            Log::alert("Bank Name Retrieved", ['bankName' => $bankName]);
-
-            $bankAccountId = $this->AddRecordedService->checkFoundBank($bankName);
-            Log::alert("Bank Account ID", ['bankAccountId' => $bankAccountId]);
-
-            $finalEntries[] = [
-                'account_id' => $bankAccountId,
-                'debit'      => $diff,
-                'credit'     => 0,
-                'description' => $bankName,
-            ];
-            $this->storeInTransaction($order, 'update'); // for model transaction
-
-            foreach ($finalEntries as $entry) {
-                Log::alert("Creating Account Entry", ['entry' => $entry]);
-
-                if (!$entry['account_id']) {
-                    Log::error("Skipping Entry, account_id null", ['entry' => $entry]);
-                    continue;
-                }
-
-                $accountEntry = AccountEntry::create([
-                    'tree_account_id'  => $entry['account_id'],
-                    'debit'            => $entry['debit'],
-                    'credit'           => $entry['credit'],
-                    'description'      => $entry['description'],
-                    'order_id'         => $order->id,
-                    'entry_batch_code' => 'PARTCOLLECT-' . now()->format('YmdHis'),
+                Log::error('OrderObserver: cannot resolve customer account for prepaid reversal', [
+                    'order_id' => $order->id,
                 ]);
 
-                Log::alert("Account Entry Created", ['accountEntry' => $accountEntry->toArray()]);
-
-                $type = $entry['debit'] > 0 ? 'debit' : 'credit';
-                $this->updateBalance($entry['account_id'], max($entry['debit'], $entry['credit']), $type);
+                return;
             }
+
+            $cashAccountId = $this->salesOrderAccounting->resolveCashTreeAccountIdForOrder($order);
+            if (!$cashAccountId) {
+                Log::error('OrderObserver: cannot resolve cash account for prepaid reversal', [
+                    'order_id' => $order->id,
+                ]);
+
+                return;
+            }
+
+            $batchCode = 'PREPAID-REV-' . $order->id . '-' . now()->format('YmdHis');
+            $desc = 'تخفيض دفعة مقدمة — طلب رقم ' . $order->id;
+
+            app(LedgerJournalService::class)->postCustomerCollectionReversal(
+                $customerAccount->id,
+                $cashAccountId,
+                $amount,
+                $desc,
+                $order->id,
+                $batchCode
+            );
         });
     }
 
-    public function storeInTransaction($order, $type, $netAmount = 0)
+    private function resolveCustomerAccount(Order $order): ?TreeAccount
+    {
+        $accountLinkingService = app(\App\Services\Accounting\AccountLinkingService::class);
+
+        return $accountLinkingService->resolveOrderCustomerAccount(
+            $order->customer_type ?? 'فرد',
+            $order->customer_name,
+            $order->customer_phone_1,
+            $order->company_id
+        );
+    }
+
+    public function storeInTransaction($order, $type, $netAmount = 0): void
     {
         if ($type == 'create') {
             $prepaid_amount = 0;
             $net_total = $netAmount;
         } else {
             $prepaid_amount = $order->prepaid_amount - ($order->getOriginal('prepaid_amount') ?: 0);
-
             $net_total = 0;
         }
-        $data = [
+
+        Transaction::create([
             'order_id' => $order->id,
             'phone' => $order->customer_phone_1 ?? '010161582010',
             'net_total' => $net_total,
             'prepaid_amount' => $prepaid_amount,
-        ];
-        Transaction::create($data);
+        ]);
     }
 
+    /**
+     * @deprecated Legacy helper — prefer {@see LedgerJournalService}. Kept for external callers if any.
+     */
     public function createAccountTreeBank($bankName, $expenseType, $amount)
     {
-
         $treeBank = TreeAccount::where('name', $bankName)->where('level', 4)->first();
         $treeExpense = TreeAccount::where('name', $expenseType)->where('level', 4)->first();
 
+        $finalEntries = [];
         $finalEntries[] = [
             'account_id' => $treeExpense->id ?? null,
-            'debit'      => $amount,
-            'credit'     => 0,
-            'description' => "Expense Recorded",
+            'debit' => $amount,
+            'credit' => 0,
+            'description' => 'Expense Recorded',
         ];
-
         $finalEntries[] = [
             'account_id' => $treeBank->id ?? null,
-            'debit'      => 0,
-            'credit'     => $amount,
-            'description' => "Bank Withdrawal - Expense Payment",
+            'debit' => 0,
+            'credit' => $amount,
+            'description' => 'Bank Withdrawal - Expense Payment',
         ];
-        $batchCode = 'ORD-' . '-' . now()->format('YmdHis');
+
+        $batchCode = 'EXP-' . now()->format('YmdHis');
+        $accService = app(AccountingService::class);
 
         foreach ($finalEntries as $entry) {
-            if (!$entry['account_id']) continue;
+            if (!$entry['account_id']) {
+                continue;
+            }
 
             AccountEntry::create([
-                'tree_account_id'  => $entry['account_id'],
-                'debit'            => $entry['debit'],
-                'credit'           => $entry['credit'],
-                'description'      => $entry['description'],
-                'order_id'         => null,
+                'tree_account_id' => $entry['account_id'],
+                'debit' => $entry['debit'],
+                'credit' => $entry['credit'],
+                'description' => $entry['description'],
+                'order_id' => null,
                 'entry_batch_code' => $batchCode,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
-            $type = $entry['debit'] > 0 ? 'debit' : 'credit';
-            $this->updateBalance($entry['account_id'], max($entry['debit'], $entry['credit']), $type);
+            try {
+                $accService->updateAccountHierarchyBalances($entry['account_id']);
+            } catch (\Exception $e) {
+                Log::warning('OrderObserver::createAccountTreeBank hierarchy update failed', [
+                    'account_id' => $entry['account_id'],
+                ]);
+            }
         }
     }
 }

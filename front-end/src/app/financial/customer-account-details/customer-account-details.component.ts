@@ -41,11 +41,17 @@ export class CustomerAccountDetailsComponent {
   }
 
   getCustomerDetails(){
-    this.transactionService.getCustomerDetails(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
-      this.data = res.data;
-      this.length=res.total;
-      this.pageSize=res.per_page;
-    })
+    this.transactionService.getCustomerDetails(this.pageSize,this.page+1,this.param).subscribe({
+      next: (res: any) => {
+        this.data = res.data ?? [];
+        this.length = res.total ?? 0;
+        this.pageSize = res.per_page ?? this.pageSize;
+      },
+      error: () => {
+        this.data = [];
+        this.length = 0;
+      }
+    });
   }
 
   onPageChange(event: any) {

@@ -35,6 +35,6 @@ class Category extends Model
  }
  public function stock()
  {
-  return $this->belongsTo(stock::class);
+  return $this->belongsTo(Stock::class);
  }
 }
