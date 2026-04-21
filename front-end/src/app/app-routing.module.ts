@@ -26,6 +26,7 @@ const routes: Routes = [
     {path: 'whatsapp', loadChildren: () => import('./whatsapp/whatsapp.module').then(m => m.WhatsAppModule)},
     {path: 'approvals', loadChildren: () => import('./approvals/approvals.module').then(m => m.ApprovalsModule)},
     {path: 'corparates-sales', loadChildren: () => import('./corparates-sales/corparates-sales.module').then(m => m.CorparatesSalesModule)},
+    {path: 'shopify', loadChildren: () => import('./shopify-integration/shopify-integration.module').then(m => m.ShopifyIntegrationModule)},
   ]
 },
 ];

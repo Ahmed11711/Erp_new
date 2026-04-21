@@ -197,7 +197,6 @@ class ServiceAccountsController extends Controller
             // We rely on AccountEntry for history.
 
             if ($type === 'receipt') {
-                // 1. Debit Service Account (Money In)
                 AccountEntry::create([
                     'tree_account_id' => $serviceAccountId,
                     'debit' => $amount,
@@ -206,8 +205,6 @@ class ServiceAccountsController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-                
-                // 2. Credit Counter Account (Source)
                 AccountEntry::create([
                     'tree_account_id' => $counterAccount->id,
                     'debit' => 0,
@@ -216,30 +213,8 @@ class ServiceAccountsController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // Update Balances
                 $serviceAccount->increment('balance', $amount);
-
-                $serviceTree = TreeAccount::find($serviceAccountId);
-                $serviceTree->increment('debit_balance', $amount);
-                if (in_array($serviceTree->type, ['asset', 'expense'])) {
-                     $serviceTree->increment('balance', $amount);
-                } else {
-                     $serviceTree->decrement('balance', $amount);
-                }
-                $serviceTree->save();
-
-                $counterTree = TreeAccount::find($counterAccount->id);
-                $counterTree->increment('credit_balance', $amount);
-                if (in_array($counterTree->type, ['asset', 'expense'])) {
-                     $counterTree->decrement('balance', $amount);
-                } else {
-                     $counterTree->increment('balance', $amount);
-                }
-                $counterTree->save();
-
-            } else { // payment
-                // 1. Credit Service Account (Money Out)
+            } else {
                 AccountEntry::create([
                     'tree_account_id' => $serviceAccountId,
                     'debit' => 0,
@@ -248,38 +223,20 @@ class ServiceAccountsController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // 2. Debit Counter Account (Destination)
                 AccountEntry::create([
                     'tree_account_id' => $counterAccount->id,
-                     'debit' => $amount,
+                    'debit' => $amount,
                     'credit' => 0,
                     'description' => "صرف حساب خدمي - " . $notes,
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // Update Balances
                 $serviceAccount->decrement('balance', $amount);
-
-                $serviceTree = TreeAccount::find($serviceAccountId);
-                $serviceTree->increment('credit_balance', $amount);
-                 if (in_array($serviceTree->type, ['asset', 'expense'])) {
-                     $serviceTree->decrement('balance', $amount);
-                } else {
-                     $serviceTree->increment('balance', $amount);
-                }
-                $serviceTree->save();
-
-                $counterTree = TreeAccount::find($counterAccount->id);
-                $counterTree->increment('debit_balance', $amount);
-                 if (in_array($counterTree->type, ['asset', 'expense'])) {
-                     $counterTree->increment('balance', $amount);
-                } else {
-                     $counterTree->decrement('balance', $amount);
-                }
-                $counterTree->save();
             }
+
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+            $accService->updateAccountHierarchyBalances($serviceAccountId);
+            $accService->updateAccountHierarchyBalances($counterAccount->id);
 
             DB::commit();
             return response()->json(['message' => 'تمت العملية بنجاح'], 200);

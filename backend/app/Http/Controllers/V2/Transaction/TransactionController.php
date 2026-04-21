@@ -61,7 +61,8 @@ class TransactionController extends Controller
             (string) ($sampleOrder->customer_type ?? 'فرد'),
             (string) ($sampleOrder->customer_name ?? ''),
             $sampleOrder->customer_phone_1,
-            $sampleOrder->company_id ? (int) $sampleOrder->company_id : null
+            $sampleOrder->company_id ? (int) $sampleOrder->company_id : null,
+            $sampleOrder->order_source_id ? (int) $sampleOrder->order_source_id : null
         );
 
         if ($tree) {

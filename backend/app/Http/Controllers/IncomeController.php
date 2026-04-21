@@ -14,48 +14,99 @@ use App\Services\Accounting\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class IncomeController extends Controller
 {
     public function index()
     {
-        $incomes = Income::all();
+        $incomes = Income::query()
+            ->with([
+                'revenueTreeAccount:id,name,code,type',
+                'bank:id,name',
+                'safe:id,name',
+                'serviceAccount:id,name',
+            ])
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->get();
+
         return response()->json($incomes);
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'type' => 'required',
+        $validator = Validator::make($request->all(), [
+            'type' => 'required|string|max:255',
             'date' => 'required|date',
             'income_amount' => 'required|numeric|min:0.01',
-            'payment_type' => 'nullable|in:bank,safe,service_account',
-            'bank_id' => 'nullable|exists:banks,id',
-            'safe_id' => 'nullable|exists:safes,id',
-            'service_account_id' => 'nullable|exists:service_accounts,id',
+            'payment_type' => 'required|in:bank,safe,service_account',
+            'bank_id' => 'required_if:payment_type,bank|nullable|exists:banks,id',
+            'safe_id' => 'required_if:payment_type,safe|nullable|exists:safes,id',
+            'service_account_id' => 'required_if:payment_type,service_account|nullable|exists:service_accounts,id',
+            'revenue_tree_account_id' => 'required|exists:tree_accounts,id',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first()], 422);
+        }
+
+        $revenueAcc = TreeAccount::query()
+            ->where('id', $request->revenue_tree_account_id)
+            ->whereIn('type', ['revenue', 'income'])
+            ->whereDoesntHave('children')
+            ->first();
+
+        if (!$revenueAcc) {
+            return response()->json([
+                'message' => 'يجب اختيار حساب إيراد فرعي (ورقة) من شجرة الإيرادات.',
+            ], 422);
+        }
+
+        $paymentType = $request->payment_type;
+        $amount = (float) $request->income_amount;
+        $debitTreeId = null;
+
+        if ($paymentType === 'safe') {
+            $safe = Safe::find($request->safe_id);
+            if (!$safe || !$safe->account_id) {
+                return response()->json(['message' => 'الخزينة غير مرتبطة بحساب في الشجرة المحاسبية.'], 422);
+            }
+            $debitTreeId = (int) $safe->account_id;
+        } elseif ($paymentType === 'service_account') {
+            $svc = ServiceAccount::find($request->service_account_id);
+            if (!$svc || !$svc->account_id) {
+                return response()->json(['message' => 'الحساب الخدمي غير مرتبط بشجرة الحسابات.'], 422);
+            }
+            $debitTreeId = (int) $svc->account_id;
+        } else {
+            $bank = Bank::find($request->bank_id);
+            if (!$bank || !$bank->asset_id) {
+                return response()->json(['message' => 'البنك غير مرتبط بحساب أصول في الشجرة المحاسبية.'], 422);
+            }
+            $debitTreeId = (int) $bank->asset_id;
+        }
 
         DB::beginTransaction();
         try {
-            $income = Income::create($request->all());
-            $amount = (float) $request->income_amount;
+            $income = Income::create([
+                'type' => $request->type,
+                'date' => $request->date,
+                'income_amount' => $amount,
+                'revenue_tree_account_id' => $revenueAcc->id,
+                'payment_type' => $paymentType,
+                'bank_id' => $paymentType === 'bank' ? $request->bank_id : null,
+                'safe_id' => $paymentType === 'safe' ? $request->safe_id : null,
+                'service_account_id' => $paymentType === 'service_account' ? $request->service_account_id : null,
+            ]);
 
-            $debitTreeId = null;
-            $paymentType = $request->payment_type ?? 'bank';
-
-            if ($paymentType === 'safe' && $request->safe_id) {
+            if ($paymentType === 'safe') {
                 $safe = Safe::find($request->safe_id);
-                if ($safe) {
-                    $safe->increment('balance', $amount);
-                    $debitTreeId = $safe->account_id;
-                }
-            } elseif ($paymentType === 'service_account' && $request->service_account_id) {
+                $safe?->increment('balance', $amount);
+            } elseif ($paymentType === 'service_account') {
                 $svc = ServiceAccount::find($request->service_account_id);
-                if ($svc) {
-                    $svc->increment('balance', $amount);
-                    $debitTreeId = $svc->account_id;
-                }
-            } elseif ($request->bank_id) {
+                $svc?->increment('balance', $amount);
+            } else {
                 $bank = Bank::find($request->bank_id);
                 if ($bank) {
                     $balanceBefore = (float) $bank->balance;
@@ -72,24 +123,7 @@ class IncomeController extends Controller
                         'created_at' => now(),
                         'user_id' => auth()->id(),
                     ]);
-                    $debitTreeId = $bank->asset_id;
                 }
-            }
-
-            $revenueAcc = TreeAccount::where('type', 'revenue')
-                ->where(function ($q) use ($request) {
-                    $q->where('name', 'like', '%' . $request->type . '%')
-                      ->orWhere('name', 'like', '%إيرادات أخرى%')
-                      ->orWhere('name_en', 'like', '%other income%');
-                })
-                ->whereDoesntHave('children')
-                ->first();
-
-            if (!$revenueAcc) {
-                $revenueAcc = TreeAccount::where('type', 'revenue')
-                    ->whereDoesntHave('children')
-                    ->orderBy('code')
-                    ->first();
             }
 
             if ($debitTreeId && $revenueAcc) {
@@ -142,10 +176,27 @@ class IncomeController extends Controller
             }
 
             DB::commit();
+
             return response()->json($income, 201);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['message' => $e->getMessage()], 500);
         }
+    }
+
+    public function show(Income $income)
+    {
+        return response()->json($income);
+    }
+
+    public function update(Request $request, Income $income)
+    {
+        return response()->json(['message' => 'غير مدعوم'], 501);
+    }
+
+    public function destroy(Income $income)
+    {
+        return response()->json(['message' => 'غير مدعوم'], 501);
     }
 }

@@ -91,6 +91,21 @@ export class DiscountsComponent implements OnInit {
     return this.paymentSources.service_accounts || [];
   }
 
+  accountLabel(acc: { code?: number | string; name?: string } | null | undefined): string {
+    if (!acc) {
+      return '—';
+    }
+    const code = acc.code != null && acc.code !== '' ? String(acc.code) + ' — ' : '';
+    return code + (acc.name || '');
+  }
+
+  formatDate(raw: string | undefined): string {
+    if (!raw) {
+      return '—';
+    }
+    return String(raw).slice(0, 10);
+  }
+
   submitPay(): void {
     if (!this.selectedCommitment) { return; }
     const remaining = this.selectedCommitment.remaining_amount ?? (this.selectedCommitment.deserved_amount - (this.selectedCommitment.paid_amount || 0));

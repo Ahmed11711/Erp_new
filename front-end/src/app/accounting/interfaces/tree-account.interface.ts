@@ -4,7 +4,8 @@ export interface TreeAccount {
   name_en?: string;
   code?: number;
   type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense' | 'settlement';
-  account_type?: 'رئيسي' | 'فرعي' | 'مستوى أول';
+  /** @deprecated قديم — لا يُستخدم؛ الدور يُستنتج من الشجرة (جذر / مجموعة / تفصيلي) */
+  account_type?: string | null;
   budget_type?: string;
   budget_amount?: number;
   budget_period?: 'yearly' | 'monthly';

@@ -5,6 +5,7 @@ import { environment } from 'src/env/env';
 import { VoucherService } from '../../accounting/services/voucher.service';
 import { BankService } from '../../accounting/services/bank.service';
 import { SafeService } from '../../accounting/services/safe.service';
+import { ServiceAccountsService } from '../services/service-accounts.service';
 
 @Component({
    selector: 'app-add-capital',
@@ -27,23 +28,34 @@ import { SafeService } from '../../accounting/services/safe.service';
 
              <div class="col-md-6 mb-3">
                 <label>نوع الإيداع</label>
-                <select class="form-control" [(ngModel)]="data.target_type" (change)="data.target_id = null">
+                <select class="form-control" [(ngModel)]="data.target_type" (change)="onDepositTypeChange()">
                    <option value="bank">بنك</option>
                    <option value="safe">خزينة</option>
+                   <option value="service_account">حساب خدمي</option>
                 </select>
              </div>
 
              <div class="col-md-6 mb-3" *ngIf="data.target_type === 'bank'">
                 <label>البنك</label>
                 <select class="form-control" [(ngModel)]="data.target_id">
-                   <option *ngFor="let bank of banks" [value]="bank.id">{{bank.name}}</option>
+                   <option [ngValue]="null" disabled>— اختر البنك —</option>
+                   <option *ngFor="let bank of banks" [ngValue]="bank.id">{{bank.name}}</option>
                 </select>
              </div>
 
              <div class="col-md-6 mb-3" *ngIf="data.target_type === 'safe'">
                 <label>الخزينة</label>
                 <select class="form-control" [(ngModel)]="data.target_id">
-                   <option *ngFor="let safe of safes" [value]="safe.id">{{safe.name}}</option>
+                   <option [ngValue]="null" disabled>— اختر الخزينة —</option>
+                   <option *ngFor="let safe of safes" [ngValue]="safe.id">{{safe.name}}</option>
+                </select>
+             </div>
+
+             <div class="col-md-6 mb-3" *ngIf="data.target_type === 'service_account'">
+                <label>الحساب الخدمي</label>
+                <select class="form-control" [(ngModel)]="data.target_id">
+                   <option [ngValue]="null" disabled>— اختر الحساب الخدمي —</option>
+                   <option *ngFor="let sa of serviceAccounts" [ngValue]="sa.id">{{sa.name}}</option>
                 </select>
              </div>
 
@@ -82,6 +94,7 @@ export class AddCapitalComponent implements OnInit {
 
    banks: any[] = [];
    safes: any[] = [];
+   serviceAccounts: any[] = [];
    equityAccounts: any[] = [];
    loading = false;
    private apiUrl = environment.Url + '/accounting/capitals';
@@ -91,13 +104,19 @@ export class AddCapitalComponent implements OnInit {
       private router: Router,
       private bankService: BankService,
       private safeService: SafeService,
+      private serviceAccountsService: ServiceAccountsService,
       private voucherService: VoucherService
    ) { }
 
    ngOnInit() {
       this.getBanks();
       this.getSafes();
+      this.getServiceAccounts();
       this.getEquityAccounts();
+   }
+
+   onDepositTypeChange() {
+      this.data.target_id = null;
    }
 
    getBanks() {
@@ -109,6 +128,12 @@ export class AddCapitalComponent implements OnInit {
    getSafes() {
       this.safeService.getAll().subscribe(res => {
          this.safes = res.data || (Array.isArray(res) ? res : []);
+      });
+   }
+
+   getServiceAccounts() {
+      this.serviceAccountsService.index().subscribe((res: any) => {
+         this.serviceAccounts = Array.isArray(res) ? res : (res?.data || []);
       });
    }
 

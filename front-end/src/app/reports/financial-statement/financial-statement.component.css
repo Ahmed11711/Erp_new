@@ -67,5 +67,14 @@ i{
 tfoot{
   background-color: #82225e;
   color: white;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+tfoot .text-success{
+  color: #c8f5d0 !important;
+}
+
+tfoot .text-danger{
+  color: #ffc9c9 !important;
 }

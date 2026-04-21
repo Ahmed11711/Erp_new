@@ -63,6 +63,18 @@ export class GeneralAccountsComponent implements OnInit {
     return found ? found.label : type;
   }
 
+  /** جذر / مجموعة / تفصيلي — وفق دليل حسابات هرمي (بدون حقل يدوي). */
+  getHierarchyRole(account: TreeAccount): string {
+    if (!account.parent_id) {
+      return 'جذر';
+    }
+    const id = account.id;
+    if (id != null && this.accounts.some(a => a.parent_id === id)) {
+      return 'مجموعة';
+    }
+    return 'تفصيلي';
+  }
+
   /** نفس منطق شجرة الحسابات: للخصوم/الإيرادات/حقوق الملكية عرض الرصيد الطبيعي (−balance). */
   getDisplayBalance(account: TreeAccount): number {
     const b = account.balance ?? 0;

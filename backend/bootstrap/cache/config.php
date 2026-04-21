@@ -746,6 +746,10 @@
     ),
     'shopify' => 
     array (
+      'shop_domain' => '',
+      'admin_access_token' => '',
+      'api_version' => '2024-10',
+      'http_timeout' => 120,
       'webhook_secret' => '',
       'allowed_shop_domains' => 
       array (
@@ -753,6 +757,10 @@
       'accepted_topics' => 
       array (
         0 => 'orders/create',
+        1 => 'orders/updated',
+        2 => 'products/create',
+        3 => 'products/update',
+        4 => 'inventory_levels/update',
       ),
       'default_order_source_id' => 0,
       'default_shipping_method_id' => 0,
@@ -764,6 +772,13 @@
       'order_type' => 'جديد',
       'placeholder_phone' => '0000000000',
       'tracking_user_id' => NULL,
+    ),
+    'shipping_partner' => 
+    array (
+      'api_base_url' => '',
+      'api_token' => '',
+      'webhook_secret' => '',
+      'timeout' => 60,
     ),
   ),
   'session' => 

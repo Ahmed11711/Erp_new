@@ -200,6 +200,14 @@ class CategoriesController extends Controller
    return response()->json(['error' => 'Category not found'], 404);
   }
 
+  $dup = Category::where('warehouse', $request->warehouse)
+   ->whereRaw('TRIM(category_name) = ?', [trim($request->category_name)])
+   ->where('id', '!=', (int) $id)
+   ->first();
+  if ($dup) {
+   return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
+  }
+
   $img_name = '';
   if ($request->hasFile('category_image')) {
    $img = $request->file('category_image');

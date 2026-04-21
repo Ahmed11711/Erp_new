@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class TreeAccount extends Model
 {
@@ -20,6 +22,111 @@ class TreeAccount extends Model
         'is_trading_account' => 'boolean',
         'detail_type' => 'string',
     ];
+
+    /**
+     * يُستدعى مباشرةً قبل INSERT — أضمن من الأحداث لو تعطّل أو تُستثنى في بعض الإصدارات/الكاش.
+     */
+    protected function performInsert(Builder $query)
+    {
+        if (!$this->exists) {
+            $this->ensureCodeAndLevelForNewInsert();
+        }
+
+        return parent::performInsert($query);
+    }
+
+    private function ensureCodeAndLevelForNewInsert(): void
+    {
+        $code = trim((string) ($this->getAttribute('code') ?? ''));
+        if ($code !== '') {
+            return;
+        }
+
+        if ($this->parent_id) {
+            $parent = static::query()->whereKey($this->parent_id)->lockForUpdate()->first();
+            if (!$parent) {
+                throw new \RuntimeException('الحساب الأب غير موجود');
+            }
+            $lastChild = static::queryLastChildUnderParentLocked($parent);
+            $resolved = static::resolveNextChildCodeAndLevel($parent, $lastChild);
+            $this->setAttribute('code', $resolved['code']);
+            $this->setAttribute('level', $resolved['level']);
+
+            return;
+        }
+
+        $lastRootQuery = static::query()->whereNull('parent_id')->lockForUpdate();
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'mysql') {
+            $lastRoot = $lastRootQuery->orderByRaw('CAST(code AS UNSIGNED) DESC')->first();
+        } elseif ($driver === 'sqlite') {
+            $lastRoot = $lastRootQuery->orderByRaw('CAST(code AS INTEGER) DESC')->first();
+        } else {
+            $lastRoot = $lastRootQuery->orderByDesc('code')->first();
+        }
+        $next = $lastRoot
+            ? ((int) preg_replace('/\D/', '', (string) $lastRoot->code) + 1)
+            : 1;
+        $this->setAttribute('code', (string) $next);
+        $lvl = $this->getAttribute('level');
+        if ($lvl === null || (int) $lvl === 0) {
+            $this->setAttribute('level', 1);
+        }
+    }
+
+    /**
+     * آخر ابن تحت الأب بترتيب عددي للكود (مع قفل الصفوف داخل المعاملة الحالية).
+     */
+    public static function queryLastChildUnderParentLocked(self $parent): ?self
+    {
+        $q = static::query()->where('parent_id', $parent->id)->lockForUpdate();
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'mysql') {
+            return $q->orderByRaw('CAST(code AS UNSIGNED) DESC')->first();
+        }
+        if ($driver === 'sqlite') {
+            return $q->orderByRaw('CAST(code AS INTEGER) DESC')->first();
+        }
+
+        return $q->orderByDesc('code')->first();
+    }
+
+    /**
+     * كود ومستوى الابن لأي عمق (فرع تحت فرع).
+     */
+    public static function resolveNextChildCodeAndLevel(self $parent, ?self $lastChild): array
+    {
+        $parentLevel = max(1, (int) ($parent->level ?? 0));
+        $childLevel = $parentLevel + 1;
+
+        if ($lastChild !== null) {
+            $n = (int) preg_replace('/\D/', '', (string) $lastChild->code);
+
+            return [
+                'code' => (string) ($n + 1),
+                'level' => $childLevel,
+            ];
+        }
+
+        $raw = trim((string) $parent->code);
+        $digits = (int) preg_replace('/\D/', '', $raw);
+
+        if ($parentLevel === 2 && strlen($raw) === 2 && ctype_digit($raw) && (int) $raw < 100) {
+            return [
+                'code' => (string) ((int) ($raw[0] . '0' . $raw[1])),
+                'level' => $childLevel,
+            ];
+        }
+
+        if ($digits < 1) {
+            $digits = (int) $parent->id;
+        }
+
+        return [
+            'code' => (string) ($digits * 10 + 1),
+            'level' => $childLevel,
+        ];
+    }
 
     public function parent()
     {
@@ -44,6 +151,23 @@ class TreeAccount extends Model
     public function safes()
     {
         return $this->hasMany(Safe::class, 'account_id');
+    }
+
+    /**
+     * Whether another tree account already uses this display name (trimmed).
+     */
+    public static function nameAlreadyUsed(string $name, ?int $exceptId = null): bool
+    {
+        $trimmed = trim($name);
+        if ($trimmed === '') {
+            return false;
+        }
+        $q = static::query()->whereRaw('TRIM(name) = ?', [$trimmed]);
+        if ($exceptId !== null) {
+            $q->where('id', '!=', $exceptId);
+        }
+
+        return $q->exists();
     }
 
     /**

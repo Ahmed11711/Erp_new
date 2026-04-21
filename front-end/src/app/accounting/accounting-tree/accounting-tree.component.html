@@ -116,12 +116,9 @@
             <option *ngFor="let type of accountTypes" [value]="type.value">{{ type.label }}</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>نوع الحساب المحاسبي</label>
-          <select class="form-control" [(ngModel)]="newAccount.account_type" name="account_type">
-            <option *ngFor="let option of accountTypeOptions" [value]="option.value">{{ option.label }}</option>
-          </select>
-        </div>
+        <p class="small text-muted mb-0">
+          <strong>مستوى الشجرة:</strong> يُحدَّد تلقائياً من الحساب الأب (حساب رئيسي أو زر +). جذر ← مجموعة ← حساب تفصيلي حسب موقعك في الشجرة، كما في أنظمة دليل الحسابات المعتادة.
+        </p>
         <p class="small text-muted mb-0">
           الرصيد يُبنى من <strong>القيود المحاسبية</strong> فقط (قيد يومي، سند، …). الحساب الجديد يبدأ بصفر.
         </p>
@@ -163,12 +160,9 @@
             <option *ngFor="let type of accountTypes" [value]="type.value">{{ type.label }}</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>نوع الحساب المحاسبي</label>
-          <select class="form-control" [(ngModel)]="selectedAccount.account_type" name="account_type">
-            <option *ngFor="let option of accountTypeOptions" [value]="option.value">{{ option.label }}</option>
-          </select>
-        </div>
+        <p class="small text-muted" *ngIf="selectedAccount?.level != null">
+          <strong>مستوى الشجرة الحالي:</strong> {{ selectedAccount.level }} — يتبع هيكل الأباء ولا يُعدَّل يدوياً من هنا.
+        </p>
         <div class="form-group mb-0">
           <label>الرصيد الحالي (من القيود)</label>
           <p class="form-control-plaintext border rounded px-2 py-1 mb-1 bg-light">

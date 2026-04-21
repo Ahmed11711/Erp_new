@@ -48,12 +48,25 @@ class AccountingReportController extends Controller
             $query->whereRaw("{$effectiveDateExpr} = ?", [$request->date]);
         }
 
-        if ($request->has('account_id')) {
+        if ($request->filled('account_id')) {
             $query->where('account_entries.tree_account_id', $request->account_id);
         }
 
+        /** فقط حركات مرتبطة برأس قيد يومي (شاشة القيود اليومية أو أي ترحيل ينشئ DailyEntry) */
+        if ($request->boolean('daily_entry_only')) {
+            $query->whereNotNull('account_entries.daily_entry_id');
+        }
+
+        // إجمالي المدين/الدائن لكل النتائج المصفّاة — وليس للصفحة الحالية فقط
+        $totalsQuery = clone $query;
+        $totals = [
+            'total_debit' => (float) $totalsQuery->sum('account_entries.debit'),
+            'total_credit' => (float) $totalsQuery->sum('account_entries.credit'),
+        ];
+
         $perPage = $request->get('per_page', 25);
         $entries = $query->orderByRaw("{$effectiveDateExpr} ASC")
+            ->orderBy('account_entries.daily_entry_id')
             ->orderBy('account_entries.created_at', 'asc')
             ->orderBy('account_entries.id', 'asc')
             ->paginate($perPage);
@@ -76,15 +89,13 @@ class AccountingReportController extends Controller
                 $journalRef = $entry->entry_batch_code;
             }
             $entry->setAttribute('journal_entry_number', $journalRef);
+            $entry->setAttribute(
+                'journal_header_description',
+                $entry->dailyEntry?->description
+            );
 
             return $entry;
         });
-
-        // Calculate totals
-        $totals = [
-            'total_debit' => $entries->sum('debit'),
-            'total_credit' => $entries->sum('credit'),
-        ];
 
         return response()->json([
             'data' => $entries,

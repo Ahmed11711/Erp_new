@@ -2,6 +2,7 @@
 
 namespace App\Services\Shopify;
 
+use App\Jobs\SendOrderToShippingJob;
 use App\Models\Order;
 use App\Models\OrderDetails;
 use App\Models\OrderProduct;
@@ -48,10 +49,13 @@ class ShopifyOrderImportService
         $addr = $shippingAddr !== [] ? $shippingAddr : $billingAddr;
 
         $customerName = $this->buildCustomerName($addr, $payload);
-        $phone = $this->normalizePhone($addr['phone'] ?? $payload['phone'] ?? '');
+        $phone = $this->resolvePhone($payload, $addr);
         if ($phone === '') {
             $phone = (string) config('services.shopify.placeholder_phone', '0000000000');
         }
+
+        $financialStatus = (string) ($payload['financial_status'] ?? '');
+        $fulfillmentStatus = (string) ($payload['fulfillment_status'] ?? '');
 
         $governorate = (string) ($addr['province'] ?? $addr['city'] ?? config('services.shopify.default_governorate', 'غير محدد'));
         $city = (string) ($addr['city'] ?? '');
@@ -84,7 +88,7 @@ class ShopifyOrderImportService
             );
         }
 
-        return DB::transaction(function () use (
+        $order = DB::transaction(function () use (
             $shopifyOrderId,
             $shopDomain,
             $customerName,
@@ -100,11 +104,15 @@ class ShopifyOrderImportService
             $lineRows,
             $referenceNumber,
             $note,
-            $trackingUserId
+            $trackingUserId,
+            $financialStatus,
+            $fulfillmentStatus
         ) {
             $order = Order::create([
                 'shopify_order_id' => $shopifyOrderId,
                 'shopify_shop_domain' => $shopDomain,
+                'shopify_financial_status' => $financialStatus !== '' ? $financialStatus : null,
+                'shopify_fulfillment_status' => $fulfillmentStatus !== '' ? $fulfillmentStatus : null,
                 'customer_name' => $customerName,
                 'customer_type' => (string) config('services.shopify.default_customer_type', 'فرد'),
                 'customer_phone_1' => $phone,
@@ -163,6 +171,12 @@ class ShopifyOrderImportService
 
             return $order;
         });
+
+        if ($order) {
+            SendOrderToShippingJob::dispatch($order->id);
+        }
+
+        return $order;
     }
 
     /**
@@ -192,6 +206,8 @@ class ShopifyOrderImportService
 
             $rows[] = [
                 'category_id' => $categoryId,
+                'shopify_line_item_id' => isset($line['id']) ? (int) $line['id'] : null,
+                'shopify_variant_id' => $variantId,
                 'quantity' => (string) $qty,
                 'price' => $unitPrice,
                 'total_price' => round($unitPrice * $qty, 2),
@@ -303,5 +319,70 @@ class ShopifyOrderImportService
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
 
         return $digits !== '' ? $digits : '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $addr
+     */
+    private function resolvePhone(array $payload, array $addr): string
+    {
+        $candidates = [
+            (string) ($addr['phone'] ?? ''),
+            (string) ($payload['phone'] ?? ''),
+            (string) data_get($payload, 'customer.phone'),
+            (string) data_get($payload, 'customer.default_address.phone'),
+            (string) data_get($payload, 'billing_address.phone'),
+        ];
+        foreach ($payload['note_attributes'] ?? [] as $na) {
+            if (strtolower((string) ($na['name'] ?? '')) === 'phone') {
+                $candidates[] = (string) ($na['value'] ?? '');
+            }
+        }
+        foreach ($candidates as $c) {
+            $n = $this->normalizePhone($c);
+            if ($n !== '') {
+                return $n;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function syncFromUpdate(array $payload, ?string $shopDomain): void
+    {
+        $shopifyOrderId = isset($payload['id']) ? (int) $payload['id'] : null;
+        if (! $shopifyOrderId) {
+            return;
+        }
+
+        $order = Order::query()->where('shopify_order_id', $shopifyOrderId)->first();
+        if (! $order) {
+            Log::info('Shopify orders/updated: no local order', ['shopify_order_id' => $shopifyOrderId]);
+
+            return;
+        }
+
+        $totals = $this->extractTotals($payload);
+        $shipping = $this->extractShippingCost($payload);
+        $financialStatus = (string) ($payload['financial_status'] ?? '');
+        $fulfillmentStatus = (string) ($payload['fulfillment_status'] ?? '');
+
+        $order->update(array_filter([
+            'shopify_shop_domain' => $shopDomain ?? $order->shopify_shop_domain,
+            'shopify_financial_status' => $financialStatus !== '' ? $financialStatus : null,
+            'shopify_fulfillment_status' => $fulfillmentStatus !== '' ? $fulfillmentStatus : null,
+            'shipping_cost' => $shipping,
+            'total_invoice' => $totals['total_invoice'],
+            'prepaid_amount' => $totals['prepaid_amount'],
+            'discount' => $totals['discount'],
+            'net_total' => $totals['net_total'],
+            'vat' => $totals['vat'],
+        ], fn ($v) => $v !== null));
+
+        Log::info('Shopify order updated from webhook', ['local_order_id' => $order->id]);
     }
 }

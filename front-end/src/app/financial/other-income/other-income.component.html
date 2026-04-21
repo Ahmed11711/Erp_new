@@ -7,52 +7,65 @@
       <div><p class="title header w-50 m-auto">الايرادات الاخري</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container-fluid">
-
-
+    <div *ngIf="loadError" class="alert alert-danger">{{ loadError }}</div>
 
     <div class="row mb-4">
       <div class="col-md-3">
-        <label for="">من تاريخ</label>
-        <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+        <label for="oi-from">من تاريخ</label>
+        <input id="oi-from" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
       </div>
       <div class="col-md-3">
-        <label for="">الى تاريخ</label>
-        <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+        <label for="oi-to">الى تاريخ</label>
+        <input id="oi-to" class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
       </div>
       <div class="col-md-3 d-flex align-items-end">
-        <input (change)="filterData($event)" [(ngModel)]="searchWord" class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث...">
+        <input
+          [(ngModel)]="searchWord"
+          (ngModelChange)="applyFilters()"
+          class="form-control border-end-0 border rounded-pill"
+          type="search"
+          placeholder="البحث في البيان أو الحساب أو المصدر..."
+        >
       </div>
     </div>
 
-
-    <table class="table table-bordered m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>الاسم</th>
-        <th>التاريخ</th>
-        <th>نوع الايراد</th>
-        <th>المبلغ</th>
-        <th>بواسطة</th>
-      </thead>
-      <tbody>
-        <tr *ngFor="let elm of tableData">
-          <td>{{elm.name}}</td>
-          <td>{{elm.date}}</td>
-          <td>{{elm.type}}</td>
-          <td>{{elm.income_amount}}</td>
-          <td></td>
-        </tr>
-      </tbody>
-      <tfoot>
-        <tr>
-          <td>الاجمالى</td>
-          <td colspan="4">{{total}}</td>
-        </tr>
-      </tfoot>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-bordered m-auto text-center">
+        <thead class="bg-dark text-white">
+          <tr>
+            <th>مصدر التحصيل</th>
+            <th>التاريخ</th>
+            <th>البيان</th>
+            <th>حساب الإيراد (الشجرة)</th>
+            <th>المبلغ</th>
+            <th>بواسطة</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let elm of tableData">
+            <td>{{ paymentSourceLabel(elm) }}</td>
+            <td>{{ elm.date }}</td>
+            <td>{{ elm.type }}</td>
+            <td class="text-start" dir="rtl">{{ revenueAccountLabel(elm) }}</td>
+            <td>{{ elm.income_amount }}</td>
+            <td>—</td>
+          </tr>
+          <tr *ngIf="!tableData.length">
+            <td colspan="6" class="text-muted py-4">لا توجد بيانات مطابقة للفلتر الحالي.</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="text-end fw-bold">الإجمالي</td>
+            <td class="fw-bold">{{ total | number : '1.2-2' }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
 </div>

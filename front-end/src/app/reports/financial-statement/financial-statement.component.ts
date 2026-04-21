@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
-import { filter, distinctUntilChanged } from 'rxjs/operators';
 import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
@@ -122,17 +121,6 @@ export class FinancialStatementComponent implements OnInit {
     this.cashForm.get('entity_type')?.valueChanges.subscribe(() => {
       this.cashForm.patchValue({ entity_id: null });
       this.clearReportOnly();
-    });
-
-    /** عند اختيار حساب من الشجرة: جلب كشف الحساب مباشرة دون الضغط على «عرض التقرير» */
-    this.ledgerForm.get('account_id')?.valueChanges.pipe(
-      distinctUntilChanged(),
-      filter((id): id is number => id != null && Number.isFinite(Number(id)))
-    ).subscribe(() => {
-      if (this.activeTab !== 'ledger') {
-        return;
-      }
-      this.submitLedgerForm();
     });
   }
 

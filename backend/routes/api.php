@@ -54,6 +54,7 @@ Route::get('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class,
 Route::post('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'handle']);
 
 Route::post('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'handle']);
+Route::post('/webhooks/shipping/update', [\App\Http\Controllers\ShippingPartnerWebhookController::class, 'update']);
 
 
 Route::group(['middleware' => 'api', 'prefix' => 'auth'], function ($router) {
@@ -164,6 +165,8 @@ Route::middleware('auth')->group(function () {
         Route::post('assets/run-depreciation', [App\Http\Controllers\DepreciationController::class, 'runDepreciation']); // New Route
         Route::post('cimmitments/{id}/pay', [App\Http\Controllers\CimmitmentController::class, 'pay']);
         Route::apiResource('cimmitments', App\Http\Controllers\CimmitmentController::class);
+        Route::get('covenants', [App\Http\Controllers\CovenantController::class, 'index']);
+        Route::post('covenants', [App\Http\Controllers\CovenantController::class, 'store']);
         Route::apiResource('incomes', App\Http\Controllers\IncomeController::class);
     });
 
@@ -236,6 +239,16 @@ Route::middleware('auth')->group(function () {
         // V2
         //  Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
         Route::apiResource('stocks', stockController::class)->names('stock');
+
+        Route::get('shopify/status', [\App\Http\Controllers\ShopifyIntegrationController::class, 'status']);
+        Route::post('shopify/sync-product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncProductMappings']);
+        Route::post('shopify/sync-orders', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncOrders']);
+        Route::get('shopify/product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'productMappingsIndex']);
+
+        Route::get('shopify/integration/orders', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationOrders']);
+        Route::get('shopify/integration/products', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationProducts']);
+        Route::patch('shopify/integration/products/{id}', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'updateIntegrationProduct']);
+        Route::get('shopify/integration/failed-jobs', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'failedJobs']);
     });
 
     Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Logistics Specialist'])->group(function () {

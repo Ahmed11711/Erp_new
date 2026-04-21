@@ -35,6 +35,32 @@ button span{
   color: blue;
 }
 
+.dash-quick-tabs {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    background: #faf8fc;
+    padding-inline: 8px;
+}
+
+.dash-quick-tabs .mat-mdc-tab-link,
+.dash-quick-tabs .mat-tab-link {
+    min-height: 44px;
+    font-weight: 600;
+    opacity: 0.85;
+}
+
+.dash-quick-tabs .mat-mdc-tab-link.mat-mdc-tab-label-active,
+.dash-quick-tabs .mat-tab-link.mat-tab-label-active {
+    opacity: 1;
+}
+
+.dash-quick-tabs__ic {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-inline-end: 6px;
+    vertical-align: middle;
+}
+
 .toolbar-item-spacer {
     flex: 1 1 auto;
 }

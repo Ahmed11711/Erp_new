@@ -12,7 +12,6 @@ class TreeAccountStoreRequest extends BaseRequest
             'name_en' => 'nullable|string|max:255',
             'parent_id' => 'nullable|integer|exists:tree_accounts,id',
             'type' => 'required|in:asset,liability,equity,revenue,expense,settlement',
-            'account_type' => 'nullable|in:رئيسي,فرعي,مستوى أول',
             'budget_type' => 'nullable|string|max:255',
             'is_trading_account' => 'nullable|boolean',
             'balance' => 'nullable|numeric|min:0',

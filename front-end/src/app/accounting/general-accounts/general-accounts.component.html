@@ -43,7 +43,7 @@
               <th>اسم الحساب</th>
               <th>الاسم بالإنجليزية</th>
               <th>النوع</th>
-              <th>طبيعة الحساب</th>
+              <th>الدور في الشجرة</th>
               <th>الرصيد</th>
               <th>حالة الحساب</th>
             </tr>
@@ -62,7 +62,7 @@
                   {{ getAccountTypeLabel(account.type) }}
                 </span>
               </td>
-              <td>{{ account.account_type || '-' }}</td>
+              <td>{{ getHierarchyRole(account) }}</td>
               <td class="balance" [class.negative]="getDisplayBalance(account) < 0" [title]="'مدين−دائن خام: ' + (account.balance ?? 0)">
                 {{ getDisplayBalance(account) | number:'1.2-2' }}
               </td>

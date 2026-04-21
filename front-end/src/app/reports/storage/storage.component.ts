@@ -91,4 +91,24 @@ export class StorageComponent implements OnInit {
     const dt = new Date(d);
     return dt.toLocaleDateString('ar-EG');
   }
+
+  private num(v: unknown): number {
+    if (v == null || v === '') {
+      return 0;
+    }
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  get sumBalanceBefore(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.balance_before), 0);
+  }
+
+  get sumQuantity(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.quantity), 0);
+  }
+
+  get sumBalanceAfter(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.balance_after), 0);
+  }
 }

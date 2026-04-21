@@ -7,7 +7,6 @@
       <div><p class="title header w-50 m-auto">صرف</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
@@ -16,52 +15,84 @@
 
       <div class="row">
         <div class="col-md-2 mb-3">
-          <label for="">التاريخ</label>
-          <input formControlName="start" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label for="covenant-date">التاريخ</label>
+          <input id="covenant-date" formControlName="transaction_date" class="form-control" type="date"
+            (change)="onDateFromChange($event)">
         </div>
         <div class="col-md-10">
         </div>
         <div class="col-md-3">
-          <select formControlName='type' class="form-control type">
-            <option disabled selected value="نوع العهدة">نوع العهدة</option>
-            <option value="نقدية">نقدية</option>
-            <option value="عينية">عينية</option>
+          <label class="form-label small text-muted">نوع العهدة</label>
+          <select formControlName="covenant_type" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر النوع —</option>
+            <option ngValue="نقدية">نقدية</option>
+            <option ngValue="عينية">عينية</option>
           </select>
         </div>
         <div class="col-md-3">
+          <label class="form-label small text-muted">المبلغ</label>
           <div class="mb-3">
-            <input class="form-control"   placeholder="مبلغ العهدة"
+            <input class="form-control" placeholder="مبلغ العهدة"
             [class.is-valid]="form.get('price')?.errors ==null && form.get('price')?.touched"
-            formControlName='price' type="number" min="0" class="form-control">
+            formControlName='price' type="number" min="0" step="0.01">
             <p *ngIf="form.get('price')?.errors !=null && form.get('price')?.touched"
-              class="error mb-0 text-danger">رقم غير صحيح</p>
+              class="error mb-0 text-danger">مبلغ صحيح مطلوب</p>
           </div>
         </div>
-        <div  class="col-md-3">
-          <select formControlName='kind' class="form-control type" id="inlineFormCustomSelect" >
-            <option disabled selected>متحصل العهدة</option>
+        <div class="col-md-3">
+          <label class="form-label small text-muted">متحصل العهدة</label>
+          <select formControlName="holder_kind" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر المتحصل —</option>
+            <option ngValue="petty_custodian">متحصل العهدة</option>
+            <option ngValue="employee">موظف</option>
+            <option ngValue="representative">مندوب</option>
+            <option ngValue="other">أخرى</option>
           </select>
         </div>
         <div class="col-md-3">
-          <select formControlName='bank' class="form-control type" id="inlineFormCustomSelect" >
-            <option disabled selected>الخزينة</option>
-            <option value="">خزينة المصنع</option>
-            <option value="">فودافون كاش</option>
-            <option value="">البنك الاهلي</option>
+          <label class="form-label small text-muted">مصدر الصرف</label>
+          <select formControlName="payment_type" class="form-control type" (change)="onPaymentTypeChange()">
+            <option ngValue="safe">خزينة نقدية</option>
+            <option ngValue="bank">حساب بنكي</option>
+            <option ngValue="service_account">محفظة إلكترونية (فودافون كاش وغيرها)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row mt-2">
+        <div class="col-md-4" *ngIf="paymentType === 'safe'">
+          <label class="form-label small text-muted">الخزينة</label>
+          <select formControlName="safe_id" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر الخزينة —</option>
+            <option *ngFor="let elm of safesData" [ngValue]="elm.id">{{ elm.name }}</option>
+          </select>
+        </div>
+        <div class="col-md-4" *ngIf="paymentType === 'bank'">
+          <label class="form-label small text-muted">البنك</label>
+          <select formControlName="bank_id" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر البنك —</option>
+            <option *ngFor="let elm of banksData" [ngValue]="elm.id">{{ elm.name }}</option>
+          </select>
+        </div>
+        <div class="col-md-4" *ngIf="paymentType === 'service_account'">
+          <label class="form-label small text-muted">المحفظة / الوسيط</label>
+          <select formControlName="service_account_id" class="form-control type">
+            <option [ngValue]="null" disabled>— اختر المحفظة —</option>
+            <option *ngFor="let elm of serviceAccountsData" [ngValue]="elm.id">{{ elm.name }}</option>
           </select>
         </div>
       </div>
 
       <div class="row mt-3">
         <div class="col-md-6">
-          <textarea placeholder="وصف" name="" id="" cols="97%" formControlName='description'
+          <textarea placeholder="وصف" cols="97%" formControlName='description'
           [class.is-valid]="form.get('description')?.errors ==null && form.get('description')?.touched"
           ></textarea>
           <p *ngIf="form.get('description')?.errors !=null && form.get('description')?.touched"
               class="error mb-0 text-danger">مطلوب</p>
         </div>
         <div class="col-md-6">
-          <textarea placeholder="ملاحظات" name="" id="" formControlName='note'
+          <textarea placeholder="ملاحظات" formControlName='note'
           [class.is-valid]="form.get('note')?.errors ==null && form.get('note')?.touched"
           ></textarea>
           <p *ngIf="form.get('note')?.errors !=null && form.get('note')?.touched"
@@ -70,8 +101,7 @@
       </div>
 
       <div class="text-center mt-2">
-        <button
-          type="submit" class="btn submit text-white">صرف</button>
+        <button type="submit" class="btn submit text-white" [disabled]="saving">{{ saving ? 'جاري الحفظ...' : 'صرف' }}</button>
       </div>
 
     </form>

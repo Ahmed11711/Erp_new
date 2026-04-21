@@ -65,4 +65,24 @@ export class ShippincompanyReportsComponent implements OnInit {
     this.searchTimer = setTimeout(() => this.load(), 400);
   }
 
+  get totalOrders(): number {
+    return this.data.reduce((sum, row) => sum + (+row.orders_count || 0), 0);
+  }
+
+  get totalCollected(): number {
+    return this.data.reduce((sum, row) => sum + (+row.collected_count || 0), 0);
+  }
+
+  get totalRefused(): number {
+    return this.data.reduce((sum, row) => sum + (+row.refused_count || 0), 0);
+  }
+
+  /** إجمالي نسبة التحصيل = مجموع المحصل ÷ مجموع الطلبات */
+  get aggregateCollectionPercentage(): string {
+    if (!this.totalOrders) {
+      return '0';
+    }
+    return ((this.totalCollected / this.totalOrders) * 100).toFixed(2);
+  }
+
 }

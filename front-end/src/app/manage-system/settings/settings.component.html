@@ -1,148 +1,89 @@
+<!-- واجهة الربط المحاسبي (عملاء/موردين) محفوظة في settings-account-linking.fragment.html عند الحاجة -->
+
 <div class="container-fluid p-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-2xl font-bold">اعدادات ربط الحسابات</h2>
-        <button mat-raised-button color="primary" (click)="saveSettings()" [disabled]="loading">
-            <mat-icon>save</mat-icon> حفظ الاعدادات
-        </button>
-    </div>
-
-    <mat-card class="mb-4">
-        <mat-card-header>
-            <mat-card-title>حسابات العملاء (شركات)</mat-card-title>
+    <mat-card class="shopify-settings-card mb-4">
+        <mat-card-header class="shopify-settings-card__header">
+            <div mat-card-avatar class="shopify-settings-card__avatar">
+                <mat-icon>storefront</mat-icon>
+            </div>
+            <div class="shopify-settings-card__titles">
+                <mat-card-title>Shopify</mat-card-title>
+                <mat-card-subtitle>إعداد الخادم — Webhooks والمزامنة التكميلية</mat-card-subtitle>
+            </div>
         </mat-card-header>
-        <mat-card-content class="p-3">
-            <p class="text-muted small mb-3">سيتم ربط كل عميل شركة جديد تلقائياً بحساب فرعي تحت الحساب المحدد.</p>
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <mat-form-field appearance="outline" class="w-100">
-                        <mat-label>الحساب الرئيسي لعملاء الشركات</mat-label>
-                        <mat-select [(ngModel)]="settings.customer_corporate_parent_account_id">
-                            <mat-option>-- اختر حساب --</mat-option>
-                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
-                                {{ acc.name }} ({{ acc.code }})
-                            </mat-option>
-                        </mat-select>
-                    </mat-form-field>
-                </div>
-                <div class="col-md-3">
-                    <button mat-stroked-button color="warn"
-                        (click)="updateExisting('customer', 'corporate', settings.customer_corporate_parent_account_id)"
-                        [disabled]="!settings.customer_corporate_parent_account_id || loading">
-                        تحديث العملاء الحاليين
+        <mat-card-content class="shopify-settings-card__body p-3 pt-0">
+            <div class="shopify-settings__hint" dir="rtl">
+                <span class="shopify-settings__hint-label">ما يُضبط على الخادم (.env)</span>
+                <p class="shopify-settings__hint-text mb-2">
+                    <strong>المتجر والويب هوك:</strong>
+                    <code>SHOPIFY_SHOP_DOMAIN</code>، <code>SHOPIFY_ADMIN_ACCESS_TOKEN</code>،
+                    <code>SHOPIFY_WEBHOOK_SECRET</code>، واختياريًا <code>SHOPIFY_ALLOWED_SHOP_DOMAINS</code>.
+                    سجّل في Shopify ويب هوك للمسار:
+                    <code>…/api/shopify/webhook</code> (بعد <code>APP_URL</code> العام للخادم).
+                    للمواضيع: <code>orders/create</code>، <code>orders/updated</code>، <code>products/create</code>،
+                    <code>products/update</code>، واختياريًا <code>inventory_levels/update</code>.
+                    شغّل طابور Laravel (<code>QUEUE_CONNECTION</code> ليس <code>sync</code> في الإنتاج) مع <code>php artisan queue:work</code>.
+                </p>
+                <p class="shopify-settings__hint-text mb-2">
+                    <strong>استيراد الطلبات إلى ERP:</strong>
+                    <code>SHOPIFY_DEFAULT_ORDER_SOURCE_ID</code>، <code>SHOPIFY_DEFAULT_SHIPPING_METHOD_ID</code>،
+                    <code>SHOPIFY_FALLBACK_CATEGORY_ID</code>، <code>SHOPIFY_TRACKING_USER_ID</code>.
+                </p>
+                <p class="shopify-settings__hint-text mb-2">
+                    <strong>شركة الشحن الخارجية:</strong>
+                    <code>SHIPPING_API_BASE_URL</code>، <code>SHIPPING_API_TOKEN</code>،
+                    <code>SHIPPING_WEBHOOK_SECRET</code> (لـ <code>POST …/api/webhooks/shipping/update</code>).
+                </p>
+                <p class="shopify-settings__hint-text mb-0">
+                    <strong>صلاحيات تطبيق Shopify:</strong> قراءة/كتابة منتجات حسب الحاجة (<code>read_products</code> / <code>write_products</code>)؛
+                    طلبات (<code>read_orders</code> و<code>read_all_orders</code> عند الحاجة)؛ وصلاحيات التنفيذ/الإلغاء على الطلبات حسب ما يظهر في لوحة التطبيق.
+                </p>
+                <p class="shopify-settings__hint-text mb-0 mt-2 shopify-settings__hint-emphasis">
+                    <strong>المسار الأساسي:</strong> الطلبات والتحديثات الفورية تصل عبر <strong>Webhooks</strong> تلقائياً بعد ضبط المتجر والطابور.
+                    <strong>لا تعتمد على أزرار المزامنة</strong> في التشغيل اليومي — مخصصة لحالات مثل: طلبات قديمة قبل تفعيل الويب هوك، توقف مؤقت للخادم، أو إصلاح سجل ناقص.
+                </p>
+            </div>
+
+            <div class="shopify-settings__nav-row mb-3">
+                <a mat-stroked-button color="accent" routerLink="/dashboard/shopify">
+                    <mat-icon>dashboard</mat-icon>
+                    لوحة مراقبة الطلبات والمنتجات
+                </a>
+            </div>
+
+            <mat-expansion-panel class="shopify-settings__manual-panel" [expanded]="false">
+                <mat-expansion-panel-header>
+                    <mat-panel-title>أدوات اختبار ومزامنة تاريخية (اختياري)</mat-panel-title>
+                    <mat-panel-description>للصيانة وليس بديلاً للويب هوك</mat-panel-description>
+                </mat-expansion-panel-header>
+                <div class="shopify-settings__actions">
+                    <button mat-stroked-button color="primary" type="button" class="shopify-settings__btn"
+                        (click)="testShopifyConnection()"
+                        [disabled]="shopifyStatusLoading || shopifySyncing || shopifyOrderSyncing">
+                        <mat-icon>cloud_done</mat-icon>
+                        اختبار الاتصال
+                    </button>
+                    <button mat-stroked-button color="primary" type="button" class="shopify-settings__btn"
+                        (click)="syncShopifyProductMappings()"
+                        [disabled]="shopifySyncing || shopifyStatusLoading || shopifyOrderSyncing">
+                        <mat-icon>sync</mat-icon>
+                        مزامنة ربط المتغيرات (خرج API)
                     </button>
                 </div>
-            </div>
-            <hr>
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <mat-form-field appearance="outline" class="w-100">
-                        <mat-label>الحساب الرئيسي لعملاء الأفراد</mat-label>
-                        <mat-select [(ngModel)]="settings.customer_individual_parent_account_id">
-                            <mat-option>-- اختر حساب --</mat-option>
-                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
-                                {{ acc.name }} ({{ acc.code }})
-                            </mat-option>
-                        </mat-select>
-                        <mat-hint>سيتم إنشاء حسابات فرعية للعملاء الأفراد تحت هذا الحساب تلقائياً عند إنشاء الطلبات أو الدفع.</mat-hint>
+                <div class="shopify-settings__orders">
+                    <mat-form-field appearance="outline" class="shopify-settings__days-field">
+                        <mat-label>أيام (0 = كل الطلبات)</mat-label>
+                        <input matInput type="number" min="0" max="3650" [(ngModel)]="shopifyOrderDays" name="shopifyOrderDays"
+                            [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
                     </mat-form-field>
-                </div>
-                <!-- Batch update for individuals is complex/not supported yet as they are not in a separate table -->
-            </div>
-        </mat-card-content>
-    </mat-card>
-
-    <mat-card class="mb-4">
-        <mat-card-header>
-            <mat-card-title>حسابات الموردين</mat-card-title>
-        </mat-card-header>
-        <mat-card-content class="p-3">
-            <p class="text-muted small mb-3">سيتم ربط كل مورد جديد تلقائياً بحساب فرعي تحت الحساب المحدد (حسب نوع المورد أو الافتراضي).</p>
-            <!-- General Supplier Default -->
-            <div class="row align-items-center mb-3">
-                <div class="col-md-6">
-                    <mat-form-field appearance="outline" class="w-100">
-                        <mat-label>الحساب الرئيسي الافتراضي للموردين</mat-label>
-                        <mat-select [(ngModel)]="settings.supplier_general_parent_id">
-                            <mat-option>-- اختر حساب --</mat-option>
-                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
-                                {{ acc.name }} ({{ acc.code }})
-                            </mat-option>
-                        </mat-select>
-                    </mat-form-field>
-                </div>
-                <div class="col-md-3">
-                    <button mat-stroked-button color="warn"
-                        (click)="updateExisting('supplier', 'general', settings.supplier_general_parent_id)"
-                        [disabled]="!settings.supplier_general_parent_id || loading">
-                        تحديث الموردين الحاليين
+                    <button mat-flat-button color="primary" type="button" class="shopify-settings__btn shopify-settings__btn--primary"
+                        (click)="syncShopifyOrders()"
+                        [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
+                        <mat-icon>shopping_cart</mat-icon>
+                        جلب طلبات من التاريخ (يدوي)
                     </button>
                 </div>
-            </div>
-
-            <hr>
-            <h3 class="h6 text-muted mb-3">تخصيص حسب فئة المورد</h3>
-
-            <div class="row align-items-center mb-3" *ngFor="let type of supplierTypes">
-                <div class="col-md-3">
-                    <span class="font-weight-bold">{{ type.supplier_type }}</span>
-                </div>
-                <div class="col-md-6">
-                    <mat-form-field appearance="outline" class="w-100">
-                        <mat-label>الحساب الرئيسي</mat-label>
-                        <mat-select [(ngModel)]="settings['supplier_type_' + type.id + '_parent_id']">
-                            <mat-option>-- اختر حساب --</mat-option>
-                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
-                                {{ acc.name }} ({{ acc.code }})
-                            </mat-option>
-                        </mat-select>
-                    </mat-form-field>
-                </div>
-                <div class="col-md-3">
-                    <button mat-stroked-button color="warn"
-                        (click)="updateExisting('supplier', type.id, settings['supplier_type_' + type.id + '_parent_id'])"
-                        [disabled]="!settings['supplier_type_' + type.id + '_parent_id'] || loading">
-                        تحديث الموردين الحاليين
-                    </button>
-                </div>
-            </div>
-
-        </mat-card-content>
-    </mat-card>
-
-    <mat-card class="mb-4">
-        <mat-card-header>
-            <mat-card-title>حسابات الالتزامات</mat-card-title>
-        </mat-card-header>
-        <mat-card-content class="p-3">
-            <p class="text-muted small mb-3">سيتم استخدام هذه الحسابات عند إضافة التزامات جديدة (جهة أخرى غير المورد).</p>
-            <div class="row align-items-center mb-3">
-                <div class="col-md-6">
-                    <mat-form-field appearance="outline" class="w-100">
-                        <mat-label>حساب الالتزامات الافتراضي</mat-label>
-                        <mat-select [(ngModel)]="settings.commitment_liability_parent_account_id">
-                            <mat-option>-- اختر حساب --</mat-option>
-                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
-                                {{ acc.name }} ({{ acc.code }})
-                            </mat-option>
-                        </mat-select>
-                        <mat-hint>حساب الالتزامات (دائن)</mat-hint>
-                    </mat-form-field>
-                </div>
-            </div>
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <mat-form-field appearance="outline" class="w-100">
-                        <mat-label>حساب المصروفات الافتراضي للالتزامات</mat-label>
-                        <mat-select [(ngModel)]="settings.commitment_expense_parent_account_id">
-                            <mat-option>-- اختر حساب --</mat-option>
-                            <mat-option *ngFor="let acc of treeAccounts" [value]="acc.id">
-                                {{ acc.name }} ({{ acc.code }})
-                            </mat-option>
-                        </mat-select>
-                        <mat-hint>حساب المصروفات (مدين)</mat-hint>
-                    </mat-form-field>
-                </div>
-            </div>
+            </mat-expansion-panel>
         </mat-card-content>
     </mat-card>
 </div>

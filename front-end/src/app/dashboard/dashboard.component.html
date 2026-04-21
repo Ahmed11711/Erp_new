@@ -384,6 +384,30 @@
                                     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
                                     <span>قائمة الدخل</span>
                                 </a>
+                                <a mat-list-item routerLink="/dashboard/reports/product-performance" routerLinkActive="active"
+                                *ngIf="user == 'Admin' || user == 'Account Management'">
+                                <span>تقرير أداء المنتجات</span>
+                            </a>
+                            <a mat-list-item routerLink="/dashboard/reports/procurement" routerLinkActive="active"
+                                *ngIf="user == 'Admin'">
+                                <span>تقرير المشتريات</span>
+                            </a>
+                            <a mat-list-item routerLink="/dashboard/reports/productsales" routerLinkActive="active"
+                                *ngIf="user == 'Admin'">
+                                <span>تقرير مبيعات المنتجات</span>
+                            </a>
+                            <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
+                                *ngIf="user == 'Admin'">
+                                <span>تقرير المخزون</span>
+                            </a>
+                            <a mat-list-item routerLink="/dashboard/reports/category" routerLinkActive="active"
+                                *ngIf="user == 'Admin'">
+                                <span>تقرير ربحية الصنف</span>
+                            </a>
+                            <a mat-list-item routerLink="/dashboard/reports/shippingcompany" routerLinkActive="active"
+                                *ngIf="user == 'Admin'">
+                                <span>تقرير شركات الشحن</span>
+                            </a>
                             </mat-nav-list>
                         </mat-expansion-panel>
 
@@ -425,6 +449,10 @@
                             *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Account Management' || user == 'Logistics Specialist'">
                             <span>بيان خط الشحن</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/shopify" routerLinkActive="active"
+                            *ngIf="user == 'Admin' || user == 'Logistics Specialist'">
+                            <span>تكامل Shopify والشحن</span>
+                        </a>
                     </mat-nav-list>
                 </mat-expansion-panel>
 
@@ -460,39 +488,16 @@
                 </mat-expansion-panel>
 
                 <!-- ══════ التقارير ══════ -->
-                <mat-expansion-panel [class.mat-elevation-z0]="true"
+                <!-- <mat-expansion-panel [class.mat-elevation-z0]="true"
                     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Shipping Management' || user == 'Corparates' || user == 'Logistics Specialist'">
                     <mat-expansion-panel-header>
                         <mat-icon>bar_chart</mat-icon>
                         التقارير
                     </mat-expansion-panel-header>
                     <mat-nav-list>
-                        <a mat-list-item routerLink="/dashboard/reports/product-performance" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Account Management'">
-                            <span>تقرير أداء المنتجات</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/reports/procurement" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
-                            <span>تقرير المشتريات</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/reports/productsales" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
-                            <span>تقرير مبيعات المنتجات</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
-                            <span>تقرير المخزون</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/reports/category" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
-                            <span>تقرير ربحية الصنف</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/reports/shippingcompany" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
-                            <span>تقرير شركات الشحن</span>
-                        </a>
+                       
                     </mat-nav-list>
-                </mat-expansion-panel>
+                </mat-expansion-panel> -->
 
                 <!-- ══════ الإيصالات والأذونات ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
@@ -554,7 +559,7 @@
                 <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
                     <mat-expansion-panel-header>
                         <mat-icon>settings</mat-icon>
-                        إدارة النظام
+                        Admin
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/system/adduser" routerLinkActive="active">
@@ -570,7 +575,7 @@
                             <span>تتبع المستخدمين</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/system/settings" routerLinkActive="active">
-                            <span>إعدادات ربط الحسابات</span>
+                            <span>إعدادات تكامل Shopify</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/admin/adminorder" routerLinkActive="active">
                             <span>الأوردرات</span>
@@ -618,6 +623,15 @@
 
     <mat-sidenav-content>
         <i id="back" (click)="backPage()" class="fa-solid fa-arrow-left"></i>
+        <nav mat-tab-nav-bar mat-stretch-tabs="false" class="dash-quick-tabs" *ngIf="showShopifyQuickTabs" dir="rtl">
+            <a mat-tab-link [routerLink]="['/dashboard']" [active]="isHomeDashTabActive()">
+                الرئيسية
+            </a>
+            <!-- <a mat-tab-link [routerLink]="['/dashboard/shopify']" [active]="isShopifyDashTabActive()">
+                <mat-icon class="dash-quick-tabs__ic">storefront</mat-icon>
+                تكامل Shopify والشحن
+            </a> -->
+        </nav>
         <router-outlet></router-outlet>
     </mat-sidenav-content>
 

@@ -246,11 +246,17 @@ export class AddRecipeComponent implements OnInit{
         return {id:elm.id , quantity:elm.quantity , total_price:elm.total_price}
       })
       const data = {product_id:this.product_id , total:this.totalPrice , products}
-      this.manufacturingService.addRecipe(data).subscribe(result=>{
-        if (result === "success") {
-          this.route.navigate(['/dashboard/manufacturing/recipes']);
-        }
-      })
+      this.manufacturingService.addRecipe(data).subscribe({
+        next: (result) => {
+          if (result === 'success') {
+            this.route.navigate(['/dashboard/manufacturing/recipes']);
+          }
+        },
+        error: (err: { error?: { message?: string } }) => {
+          const msg = err?.error?.message ?? 'تعذر حفظ الوصفة';
+          alert(msg);
+        },
+      });
     }
   }
   //end

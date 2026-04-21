@@ -187,13 +187,12 @@ class AccountingService
         $parent = TreeAccount::findOrFail($parentId);
         
         // 1. Parent's direct entries (الحساب الأب قد يكون له قيود مباشرة)
-        $directDebit = AccountEntry::where('tree_account_id', $parentId)->sum('debit');
-        $directCredit = AccountEntry::where('tree_account_id', $parentId)->sum('credit');
+        $directDebit = (float) AccountEntry::where('tree_account_id', $parentId)->sum('debit');
+        $directCredit = (float) AccountEntry::where('tree_account_id', $parentId)->sum('credit');
         
-        // 2. Sum of all direct children's balances (الأبناء قد يكون لهم أرصدة محدثة)
-        $children = TreeAccount::where('parent_id', $parentId)->get();
-        $childrenDebit = $children->sum('debit_balance');
-        $childrenCredit = $children->sum('credit_balance');
+        // 2. مجموع مدين/دائن الأبناء المباشرين في قاعدة البيانات (أدق من Collection::sum مع DECIMAL)
+        $childrenDebit = (float) TreeAccount::where('parent_id', $parentId)->sum('debit_balance');
+        $childrenCredit = (float) TreeAccount::where('parent_id', $parentId)->sum('credit_balance');
         
         // 3. Total = own entries + children (المجموع = القيود المباشرة + أرصدة الأبناء)
         $totalDebit = $directDebit + $childrenDebit;

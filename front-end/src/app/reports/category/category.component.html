@@ -85,6 +85,23 @@
             <td colspan="15" class="text-center">لا توجد نتائج تطابق البحث</td>
           </tr>
         </tbody>
+        <tfoot *ngIf="filteredData.length > 0">
+          <tr>
+            <td colspan="3">الإجمالي</td>
+            <td>{{ sumSalesQty }}</td>
+            <td>{{ sumSalesAmount }}</td>
+            <td>{{ sumOrdersCount }}</td>
+            <td>{{ sumReturnsQty }}</td>
+            <td>{{ sumRejectedQty }}</td>
+            <td>{{ aggregateAvgSellingPrice }}</td>
+            <td>{{ aggregateAvgCost }}</td>
+            <td>—</td>
+            <td>{{ sumNetProfit }}</td>
+            <td>{{ sumTotalProfit }}</td>
+            <td>{{ aggregateProfitMargin }}%</td>
+            <td>—</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </div>

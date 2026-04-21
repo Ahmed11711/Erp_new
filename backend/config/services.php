@@ -43,11 +43,22 @@ return [
     /*
     | Shopify: Webhook secret من تطبيق Shopify (Admin → Apps → your app → API credentials).
     | سجّل Webhook: Topic = orders/create → URL = {APP_URL}/api/shopify/webhook
+    | Admin API: نطاق المتجر my-store.myshopify.com + Admin API access token (صلاحيات read_products على الأقل للمزامنة).
     */
     'shopify' => [
+        'shop_domain' => env('SHOPIFY_SHOP_DOMAIN'),
+        'admin_access_token' => env('SHOPIFY_ADMIN_ACCESS_TOKEN'),
+        'api_version' => env('SHOPIFY_API_VERSION', '2024-10'),
+        'http_timeout' => (int) env('SHOPIFY_HTTP_TIMEOUT', 120),
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
         'allowed_shop_domains' => array_values(array_filter(array_map('trim', explode(',', (string) env('SHOPIFY_ALLOWED_SHOP_DOMAINS', ''))))),
-        'accepted_topics' => ['orders/create'],
+        'accepted_topics' => [
+            'orders/create',
+            'orders/updated',
+            'products/create',
+            'products/update',
+            'inventory_levels/update',
+        ],
         'default_order_source_id' => (int) env('SHOPIFY_DEFAULT_ORDER_SOURCE_ID', 0),
         'default_shipping_method_id' => (int) env('SHOPIFY_DEFAULT_SHIPPING_METHOD_ID', 0),
         'fallback_category_id' => (int) env('SHOPIFY_FALLBACK_CATEGORY_ID', 0),
@@ -60,6 +71,13 @@ return [
         'tracking_user_id' => ($uid = env('SHOPIFY_TRACKING_USER_ID')) !== null && $uid !== ''
             ? (int) $uid
             : null,
+    ],
+
+    'shipping_partner' => [
+        'api_base_url' => rtrim((string) env('SHIPPING_API_BASE_URL', ''), '/'),
+        'api_token' => env('SHIPPING_API_TOKEN'),
+        'webhook_secret' => env('SHIPPING_WEBHOOK_SECRET'),
+        'timeout' => (int) env('SHIPPING_API_TIMEOUT', 60),
     ],
 
 ];

@@ -103,6 +103,14 @@
             <td style="direction: ltr;">{{ entry.running_balance | number:'1.2-2' }}</td>
           </tr>
         </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">الإجمالي</td>
+            <td class="text-success">{{ totalDebit | number:'1.2-2' }}</td>
+            <td class="text-danger">{{ totalCredit | number:'1.2-2' }}</td>
+            <td style="direction: ltr;">{{ closingBalance | number:'1.2-2' }}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 

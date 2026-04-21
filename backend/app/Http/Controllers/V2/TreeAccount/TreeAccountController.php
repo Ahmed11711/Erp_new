@@ -163,7 +163,6 @@ class TreeAccountController extends BaseController
             'name_en' => 'nullable|string',
             'parent_id' => 'nullable|exists:tree_accounts,id',
             'type' => 'required|in:asset,liability,equity,revenue,expense,settlement',
-            'account_type' => 'nullable|in:رئيسي,فرعي,مستوى أول',
             'budget_type' => 'nullable|string',
             'budget_amount' => 'nullable|numeric|min:0',
             'budget_period' => 'nullable|in:yearly,monthly',
@@ -180,6 +179,10 @@ class TreeAccountController extends BaseController
         $validated['credit_balance'] = $validated['credit_balance'] ?? 0.00;
         $validated['is_trading_account'] = $validated['is_trading_account'] ?? false;
 
+        if (TreeAccount::nameAlreadyUsed($validated['name'])) {
+            return $this->errorResponse('اسم الحساب مستخدم مسبقاً', 422);
+        }
+
         try {
             DB::transaction(function () use (&$validated) {
                 if (empty($validated['parent_id'])) {
@@ -188,51 +191,23 @@ class TreeAccountController extends BaseController
                         ->lockForUpdate()
                         ->first();
 
-                    $validated['code'] = $lastRoot ? $lastRoot->code + 1 : 1;
+                    $validated['code'] = (string) ($lastRoot ? ((int) $lastRoot->code + 1) : 1);
                     $validated['level'] = 1;
                 } else {
                     $parent = TreeAccount::find($validated['parent_id']);
+
+                    if (!$parent) {
+                        throw new \Exception('الحساب الأب غير موجود');
+                    }
 
                     if ($parent->type !== $validated['type']) {
                         throw new \Exception('Child account type must match parent type');
                     }
 
-                    // جلب آخر Child موجود تحت هذا الأب مع قفل الصف لمنع التكرار
-                    $lastChild = TreeAccount::where('parent_id', $parent->id)
-                        ->orderByDesc('code')
-                        ->lockForUpdate()
-                        ->first();
-
-                    switch ($parent->level) {
-                        case 1:
-                            $validated['code'] = $lastChild ? $lastChild->code + 1 : ($parent->code * 10 + 1);
-                            $validated['level'] = 2;
-                            break;
-
-                        case 2:
-                            if (!$lastChild) {
-                                if ($parent->code < 100) {
-                                    $parentCode = (string) $parent->code; // الأب رقمين، مثال: "21"
-
-                                    $firstDigit = $parentCode[0];
-                                    $secondDigit = $parentCode[1];
-
-                                    $validated['code'] = (int) ($firstDigit . '0' . $secondDigit);
-                                } else {
-                                    $validated['code'] = $parent->code * 10 + 1;
-                                }
-                            } else {
-                                $validated['code'] = $lastChild->code + 1;
-                            }
-                            $validated['level'] = 3;
-                            break;
-
-                        case 3:
-                            // LEVEL 4 → أبناء المستوى الثالث (نفس منطق المستوى 2 و 3)
-                            $validated['code'] = $lastChild ? $lastChild->code + 1 : ($parent->code * 10 + 1);
-                            $validated['level'] = 4;
-                            break;
-                    }
+                    $lastChild = TreeAccount::queryLastChildUnderParentLocked($parent);
+                    $resolved = TreeAccount::resolveNextChildCodeAndLevel($parent, $lastChild);
+                    $validated['code'] = $resolved['code'];
+                    $validated['level'] = $resolved['level'];
                 }
 
                 // إنشاء الحساب

@@ -302,13 +302,6 @@ class CustomerCompanyController extends Controller
                 'description' => 'تحصيل من شركة - ' . $company->name,
                 'daily_entry_id' => $dailyEntry->id,
             ]);
-            $debitAcc = TreeAccount::find($debitTreeId);
-            $creditAcc = TreeAccount::find($customerTreeId);
-            $debitAcc->increment('balance', $amount);
-            $debitAcc->increment('debit_balance', $amount);
-            $creditAcc->decrement('balance', $amount);
-            $creditAcc->increment('credit_balance', $amount);
-            // تحديث الحساب والحسابات الأب في الشجرة
             $accService = app(\App\Services\Accounting\AccountingService::class);
             $accService->updateAccountHierarchyBalances($debitTreeId);
             $accService->updateAccountHierarchyBalances($customerTreeId);

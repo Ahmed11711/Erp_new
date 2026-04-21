@@ -231,8 +231,8 @@ class BankController extends Controller
             }
 
 
-            // Create Accounting Entries & Update Tree Account Balances
-            // 1. Credit the Sender (From) -> Money Leaves -> Credit
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+
             if ($fromAccountId) {
                 AccountEntry::create([
                     'tree_account_id' => $fromAccountId,
@@ -240,34 +240,17 @@ class BankController extends Controller
                     'credit' => $amount,
                     'description' => "تحويل مالي ($type) - " . $request->notes,
                 ]);
-                $fromTree = TreeAccount::find($fromAccountId);
-                if ($fromTree) {
-                    $fromTree->increment('credit_balance', $amount);
-                    if (in_array($fromTree->type, ['asset', 'expense'])) {
-                        $fromTree->decrement('balance', $amount);
-                    } else {
-                        $fromTree->increment('balance', $amount);
-                    }
-                }
+                $accService->updateAccountHierarchyBalances($fromAccountId);
             }
 
-            // 2. Debit the Receiver (To) -> Money Enters -> Debit
             if ($toAccountId) {
-                 AccountEntry::create([
+                AccountEntry::create([
                     'tree_account_id' => $toAccountId,
                     'debit' => $amount,
                     'credit' => 0,
                     'description' => "تحويل مالي ($type) - " . $request->notes,
                 ]);
-                $toTree = TreeAccount::find($toAccountId);
-                if ($toTree) {
-                    $toTree->increment('debit_balance', $amount);
-                    if (in_array($toTree->type, ['asset', 'expense'])) {
-                        $toTree->increment('balance', $amount);
-                    } else {
-                        $toTree->decrement('balance', $amount);
-                    }
-                }
+                $accService->updateAccountHierarchyBalances($toAccountId);
             }
 
             DB::commit();
@@ -321,7 +304,6 @@ class BankController extends Controller
             // Payment (Withdraw): Credit Bank, Debit Counter Account
 
             if ($type === 'receipt') {
-                // 1. Debit Bank (Money In)
                 AccountEntry::create([
                     'tree_account_id' => $bankAccountId,
                     'debit' => $amount,
@@ -330,8 +312,6 @@ class BankController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-                
-                // 2. Credit Counter Account (Source)
                 AccountEntry::create([
                     'tree_account_id' => $counterAccount->id,
                     'debit' => 0,
@@ -340,32 +320,8 @@ class BankController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // Update Balances
-                // Bank Balance
                 $bank->increment('balance', $amount);
-
-                // Tree Balances
-                $bankTree = TreeAccount::find($bankAccountId);
-                $bankTree->increment('debit_balance', $amount);
-                // Asset increases with Debit
-                if (in_array($bankTree->type, ['asset', 'expense'])) {
-                     $bankTree->increment('balance', $amount);
-                } else {
-                     $bankTree->decrement('balance', $amount);
-                }
-
-                $counterTree = TreeAccount::find($counterAccount->id);
-                $counterTree->increment('credit_balance', $amount);
-                // Asset decreases with Credit, Liability increases
-                if (in_array($counterTree->type, ['asset', 'expense'])) {
-                     $counterTree->decrement('balance', $amount);
-                } else {
-                     $counterTree->increment('balance', $amount);
-                }
-
-            } else { // payment
-                // 1. Credit Bank (Money Out)
+            } else {
                 AccountEntry::create([
                     'tree_account_id' => $bankAccountId,
                     'debit' => 0,
@@ -374,43 +330,20 @@ class BankController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // 2. Debit Counter Account (Destination)
                 AccountEntry::create([
                     'tree_account_id' => $counterAccount->id,
-                     'debit' => $amount,
+                    'debit' => $amount,
                     'credit' => 0,
                     'description' => "سحب بنكي - " . $notes,
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // Update Balances
-                // Bank Balance
                 $bank->decrement('balance', $amount);
-
-                // Tree Balances
-                $bankTree = TreeAccount::find($bankAccountId);
-                $bankTree->increment('credit_balance', $amount);
-                 if (in_array($bankTree->type, ['asset', 'expense'])) {
-                     $bankTree->decrement('balance', $amount);
-                } else {
-                     $bankTree->increment('balance', $amount);
-                }
-
-                $counterTree = TreeAccount::find($counterAccount->id);
-                $counterTree->increment('debit_balance', $amount);
-                 if (in_array($counterTree->type, ['asset', 'expense'])) {
-                     $counterTree->increment('balance', $amount);
-                } else {
-                     $counterTree->decrement('balance', $amount);
-                }
             }
 
-            // Save Model Updates
-            $bank->save();
-            if(isset($bankTree)) $bankTree->save();
-            if(isset($counterTree)) $counterTree->save();
+            $accService = app(\App\Services\Accounting\AccountingService::class);
+            $accService->updateAccountHierarchyBalances($bankAccountId);
+            $accService->updateAccountHierarchyBalances($counterAccount->id);
 
             DB::commit();
             return response()->json(['message' => 'تمت العملية بنجاح'], 200);

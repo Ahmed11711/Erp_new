@@ -253,15 +253,6 @@ class VoucherController extends Controller
                 'created_at' => $request->date,
                 'updated_at' => $request->date
             ]);
-           
-            // Update Balance Logic
-            $debitAccount = TreeAccount::find($debitAccountId);
-            $debitAccount->increment('debit_balance', $request->amount);
-            if (in_array($debitAccount->type, ['asset', 'expense'])) {
-                $debitAccount->increment('balance', $request->amount);
-            } else {
-                $debitAccount->decrement('balance', $request->amount);
-            }
 
             // 4. Create Credit Entry
             AccountEntry::create([
@@ -273,20 +264,8 @@ class VoucherController extends Controller
                 'created_at' => $request->date,
                 'updated_at' => $request->date
             ]);
-            
-            $creditAccount = TreeAccount::find($creditAccountId);
-            $creditAccount->increment('credit_balance', $request->amount);
-             if (in_array($creditAccount->type, ['asset', 'expense'])) {
-                $creditAccount->decrement('balance', $request->amount);
-            } else {
-                $creditAccount->increment('balance', $request->amount);
-            }
 
-            // Save Model Updates
-            $debitAccount->save();
-            $creditAccount->save();
-
-            // تحديث الحساب والحسابات الأب في الشجرة (لتأثير التعاملات على الحساب وما فوقه)
+            // تحديث الطرفين وجميع الحسابات الأب من مجموع القيود فقط (مصدر واحد للحقيقة)
             $accountingService = app(\App\Services\Accounting\AccountingService::class);
             $accountingService->updateAccountHierarchyBalances($debitAccountId);
             $accountingService->updateAccountHierarchyBalances($creditAccountId);
@@ -351,30 +330,15 @@ class VoucherController extends Controller
             // ------------------------------------------------------------------
             $this->updateOperationalBalance($voucher, true); // Reverse Old Effect
 
-            // Reverse old entries
+            // حذف القيود القديمة ثم إعادة حساب الشجرة من القيود المتبقية (بدون تعديل تراكمي يدوي يُخالف الأب)
             $oldEntries = AccountEntry::where('voucher_id', $voucher->id)->get();
+            $oldAffectedIds = $oldEntries->pluck('tree_account_id')->unique()->filter()->map(fn ($id) => (int) $id)->all();
             foreach ($oldEntries as $entry) {
-                $acct = TreeAccount::find($entry->tree_account_id);
-                if ($acct) {
-                    if ($entry->debit > 0) {
-                        $acct->decrement('debit_balance', $entry->debit);
-                        if (in_array($acct->type, ['asset', 'expense'])) {
-                            $acct->decrement('balance', $entry->debit);
-                        } else {
-                            $acct->increment('balance', $entry->debit);
-                        }
-                    }
-                    if ($entry->credit > 0) {
-                        $acct->decrement('credit_balance', $entry->credit);
-                        if (in_array($acct->type, ['asset', 'expense'])) {
-                            $acct->increment('balance', $entry->credit);
-                        } else {
-                            $acct->decrement('balance', $entry->credit);
-                        }
-                    }
-                    $acct->save();
-                }
                 $entry->delete();
+            }
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            foreach ($oldAffectedIds as $aid) {
+                $accountingService->updateAccountHierarchyBalances($aid);
             }
 
             // Update voucher
@@ -416,13 +380,6 @@ class VoucherController extends Controller
                 'created_at' => $voucher->date,
                 'updated_at' => $voucher->date
             ]);
-            $debitAccount = TreeAccount::find($debitAccountId);
-            $debitAccount->increment('debit_balance', $voucher->amount);
-            if (in_array($debitAccount->type, ['asset', 'expense'])) {
-                $debitAccount->increment('balance', $voucher->amount);
-            } else {
-                $debitAccount->decrement('balance', $voucher->amount);
-            }
 
             // Create Credit Entry
             AccountEntry::create([
@@ -434,21 +391,11 @@ class VoucherController extends Controller
                 'created_at' => $voucher->date,
                 'updated_at' => $voucher->date
             ]);
-            $creditAccount = TreeAccount::find($creditAccountId);
-            $creditAccount->increment('credit_balance', $voucher->amount);
-             if (in_array($creditAccount->type, ['asset', 'expense'])) {
-                $creditAccount->decrement('balance', $voucher->amount);
-            } else {
-                $creditAccount->increment('balance', $voucher->amount);
+
+            // تحديث الحساب والحسابات الأب في الشجرة من القيود
+            foreach ([$debitAccountId, $creditAccountId] as $tid) {
+                $accountingService->updateAccountHierarchyBalances((int) $tid);
             }
-
-            $debitAccount->save();
-            $creditAccount->save();
-
-            // تحديث الحساب والحسابات الأب في الشجرة
-            $accountingService = app(\App\Services\Accounting\AccountingService::class);
-            $accountingService->updateAccountHierarchyBalances($debitAccountId);
-            $accountingService->updateAccountHierarchyBalances($creditAccountId);
 
             // ------------------------------------------------------------------
             // APPLY NEW OPERATIONAL BALANCE

@@ -44,9 +44,35 @@
             </div>
 
             <div class="col-md-6 mb-3">
-                <label>حساب الدفع (البنك)</label>
+                <label>نوع مصدر الدفع</label>
+                <select class="form-control" formControlName="payment_source_type" (change)="onPaymentSourceChange()">
+                    <option value="bank">بنك</option>
+                    <option value="safe">خزينة</option>
+                    <option value="service_account">حساب خدمي</option>
+                </select>
+            </div>
+
+            <div class="col-md-6 mb-3" *ngIf="form.get('payment_source_type')?.value === 'bank'">
+                <label>البنك</label>
                 <select class="form-control" formControlName="bank_id">
-                    <option *ngFor="let bank of banks" [value]="bank.id">{{ bank.name }}</option>
+                    <option [ngValue]="null" disabled>— اختر البنك —</option>
+                    <option *ngFor="let bank of banks" [ngValue]="bank.id">{{ bank.name }}</option>
+                </select>
+            </div>
+
+            <div class="col-md-6 mb-3" *ngIf="form.get('payment_source_type')?.value === 'safe'">
+                <label>الخزينة</label>
+                <select class="form-control" formControlName="safe_id">
+                    <option [ngValue]="null" disabled>— اختر الخزينة —</option>
+                    <option *ngFor="let s of safes" [ngValue]="s.id">{{ s.name }}</option>
+                </select>
+            </div>
+
+            <div class="col-md-6 mb-3" *ngIf="form.get('payment_source_type')?.value === 'service_account'">
+                <label>الحساب الخدمي</label>
+                <select class="form-control" formControlName="service_account_id">
+                    <option [ngValue]="null" disabled>— اختر الحساب الخدمي —</option>
+                    <option *ngFor="let sa of serviceAccounts" [ngValue]="sa.id">{{ sa.name }}</option>
                 </select>
             </div>
 

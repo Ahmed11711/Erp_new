@@ -105,7 +105,6 @@ class SafeController extends Controller
                 'name_en' => 'Safe - ' . $request->name,
                 'code' => $newCode,
                 'type' => $parentAccount->type,
-                'account_type' => 'فرعي',
                 'level' => $newLevel,
                 'parent_id' => $parentAccount->id,
                 'balance' => 0,
@@ -151,28 +150,10 @@ class SafeController extends Controller
                     'updated_at' => $now,
                 ]);
 
-                // تراكمي مثل CapitalController — لا نستخدم updateAccountHierarchyBalances هنا لأنه يعيد
-                // كتابة debit/credit/balance من مجموع القيود فقط ويمسح أرصدة قديمة غير مُثبتة بقيود.
-                $safeTree = TreeAccount::find($safeAccountId);
-                $safeTree->increment('debit_balance', $balance);
-                if (in_array($safeTree->type, ['asset', 'expense'], true)) {
-                    $safeTree->increment('balance', $balance);
-                } else {
-                    $safeTree->decrement('balance', $balance);
-                }
-
-                $counterTree = TreeAccount::find($counterId);
-                $counterTree->increment('credit_balance', $balance);
-                if (in_array($counterTree->type, ['asset', 'expense'], true)) {
-                    $counterTree->decrement('balance', $balance);
-                } else {
-                    $counterTree->increment('balance', $balance);
-                }
-
                 /** @var AccountingService $accService */
                 $accService = app(AccountingService::class);
-                $accService->propagateBalancesUpFromLeaf($safeAccountId);
-                $accService->propagateBalancesUpFromLeaf($counterId);
+                $accService->updateAccountHierarchyBalances($safeAccountId);
+                $accService->updateAccountHierarchyBalances($counterId);
             }
 
             DB::commit();
@@ -388,7 +369,6 @@ class SafeController extends Controller
             ]);
 
             if ($type === 'receipt') {
-                // 1. Debit Safe (Money In)
                 AccountEntry::create([
                     'tree_account_id' => $safeAccountId,
                     'debit' => $amount,
@@ -397,8 +377,6 @@ class SafeController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-                
-                // 2. Credit Counter Account (Source)
                 AccountEntry::create([
                     'tree_account_id' => $counterAccount->id,
                     'debit' => 0,
@@ -407,30 +385,8 @@ class SafeController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // Update Balances
                 $safe->increment('balance', $amount);
-
-                $safeTree = TreeAccount::find($safeAccountId);
-                $safeTree->increment('debit_balance', $amount);
-                if (in_array($safeTree->type, ['asset', 'expense'])) {
-                     $safeTree->increment('balance', $amount);
-                } else {
-                     $safeTree->decrement('balance', $amount);
-                }
-                $safeTree->save();
-
-                $counterTree = TreeAccount::find($counterAccount->id);
-                $counterTree->increment('credit_balance', $amount);
-                if (in_array($counterTree->type, ['asset', 'expense'])) {
-                     $counterTree->decrement('balance', $amount);
-                } else {
-                     $counterTree->increment('balance', $amount);
-                }
-                $counterTree->save();
-
-            } else { // payment
-                // 1. Credit Safe (Money Out)
+            } else {
                 AccountEntry::create([
                     'tree_account_id' => $safeAccountId,
                     'debit' => 0,
@@ -439,38 +395,20 @@ class SafeController extends Controller
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // 2. Debit Counter Account (Destination)
                 AccountEntry::create([
                     'tree_account_id' => $counterAccount->id,
-                     'debit' => $amount,
+                    'debit' => $amount,
                     'credit' => 0,
                     'description' => "صرف خزينة - " . $notes,
                     'created_at' => $date,
                     'updated_at' => $date
                 ]);
-
-                // Update Balances
                 $safe->decrement('balance', $amount);
-
-                $safeTree = TreeAccount::find($safeAccountId);
-                $safeTree->increment('credit_balance', $amount);
-                 if (in_array($safeTree->type, ['asset', 'expense'])) {
-                     $safeTree->decrement('balance', $amount);
-                } else {
-                     $safeTree->increment('balance', $amount);
-                }
-                $safeTree->save();
-
-                $counterTree = TreeAccount::find($counterAccount->id);
-                $counterTree->increment('debit_balance', $amount);
-                 if (in_array($counterTree->type, ['asset', 'expense'])) {
-                     $counterTree->increment('balance', $amount);
-                } else {
-                     $counterTree->decrement('balance', $amount);
-                }
-                $counterTree->save();
             }
+
+            $accService = app(AccountingService::class);
+            $accService->updateAccountHierarchyBalances($safeAccountId);
+            $accService->updateAccountHierarchyBalances($counterAccount->id);
 
             DB::commit();
             return response()->json(['message' => 'تمت العملية بنجاح'], 200);

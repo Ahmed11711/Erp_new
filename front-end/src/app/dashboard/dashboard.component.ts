@@ -1,7 +1,7 @@
-import { Component, Renderer2 } from '@angular/core';
+import { Component, OnDestroy, Renderer2 } from '@angular/core';
 import { NavigationEnd, Route, Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
-import { filter, interval, startWith, switchMap } from 'rxjs';
+import { filter, interval, startWith, Subscription, switchMap } from 'rxjs';
 import { NotificationService } from '../notification/service/notification.service';
 import Swal from 'sweetalert2';
 import { FilterOrderService } from '../shipping/services/filter-order.service';
@@ -13,7 +13,7 @@ import { WhatsAppService } from '../whatsapp/services/whatsapp.service';
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
-export class DashboardComponent {
+export class DashboardComponent implements OnDestroy {
 
   permission:any[]=[];
 
@@ -34,6 +34,12 @@ export class DashboardComponent {
   openASide:boolean = true;
   asideMode:string = 'side';
 
+  /** مسار المحتوى تحت /dashboard لتمييز التبويب النشط */
+  dashboardNavUrl = '';
+  /** تبويب سريع: الرئيسية ↔ Shopify */
+  showShopifyQuickTabs = false;
+  private navUrlSub?: Subscription;
+
   constructor(private loginService:AuthService , private notificationService:NotificationService, private route:Router,
     private orderFilter :FilterOrderService, private renderer: Renderer2,
     private whatsappService: WhatsAppService,
@@ -53,6 +59,13 @@ export class DashboardComponent {
 
     this.user = this.loginService.getUser();
     this.userName = this.loginService.userName();
+    this.showShopifyQuickTabs = this.user === 'Admin' || this.user === 'Logistics Specialist';
+    this.dashboardNavUrl = this.route.url;
+    this.navUrlSub = this.route.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe((e) => {
+        this.dashboardNavUrl = e.urlAfterRedirects;
+      });
 
     const perms = this.loginService.getPermission();
     this.canAssignWhatsAppNumbers =
@@ -101,6 +114,20 @@ export class DashboardComponent {
       }
     });
 
+  }
+
+  ngOnDestroy(): void {
+    this.navUrlSub?.unsubscribe();
+  }
+
+  isHomeDashTabActive(): boolean {
+    const path = (this.dashboardNavUrl || '').split('?')[0].replace(/\/$/, '') || '';
+    return path === '/dashboard';
+  }
+
+  isShopifyDashTabActive(): boolean {
+    const path = (this.dashboardNavUrl || '').split('?')[0];
+    return path.startsWith('/dashboard/shopify');
   }
 
   openNotifiy(e:any){

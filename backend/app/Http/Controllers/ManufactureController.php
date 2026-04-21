@@ -27,11 +27,30 @@ class ManufactureController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'product_id' => 'required',
-            'total' => 'required'
+            'product_id' => 'required|integer|exists:categories,id',
+            'total' => 'required|numeric',
+            'products' => 'required|array|min:1',
+            'products.*.id' => 'required|integer|exists:categories,id',
+            'products.*.quantity' => 'required|numeric|min:0.000001',
+            'products.*.total_price' => 'required|numeric',
         ]);
+
+        $productId = (int) $request->product_id;
+        if (Manufacture::where('product_id', $productId)->exists()) {
+            return response()->json([
+                'message' => 'يوجد بالفعل وصفة لهذا المنتج. لا يمكن تسجيل وصفة مكرّرة لنفس الصنف.',
+            ], 422);
+        }
+
+        $ingredientIds = collect($request->products)->map(fn ($row) => (int) ($row['id'] ?? 0));
+        if ($ingredientIds->count() !== $ingredientIds->unique()->count()) {
+            return response()->json([
+                'message' => 'لا يمكن تكرار نفس المادة أكثر من مرة في الوصفة.',
+            ], 422);
+        }
+
         $manfuture = Manufacture::create([
-            'product_id' => $request->product_id,
+            'product_id' => $productId,
             'total' => $request->total
         ]);
         foreach ($request->products as $product) {

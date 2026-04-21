@@ -77,4 +77,68 @@ export class CategoryComponent implements OnInit {
       );
     }
   }
+
+  private num(v: unknown): number {
+    if (v == null || v === '' || v === '—') {
+      return 0;
+    }
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  get sumSalesQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.sales_qty), 0);
+  }
+
+  get sumSalesAmount(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.sales_amount), 0);
+  }
+
+  get sumOrdersCount(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.orders_count), 0);
+  }
+
+  get sumReturnsQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.returns_qty), 0);
+  }
+
+  get sumRejectedQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.rejected_qty), 0);
+  }
+
+  get sumNetProfit(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.net_profit), 0);
+  }
+
+  get sumTotalProfit(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.total_profit), 0);
+  }
+
+  /** متوسط سعر البيع = إجمالي القيمة ÷ إجمالي القطع */
+  get aggregateAvgSellingPrice(): string {
+    if (!this.sumSalesQty) {
+      return '—';
+    }
+    return (this.sumSalesAmount / this.sumSalesQty).toFixed(2);
+  }
+
+  /** متوسط تكلفة مرجح بالكمية المباعة */
+  get aggregateAvgCost(): string {
+    if (!this.sumSalesQty) {
+      return '—';
+    }
+    const weighted = this.filteredData.reduce(
+      (s, r) => s + this.num(r.avg_cost) * this.num(r.sales_qty),
+      0
+    );
+    return (weighted / this.sumSalesQty).toFixed(2);
+  }
+
+  /** هامش ربح إجمالي % */
+  get aggregateProfitMargin(): string {
+    if (!this.sumSalesAmount) {
+      return '—';
+    }
+    return ((this.sumTotalProfit / this.sumSalesAmount) * 100).toFixed(2);
+  }
 }

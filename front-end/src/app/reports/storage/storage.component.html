@@ -77,6 +77,16 @@
             <td colspan="8" class="text-center">لا توجد نتائج تطابق البحث</td>
           </tr>
         </tbody>
+        <tfoot *ngIf="filteredData.length > 0">
+          <tr>
+            <td colspan="3">الإجمالي</td>
+            <td>{{ sumBalanceBefore }}</td>
+            <td>{{ sumQuantity }}</td>
+            <td>{{ sumBalanceAfter }}</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        </tfoot>
       </table>
       <div class="d-flex justify-content-center my-2">
         <mat-paginator [length]="length" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"

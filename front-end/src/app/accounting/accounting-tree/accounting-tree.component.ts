@@ -30,12 +30,6 @@ export class AccountingTreeComponent implements OnInit {
     { value: 'settlement', label: 'تسوية' }
   ];
 
-  accountTypeOptions = [
-    { value: 'رئيسي', label: 'رئيسي' },
-    { value: 'فرعي', label: 'فرعي' },
-    { value: 'مستوى أول', label: 'مستوى أول' }
-  ];
-
   newAccount: TreeAccount = {
     name: '',
     type: 'asset',
@@ -254,8 +248,10 @@ export class AccountingTreeComponent implements OnInit {
     }
 
     this.loading = true;
+    const { account_type: _ignoredAt, children: _c, parent: _p, main_account: _m, safes: _s, ...rest } =
+      this.newAccount as TreeAccount & { children?: unknown; parent?: unknown; main_account?: unknown; safes?: unknown };
     const payload = {
-      ...this.newAccount,
+      ...rest,
       balance: 0,
       debit_balance: 0,
       credit_balance: 0
@@ -268,7 +264,7 @@ export class AccountingTreeComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error creating account:', error);
-        alert('حدث خطأ أثناء إضافة الحساب');
+        alert(this.getHttpErrorMessage(error, 'حدث خطأ أثناء إضافة الحساب'));
         this.loading = false;
       }
     });
@@ -288,7 +284,6 @@ export class AccountingTreeComponent implements OnInit {
       name: a.name,
       name_en: a.name_en,
       type: a.type,
-      account_type: a.account_type,
       is_trading_account: a.is_trading_account,
       budget_type: a.budget_type,
       budget_amount: a.budget_amount,
@@ -302,7 +297,7 @@ export class AccountingTreeComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error updating account:', error);
-        alert('حدث خطأ أثناء تحديث الحساب');
+        alert(this.getHttpErrorMessage(error, 'حدث خطأ أثناء تحديث الحساب'));
         this.loading = false;
       }
     });
@@ -321,7 +316,7 @@ export class AccountingTreeComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error deleting account:', error);
-        alert('حدث خطأ أثناء حذف الحساب');
+        alert(this.getHttpErrorMessage(error, 'حدث خطأ أثناء حذف الحساب'));
         this.loading = false;
       }
     });
@@ -375,10 +370,34 @@ export class AccountingTreeComponent implements OnInit {
     return `${level * 20}px`;
   }
 
-  // Allow adding children up to level 4 (backend supports 4)
+  /** يسمح بأبناء حتى عمق معقول؛ الخلفية تدعم المستويات الأعمق عبر default في توليد الكود */
   canAddChild(node: TreeAccount): boolean {
     const lvl = node.level ?? 1;
-    return lvl < 4;
+    return lvl < 50;
+  }
+
+  /** رسالة خطأ واضحة من Laravel (validation أو ApiResponse) */
+  private getHttpErrorMessage(err: any, fallback: string): string {
+    const body = err?.error;
+    if (body == null) {
+      return typeof err?.message === 'string' ? err.message : fallback;
+    }
+    if (typeof body === 'string') {
+      return body || fallback;
+    }
+    const errs = body.errors;
+    if (errs && typeof errs === 'object') {
+      for (const key of Object.keys(errs)) {
+        const arr = errs[key];
+        if (Array.isArray(arr) && arr.length && arr[0]) {
+          return String(arr[0]);
+        }
+      }
+    }
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message;
+    }
+    return fallback;
   }
 
   // Sort recursively by code for better presentation

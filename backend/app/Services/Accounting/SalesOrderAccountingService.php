@@ -199,7 +199,8 @@ class SalesOrderAccountingService
             $order->customer_type ?? 'فرد',
             $order->customer_name,
             $order->customer_phone_1,
-            $order->company_id
+            $order->company_id,
+            $order->order_source_id ? (int) $order->order_source_id : null
         );
     }
 

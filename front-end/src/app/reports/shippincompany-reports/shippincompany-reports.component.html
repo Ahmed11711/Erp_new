@@ -64,7 +64,19 @@
           <td>{{ row.period_from }} — {{ row.period_to }}</td>
         </tr>
       </tbody>
+      <tfoot *ngIf="!loading && data.length > 0">
+        <tr>
+          <td colspan="2">الإجمالي</td>
+          <td>{{ totalOrders }}</td>
+          <td>{{ totalCollected }}</td>
+          <td>{{ totalRefused }}</td>
+          <td>{{ aggregateCollectionPercentage }}%</td>
+          <td>—</td>
+          <td>{{ dateFrom }} — {{ dateTo }}</td>
+        </tr>
+      </tfoot>
     </table>
 
 
+  </div>
 </div>
