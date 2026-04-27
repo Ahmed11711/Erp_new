@@ -7,6 +7,7 @@ use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\AccountingService;
 use App\Services\Accounting\BudgetReviewService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,9 +15,6 @@ use Illuminate\Support\Facades\Validator;
 
 class DailyEntryController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request)
     {
         $query = DailyEntry::with(['items.account', 'user']);
@@ -39,9 +37,6 @@ class DailyEntryController extends Controller
         return response()->json($entries, 200);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -58,7 +53,6 @@ class DailyEntryController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Validate that total debit equals total credit
         $totalDebit = collect($request->items)->sum('debit');
         $totalCredit = collect($request->items)->sum('credit');
 
@@ -70,7 +64,6 @@ class DailyEntryController extends Controller
             ], 422);
         }
 
-        // Budget review: respect budget restrictions
         $budgetService = app(BudgetReviewService::class);
         $itemsForBudget = array_map(fn($i) => [
             'tree_account_id' => $i['account_id'],
@@ -87,20 +80,19 @@ class DailyEntryController extends Controller
 
         DB::beginTransaction();
         try {
-            // Generate entry number
-            $lastEntry = DailyEntry::orderByDesc('entry_number')->first();
-            $entryNumber = $lastEntry ? (int)$lastEntry->entry_number + 1 : 1;
+            $entryNumber = DailyEntry::getNextEntryNumber();
 
             $dailyEntry = DailyEntry::create([
                 'date' => $request->date,
-                'entry_number' => str_pad($entryNumber, 6, '0', STR_PAD_LEFT),
+                'entry_number' => $entryNumber,
                 'description' => $request->description,
                 'user_id' => auth()->id(),
             ]);
 
-            // Create items and account entries
+            $touchedAccountIds = [];
+
             foreach ($request->items as $item) {
-                $entryItem = DailyEntryItem::create([
+                DailyEntryItem::create([
                     'daily_entry_id' => $dailyEntry->id,
                     'account_id' => $item['account_id'],
                     'debit' => $item['debit'] ?? 0,
@@ -108,7 +100,6 @@ class DailyEntryController extends Controller
                     'notes' => $item['notes'] ?? null,
                 ]);
 
-                // Create account entry
                 AccountEntry::create([
                     'tree_account_id' => $item['account_id'],
                     'debit' => $item['debit'] ?? 0,
@@ -117,19 +108,12 @@ class DailyEntryController extends Controller
                     'daily_entry_id' => $dailyEntry->id,
                 ]);
 
-                // Update account balance
-                $account = TreeAccount::find($item['account_id']);
-                $balanceChange = ($item['debit'] ?? 0) - ($item['credit'] ?? 0);
-                $account->increment('balance', $balanceChange);
+                $touchedAccountIds[] = $item['account_id'];
+            }
 
-                $debit = (float)($item['debit'] ?? 0);
-                $credit = (float)($item['credit'] ?? 0);
-                if ($debit > 0) {
-                    $account->increment('debit_balance', $debit);
-                }
-                if ($credit > 0) {
-                    $account->increment('credit_balance', $credit);
-                }
+            $accService = app(AccountingService::class);
+            foreach (array_unique($touchedAccountIds) as $accId) {
+                $accService->updateAccountHierarchyBalances($accId);
             }
 
             DB::commit();
@@ -143,13 +127,10 @@ class DailyEntryController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
         $entry = DailyEntry::with(['items.account', 'user'])->find($id);
-        
+
         if (!$entry) {
             return response()->json(['message' => 'القيد اليومي غير موجود'], 404);
         }
@@ -157,13 +138,10 @@ class DailyEntryController extends Controller
         return response()->json($entry, 200);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, $id)
     {
         $dailyEntry = DailyEntry::find($id);
-        
+
         if (!$dailyEntry) {
             return response()->json(['message' => 'القيد اليومي غير موجود'], 404);
         }
@@ -195,26 +173,16 @@ class DailyEntryController extends Controller
 
         DB::beginTransaction();
         try {
-            // Reverse old entries
-            foreach ($dailyEntry->items as $item) {
-                $account = TreeAccount::find($item->account_id);
-                $balanceChange = $item->debit - $item->credit;
-                $account->decrement('balance', $balanceChange);
-                $account->decrement('debit_balance', $item->debit);
-                $account->decrement('credit_balance', $item->credit);
-            }
+            $touchedAccountIds = $dailyEntry->items->pluck('account_id')->toArray();
 
-            // Delete old entries
             AccountEntry::where('daily_entry_id', $dailyEntry->id)->delete();
             $dailyEntry->items()->delete();
 
-            // Update daily entry
             $dailyEntry->update($request->only(['date', 'description']));
 
-            // Create new items
             if ($request->has('items')) {
                 foreach ($request->items as $item) {
-                    $entryItem = DailyEntryItem::create([
+                    DailyEntryItem::create([
                         'daily_entry_id' => $dailyEntry->id,
                         'account_id' => $item['account_id'],
                         'debit' => $item['debit'] ?? 0,
@@ -230,12 +198,13 @@ class DailyEntryController extends Controller
                         'daily_entry_id' => $dailyEntry->id,
                     ]);
 
-                    $account = TreeAccount::find($item['account_id']);
-                    $balanceChange = ($item['debit'] ?? 0) - ($item['credit'] ?? 0);
-                    $account->increment('balance', $balanceChange);
-                    $account->increment('debit_balance', $item['debit'] ?? 0);
-                    $account->increment('credit_balance', $item['credit'] ?? 0);
+                    $touchedAccountIds[] = $item['account_id'];
                 }
+            }
+
+            $accService = app(AccountingService::class);
+            foreach (array_unique($touchedAccountIds) as $accId) {
+                $accService->updateAccountHierarchyBalances($accId);
             }
 
             DB::commit();
@@ -249,36 +218,26 @@ class DailyEntryController extends Controller
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id)
     {
         $dailyEntry = DailyEntry::find($id);
-        
+
         if (!$dailyEntry) {
             return response()->json(['message' => 'القيد اليومي غير موجود'], 404);
         }
 
         DB::beginTransaction();
         try {
-            // Reverse account entries
-            foreach ($dailyEntry->items as $item) {
-                $account = TreeAccount::find($item->account_id);
-                $balanceChange = $item->debit - $item->credit;
-                $account->decrement('balance', $balanceChange);
-                $account->decrement('debit_balance', $item->debit);
-                $account->decrement('credit_balance', $item->credit);
-            }
+            $touchedAccountIds = $dailyEntry->items->pluck('account_id')->toArray();
 
-            // Delete account entries
             AccountEntry::where('daily_entry_id', $dailyEntry->id)->delete();
-
-            // Delete items
             $dailyEntry->items()->delete();
-
-            // Delete entry
             $dailyEntry->delete();
+
+            $accService = app(AccountingService::class);
+            foreach (array_unique($touchedAccountIds) as $accId) {
+                $accService->updateAccountHierarchyBalances($accId);
+            }
 
             DB::commit();
             return response()->json(['message' => 'تم حذف القيد اليومي بنجاح'], 200);
@@ -288,4 +247,3 @@ class DailyEntryController extends Controller
         }
     }
 }
-

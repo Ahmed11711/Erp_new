@@ -53,6 +53,29 @@ Route::get('/test', function () {
 Route::get('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'verify']);
 Route::post('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'handle']);
 
+Route::get('/meta/webhook-health', function () {
+    $hasMediaId = \Illuminate\Support\Facades\Schema::hasColumn('messages', 'media_id');
+    $hasType = \Illuminate\Support\Facades\Schema::hasColumn('messages', 'type');
+    $hasPhoneNumberId = \Illuminate\Support\Facades\Schema::hasColumn('messages', 'phone_number_id');
+    $latestInbound = \App\Models\Message::where('direction', 'inbound')
+        ->orderByDesc('id')
+        ->first(['id', 'type', 'media_id', 'content', 'created_at']);
+    $totalMedia = \App\Models\Message::whereNotNull('media_id')
+        ->where('media_id', '!=', '')
+        ->count();
+    return response()->json([
+        'columns_ok' => $hasMediaId && $hasType && $hasPhoneNumberId,
+        'has_media_id_column' => $hasMediaId,
+        'has_type_column' => $hasType,
+        'has_phone_number_id_column' => $hasPhoneNumberId,
+        'total_media_messages' => $totalMedia,
+        'latest_inbound' => $latestInbound,
+    ]);
+});
+
+Route::post('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'handle']);
+Route::post('/webhooks/shipping/update', [\App\Http\Controllers\ShippingPartnerWebhookController::class, 'update']);
+
 
 Route::group(['middleware' => 'api', 'prefix' => 'auth'], function ($router) {
     Route::post('login', [AuthController::class, 'login']);
@@ -76,6 +99,12 @@ Route::middleware('auth')->group(function () {
     Route::get('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readNotify']);
     Route::post('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readOrderNotify']);
 
+    // WhatsApp-Web style chat API (cursor pagination + media proxy)
+    Route::get('conversations/{conversation_id}/messages', [App\Http\Controllers\ConversationController::class, 'messages'])
+        ->whereNumber('conversation_id');
+    Route::get('media/{id}', [App\Http\Controllers\ConversationController::class, 'media'])
+        ->whereNumber('id');
+
     // WhatsApp Messaging Routes
     Route::prefix('whatsapp/')->group(function () {
         Route::post('send', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMessage']);
@@ -84,6 +113,8 @@ Route::middleware('auth')->group(function () {
         Route::get('meta-templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getMetaTemplatesList']);
         Route::post('send-meta-template-from-order', [App\Http\Controllers\WhatsAppMessageController::class, 'sendMetaTemplateFromOrder']);
         Route::get('chat/{customerId}', [App\Http\Controllers\WhatsAppMessageController::class, 'getChatMessages']);
+        Route::get('customers/by-phone', [App\Http\Controllers\WhatsAppMessageController::class, 'findCustomerByPhone']);
+        Route::get('customers/whatsapp-snippet', [App\Http\Controllers\WhatsAppMessageController::class, 'getWhatsAppSnippet']);
         Route::get('customers', [App\Http\Controllers\WhatsAppMessageController::class, 'getCustomers']);
         Route::get('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'getTemplates']);
         Route::post('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'createTemplate']);
@@ -109,8 +140,10 @@ Route::middleware('auth')->group(function () {
 
     // Reports and charts
     Route::get('reports/categoriesSellReports', [App\Http\Controllers\CategoriesController::class, 'categoriesSellReports']);
+    Route::get('reports/shipping-companies', [ShippingCompanyController::class, 'shippingCompaniesReport']);
 
     Route::middleware(['department.access:Admin,Account Management,Logistics Specialist'])->group(function () {
+        Route::get('transactions/by-supplier-order/search', [SupplierController::class, 'supplierAccountsAggregated']);
         Route::get('categories/warehouse_balance', [CategoriesController::class, 'warehouse_balance']);
         Route::get('categories/categories_details/{id}', [CategoriesController::class, 'categories_details']);
         Route::get('categories/warehousedetails', [CategoriesController::class, 'warehouseDetails']);
@@ -158,6 +191,8 @@ Route::middleware('auth')->group(function () {
         Route::post('assets/run-depreciation', [App\Http\Controllers\DepreciationController::class, 'runDepreciation']); // New Route
         Route::post('cimmitments/{id}/pay', [App\Http\Controllers\CimmitmentController::class, 'pay']);
         Route::apiResource('cimmitments', App\Http\Controllers\CimmitmentController::class);
+        Route::get('covenants', [App\Http\Controllers\CovenantController::class, 'index']);
+        Route::post('covenants', [App\Http\Controllers\CovenantController::class, 'store']);
         Route::apiResource('incomes', App\Http\Controllers\IncomeController::class);
     });
 
@@ -176,7 +211,32 @@ Route::middleware('auth')->group(function () {
         Route::get('getCategoryByStockId', [CategoriesController::class, 'getCategoryByStockId']);
 
         Route::post('categories', [CategoriesController::class, 'store']);
-        Route::PATCH('categories/{id}/update-code', [CategoriesController::class, 'updateCode']);
+        Route::get('recipes', [\App\Http\Controllers\RecipeController::class, 'index']);
+        Route::post('recipes', [\App\Http\Controllers\RecipeController::class, 'store']);
+        Route::post('recipes/bulk-delete', [\App\Http\Controllers\RecipeController::class, 'bulkDestroy']);
+
+        // Interactive Excel import (literal paths — must be before {id} wildcard)
+        Route::post('recipes/import', [\App\Http\Controllers\RecipeImportController::class, 'preview']);
+        Route::post('recipes/import/confirm', [\App\Http\Controllers\RecipeImportController::class, 'confirm']);
+        Route::post('recipes/import/cancel', [\App\Http\Controllers\RecipeImportController::class, 'cancel']);
+
+        // Recipe detail, CRUD, execution, stock check, movements
+        Route::get('recipes/{id}', [\App\Http\Controllers\RecipeController::class, 'show'])->whereNumber('id');
+        Route::put('recipes/{id}', [\App\Http\Controllers\RecipeController::class, 'update'])->whereNumber('id');
+        Route::delete('recipes/{id}', [\App\Http\Controllers\RecipeController::class, 'destroy'])->whereNumber('id');
+        Route::get('recipes/{id}/check-stock', [\App\Http\Controllers\RecipeController::class, 'checkStock'])->whereNumber('id');
+        Route::post('recipes/{id}/execute', [\App\Http\Controllers\RecipeController::class, 'execute'])->whereNumber('id');
+        Route::get('recipes/{id}/movements', [\App\Http\Controllers\RecipeController::class, 'movements'])->whereNumber('id');
+
+        // Recipe extra costs (dynamic cost lines: machine, labor, overhead, etc.)
+        Route::get('recipes/{recipeId}/extra-costs', [\App\Http\Controllers\RecipeExtraCostController::class, 'index'])->whereNumber('recipeId');
+        Route::post('recipes/{recipeId}/extra-costs', [\App\Http\Controllers\RecipeExtraCostController::class, 'store'])->whereNumber('recipeId');
+        Route::put('recipes/{recipeId}/extra-costs/{extraCostId}', [\App\Http\Controllers\RecipeExtraCostController::class, 'update'])->whereNumber(['recipeId', 'extraCostId']);
+        Route::delete('recipes/{recipeId}/extra-costs/{extraCostId}', [\App\Http\Controllers\RecipeExtraCostController::class, 'destroy'])->whereNumber(['recipeId', 'extraCostId']);
+        Route::get('recipes/{recipeId}/breakdown', [\App\Http\Controllers\RecipeExtraCostController::class, 'breakdown'])->whereNumber('recipeId');
+
+        Route::post('categories/{id}/revision-roll-forward', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'rollForward']);
+        Route::get('categories/{id}/revision-lineage', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'lineage']);
 
         Route::get('category/{id}', [CategoriesController::class, 'getCategoryById']);
         Route::post('editcategory/{id}', [CategoriesController::class, 'editCategory']);
@@ -231,6 +291,16 @@ Route::middleware('auth')->group(function () {
         // V2
         //  Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
         Route::apiResource('stocks', stockController::class)->names('stock');
+
+        Route::get('shopify/status', [\App\Http\Controllers\ShopifyIntegrationController::class, 'status']);
+        Route::post('shopify/sync-product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncProductMappings']);
+        Route::post('shopify/sync-orders', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncOrders']);
+        Route::get('shopify/product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'productMappingsIndex']);
+
+        Route::get('shopify/integration/orders', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationOrders']);
+        Route::get('shopify/integration/products', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationProducts']);
+        Route::patch('shopify/integration/products/{id}', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'updateIntegrationProduct']);
+        Route::get('shopify/integration/failed-jobs', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'failedJobs']);
     });
 
     Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Logistics Specialist'])->group(function () {
@@ -360,10 +430,13 @@ Route::middleware('auth')->group(function () {
 // http://127.0.0.1:8000/api/transactions/by-customer-order/detailed?itemsPerPage=15&page=1&customer=01018816899
 
 
-Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
-Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
-// new
-Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
+Route::middleware('auth')->group(function () {
+    Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
+    Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
+    Route::post('tree_accounts/{id}/balance-adjustment', [TreeAccountController::class, 'balanceAdjustment']);
+    Route::post('tree_accounts/bulk-balance-adjustment', [TreeAccountController::class, 'bulkBalanceAdjustment']);
+    Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
+});
 
 // Accounting Routes
 Route::prefix('accounting/')->middleware('auth')->group(function () {
@@ -391,6 +464,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'index']);
         Route::post('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'store']);
         Route::post('/transfer', [App\Http\Controllers\V2\Accounting\SafeController::class, 'transfer']);
+        Route::post('/direct-transaction', [App\Http\Controllers\V2\Accounting\SafeController::class, 'directTransaction']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'update']);
         Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'destroy']);
@@ -439,12 +513,10 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/category-profitability', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'categoryProfitability']);
     });
 
-    // Accounting Transactions
-    Route::prefix('accounting/')->group(function () {
-        Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
-        Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
-        Route::post('/recalculate-all-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'recalculateAllHierarchyBalances']);
-    });
+    // Accounting Transactions (no nested accounting/ prefix)
+    Route::post('/process-cash-transaction', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'processCashTransaction']);
+    Route::post('/update-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'updateHierarchyBalances']);
+    Route::post('/recalculate-all-hierarchy-balances', [App\Http\Controllers\V2\Accounting\AccountingReportController::class, 'recalculateAllHierarchyBalances']);
     // Service Accounts
     Route::prefix('service-accounts/')->group(function () {
         Route::get('/', [App\Http\Controllers\ServiceAccountsController::class, 'index']);
@@ -460,12 +532,9 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
     Route::post('/settings/update-existing', [App\Http\Controllers\SettingController::class, 'updateExistingEntities']);
 });
 
-Route::prefix('report/')->group(function () {
+Route::prefix('report/')->middleware('auth')->group(function () {
     Route::get('order', [ReportOrderController::class, 'AllOrder']);
     Route::get('getByOrderId', [ReportOrderController::class, 'getByOrderId']);
 });
 
 
-Route::get('ahmed', function () {
-    Log::info("ddd", ["ddd"]);
-});

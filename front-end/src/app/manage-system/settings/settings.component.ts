@@ -17,12 +17,18 @@ export class SettingsComponent implements OnInit {
     settings: any = {
         customer_corporate_parent_account_id: null,
         customer_individual_parent_account_id: null,
+        customer_online_parent_account_id: null,
         supplier_general_parent_id: null,
         commitment_liability_parent_account_id: null,
         commitment_expense_parent_account_id: null,
     };
 
     loading = false;
+    shopifySyncing = false;
+    shopifyOrderSyncing = false;
+    shopifyStatusLoading = false;
+    /** عدد الأيام للخلف لاستيراد الطلبات من Shopify؛ 0 = كل الطلبات (بطيء إن كان التاريخ طويلاً). */
+    shopifyOrderDays = 30;
 
     constructor(private http: HttpClient, private snackBar: MatSnackBar) { }
 
@@ -58,6 +64,7 @@ export class SettingsComponent implements OnInit {
         // Default keys
         if (!this.settings['customer_corporate_parent_account_id']) this.settings['customer_corporate_parent_account_id'] = null;
         if (!this.settings['customer_individual_parent_account_id']) this.settings['customer_individual_parent_account_id'] = null;
+        if (!this.settings['customer_online_parent_account_id']) this.settings['customer_online_parent_account_id'] = null;
         if (!this.settings['supplier_general_parent_id']) this.settings['supplier_general_parent_id'] = null;
         if (!this.settings['commitment_liability_parent_account_id']) this.settings['commitment_liability_parent_account_id'] = null;
         if (!this.settings['commitment_expense_parent_account_id']) this.settings['commitment_expense_parent_account_id'] = null;
@@ -106,5 +113,70 @@ export class SettingsComponent implements OnInit {
                 this.loading = false;
             }
         );
+    }
+
+    testShopifyConnection(): void {
+        this.shopifyStatusLoading = true;
+        this.http.get(environment.Url + '/shopify/status').subscribe({
+            next: (res: any) => {
+                this.shopifyStatusLoading = false;
+                const name = res?.shop?.name || res?.shop?.domain || 'متصل';
+                this.snackBar.open('Shopify: ' + name, 'إغلاق', { duration: 4000 });
+            },
+            error: (err) => {
+                this.shopifyStatusLoading = false;
+                const msg = err.error?.error || err.error?.message || err.message || 'فشل الاتصال';
+                this.snackBar.open('Shopify: ' + msg, 'إغلاق', { duration: 6000 });
+            }
+        });
+    }
+
+    syncShopifyProductMappings(): void {
+        if (!confirm('مزامنة متغيرات منتجات Shopify إلى جدول الربط المحلي؟ قد يستغرق وقتاً إذا كان الكتالوج كبيراً.')) {
+            return;
+        }
+        this.shopifySyncing = true;
+        this.http.post(environment.Url + '/shopify/sync-product-mappings', {}).subscribe({
+            next: (res: any) => {
+                this.shopifySyncing = false;
+                const n = res?.synced_variants ?? '?';
+                this.snackBar.open(`تمت المزامنة: ${n} متغير`, 'إغلاق', { duration: 5000 });
+            },
+            error: (err) => {
+                this.shopifySyncing = false;
+                const msg = err.error?.message || err.message || 'فشل المزامنة';
+                this.snackBar.open(msg, 'إغلاق', { duration: 6000 });
+            }
+        });
+    }
+
+    syncShopifyOrders(): void {
+        const days = Math.max(0, Math.min(3650, Number(this.shopifyOrderDays) || 0));
+        const msg =
+            days === 0
+                ? 'سيتم جلب كل الطلبات من Shopify (قد يستغرق وقتاً طويلاً). المتابعة؟'
+                : `استيراد طلبات Shopify من آخر ${days} يوماً (غير الموجودة محلياً). المتابعة؟`;
+        if (!confirm(msg)) {
+            return;
+        }
+        this.shopifyOrderSyncing = true;
+        this.http.post(environment.Url + '/shopify/sync-orders', { days }).subscribe({
+            next: (res: any) => {
+                this.shopifyOrderSyncing = false;
+                const imp = res?.imported ?? 0;
+                const skip = res?.skipped_duplicates ?? 0;
+                const fail = res?.failed ?? 0;
+                this.snackBar.open(
+                    `طلبات: مستورد ${imp}، متخطى ${skip}، فشل ${fail}`,
+                    'إغلاق',
+                    { duration: 7000 }
+                );
+            },
+            error: (err) => {
+                this.shopifyOrderSyncing = false;
+                const m = err.error?.message || err.message || 'فشل مزامنة الطلبات';
+                this.snackBar.open(m, 'إغلاق', { duration: 7000 });
+            }
+        });
     }
 }

@@ -3,9 +3,12 @@ export interface TreeAccount {
   name: string;
   name_en?: string;
   code?: number;
-  type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
-  account_type?: 'رئيسي' | 'فرعي' | 'مستوى أول';
+  type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense' | 'settlement';
+  /** @deprecated قديم — لا يُستخدم؛ الدور يُستنتج من الشجرة (جذر / مجموعة / تفصيلي) */
+  account_type?: string | null;
   budget_type?: string;
+  budget_amount?: number;
+  budget_period?: 'yearly' | 'monthly';
   is_trading_account?: boolean;
   level?: number;
   balance?: number;
@@ -26,6 +29,15 @@ export interface TreeAccount {
     code: number;
   };
   children?: TreeAccount[];
+  safes?: {
+    id: number;
+    name: string;
+    balance: number;
+    type: string;
+    is_inside_branch: boolean;
+    branch_name: string;
+  }[];
+  detail_type?: string;
   created_at?: string;
   updated_at?: string;
 }

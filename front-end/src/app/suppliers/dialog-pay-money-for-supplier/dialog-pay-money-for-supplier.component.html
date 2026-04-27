@@ -1,33 +1,135 @@
-<div class="d-flex justify-content-between">
-  <h1 mat-dialog-title> {{data.supplier.balance | customNumber}}</h1>
-  <h1 mat-dialog-title>سداد حساب المورد  ( {{data.supplier.supplier_name}} ) </h1>
-</div>
+<div class="supplier-pay-dialog">
+  <div class="supplier-pay-dialog__hero">
+    <div class="supplier-pay-dialog__hero-text">
+      <h2 mat-dialog-title class="supplier-pay-dialog__title">سداد حساب المورد</h2>
+      <p class="supplier-pay-dialog__supplier-name">{{ data.supplier.supplier_name }}</p>
+    </div>
+    <div class="supplier-pay-dialog__balance-wrap" dir="ltr">
+      <span class="supplier-pay-dialog__balance-label">الرصيد</span>
+      <span class="supplier-pay-dialog__balance">{{ data.supplier.balance | customNumber }}</span>
+    </div>
+  </div>
 
-<div mat-dialog-content>
-  <form #form="ngForm" (ngSubmit)="submit(form)">
-    <div class="form-group">
-      <label class="form-label">نوع المصدر</label>
-      <select [(ngModel)]="paymentType" name="paymentType" class="form-control" dir="rtl">
-        <option value="safe">خزينة</option>
-        <option value="bank">بنك</option>
-        <option value="service_account">حساب خدمي</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">{{ paymentType === 'safe' ? 'الخزينة' : paymentType === 'bank' ? 'البنك' : 'الحساب الخدمي' }}</label>
-      <select [(ngModel)]="sourceId" name="sourceId" class="form-control" dir="rtl">
-        <option [ngValue]="null" disabled>اختر المصدر</option>
-        <option *ngFor="let elm of sourceList" [ngValue]="elm.id">
-          {{ elm.name }} ({{ elm.balance | number:'1.2-2' }})
-        </option>
-      </select>
-    </div>
-    <div class="form-group">
-      <input dir="rtl" type="number" min="0" name="amount" placeholder="ادخل مبلغ السداد" ngModel #amount="ngModel" class="form-control" required>
-    </div>
-    <div class="d-flex justify-content-center ">
-      <a mat-button (click)="onCloseClick()" class="btn btn-danger mx-2">الغاء </a>
-      <button class="btn btn-success" [disabled]="!canSubmit || amount.invalid || amount.value < 1">سداد</button>
-    </div>
-  </form>
+  <div class="supplier-pay-dialog__hint">
+    اختر نوع المصدر أولاً، ثم الحساب، ثم أدخل المبلغ.
+  </div>
+
+  <div mat-dialog-content class="supplier-pay-dialog__content">
+    <form #form="ngForm" (ngSubmit)="submit(form)" class="supplier-pay-dialog__form">
+      <div class="supplier-pay-dialog__section">
+        <span class="supplier-pay-dialog__section-label">طريقة الدفع</span>
+        <div class="supplier-pay-pills" dir="rtl">
+          <label
+            class="supplier-pay-pill"
+            [class.supplier-pay-pill--active]="paymentType === 'bank'">
+            <input
+              type="radio"
+              name="supplier_payment_type"
+              value="bank"
+              [(ngModel)]="paymentType"
+              (ngModelChange)="paymentTypeChange()" />
+            <span>بنك</span>
+          </label>
+          <label
+            class="supplier-pay-pill"
+            [class.supplier-pay-pill--active]="paymentType === 'safe'">
+            <input
+              type="radio"
+              name="supplier_payment_type"
+              value="safe"
+              [(ngModel)]="paymentType"
+              (ngModelChange)="paymentTypeChange()" />
+            <span>خزينة</span>
+          </label>
+          <label
+            class="supplier-pay-pill"
+            [class.supplier-pay-pill--active]="paymentType === 'service_account'">
+            <input
+              type="radio"
+              name="supplier_payment_type"
+              value="service_account"
+              [(ngModel)]="paymentType"
+              (ngModelChange)="paymentTypeChange()" />
+            <span>حساب خدمي</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="supplier-pay-dialog__field" *ngIf="paymentType === 'bank'">
+        <label class="supplier-pay-dialog__label" for="bank_supplier">البنك</label>
+        <select
+          id="bank_supplier"
+          class="form-control supplier-pay-dialog__select"
+          name="bank_id"
+          [(ngModel)]="bankId"
+          dir="rtl">
+          <option [ngValue]="null" disabled>اختر البنك</option>
+          <option *ngFor="let item of banks" [ngValue]="item.id">
+            {{ item.name }} ({{ item.balance | number:'1.2-2' }})
+          </option>
+        </select>
+        <p class="supplier-pay-dialog__empty" *ngIf="banks.length === 0">لا توجد حسابات بنك مسجّلة.</p>
+      </div>
+
+      <div class="supplier-pay-dialog__field" *ngIf="paymentType === 'safe'">
+        <label class="supplier-pay-dialog__label" for="safe_supplier">الخزينة</label>
+        <select
+          id="safe_supplier"
+          class="form-control supplier-pay-dialog__select"
+          name="safe_id"
+          [(ngModel)]="safeId"
+          dir="rtl">
+          <option [ngValue]="null" disabled>اختر الخزينة</option>
+          <option *ngFor="let item of safes" [ngValue]="item.id">
+            {{ item.name }} ({{ item.balance | number:'1.2-2' }})
+          </option>
+        </select>
+        <p class="supplier-pay-dialog__empty" *ngIf="safes.length === 0">لا توجد خزائن مسجّلة.</p>
+      </div>
+
+      <div class="supplier-pay-dialog__field" *ngIf="paymentType === 'service_account'">
+        <label class="supplier-pay-dialog__label" for="service_account_supplier">الحساب الخدمي</label>
+        <select
+          id="service_account_supplier"
+          class="form-control supplier-pay-dialog__select"
+          name="service_account_id"
+          [(ngModel)]="serviceAccountId"
+          dir="rtl">
+          <option [ngValue]="null" disabled>اختر الحساب الخدمي</option>
+          <option *ngFor="let item of serviceAccounts" [ngValue]="item.id">
+            {{ item.name }} ({{ item.balance | number:'1.2-2' }})
+          </option>
+        </select>
+        <p class="supplier-pay-dialog__empty" *ngIf="serviceAccounts.length === 0">لا توجد حسابات خدمية مسجّلة.</p>
+      </div>
+
+      <div class="supplier-pay-dialog__field">
+        <label class="supplier-pay-dialog__label" for="amount_supplier">مبلغ السداد</label>
+        <input
+          id="amount_supplier"
+          dir="ltr"
+          type="number"
+          min="0"
+          step="0.01"
+          name="amount"
+          placeholder="0"
+          ngModel
+          #amount="ngModel"
+          class="form-control supplier-pay-dialog__input-amount"
+          required />
+      </div>
+
+      <div class="supplier-pay-dialog__actions">
+        <button type="button" class="btn supplier-pay-dialog__btn-cancel" (click)="onCloseClick()">
+          إلغاء
+        </button>
+        <button
+          type="submit"
+          class="btn supplier-pay-dialog__btn-submit"
+          [disabled]="!canSubmit || amount.invalid || amount.value < 1">
+          تأكيد السداد
+        </button>
+      </div>
+    </form>
+  </div>
 </div>

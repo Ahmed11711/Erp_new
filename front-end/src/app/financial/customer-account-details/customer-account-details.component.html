@@ -24,9 +24,9 @@
         <tr *ngFor="let item of data; let i = index">
           <td>{{item?.order_id}}</td>
           <td>{{item?.created_at | customDate}}</td>
-          <!-- <td dir="ltr">{{item?.credit ?? 0 | customNumber }}</td> -->
-          <td dir="ltr">{{item?.prepaid_amount ?? 0 | customNumber }}</td>
-          <td dir="ltr">{{item?.net_total ?? 0 | customNumber }}</td>
+          <!-- دائن / مدين من القيود على حساب العميل (أو احتياطي قديم: prepaid / net_total) -->
+          <td dir="ltr">{{ (item?.total_credit ?? item?.prepaid_amount) ?? 0 | customNumber }}</td>
+          <td dir="ltr">{{ (item?.total_debit ?? item?.net_total) ?? 0 | customNumber }}</td>
 
         </tr>
       </tbody>

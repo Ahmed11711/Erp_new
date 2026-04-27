@@ -40,7 +40,6 @@
           class="form-control"
           aria-describedby="address"
           id="address"
-          required
         />
         <div class="form-text" *ngIf="address.touched && address.invalid">
           <div *ngIf="address.errors?.['required']" class="form-text text-danger">
@@ -87,8 +86,6 @@
           class="form-control"
           aria-describedby="supplier_rate"
           id="supplier_rate"
-          required
-
           min="0"
           max="10"
         />
@@ -122,7 +119,6 @@
               class="form-control"
               aria-describedby="price_rate"
               id="price_rate"
-              required
               min="0"
               max="10"
               autocomplete="off"
@@ -152,7 +148,6 @@
           class="form-control"
           name="type"
           ngModel
-          required
           #type="ngModel"
         >
           <option selected disabled value="">اختر فئة المورد</option>
@@ -177,8 +172,8 @@
 
          <button
         type="submit"
-          [disabled]="addSupp.invalid"
         class="btn btn-primary"
+        [disabled]="addSupp.invalid"
       >
         اضف
       </button>

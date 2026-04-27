@@ -11,6 +11,9 @@ import { TreeAccount } from '../interfaces/tree-account.interface';
 export class AccountingTreeComponent implements OnInit {
   accounts: TreeAccount[] = [];
   treeData: TreeAccount[] = [];
+  /** شجرة العرض: كاملة أو بعد تطبيق البحث */
+  displayTree: TreeAccount[] = [];
+  searchTerm = '';
   loading = false;
   recalculating = false;
   showAddDialog = false;
@@ -23,13 +26,8 @@ export class AccountingTreeComponent implements OnInit {
     { value: 'liability', label: 'خصوم' },
     { value: 'equity', label: 'حقوق ملكية' },
     { value: 'revenue', label: 'إيرادات' },
-    { value: 'expense', label: 'مصروفات' }
-  ];
-
-  accountTypeOptions = [
-    { value: 'رئيسي', label: 'رئيسي' },
-    { value: 'فرعي', label: 'فرعي' },
-    { value: 'مستوى أول', label: 'مستوى أول' }
+    { value: 'expense', label: 'مصروفات' },
+    { value: 'settlement', label: 'تسوية' }
   ];
 
   newAccount: TreeAccount = {
@@ -76,6 +74,7 @@ export class AccountingTreeComponent implements OnInit {
             console.error('Error loading accounts:', error);
             this.accounts = [];
             this.treeData = [];
+            this.displayTree = [];
             this.loading = false;
           }
         });
@@ -118,6 +117,85 @@ export class AccountingTreeComponent implements OnInit {
 
       this.treeData = rootAccounts;
       this.sortTreeByCode(this.treeData);
+    }
+    this.applySearchFilter();
+  }
+
+  clearSearch(): void {
+    this.searchTerm = '';
+    this.applySearchFilter();
+  }
+
+  /** هل يطابق الحساب نص البحث (كود أو اسم عربي/إنجليزي) */
+  isSearchMatch(node: TreeAccount): boolean {
+    const q = this.searchTerm.trim().toLowerCase();
+    if (!q) {
+      return false;
+    }
+    return this.nodeMatchesTerm(node, q);
+  }
+
+  private nodeMatchesTerm(node: TreeAccount, lower: string): boolean {
+    const code = String(node.code ?? '');
+    if (code.toLowerCase().includes(lower)) {
+      return true;
+    }
+    if ((node.name || '').toLowerCase().includes(lower)) {
+      return true;
+    }
+    if ((node.name_en || '').toLowerCase().includes(lower)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * يبقي الفروع التي فيها تطابق (اسم/كود) أو فرع يحتوي تطابقاً.
+   * إذا طابق الحساب الأب دون أبناء مطابقين، تُعرض الأبناء كاملة لسياق واضح.
+   */
+  private filterTree(nodes: TreeAccount[], q: string): TreeAccount[] {
+    const lower = q.trim().toLowerCase();
+    if (!lower) {
+      return nodes;
+    }
+
+    const walk = (list: TreeAccount[]): TreeAccount[] => {
+      const out: TreeAccount[] = [];
+      for (const node of list) {
+        const matchSelf = this.nodeMatchesTerm(node, lower);
+        const childFiltered = node.children?.length ? walk(node.children) : [];
+        if (matchSelf || childFiltered.length > 0) {
+          const children =
+            childFiltered.length > 0
+              ? childFiltered
+              : matchSelf && node.children?.length
+                ? [...node.children]
+                : [];
+          out.push({ ...node, children });
+        }
+      }
+      return out;
+    };
+
+    return walk(nodes);
+  }
+
+  applySearchFilter(): void {
+    const q = this.searchTerm.trim();
+    if (!q) {
+      this.displayTree = this.treeData;
+      return;
+    }
+    this.displayTree = this.filterTree(this.treeData, q);
+    this.expandAllInTree(this.displayTree);
+  }
+
+  private expandAllInTree(nodes: TreeAccount[]): void {
+    for (const n of nodes) {
+      if (n.id != null && n.children && n.children.length > 0) {
+        this.expandedNodes.add(n.id);
+        this.expandAllInTree(n.children);
+      }
     }
   }
 
@@ -170,7 +248,15 @@ export class AccountingTreeComponent implements OnInit {
     }
 
     this.loading = true;
-    this.treeAccountService.create(this.newAccount).subscribe({
+    const { account_type: _ignoredAt, children: _c, parent: _p, main_account: _m, safes: _s, ...rest } =
+      this.newAccount as TreeAccount & { children?: unknown; parent?: unknown; main_account?: unknown; safes?: unknown };
+    const payload = {
+      ...rest,
+      balance: 0,
+      debit_balance: 0,
+      credit_balance: 0
+    };
+    this.treeAccountService.create(payload).subscribe({
       next: (response) => {
         this.loadAccounts();
         this.closeDialogs();
@@ -178,7 +264,7 @@ export class AccountingTreeComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error creating account:', error);
-        alert('حدث خطأ أثناء إضافة الحساب');
+        alert(this.getHttpErrorMessage(error, 'حدث خطأ أثناء إضافة الحساب'));
         this.loading = false;
       }
     });
@@ -193,7 +279,17 @@ export class AccountingTreeComponent implements OnInit {
     }
 
     this.loading = true;
-    this.treeAccountService.update(this.selectedAccount.id!, this.selectedAccount).subscribe({
+    const a = this.selectedAccount;
+    const payload: Partial<TreeAccount> = {
+      name: a.name,
+      name_en: a.name_en,
+      type: a.type,
+      is_trading_account: a.is_trading_account,
+      budget_type: a.budget_type,
+      budget_amount: a.budget_amount,
+      budget_period: a.budget_period
+    };
+    this.treeAccountService.update(a.id!, payload as TreeAccount).subscribe({
       next: (response) => {
         this.loadAccounts();
         this.closeDialogs();
@@ -201,7 +297,7 @@ export class AccountingTreeComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error updating account:', error);
-        alert('حدث خطأ أثناء تحديث الحساب');
+        alert(this.getHttpErrorMessage(error, 'حدث خطأ أثناء تحديث الحساب'));
         this.loading = false;
       }
     });
@@ -220,14 +316,29 @@ export class AccountingTreeComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error deleting account:', error);
-        alert('حدث خطأ أثناء حذف الحساب');
+        alert(this.getHttpErrorMessage(error, 'حدث خطأ أثناء حذف الحساب'));
         this.loading = false;
       }
     });
   }
 
   findAccountById(id: number): TreeAccount | null {
-    return this.accounts.find(acc => acc.id === id) || null;
+    return this.findInTree(this.accounts, id);
+  }
+
+  private findInTree(nodes: TreeAccount[], id: number): TreeAccount | null {
+    for (const node of nodes) {
+      if (node.id === id) {
+        return node;
+      }
+      if (node.children?.length) {
+        const found = this.findInTree(node.children, id);
+        if (found) {
+          return found;
+        }
+      }
+    }
+    return null;
   }
 
   recalculateAllBalances(): void {
@@ -258,14 +369,50 @@ export class AccountingTreeComponent implements OnInit {
     return accountType ? accountType.label : type;
   }
 
+  /**
+   * الرصيد المخزَّن = مدين − دائن. للخصوم/الإيرادات/حقوق الملكية نعرض الرصيد الطبيعي (−balance)
+   * ليتوافق مع «ما على الشركة للمورد» مثل رصيد المورد في شاشة الموردين.
+   */
+  getDisplayBalance(node: TreeAccount): number {
+    const b = node.balance ?? 0;
+    if (node.type === 'liability' || node.type === 'equity' || node.type === 'revenue' || node.type === 'settlement') {
+      return -b;
+    }
+    return b;
+  }
+
   getIndentLevel(level: number): string {
     return `${level * 20}px`;
   }
 
-  // Allow adding children up to level 4 (backend supports 4)
+  /** يسمح بأبناء حتى عمق معقول؛ الخلفية تدعم المستويات الأعمق عبر default في توليد الكود */
   canAddChild(node: TreeAccount): boolean {
     const lvl = node.level ?? 1;
-    return lvl < 4;
+    return lvl < 50;
+  }
+
+  /** رسالة خطأ واضحة من Laravel (validation أو ApiResponse) */
+  private getHttpErrorMessage(err: any, fallback: string): string {
+    const body = err?.error;
+    if (body == null) {
+      return typeof err?.message === 'string' ? err.message : fallback;
+    }
+    if (typeof body === 'string') {
+      return body || fallback;
+    }
+    const errs = body.errors;
+    if (errs && typeof errs === 'object') {
+      for (const key of Object.keys(errs)) {
+        const arr = errs[key];
+        if (Array.isArray(arr) && arr.length && arr[0]) {
+          return String(arr[0]);
+        }
+      }
+    }
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message;
+    }
+    return fallback;
   }
 
   // Sort recursively by code for better presentation

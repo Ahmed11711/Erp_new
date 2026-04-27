@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\Stock;
+use App\Models\TreeAccount;
 use Validator;
 use Carbon\Carbon;
 use App\Models\OrderProduct;
@@ -13,6 +15,11 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\CategoryMonthlyInventory;
 use App\Http\Resources\V2\Category\CategoryResource;
 use App\Http\Requests\V2\Category\GetCategoryByStock;
+use App\Models\Item;
+use App\Services\Accounting\InventoryGlPostingService;
+use App\Services\Accounting\ProductPerformanceReportService;
+use App\Services\CategoryInventoryCostService;
+use App\Services\Items\ItemCodeService;
 
 class CategoriesController extends Controller
 {
@@ -83,14 +90,15 @@ class CategoriesController extends Controller
   $request->validate([
    'category_name' => 'required|string',
    'category_price' => 'required|numeric|min:0',
-   'category_code' => 'required|string|max:255|unique:categories,category_code',
    'initial_balance' => 'required|numeric|min:0',
    'minimum_quantity' => 'required|numeric|min:0',
    'warehouse' => 'required|string',
    'production_id' => 'required|numeric|exists:productions,id',
    'measurement_id' => 'required|numeric|exists:measurements,id',
-   'category_image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:500',
-   'stock_id' => 'required|integer|exists:stocks,id', // add this line for stock_id validation
+   'category_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:500',
+   'item_code' => 'nullable|string|max:64|unique:categories,item_code',
+   'color' => 'nullable|string|max:128',
+   'recipe_id' => 'nullable|integer|exists:recipes,id',
   ]);
   $img_name = '';
   if ($request->hasFile('category_image')) {
@@ -107,36 +115,81 @@ class CategoriesController extends Controller
    return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
   }
 
-  $category = Category::create([
+  $stockId = $this->resolveStockIdForCategory($request);
+  if (!$stockId) {
+   return response()->json(['message' => 'تعذر تحديد المخزن.'], 422);
+  }
+
+  $cost = (float) request('category_price');
+  $openQty = (float) request('initial_balance');
+  $warehouse = request('warehouse');
+
+  $attrs = [
    'category_name' => request('category_name'),
    'category_price' => request('category_price'),
-   'category_code' => request('category_code'),
+   'unit_price' => $cost,
    'initial_balance' => request('initial_balance'),
    'minimum_quantity' => request('minimum_quantity'),
-   'warehouse' => request('warehouse'),
+   'warehouse' => $warehouse,
    'production_id' => request('production_id'),
    'measurement_id' => request('measurement_id'),
    'category_image' => $img_name,
-   'stock_id' => request('stock_id'),
-  ]);
+   'stock_id' => $stockId,
+   'color' => $request->input('color'),
+   'item_code' => $request->filled('item_code') ? trim((string) $request->input('item_code')) : null,
+  ];
 
+  if ($request->filled('recipe_id')) {
+   $attrs['recipe_id'] = (int) $request->input('recipe_id');
+  }
+
+  // الرصيد الافتتاحي = كمية أولية؛ عمود «الرصيد» في القائمة يعرض quantity وليس initial_balance فقط
+  if ($openQty > 0.0000001) {
+   $attrs['quantity'] = $openQty;
+   if ($warehouse === 'مخزن منتج تام') {
+    $attrs['sell_total_price'] = $openQty * $cost;
+   } else {
+    $attrs['total_price'] = $openQty * $cost;
+   }
+  }
+
+  $category = Category::create($attrs);
+
+  if ($category->item_code === null || $category->item_code === '') {
+   app(ItemCodeService::class)->ensureCode(Item::query()->findOrFail($category->id));
+   $category->refresh();
+  }
+
+  if ($openQty > 0.0000001) {
+   DB::table('categories_balance')->insert([
+    'invoice_number' => 'OB',
+    'category_id' => $category->id,
+    'type' => 'رصيد افتتاحي',
+    'quantity' => $openQty,
+    'balance_before' => 0,
+    'balance_after' => $openQty,
+    'price' => $cost,
+    'total_price' => $cost * $openQty,
+    'unit_cost' => $cost,
+    'cost_total' => $cost * $openQty,
+    'by' => auth()->check() ? auth()->user()->name : 'النظام',
+    'created_at' => now(),
+   ]);
+   if ($warehouse !== 'مخزن منتج تام') {
+    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
+   $openingValue = $openQty * $cost;
+   if ($openingValue > 0.00001) {
+    app(InventoryGlPostingService::class)->postOpeningInventory(
+     $openingValue,
+     'رصيد افتتاحي — ' . $category->category_name . ' (صنف #' . $category->id . ')',
+     auth()->id()
+    );
+   }
+  }
 
   return response()->json($category, 201);
  }
-
- public function updateCode(Request $request, $id)
- {
-  $request->validate([
-   'category_code' => 'required|unique:categories,category_code,' . $id,
-  ]);
-
-  $category = Category::findOrFail($id);
-  $category->category_code = $request->category_code;
-  $category->save();
-
-  return response()->json(['success' => true, 'category_code' => $category->category_code]);
- }
-
 
  public function editCategory($id, Request $request)
  {
@@ -148,15 +201,30 @@ class CategoriesController extends Controller
    'warehouse' => 'required|string',
    'production_id' => 'required|numeric|exists:productions,id',
    'measurement_id' => 'required|numeric|exists:measurements,id',
-   'category_image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:500',
-   'stock_id' => 'required|integer|exists:stocks,id',
+   'category_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:500',
+   'item_code' => 'nullable|string|max:64|unique:categories,item_code,'.$id,
+   'color' => 'nullable|string|max:128',
+   'recipe_id' => 'nullable|integer|exists:recipes,id',
 
   ]);
+
+  $stockId = $this->resolveStockIdForCategory($request);
+  if (!$stockId) {
+   return response()->json(['message' => 'تعذر تحديد المخزن.'], 422);
+  }
 
   $category = Category::find($id);
 
   if (!$category) {
    return response()->json(['error' => 'Category not found'], 404);
+  }
+
+  $dup = Category::where('warehouse', $request->warehouse)
+   ->whereRaw('TRIM(category_name) = ?', [trim($request->category_name)])
+   ->where('id', '!=', (int) $id)
+   ->first();
+  if ($dup) {
+   return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
   }
 
   $img_name = '';
@@ -170,7 +238,7 @@ class CategoriesController extends Controller
    }
   }
 
-  $category->update([
+  $update = [
    'category_name' => $request->input('category_name'),
    'category_price' => $request->input('category_price'),
    'initial_balance' => $request->input('initial_balance'),
@@ -178,15 +246,90 @@ class CategoriesController extends Controller
    'warehouse' => $request->input('warehouse'),
    'production_id' => $request->input('production_id'),
    'measurement_id' => $request->input('measurement_id'),
-   'category_image' => $img_name,
-   'stock_id' => $request->input('stock_id'),
+   'stock_id' => $stockId,
+   'color' => $request->input('color'),
+  ];
 
-  ]);
+  if ($img_name !== '') {
+   $update['category_image'] = $img_name;
+  }
+
+  if ($request->has('item_code')) {
+   $update['item_code'] = $request->filled('item_code') ? trim((string) $request->input('item_code')) : null;
+  }
+
+  if ($request->has('recipe_id')) {
+   $update['recipe_id'] = $request->filled('recipe_id') ? (int) $request->input('recipe_id') : null;
+  }
+
+  $category->update($update);
+
+  if (($category->item_code === null || $category->item_code === '') && $request->has('item_code')) {
+   app(ItemCodeService::class)->ensureCode(Item::query()->findOrFail($category->id));
+   $category->refresh();
+  }
 
 
   return response()->json($category, 200);
  }
 
+ /**
+  * يعتمد على stock_id المرسل إن وُجد، أو اسم المخزن، أو ينشئ صفاً في stocks للمخازن الخمسة المعتمدة.
+  */
+ private function resolveStockIdForCategory(Request $request): ?int
+ {
+  $inputId = $request->input('stock_id');
+  if ($inputId !== null && $inputId !== '' && $inputId !== '0') {
+   $id = (int) $inputId;
+   if (Stock::where('id', $id)->exists()) {
+    return $id;
+   }
+  }
+  $warehouse = trim((string) $request->input('warehouse', ''));
+  if ($warehouse === '') {
+   return null;
+  }
+  $existing = Stock::where('name', $warehouse)->first();
+  if ($existing) {
+   return (int) $existing->id;
+  }
+
+  return $this->ensureStockRowForStandardWarehouse($warehouse);
+ }
+
+ /**
+  * @return int|null رقم السجل أو null إن لم يكن اسماً معتمداً
+  */
+ private function ensureStockRowForStandardWarehouse(string $warehouse): ?int
+ {
+  $allowed = [
+   'مخزن مواد خام',
+   'مخزن منتج تحت التشغيل',
+   'مخزن منتج تام',
+   'مخزن صيانة',
+   'مخزن تالف',
+  ];
+  if (!in_array($warehouse, $allowed, true)) {
+   return null;
+  }
+  $assetId = Stock::query()->value('asset_id');
+  if ($assetId === null) {
+   $assetId = TreeAccount::query()->min('id');
+  }
+  if ($assetId === null) {
+   $assetId = 1;
+  }
+  $row = Stock::firstOrCreate(
+   ['name' => $warehouse],
+   [
+    'balance' => 0,
+    'asset_id' => (int) $assetId,
+    'active' => true,
+   ]
+  );
+
+  return (int) $row->id;
+ }
 
 
  public function search(Request $request)
@@ -279,6 +422,8 @@ class CategoriesController extends Controller
     'balance_after' => $category->quantity + $quantity,
     'price' => $categorPrice,
     'total_price' => $categorPrice * $quantity,
+    'unit_cost' => $categorPrice,
+    'cost_total' => $categorPrice * $quantity,
     'by' => auth()->user()->name,
     'created_at' => now()
    ]);
@@ -289,10 +434,13 @@ class CategoriesController extends Controller
     $category->total_price = $category->total_price + ($quantity * $categorPrice);
    }
    $category->save();
+   if ($category->warehouse !== 'مخزن منتج تام') {
+    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
    return response()->json('success', 200);
   }
 
-  if ($request->status == 'edit' && $quantity > 0) {
+  if ($request->status == 'edit' && is_numeric($quantity) && (float) $quantity >= 0) {
    $cat_details =  DB::table('categories_balance')->where('category_id', $request->id)->latest()->first();
    if ($cat_details) {
     $categorPrice = $cat_details->price;
@@ -308,6 +456,8 @@ class CategoriesController extends Controller
     'balance_after' => $quantity,
     'price' => $categorPrice,
     'total_price' => $categorPrice * ($quantity - $category->quantity),
+    'unit_cost' => $categorPrice,
+    'cost_total' => $categorPrice * ($quantity - $category->quantity),
     'by' => auth()->user()->name,
     'created_at' => now()
    ]);
@@ -318,6 +468,9 @@ class CategoriesController extends Controller
     $category->total_price = $category->total_price + $totalPrice;
    }
    $category->save();
+   if ($category->warehouse !== 'مخزن منتج تام') {
+    CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+   }
    return response()->json('success', 200);
   }
  }
@@ -450,29 +603,67 @@ class CategoriesController extends Controller
   return response()->json($data, 200);
  }
 
+ /**
+  * إغلاق جرد شهري: لقطة من رصيد المخزون الفعلي (categories.quantity) وتقييم متسق مع حركات الإخراج/الشحن (متوسط التكلفة المرجح).
+  * يدعم ?month=YYYY-MM (الشهر المُغلَق)، وإلا يُغلق الشهر السابق تقويمياً.
+  * يستخدم updateOrCreate حتى يمكن إعادة تسجيل نفس الشهر بعد تصحيح الجرد دون خطأ تكرار.
+  */
  public function monthlyInventory(Request $request)
  {
+  $request->validate([
+   'warehouse' => 'required|string',
+   'month' => 'nullable|date_format:Y-m',
+  ]);
+
+  $month = $request->filled('month')
+   ? Carbon::createFromFormat('Y-m', (string) $request->input('month'))->format('Y-m')
+   : Carbon::now()->subMonth()->format('Y-m');
+
   $categories = Category::where('warehouse', $request->warehouse)->get();
-  $transformedCategories = $categories->map(function ($category) {
-   $previousMonthDate = Carbon::now()->subMonth()->format('Y-m');
-   return [
-    'category_id' => $category->id,
-    'quantity' => $category->quantity,
-    'total_price' => $category->total_price,
-    'sell_total_price' => $category->sell_total_price,
-    'month' => $previousMonthDate,
-    'by' => auth()->user()->name,
-    'created_at' => now(),
-   ];
-  })->toArray();
 
-  DB::table('category_monthly_inventories')->insert($transformedCategories);
+  $closedBy = auth()->user()?->name ?? 'system';
 
-  return response()->json('success', 200);
+  DB::transaction(function () use ($categories, $month, $closedBy) {
+   foreach ($categories as $category) {
+    $qty = max(0, (float) ($category->quantity ?? 0));
+    $cid = (int) $category->id;
+
+    // قيمة المخزون بالتكلفة: نفس منطق إخراج الصنف للشحن/COGS (متوسط مرجح من categories.total_price ÷ quantity)
+    $avgCost = CategoryInventoryCostService::averageCostForCategoryIssue($cid);
+    $inventoryAtCost = round($qty * $avgCost, 2);
+
+    // مخزن منتج تام: إجمالي سعر البيع المرجّح = كمية × سعر البيع للوحدة
+    $isFinished = $category->warehouse === 'مخزن منتج تام';
+    $unitSell = (float) ($category->category_price ?? 0);
+    $sellTotal = $isFinished
+     ? round($qty * $unitSell, 2)
+     : round((float) ($category->sell_total_price ?? 0), 2);
+
+    CategoryMonthlyInventory::updateOrCreate(
+     [
+      'category_id' => $cid,
+      'month' => $month,
+     ],
+     [
+      'quantity' => $qty,
+      'total_price' => $inventoryAtCost,
+      'sell_total_price' => $sellTotal,
+      'by' => $closedBy,
+     ]
+    );
+   }
+  });
+
+  return response()->json([
+   'success' => true,
+   'month' => $month,
+   'warehouse' => $request->warehouse,
+   'lines' => $categories->count(),
+  ], 200);
  }
 
 
- public function categoriesSellReports(Request $request)
+ public function categoriesSellReports(Request $request, ProductPerformanceReportService $productPerformanceReportService)
  {
   $itemsPerPage = $request->input('itemsPerPage', 15);
 
@@ -480,6 +671,7 @@ class CategoriesController extends Controller
    ->select(
     'categories.id as category_id',
     'categories.category_name as category_name',
+    'categories.category_image as category_image',
     'categories.quantity as warehouse_balance',
     DB::raw('SUM(CASE WHEN orders.order_type = "جديد" THEN order_products.quantity ELSE 0 END) as total_quantity_new'),
     DB::raw('SUM(CASE WHEN orders.order_type = "طلب مرتجع" THEN order_products.quantity ELSE 0 END) as total_quantity_return'),
@@ -497,7 +689,7 @@ class CategoriesController extends Controller
    $query->where('categories.production_id', $request->production_id);
   }
 
-  $categorySales = $query->groupBy('categories.id', 'categories.category_name', 'categories.quantity');
+  $categorySales = $query->groupBy('categories.id', 'categories.category_name', 'categories.category_image', 'categories.quantity');
 
   if ($request->has('sort')) {
    if ($request->sort == 'category_name' || $request->sort == 'total_quantity_return' || $request->sort == 'total_postpone') {
@@ -508,7 +700,29 @@ class CategoriesController extends Controller
   }
   $categorySales = $query->paginate($itemsPerPage);
 
-  return response()->json($categorySales, 200);
+  $profitabilityTotals = null;
+  $byCategoryId = [];
+  if ($request->filled('date_from') && $request->filled('date_to')) {
+   $period = $productPerformanceReportService->computeForPeriod($request->date_from, $request->date_to);
+   $profitabilityTotals = $period['totals'];
+   $byCategoryId = $period['by_category_id'];
+  }
+
+  foreach ($categorySales->items() as $item) {
+   $pid = (int) $item->category_id;
+   $p = $byCategoryId[$pid] ?? null;
+   $item->net_sales = $p['net_sales'] ?? null;
+   $item->avg_unit_cost = $p['avg_unit_cost'] ?? null;
+   $item->ref_unit_cost = $p['ref_unit_cost'] ?? null;
+   $item->cogs = $p['cogs'] ?? null;
+   $item->gross_profit = $p['gross_profit'] ?? null;
+   $item->gross_margin_percent = $p['gross_margin_percent'] ?? null;
+  }
+
+  $payload = $categorySales->toArray();
+  $payload['profitability_totals'] = $profitabilityTotals;
+
+  return response()->json($payload, 200);
  }
 
 

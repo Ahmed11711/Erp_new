@@ -15,6 +15,9 @@ use App\Models\Supplier;
 use Illuminate\Http\Request;
 use App\Models\Approvals;
 use Illuminate\Support\Facades\DB;
+use App\Services\Accounting\InventoryGlPostingService;
+use App\Services\Accounting\LandedCostService;
+use App\Services\CategoryInventoryCostService;
 use Validator;
 class PurchasesController extends Controller
 {
@@ -35,12 +38,38 @@ class PurchasesController extends Controller
         if($request->has('receipt_date')){
             $search->where('receipt_date', $request->receipt_date);
         }
+        if ($request->filled('date_from')) {
+            $search->whereDate('receipt_date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $search->whereDate('receipt_date', '<=', $request->date_to);
+        }
         if($request->has('invoice_type')){
             $search->where('invoice_type', $request->invoice_type);
         }
         if($request->has('supplier_id')){
             $search->where('supplier_id', $request->supplier_id);
         }
+        if ($request->filled('q')) {
+            $term = '%' . trim($request->q) . '%';
+            $search->where(function ($q) use ($term) {
+                $q->where('invoice_number', 'like', $term)
+                    ->orWhereHas('supplier', function ($s) use ($term) {
+                        $s->where('supplier_name', 'like', $term);
+                    })
+                    ->orWhereIn('id', function ($sub) use ($term) {
+                        $sub->select('purchase_id')
+                            ->from('invoice_categories')
+                            ->where('product_name', 'like', $term);
+                    });
+            });
+        }
+        $search->select('purchases.*');
+        $search->addSelect([
+            DB::raw('(SELECT ic.product_name FROM invoice_categories ic WHERE ic.purchase_id = purchases.id ORDER BY ic.id ASC LIMIT 1) as first_product_name'),
+            DB::raw('(SELECT ic.product_unit FROM invoice_categories ic WHERE ic.purchase_id = purchases.id ORDER BY ic.id ASC LIMIT 1) as first_product_unit'),
+            DB::raw('(SELECT COALESCE(SUM(ic.product_quantity), 0) FROM invoice_categories ic WHERE ic.purchase_id = purchases.id) as invoice_lines_qty'),
+        ]);
         $search = $search->with([
             'supplier:id,supplier_name',
             'updatedPurchase'
@@ -79,22 +108,32 @@ class PurchasesController extends Controller
             ], 200);
         }
 
-        $invoice = Purchase::where('id', $id)
-            ->with(['bank:id,name', 'supplier:id,supplier_name'])
+        $purchase = Purchase::where('id', $id)
+            ->with(['bank:id,name', 'safe:id,name', 'supplier:id,supplier_name'])
             ->first();
 
-        $categories = DB::table('invoice_categories')->where('purchase_id', $id)->get();
-
-        $tracking = PurchasesTracking::where('invoice_id', $id)->with(['user:id,name'])->get();
-
-        if (!$invoice) {
+        if (!$purchase) {
             return response()->json(['error' => 'Invoice not found'], 404);
         }
 
-        $data =[
-            'invoice'=> $invoice,
-            'tracking'=> $tracking,
-            'categories'=> $categories
+        // Lines are stored on the latest revision row (ref -> main id); the main row often has no invoice_categories after an edit.
+        $mainId = $purchase->ref ? (int) $purchase->ref : (int) $purchase->id;
+        $latestRevision = Purchase::where('ref', $mainId)
+            ->with(['bank:id,name', 'safe:id,name', 'supplier:id,supplier_name'])
+            ->latest('id')
+            ->first();
+
+        $invoice = $latestRevision ?: $purchase;
+
+        $categories = DB::table('invoice_categories')->where('purchase_id', $invoice->id)->get();
+
+        $tracking = PurchasesTracking::where('invoice_id', $mainId)->with(['user:id,name'])->get();
+
+        $data = [
+            'invoice' => $invoice,
+            'tracking' => $tracking,
+            'categories' => $categories,
+            'cost_breakdown' => LandedCostService::purchaseBreakdown($invoice),
         ];
 
         return response()->json($data, 200);
@@ -115,7 +154,7 @@ class PurchasesController extends Controller
             'due_amount' => 'required',
             'transport_cost' => 'required',
             'price_edited' => 'required',
-            'products' => 'required',
+            'products' => 'required|array|min:1',
             'products.*.product_name' => 'required|string',
             'products.*.product_unit' => 'required|string',
             'products.*.product_quantity' => 'required|numeric',
@@ -133,7 +172,14 @@ class PurchasesController extends Controller
                 $rules['service_account_id'] = 'required|exists:service_accounts,id';
             }
         }
-        Validator::make($request->all(), $rules)->validate();
+        $data = $request->all();
+        if (isset($data['products']) && is_string($data['products'])) {
+            $decodedProducts = json_decode($data['products'], true);
+            if (is_array($decodedProducts)) {
+                $data['products'] = $decodedProducts;
+            }
+        }
+        Validator::make($data, $rules)->validate();
 
         DB::beginTransaction();
         try {
@@ -156,18 +202,31 @@ class PurchasesController extends Controller
 
             $oldCategories = DB::table('invoice_categories')->where('purchase_id', $oldInvice->id)->get();
             foreach($oldCategories as $product){
-                DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $product->product_quantity*-1);
-                DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $product->total*-1);
+                $qty = (float) $product->product_quantity;
+                $lineTotal = (float) $product->total;
+                $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
+
+                $revCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
+                if (! $revCatId) {
+                    throw new \Exception('تعذر ربط الصنف عند عكس التعديل: ' . $product->product_name);
+                }
+
+                DB::table('categories')->where('id', $revCatId)->increment('quantity', $qty * -1);
+                DB::table('categories')->where('id', $revCatId)->increment('total_price', $lineTotal * -1);
+
+                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
 
                 DB::table('categories_balance')->insert([
                     'invoice_number' => $oldInvice->invoice_number,
-                    'category_id' => DB::table('categories')->where('category_name', $product->product_name)->value('id'),
+                    'category_id' => $revCatId,
                     'type' => 'تعديل فواتير مشتريات',
-                    'quantity' => $product->product_quantity*-1,
-                    'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity')- ($product->product_quantity*-1),
-                    'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
-                    'price' => $product->product_price*-1,
-                    'total_price' => $product->total*-1,
+                    'quantity' => $qty * -1,
+                    'balance_before' => DB::table('categories')->where('id', $revCatId)->value('quantity') - ($qty * -1),
+                    'balance_after' => DB::table('categories')->where('id', $revCatId)->value('quantity'),
+                    'price' => $effectiveUnit * -1,
+                    'total_price' => $lineTotal * -1,
+                    'unit_cost' => $effectiveUnit,
+                    'cost_total' => $lineTotal * -1,
                     'by' => auth()->user()->name,
                     'created_at' =>now()
                 ]
@@ -175,12 +234,12 @@ class PurchasesController extends Controller
 
 
                 DB::table('warehouse_ratings')->insert([
-                    'category_id' => DB::table('categories')->where('category_name', $product->product_name)->value('id'),
-                    'price' => $product->product_price*-1,
-                    'quantity' => $product->product_quantity*-1,
+                    'category_id' => $revCatId,
+                    'price' => $effectiveUnit * -1,
+                    'quantity' => $qty * -1,
                     'ref' => $oldInvice->invoice_number,
                     'invoice_id' => $oldInvice->id,
-                    'fixed_quantity' => $product->product_quantity*-1,
+                    'fixed_quantity' => $qty * -1,
                     'created_at' =>now()
                 ]);
             }
@@ -188,6 +247,12 @@ class PurchasesController extends Controller
             $old_due_amount = $oldInvice->due_amount;
             $status = '0';
         }
+        $linesSumPreview = 0;
+        $productsPreview = json_decode($request->products, true) ?: [];
+        foreach ($productsPreview as $product) {
+            $linesSumPreview += (float) $product['total'];
+        }
+        $transportPreview = (float) request('transport_cost');
         $purchaseData = [
             'supplier_id' => request('supplier_id'),
             'invoice_type' => request('invoice_type'),
@@ -196,6 +261,9 @@ class PurchasesController extends Controller
             'paid_amount' => request('paid_amount'),
             'due_amount' => request('due_amount'),
             'transport_cost' => request('transport_cost'),
+            'product_total' => $linesSumPreview,
+            'shipping_total' => $transportPreview,
+            'grand_total' => $linesSumPreview + $transportPreview,
             'price_edited' => request('price_edited'),
             'invoice_image' => $img_name,
             'payment_type' => $paymentType,
@@ -233,9 +301,22 @@ class PurchasesController extends Controller
         }
         $products = $request->products;
         $products = json_decode($products, true);
+        $linesSum = 0;
         foreach($products as $product){
+            $qty = (float) $product['product_quantity'];
+            $lineTotal = (float) $product['total'];
+            $linesSum += $lineTotal;
+            $declaredUnit = (float) $product['product_price'];
+            $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, $declaredUnit);
+
+            $newCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product['product_name']);
+            if (! $newCatId) {
+                throw new \Exception('تعذر ربط الصنف بالمخزن (مخزن مواد خام): ' . $product['product_name']);
+            }
+
             DB::table('invoice_categories')->insert([
                 'purchase_id' => $purchase->id,
+                'category_id' => $newCatId,
                 'product_name' => $product['product_name'],
                 'product_quantity' => $product['product_quantity'],
                 'product_unit' => $product['product_unit'],
@@ -244,19 +325,23 @@ class PurchasesController extends Controller
                 'price_edited' => $product['price_edited'],
             ]);
 
-            DB::table('categories')->where('category_name', $product['product_name'])->increment('quantity', $product['product_quantity']);
-            DB::table('categories')->where('category_name', $product['product_name'])->increment('total_price', $product['total']);
-            // DB::table('categories')->where('category_name', $product['product_name'])->increment('initial_balance', $product['product_quantity']);
+            DB::table('categories')->where('id', $newCatId)->increment('quantity', $qty);
+            DB::table('categories')->where('id', $newCatId)->increment('total_price', $lineTotal);
+
+            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($newCatId);
+            $avgUnit = CategoryInventoryCostService::resolveReferenceUnitCost($newCatId);
 
             DB::table('categories_balance')->insert([
                 'invoice_number' => $purchase->invoice_number,
-                'category_id' => DB::table('categories')->where('category_name', $product['product_name'])->value('id'),
+                'category_id' => $newCatId,
                 'type' => 'فواتير مشتريات',
-                'quantity' => $product['product_quantity'],
-                'balance_before' => DB::table('categories')->where('category_name', $product['product_name'])->value('quantity')- $product['product_quantity'],
-                'balance_after' => DB::table('categories')->where('category_name', $product['product_name'])->value('quantity'),
-                'price' => $product['product_price'],
-                'total_price' => $product['total'],
+                'quantity' => $qty,
+                'balance_before' => DB::table('categories')->where('id', $newCatId)->value('quantity') - $qty,
+                'balance_after' => DB::table('categories')->where('id', $newCatId)->value('quantity'),
+                'price' => $effectiveUnit,
+                'total_price' => $lineTotal,
+                'unit_cost' => $avgUnit,
+                'cost_total' => $lineTotal,
                 'by' => auth()->user()->name,
                 'created_at' =>now()
             ]
@@ -264,12 +349,12 @@ class PurchasesController extends Controller
 
 
             DB::table('warehouse_ratings')->insert([
-                'category_id' => DB::table('categories')->where('category_name', $product['product_name'])->value('id'),
-                'price' => $product['product_price'],
-                'quantity' => $product['product_quantity'],
+                'category_id' => $newCatId,
+                'price' => $effectiveUnit,
+                'quantity' => $qty,
                 'ref' => $purchase->invoice_number,
                 'invoice_id' => $purchase->id,
-                'fixed_quantity' => $product['product_quantity'],
+                'fixed_quantity' => $qty,
                 'created_at' =>now()
             ]);
         }
@@ -286,9 +371,52 @@ class PurchasesController extends Controller
             'user_id'=> auth()->user()->id
         ]);
 
+        /** @var InventoryGlPostingService $glService */
+        $glService = app(InventoryGlPostingService::class);
+        $transport = (float) $request->transport_cost;
+        $newReceiptAmount = $linesSum + $transport;
+
+        $purchase->product_total = $linesSum;
+        $purchase->shipping_total = $transport;
+        $purchase->grand_total = $newReceiptAmount;
+        $purchase->save();
+
+        if ($request->has('invoiceId')) {
+            $oldSupplier = Supplier::find($oldInvice->supplier_id);
+            $oldLinesSum = 0;
+            foreach ($oldCategories as $oc) {
+                $oldLinesSum += (float) $oc->total;
+            }
+            $oldShip = (float) ($oldInvice->shipping_total ?? $oldInvice->transport_cost);
+            $oldProduct = (float) ($oldInvice->product_total ?? $oldLinesSum);
+            if (($oldProduct + $oldShip) > 0.00001 && $oldSupplier) {
+                $glService->reversePurchaseReceiptSplit(
+                    $oldProduct,
+                    $oldShip,
+                    $oldSupplier,
+                    'عكس استلام مخزون — تعديل فاتورة ' . $oldInvice->invoice_number,
+                    auth()->id()
+                );
+            }
+            if ($old_paid_amount > 0.00001 && $oldSupplier) {
+                $glService->reversePurchasePaymentGl($oldInvice, $oldSupplier, (float) $old_paid_amount, auth()->id());
+            }
+        }
+
         if ($request->has('invoiceId') && $old_paid_amount > 0) {
             $this->refundPurchasePayment($oldInvice, $old_paid_amount);
         }
+
+        if ($newReceiptAmount > 0.00001) {
+            $glService->postPurchaseReceiptSplit(
+                $linesSum,
+                $transport,
+                $supplier,
+                'استلام مشتريات — فاتورة ' . $purchase->invoice_number,
+                auth()->id()
+            );
+        }
+
         if ((double)$request->paid_amount > 0) {
             $this->processPurchasePayment($purchase, $supplier, (double)$request->paid_amount, $paymentType, $request, $oldInvice ?? null);
         }
@@ -383,7 +511,7 @@ class PurchasesController extends Controller
                 'account_id' => $supplierTreeId,
                 'debit' => $amount,
                 'credit' => 0,
-                'notes' => 'زيادة (فاتورة مشتريات)',
+                'notes' => 'سداد ذمة مورد (تخفيض التزام — مدين حساب خصوم)',
             ]);
             DailyEntryItem::create([
                 'daily_entry_id' => $dailyEntry->id,
@@ -468,20 +596,37 @@ class PurchasesController extends Controller
             $approval = Approvals::create($appData);
             return response()->json($approval, 201);
         }
+        DB::beginTransaction();
+        try {
         $oldCategories = DB::table('invoice_categories')->where('purchase_id', $purchase->id)->get();
+        $linesSumDelete = 0;
         foreach($oldCategories as $product){
-            DB::table('categories')->where('category_name', $product->product_name)->increment('quantity', $product->product_quantity*-1);
-            DB::table('categories')->where('category_name', $product->product_name)->increment('total_price', $product->total*-1);
+            $qty = (float) $product->product_quantity;
+            $lineTotal = (float) $product->total;
+            $linesSumDelete += $lineTotal;
+            $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
+
+            $delCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
+            if (! $delCatId) {
+                throw new \Exception('تعذر ربط الصنف عند الحذف: ' . $product->product_name);
+            }
+
+            DB::table('categories')->where('id', $delCatId)->increment('quantity', $qty * -1);
+            DB::table('categories')->where('id', $delCatId)->increment('total_price', $lineTotal * -1);
+
+            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
 
             DB::table('categories_balance')->insert([
                 'invoice_number' => $purchase->invoice_number,
-                'category_id' => DB::table('categories')->where('category_name', $product->product_name)->value('id'),
+                'category_id' => $delCatId,
                 'type' => 'حذف فواتير مشتريات',
-                'quantity' => $product->product_quantity*-1,
-                'balance_before' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity')- ($product->product_quantity*-1),
-                'balance_after' => DB::table('categories')->where('category_name', $product->product_name)->value('quantity'),
-                'price' => $product->product_price*-1,
-                'total_price' => $product->total*-1,
+                'quantity' => $qty * -1,
+                'balance_before' => DB::table('categories')->where('id', $delCatId)->value('quantity') - ($qty * -1),
+                'balance_after' => DB::table('categories')->where('id', $delCatId)->value('quantity'),
+                'price' => $effectiveUnit * -1,
+                'total_price' => $lineTotal * -1,
+                'unit_cost' => $effectiveUnit,
+                'cost_total' => $lineTotal * -1,
                 'by' => auth()->user()->name,
                 'created_at' =>now()
             ]
@@ -489,12 +634,12 @@ class PurchasesController extends Controller
 
 
             DB::table('warehouse_ratings')->insert([
-                'category_id' => DB::table('categories')->where('category_name', $product->product_name)->value('id'),
-                'price' => $product->product_price*-1,
-                'quantity' => $product->product_quantity*-1,
+                'category_id' => $delCatId,
+                'price' => $effectiveUnit * -1,
+                'quantity' => $qty * -1,
                 'ref' => $purchase->invoice_number,
                 'invoice_id' => $purchase->id,
-                'fixed_quantity' => $product->product_quantity*-1,
+                'fixed_quantity' => $qty * -1,
                 'created_at' =>now()
             ]);
         }
@@ -522,10 +667,32 @@ class PurchasesController extends Controller
             'user_id'=> auth()->user()->id
         ]);
 
+        $glService = app(InventoryGlPostingService::class);
+        $delShip = (float) ($purchase->shipping_total ?? $purchase->transport_cost);
+        $delProduct = (float) ($purchase->product_total ?? $linesSumDelete);
+        $receiptDelete = $delProduct + $delShip;
+        if ($receiptDelete > 0.00001 && $supplier) {
+            $glService->reversePurchaseReceiptSplit(
+                $delProduct,
+                $delShip,
+                $supplier,
+                'عكس استلام مخزون — حذف فاتورة ' . $purchase->invoice_number,
+                auth()->id()
+            );
+        }
+        if ((double) $purchase->paid_amount > 0.00001 && $supplier) {
+            $glService->reversePurchasePaymentGl($purchase, $supplier, (double) $purchase->paid_amount, auth()->id());
+        }
+
         if ((double)$purchase->paid_amount > 0) {
             $this->refundPurchasePayment($purchase, (double)$purchase->paid_amount);
         }
 
+        DB::commit();
         return response()->json(['success' => true], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

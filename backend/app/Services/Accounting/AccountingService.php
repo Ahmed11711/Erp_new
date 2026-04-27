@@ -26,8 +26,15 @@ class AccountingService
             // Get cash account
             $cashAccount = TreeAccount::findOrFail($transactionData['cash_account_id']);
             
-            // Validate that cash account is actually a cash/bank account
-            if (!in_array($cashAccount->type, ['asset']) || !str_contains(strtolower($cashAccount->name), 'خزينة') && !str_contains(strtolower($cashAccount->name), 'بنك')) {
+            $isCashOrBank = $cashAccount->type === 'asset' && (
+                str_contains(strtolower($cashAccount->name), 'خزينة') ||
+                str_contains(strtolower($cashAccount->name), 'بنك') ||
+                str_contains(strtolower($cashAccount->name_en ?? ''), 'cash') ||
+                str_contains(strtolower($cashAccount->name_en ?? ''), 'bank') ||
+                \App\Models\Safe::where('account_id', $cashAccount->id)->exists() ||
+                \App\Models\Bank::where('asset_id', $cashAccount->id)->exists()
+            );
+            if (!$isCashOrBank) {
                 throw new \Exception('الحساب المحدد ليس حساب خزينة أو بنك');
             }
 
@@ -94,22 +101,25 @@ class AccountingService
         $targetAccount = TreeAccount::findOrFail($transactionData['account_id']);
 
         $entries = [];
+        $txType = $transactionData['transaction_type'] ?? '';
 
-        // Cash account entry (credit for cash out, debit for cash in)
+        if (!in_array($txType, ['cash_in', 'cash_out'])) {
+            throw new \Exception('نوع العملية غير صالح — يجب أن يكون cash_in أو cash_out');
+        }
+
         $cashEntry = AccountEntry::create([
             'tree_account_id' => $cashAccount->id,
-            'debit' => $transactionData['transaction_type'] === 'cash_in' ? $amount : 0,
-            'credit' => $transactionData['transaction_type'] === 'cash_out' ? $amount : 0,
+            'debit' => $txType === 'cash_in' ? $amount : 0,
+            'credit' => $txType === 'cash_out' ? $amount : 0,
             'description' => $description,
             'created_at' => now(),
             'updated_at' => now()
         ]);
 
-        // Target account entry (debit for cash out, credit for cash in)
         $targetEntry = AccountEntry::create([
             'tree_account_id' => $targetAccount->id,
-            'debit' => $transactionData['transaction_type'] === 'cash_out' ? $amount : 0,
-            'credit' => $transactionData['transaction_type'] === 'cash_in' ? $amount : 0,
+            'debit' => $txType === 'cash_out' ? $amount : 0,
+            'credit' => $txType === 'cash_in' ? $amount : 0,
             'description' => $description,
             'created_at' => now(),
             'updated_at' => now()
@@ -157,6 +167,18 @@ class AccountingService
     }
 
     /**
+     * بعد تعديل أرصدة حساب طرفي يدوياً (مع وجود قيود + أرصدة قديمة غير مُمثَّلة في account_entries)،
+     * حدّث الحسابات الأب فقط دون إعادة حساب الطرفي من مجموع القيود — وإلا تُمسح أرصدة legacy.
+     */
+    public function propagateBalancesUpFromLeaf(int $leafAccountId): void
+    {
+        $account = TreeAccount::findOrFail($leafAccountId);
+        if ($account->parent_id) {
+            $this->updateParentAccountBalance($account->parent_id);
+        }
+    }
+
+    /**
      * Update parent account balance based on own entries + children (best practice: parent = own + children)
      * يضمن أن الحساب الفرعي يؤثر في الحساب الأب وجميع المستويات الأعلى في الشجرة
      */
@@ -165,13 +187,12 @@ class AccountingService
         $parent = TreeAccount::findOrFail($parentId);
         
         // 1. Parent's direct entries (الحساب الأب قد يكون له قيود مباشرة)
-        $directDebit = AccountEntry::where('tree_account_id', $parentId)->sum('debit');
-        $directCredit = AccountEntry::where('tree_account_id', $parentId)->sum('credit');
+        $directDebit = (float) AccountEntry::where('tree_account_id', $parentId)->sum('debit');
+        $directCredit = (float) AccountEntry::where('tree_account_id', $parentId)->sum('credit');
         
-        // 2. Sum of all direct children's balances (الأبناء قد يكون لهم أرصدة محدثة)
-        $children = TreeAccount::where('parent_id', $parentId)->get();
-        $childrenDebit = $children->sum('debit_balance');
-        $childrenCredit = $children->sum('credit_balance');
+        // 2. مجموع مدين/دائن الأبناء المباشرين في قاعدة البيانات (أدق من Collection::sum مع DECIMAL)
+        $childrenDebit = (float) TreeAccount::where('parent_id', $parentId)->sum('debit_balance');
+        $childrenCredit = (float) TreeAccount::where('parent_id', $parentId)->sum('credit_balance');
         
         // 3. Total = own entries + children (المجموع = القيود المباشرة + أرصدة الأبناء)
         $totalDebit = $directDebit + $childrenDebit;
@@ -253,7 +274,7 @@ class AccountingService
         $movementCredit = round($data->sum('movement_credit'), 2);
         $movementDiff = abs($movementDebit - $movementCredit);
 
-        $isBalanced = $closingDiff <= $tolerance && $movementDiff <= $tolerance;
+        $isBalanced = $closingDiff <= $tolerance && $movementDiff <= $tolerance && $openingDiff <= $tolerance;
 
         return [
             'is_balanced' => $isBalanced,

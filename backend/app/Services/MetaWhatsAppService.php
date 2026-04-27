@@ -25,16 +25,61 @@ class MetaWhatsAppService
     }
 
     /**
+     * رقم المستلم لـ Meta API: أرقام فقط بدون + (قالب / نص / أزرار تفاعلية).
+     */
+    private function normalizeRecipientPhoneForMeta(string $to): string
+    {
+        $to = preg_replace('/\D/', '', $to);
+        if ($to === '') {
+            return '';
+        }
+        // مصر: رقم دولي كامل يبدأ بـ 20 وطوله 12 (مثل 2010xxxxxxxx)
+        if (str_starts_with($to, '20') && strlen($to) >= 12) {
+            return $to;
+        }
+        // مصر محلي: 01xxxxxxxxx (11 رقم يبدأ بصفر)
+        if (strlen($to) === 11 && str_starts_with($to, '0')) {
+            return '20'.substr($to, 1);
+        }
+        if (strlen($to) === 10 && str_starts_with($to, '0')) {
+            return '20'.substr($to, 1);
+        }
+        if (strlen($to) === 9 && str_starts_with($to, '1')) {
+            return '20'.$to;
+        }
+        // 10 أرقام تبدأ بـ 1 بدون كود دولة (مثل 10xxxxxxxx)
+        if (strlen($to) === 10 && str_starts_with($to, '1')) {
+            return '20'.$to;
+        }
+
+        return $to;
+    }
+
+    /**
+     * رمز اللغة في قوالب واتساب يجب أن يطابق ما في مدير الأعمال؛ الإنجليزي غالباً en_US وليس en.
+     */
+    private function normalizeWhatsAppTemplateLanguageCode(string $code): string
+    {
+        $c = strtolower(trim(str_replace('-', '_', $code)));
+        if ($c === 'en') {
+            return 'en_US';
+        }
+
+        return $code;
+    }
+
+    /**
      * Get phone number ID based on user assignment
      */
     private function getPhoneNumberId(?string $userPhoneNumberId): ?string
     {
         if ($userPhoneNumberId) {
             $configuredNumbers = $this->getConfiguredPhoneNumbers();
-            $matched = $configuredNumbers[$userPhoneNumberId] ?? null;
-            if ($matched) {
-                return $matched;
+            if (isset($configuredNumbers[$userPhoneNumberId])) {
+                return $userPhoneNumberId;
             }
+            // الويب هوك يرسل phone_number_id الصحيح لرقم الاستقبال — لا تستبدله بقيمة .env قديمة
+            return $userPhoneNumberId;
         }
 
         return config('services.meta_whatsapp.phone_number_id');
@@ -207,8 +252,10 @@ class MetaWhatsAppService
         }
 
         try {
-            // Format phone number (remove + if present, ensure code)
-            $to = ltrim($to);
+            $to = $this->normalizeRecipientPhoneForMeta($to);
+            if ($to === '') {
+                return ['success' => false, 'error' => 'Invalid phone number'];
+            }
 
             $response = Http::withToken($this->accessToken)
                 ->post("https://graph.facebook.com/{$this->metaVersion}/{$this->phoneNumberId}/messages", [
@@ -254,15 +301,24 @@ class MetaWhatsAppService
 
     /**
      * Send a template message
+     *
+     * @param  bool  $languageCodeAsIs  إذا true: يُرسل رمز اللغة كما هو لـ Graph API (بدون تحويل en → en_US).
+     *                                  استخدمه عندما يكون القالب معتمداً بلغة مختلفة عن en_US (مثلاً en أو en_GB) لتفادي 132001.
      */
-    public function sendTemplateMessage(string $to, string $templateName, string $languageCode = 'en_US', array $components = []): array
+    public function sendTemplateMessage(string $to, string $templateName, string $languageCode = 'en_US', array $components = [], bool $languageCodeAsIs = false): array
     {
         if (!$this->isConfigured()) {
             return ['success' => false, 'error' => 'Meta WhatsApp not configured'];
         }
 
         try {
-            $to = ltrim($to, '+');
+            $to = $this->normalizeRecipientPhoneForMeta($to);
+            if ($to === '') {
+                return ['success' => false, 'error' => 'Invalid phone number'];
+            }
+            if (! $languageCodeAsIs) {
+                $languageCode = $this->normalizeWhatsAppTemplateLanguageCode($languageCode);
+            }
 
             $payload = [
                 'messaging_product' => 'whatsapp',
@@ -289,7 +345,8 @@ class MetaWhatsAppService
                 Log::info('Meta WhatsApp template sent', [
                     'to' => $to,
                     'template' => $templateName,
-                    'message_id' => $data['messages'][0]['id'] ?? null
+                    'message_id' => $data['messages'][0]['id'] ?? null,
+                    'contacts' => $data['contacts'] ?? null,
                 ]);
 
                 return [
@@ -326,21 +383,19 @@ class MetaWhatsAppService
             return ['success' => false, 'error' => 'Meta WhatsApp not configured'];
         }
 
-        $to = preg_replace('/\D/', '', $to);
-        if (strlen($to) === 10 && str_starts_with($to, '0')) {
-            $to = '20' . substr($to, 1);
-        } elseif (strlen($to) === 9 && str_starts_with($to, '1')) {
-            $to = '20' . $to;
+        $to = $this->normalizeRecipientPhoneForMeta($to);
+        if ($to === '') {
+            return ['success' => false, 'error' => 'Invalid phone number'];
         }
-        $to = ltrim($to, '+');
 
         $actionButtons = [];
         foreach (array_slice($buttons, 0, 3) as $btn) {
+            $title = mb_substr((string) ($btn['title'] ?? ''), 0, 25);
             $actionButtons[] = [
                 'type' => 'reply',
                 'reply' => [
-                    'id' => $btn['id'],
-                    'title' => $btn['title'],
+                    'id' => (string) ($btn['id'] ?? ''),
+                    'title' => $title,
                 ],
             ];
         }
@@ -386,5 +441,92 @@ class MetaWhatsAppService
     public function isConfigured(): bool
     {
         return !empty($this->phoneNumberId) && !empty($this->accessToken);
+    }
+
+    /**
+     * Access token used by the current service instance (used by media proxy).
+     */
+    public function getAccessTokenForMedia(): ?string
+    {
+        return $this->accessToken;
+    }
+
+    /**
+     * Resolve the short-lived (5 min) media download URL + metadata for a given Meta media id.
+     *
+     * @return array{success:bool, url?:string, mime_type?:string, file_size?:int, sha256?:string, error?:string}
+     */
+    public function fetchMediaMeta(string $mediaId): array
+    {
+        if (empty($this->accessToken) || $mediaId === '') {
+            return ['success' => false, 'error' => 'Meta WhatsApp not configured or missing media id'];
+        }
+
+        try {
+            $response = Http::withToken($this->accessToken)
+                ->timeout(20)
+                ->get("https://graph.facebook.com/{$this->metaVersion}/{$mediaId}");
+
+            if (! $response->successful()) {
+                Log::warning('Meta media metadata fetch failed', [
+                    'media_id' => $mediaId,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return ['success' => false, 'error' => 'Failed to resolve media metadata'];
+            }
+
+            $json = $response->json();
+            if (empty($json['url'])) {
+                return ['success' => false, 'error' => 'Media URL missing in response'];
+            }
+
+            return [
+                'success' => true,
+                'url' => $json['url'],
+                'mime_type' => $json['mime_type'] ?? null,
+                'file_size' => isset($json['file_size']) ? (int) $json['file_size'] : null,
+                'sha256' => $json['sha256'] ?? null,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Meta media metadata exception', ['error' => $e->getMessage()]);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Download raw bytes for a Meta media id. Returns binary body ready to stream.
+     *
+     * @return array{success:bool, body?:string, mime_type?:string, error?:string}
+     */
+    public function downloadMediaBytes(string $mediaId): array
+    {
+        $meta = $this->fetchMediaMeta($mediaId);
+        if (! $meta['success']) {
+            return $meta;
+        }
+
+        try {
+            $response = Http::withToken($this->accessToken)
+                ->timeout(60)
+                ->get($meta['url']);
+
+            if (! $response->successful()) {
+                Log::warning('Meta media binary fetch failed', [
+                    'media_id' => $mediaId,
+                    'status' => $response->status(),
+                ]);
+                return ['success' => false, 'error' => 'Failed to download media bytes'];
+            }
+
+            return [
+                'success' => true,
+                'body' => $response->body(),
+                'mime_type' => $meta['mime_type'] ?? $response->header('Content-Type') ?? 'application/octet-stream',
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Meta media download exception', ['error' => $e->getMessage()]);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
 }

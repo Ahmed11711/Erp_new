@@ -8,6 +8,8 @@ use App\Models\AccountEntry;
 use App\Models\DailyEntry;
 use App\Models\TreeAccount;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\ProductPerformanceReportService;
+use App\Services\CategoryInventoryCostService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,43 +17,85 @@ class AccountingReportController extends Controller
 {
     protected $accountingService;
 
-    public function __construct(AccountingService $accountingService)
-    {
+    public function __construct(
+        AccountingService $accountingService,
+        protected ProductPerformanceReportService $productPerformanceReportService
+    ) {
         $this->accountingService = $accountingService;
     }
 
     /**
      * Daily Ledger Report
+     * Uses accounting date: daily_entries.date / vouchers.date, else account_entries.created_at.
+     * Ordered chronologically (oldest first).
      */
     public function dailyLedger(Request $request)
     {
-        $query = AccountEntry::with(['account'])
+        $effectiveDateExpr = 'DATE(COALESCE(de.date, v.date, account_entries.created_at))';
+
+        $query = AccountEntry::with(['account', 'dailyEntry', 'voucher'])
             ->select('account_entries.*')
-            ->join('tree_accounts', 'account_entries.tree_account_id', '=', 'tree_accounts.id');
+            ->join('tree_accounts', 'account_entries.tree_account_id', '=', 'tree_accounts.id')
+            ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+            ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id');
 
         if ($request->has('date_from') && $request->has('date_to')) {
-            $query->whereBetween('account_entries.created_at', [
-                $request->date_from . ' 00:00:00',
-                $request->date_to . ' 23:59:59'
+            $query->whereRaw("{$effectiveDateExpr} BETWEEN ? AND ?", [
+                $request->date_from,
+                $request->date_to,
             ]);
         } elseif ($request->has('date')) {
-            $query->whereDate('account_entries.created_at', $request->date);
+            $query->whereRaw("{$effectiveDateExpr} = ?", [$request->date]);
         }
 
-        if ($request->has('account_id')) {
+        if ($request->filled('account_id')) {
             $query->where('account_entries.tree_account_id', $request->account_id);
         }
 
+        /** فقط حركات مرتبطة برأس قيد يومي (شاشة القيود اليومية أو أي ترحيل ينشئ DailyEntry) */
+        if ($request->boolean('daily_entry_only')) {
+            $query->whereNotNull('account_entries.daily_entry_id');
+        }
+
+        // إجمالي المدين/الدائن لكل النتائج المصفّاة — وليس للصفحة الحالية فقط
+        $totalsQuery = clone $query;
+        $totals = [
+            'total_debit' => (float) $totalsQuery->sum('account_entries.debit'),
+            'total_credit' => (float) $totalsQuery->sum('account_entries.credit'),
+        ];
+
         $perPage = $request->get('per_page', 25);
-        $entries = $query->orderBy('account_entries.created_at', 'desc')
-            ->orderBy('account_entries.id', 'desc')
+        $entries = $query->orderByRaw("{$effectiveDateExpr} ASC")
+            ->orderBy('account_entries.daily_entry_id')
+            ->orderBy('account_entries.created_at', 'asc')
+            ->orderBy('account_entries.id', 'asc')
             ->paginate($perPage);
 
-        // Calculate totals
-        $totals = [
-            'total_debit' => $entries->sum('debit'),
-            'total_credit' => $entries->sum('credit'),
-        ];
+        $entries->getCollection()->transform(function (AccountEntry $entry) {
+            $entry->setAttribute(
+                'entry_date',
+                $entry->dailyEntry?->date ?? $entry->voucher?->date ?? $entry->created_at
+            );
+
+            // رقم القيد الظاهر للمستخدم: يطابق شاشة القيود اليومية؛ وإلا سند/دفعة دفعة دُفعت بدون قيد يومي
+            $journalRef = $entry->dailyEntry?->entry_number;
+            if (! $journalRef && $entry->voucher_id) {
+                $ref = $entry->voucher?->reference_number;
+                $journalRef = $ref !== null && $ref !== ''
+                    ? (string) $ref
+                    : ('سند #' . $entry->voucher_id);
+            }
+            if (! $journalRef && $entry->entry_batch_code) {
+                $journalRef = $entry->entry_batch_code;
+            }
+            $entry->setAttribute('journal_entry_number', $journalRef);
+            $entry->setAttribute(
+                'journal_header_description',
+                $entry->dailyEntry?->description
+            );
+
+            return $entry;
+        });
 
         return response()->json([
             'data' => $entries,
@@ -119,7 +163,7 @@ class AccountingReportController extends Controller
         $request->validate([
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date|after_or_equal:date_from',
-            'account_type' => 'nullable|string|in:asset,liability,equity,revenue,expense',
+            'account_type' => 'nullable|string|in:asset,liability,equity,revenue,expense,settlement',
             'level' => 'nullable|integer',
             'search' => 'nullable|string',
             'leaf_only' => 'nullable|boolean',
@@ -155,8 +199,8 @@ class AccountingReportController extends Controller
             });
         }
 
-        // Standard order: asset, liability, equity, revenue, expense (GAAP/IFRS)
-        $typeOrder = ['asset' => 1, 'liability' => 2, 'equity' => 3, 'revenue' => 4, 'expense' => 5];
+        // Standard order: asset, liability, equity, revenue, expense, settlement
+        $typeOrder = ['asset' => 1, 'liability' => 2, 'equity' => 3, 'revenue' => 4, 'expense' => 5, 'settlement' => 6];
         $accounts = $accountsQuery->get()->sortBy(function ($a) use ($typeOrder) {
             return ($typeOrder[$a->type] ?? 99) * 100000 + (int) $a->code;
         })->values();
@@ -374,8 +418,11 @@ class AccountingReportController extends Controller
     public function accountingTree(Request $request)
     {
         $accounts = TreeAccount::with([
-                // Load nested children up to reasonable depth for the UI tree
-                'children.children.children.children',
+                'children.children.children.children.safes',
+                'children.children.children.safes',
+                'children.children.safes',
+                'children.safes',
+                'safes',
                 'parent',
                 'mainAccount',
             ])
@@ -390,6 +437,7 @@ class AccountingReportController extends Controller
     }
     /**
      * Account Statement Report
+     * يشمل الحساب المختار وجميع الحسابات التابعة له في الشجرة (كشف مجمّع للحسابات الرئيسية).
      */
     public function accountStatement(Request $request)
     {
@@ -399,26 +447,33 @@ class AccountingReportController extends Controller
             'date_to' => 'nullable|date',
         ]);
 
-        $accountId = $request->input('account_id');
+        $accountId = (int) $request->input('account_id');
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
 
         $account = TreeAccount::find($accountId);
+        $scopeAccountIds = $this->descendantTreeAccountIdsIncludingSelf($accountId);
+        $consolidated = count($scopeAccountIds) > 1;
 
         // 1. Calculate Opening Balance
         $openingBalance = 0;
-        
+
         // Define balance type multiplier based on account type
         // Asset/Expense: Debit is positive (+), Credit is negative (-)
         // Liability/Income/Equity: Credit is positive (+), Debit is negative (-)
         $isDebitNature = in_array($account->type, ['asset', 'expense']);
 
+        $effectiveDateExpr = 'DATE(COALESCE(de.date, v.date, account_entries.created_at))';
+
         if ($dateFrom) {
-            $openingQuery = AccountEntry::where('tree_account_id', $accountId)
-                ->where('created_at', '<', $dateFrom . ' 00:00:00');
-            
-            $totalDebit = $openingQuery->sum('debit');
-            $totalCredit = $openingQuery->sum('credit');
+            $openingQuery = AccountEntry::query()
+                ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+                ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
+                ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
+                ->whereRaw("{$effectiveDateExpr} < ?", [$dateFrom]);
+
+            $totalDebit = (clone $openingQuery)->sum(DB::raw('account_entries.debit'));
+            $totalCredit = (clone $openingQuery)->sum(DB::raw('account_entries.credit'));
 
             if ($isDebitNature) {
                 $openingBalance = $totalDebit - $totalCredit;
@@ -427,35 +482,49 @@ class AccountingReportController extends Controller
             }
         }
 
-        // 2. Fetch Entries
-        $query = AccountEntry::with(['voucher', 'dailyEntry'])
-            ->where('tree_account_id', $accountId);
+        // 2. Fetch Entries (filter & sort by accounting date, not only system created_at)
+        $query = AccountEntry::with(['voucher', 'dailyEntry', 'account'])
+            ->select('account_entries.*')
+            ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
+            ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+            ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id');
 
         if ($dateFrom) {
-            $query->where('created_at', '>=', $dateFrom . ' 00:00:00');
+            $query->whereRaw("{$effectiveDateExpr} >= ?", [$dateFrom]);
         }
         if ($dateTo) {
-            $query->where('created_at', '<=', $dateTo . ' 23:59:59');
+            $query->whereRaw("{$effectiveDateExpr} <= ?", [$dateTo]);
         }
 
-        $entries = $query->orderBy('created_at', 'asc')->get();
+        $entries = $query->orderByRaw("{$effectiveDateExpr} ASC")
+            ->orderBy('account_entries.created_at', 'asc')
+            ->orderBy('account_entries.id', 'asc')
+            ->get();
 
         // 3. Calculate Running Balance
         $runningBalance = $openingBalance;
         $processedEntries = $entries->map(function ($entry) use (&$runningBalance, $isDebitNature) {
+            $entry->setAttribute(
+                'entry_date',
+                $entry->dailyEntry?->date ?? $entry->voucher?->date ?? $entry->created_at
+            );
+
             if ($isDebitNature) {
                 $change = $entry->debit - $entry->credit;
             } else {
                 $change = $entry->credit - $entry->debit;
             }
             $runningBalance += $change;
-            
+
             $entry->running_balance = $runningBalance;
+
             return $entry;
         });
 
         return response()->json([
             'account' => $account,
+            'consolidated' => $consolidated,
+            'accounts_in_scope' => count($scopeAccountIds),
             'opening_balance' => $openingBalance,
             'closing_balance' => $runningBalance,
             'entries' => $processedEntries,
@@ -465,12 +534,43 @@ class AccountingReportController extends Controller
     }
 
     /**
+     * معرفات الحساب المحدد وجميع الحسابات التابعة له (BFS على شجرة parent_id).
+     *
+     * @return int[]
+     */
+    private function descendantTreeAccountIdsIncludingSelf(int $rootId): array
+    {
+        $byParent = [];
+        foreach (TreeAccount::query()->select('id', 'parent_id')->get() as $row) {
+            $p = $row->parent_id;
+            if (! isset($byParent[$p])) {
+                $byParent[$p] = [];
+            }
+            $byParent[$p][] = (int) $row->id;
+        }
+
+        $queue = [$rootId];
+        $out = [];
+        for ($i = 0; $i < count($queue); $i++) {
+            $id = $queue[$i];
+            $out[] = $id;
+            foreach ($byParent[$id] ?? [] as $cid) {
+                $queue[] = $cid;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Income Statement (قائمة الدخل)
      * Multi-step format per GAAP/IFRS best practices
-     * Computes: Revenue → COGS → Gross Profit → Operating Expenses → Operating Income
+     * Computes: Revenue (مبيعات + إيراد شحن محصل من العميل إن وُجد) → COGS → Gross Profit → Operating Expenses
+     *         (يشمل مصروف شحن صادر/توزيع منفصل عن مصروفات المشتريات) → Operating Income
      *         → Other Income/Expenses → EBIT → Interest → EBT → Tax → Net Income
      * Inputs: month=YYYY-MM or date_from/date_to
-     * Uses only leaf accounts to prevent double-counting in hierarchical chart of accounts
+     * Uses leaf accounts plus any parent that has direct postings when no child account has
+     * entries in the same period (so revenue posted on a parent "مبيعات" header is included).
      */
     public function incomeStatement(Request $request)
     {
@@ -493,32 +593,55 @@ class AccountingReportController extends Controller
                      ->where('created_at', '<=', $end . ' 23:59:59');
         };
 
-        // Leaf accounts only: prevents double-counting when parent balance = sum of children
-        $leafAccountIds = TreeAccount::whereDoesntHave('children')->pluck('id')->toArray();
-        $accounts = TreeAccount::select('id', 'name', 'name_en', 'code', 'type', 'detail_type')
-            ->whereIn('id', $leafAccountIds)
-            ->get()
-            ->keyBy('id');
-
-        $entrySums = AccountEntry::select('tree_account_id',
+        $entryRows = AccountEntry::select('tree_account_id',
                 DB::raw('SUM(debit) as total_debit'),
                 DB::raw('SUM(credit) as total_credit')
             )
-            ->whereIn('tree_account_id', $leafAccountIds)
             ->when(true, $withinPeriod)
             ->groupBy('tree_account_id')
+            ->get();
+
+        $idsWithEntries = $entryRows->pluck('tree_account_id');
+
+        $accountsWithChildren = TreeAccount::with('children:id,parent_id')
+            ->whereIn('id', $idsWithEntries)
             ->get()
-            ->mapWithKeys(function ($row) {
-                return [$row->tree_account_id => [
-                    'debit' => (float)$row->total_debit,
-                    'credit' => (float)$row->total_credit
-                ]];
-            });
+            ->keyBy('id');
+
+        $eligibleIds = [];
+        foreach ($idsWithEntries as $aid) {
+            $acc = $accountsWithChildren->get($aid);
+            if (!$acc) {
+                continue;
+            }
+            if ($acc->children->isEmpty()) {
+                $eligibleIds[] = (int) $aid;
+                continue;
+            }
+            if ($acc->children->pluck('id')->intersect($idsWithEntries)->isEmpty()) {
+                $eligibleIds[] = (int) $aid;
+            }
+        }
+
+        $accounts = TreeAccount::select('id', 'name', 'name_en', 'code', 'type', 'detail_type')
+            ->whereIn('id', $eligibleIds)
+            ->get()
+            ->keyBy('id');
+
+        $eligibleSet = array_fill_keys($eligibleIds, true);
+        $entrySums = $entryRows->filter(function ($row) use ($eligibleSet) {
+            return isset($eligibleSet[(int) $row->tree_account_id]);
+        })->mapWithKeys(function ($row) {
+            return [$row->tree_account_id => [
+                'debit' => (float) $row->total_debit,
+                'credit' => (float) $row->total_credit,
+            ]];
+        });
 
         $netByNature = function ($acc, $sum) {
             if (!$sum) return 0.0;
             $type = $acc->type ?? null;
-            if (in_array($type, ['revenue', 'income', 'liability', 'equity'])) {
+            if (in_array($type, ['revenue', 'income', 'liability', 'equity', 'settlement'])) {
                 return (float)$sum['credit'] - (float)$sum['debit'];
             }
             return (float)$sum['debit'] - (float)$sum['credit'];
@@ -534,12 +657,15 @@ class AccountingReportController extends Controller
 
         // Buckets - GAAP/IFRS multi-step structure
         $sales = 0.0;
+        $shippingRevenue = 0.0;
         $salesReturns = 0.0;
         $cogs = 0.0;
         $operatingExpenses = 0.0;
         $salesExpenses = 0.0;
+        $freightOut = 0.0;
         $adminExpenses = 0.0;
         $purchaseExpenses = 0.0;
+        $freightInExpense = 0.0;
         $depreciation = 0.0;
         $otherRevenues = 0.0;
         $capitalGains = 0.0;
@@ -558,6 +684,10 @@ class AccountingReportController extends Controller
             if (in_array($acc->type, ['revenue', 'income'])) {
                 if ($detail === 'sales' || $hasKeyword($name, ['مبيعات', 'sales'])) {
                     $sales += $net;
+                } elseif ($detail === 'shipping_revenue'
+                    || $hasKeyword($name, ['إيراد شحن', 'ايراد شحن', 'شحن محصل', 'شحن للعميل', 'shipping revenue', 'delivery revenue', 'handling revenue'])) {
+                    /** إيراد شحن يُحصّل من العميل — منفصل عن مبيعات البضاعة (IFRS/GAAP: freight billed to customers). */
+                    $shippingRevenue += $net;
                 } elseif ($detail === 'sales_returns' || $hasKeyword($name, ['مرتجع', 'مردود', 'returns'])) {
                     $salesReturns += abs($net);
                 } elseif ($detail === 'capital_gain' || $hasKeyword($name, ['رأس مالية', 'capital gain'])) {
@@ -570,11 +700,17 @@ class AccountingReportController extends Controller
             } elseif ($acc->type === 'expense') {
                 if ($detail === 'cogs' || $hasKeyword($name, ['تكلفة المبيعات', 'cost of sales', 'COGS', 'تكلفة البضاعة'])) {
                     $cogs += $net;
+                } elseif ($detail === 'freight_out'
+                    || $hasKeyword($name, ['شحن صادر', 'مصروف شحن بيع', 'توصيل مبيعات', 'freight out', 'outbound freight', 'delivery expense'])) {
+                    /** تكلفة الشحن للناقل/العميل النهائي — مصروف بيع/توزيع، لا تُخلط مع شحن المشتريات. */
+                    $freightOut += $net;
                 } elseif ($detail === 'sales_expense' || $hasKeyword($name, ['مصاريف مبيعات', 'مصروف مبيعات'])) {
                     $salesExpenses += $net;
                 } elseif ($detail === 'admin' || $hasKeyword($name, ['عمومية', 'إدارية', 'إداري', 'general & admin', 'g&a'])) {
                     $adminExpenses += $net;
-                } elseif ($detail === 'purchase_expense' || $hasKeyword($name, ['مصروف مشتريات', 'شحن مشتريات', 'توريد'])) {
+                } elseif ($detail === 'freight_in' || $hasKeyword($name, ['شحن مشتريات', 'freight in', 'purchase freight', 'شحن توريد'])) {
+                    $freightInExpense += $net;
+                } elseif ($detail === 'purchase_expense' || $hasKeyword($name, ['مصروف مشتريات', 'توريد'])) {
                     $purchaseExpenses += $net;
                 } elseif ($detail === 'depreciation' || $hasKeyword($name, ['اهلاك', 'استهلاك', 'depreciation', 'amortization'])) {
                     $depreciation += $net;
@@ -586,6 +722,12 @@ class AccountingReportController extends Controller
                     $operatingExpenses += $net;
                 }
             }
+        }
+
+        $cogsFromLedger = $cogs;
+        $cogsFromMovements = $this->netCogsFromCategoriesBalanceMovements($start, $end);
+        if ($cogsFromLedger < 0.01) {
+            $cogs = max(0, $cogsFromMovements);
         }
 
         // Inventory (for reference / COGS reconciliation)
@@ -612,25 +754,30 @@ class AccountingReportController extends Controller
 
         // Multi-step income statement (GAAP/IFRS)
         $netSales = $sales - $salesReturns;
-        $grossProfit = $netSales - $cogs;
-        $operatingExpensesTotal = $operatingExpenses + $salesExpenses + $adminExpenses + $depreciation + $purchaseExpenses;
+        $totalRevenue = $netSales + $shippingRevenue;
+        /** مجمل الربح = إجمالي الإيرادات التشغيلية (بما فيها شحن محصل) − تكلفة البضاعة المباعة. */
+        $grossProfit = $totalRevenue - $cogs;
+        $operatingExpensesTotal = $operatingExpenses + $salesExpenses + $freightOut + $adminExpenses + $depreciation + $purchaseExpenses + $freightInExpense;
         $operatingIncome = $grossProfit - $operatingExpensesTotal;
         $otherIncomeTotal = $capitalGains + $otherRevenues + $interestIncome;
         $otherExpensesTotal = $interestExpense;
         $earningsBeforeTax = $operatingIncome + $otherIncomeTotal - $otherExpensesTotal;
         $netProfitAfterTax = $earningsBeforeTax - $taxExpense;
 
-        $grossMarginPercent = $netSales != 0 ? round(($grossProfit / $netSales) * 100, 2) : 0;
-        $operatingMarginPercent = $netSales != 0 ? round(($operatingIncome / $netSales) * 100, 2) : 0;
-        $netMarginPercent = $netSales != 0 ? round(($netProfitAfterTax / $netSales) * 100, 2) : 0;
+        $revenueForMargins = abs($totalRevenue) >= 0.0001 ? $totalRevenue : $netSales;
+        $grossMarginPercent = $revenueForMargins != 0 ? round(($grossProfit / $revenueForMargins) * 100, 2) : 0;
+        $operatingMarginPercent = $revenueForMargins != 0 ? round(($operatingIncome / $revenueForMargins) * 100, 2) : 0;
+        $netMarginPercent = $revenueForMargins != 0 ? round(($netProfitAfterTax / $revenueForMargins) * 100, 2) : 0;
 
         return response()->json([
             'date_from' => $start,
             'date_to' => $end,
             // Revenue section
             'sales' => round($sales, 2),
+            'shipping_revenue' => round($shippingRevenue, 2),
             'sales_returns' => round($salesReturns, 2),
             'net_sales' => round($netSales, 2),
+            'total_revenue' => round($totalRevenue, 2),
             // Cost of sales
             'opening_inventory' => round($openingInventory, 2),
             'closing_inventory' => round($closingInventory, 2),
@@ -640,8 +787,10 @@ class AccountingReportController extends Controller
             // Operating expenses
             'operating_expenses' => round($operatingExpenses, 2),
             'sales_expenses' => round($salesExpenses, 2),
+            'freight_out_expense' => round($freightOut, 2),
             'admin_expenses' => round($adminExpenses, 2),
             'purchase_expenses' => round($purchaseExpenses, 2),
+            'freight_in_expense' => round($freightInExpense, 2),
             'depreciation' => round($depreciation, 2),
             'operating_expenses_total' => round($operatingExpensesTotal, 2),
             'operating_income' => round($operatingIncome, 2),
@@ -669,172 +818,24 @@ class AccountingReportController extends Controller
      */
     public function productPerformance(Request $request)
     {
-        $request->validate([
+        $data = $request->validate([
             'date_from' => 'nullable|date',
-            'date_to' => 'nullable|date|after_or_equal:date_from',
+            'date_to' => 'nullable|date',
         ]);
+        if (! empty($data['date_from']) && ! empty($data['date_to']) && $data['date_to'] < $data['date_from']) {
+            return response()->json([
+                'message' => 'تاريخ النهاية يجب أن يكون بعد أو يساوي تاريخ البداية.',
+                'errors' => ['date_to' => ['بعد أو يساوي من تاريخ']],
+            ], 422);
+        }
 
         $start = $request->date_from ?: date('Y-m-01');
         $end = $request->date_to ?: date('Y-m-d');
 
-        // Helper closures
-        $withinPeriod = function ($q) use ($start, $end) {
-            return $q->where('created_at', '>=', $start . ' 00:00:00')
-                     ->where('created_at', '<=', $end . ' 23:59:59');
-        };
+        $result = $this->productPerformanceReportService->computeForPeriod($start, $end);
+        unset($result['by_category_id']);
 
-        // 1) Load movements from categories_balance within period
-        // Shipments by order and category (to allocate COGS)
-        $shipments = DB::table('categories_balance')
-            ->select('invoice_number', 'category_id',
-                DB::raw('SUM(quantity) as qty'),
-                DB::raw('SUM(total_price) as amount'))
-            ->where('type', 'شحن طلب')
-            ->when(true, $withinPeriod)
-            ->groupBy('invoice_number', 'category_id')
-            ->get();
-
-        // Returns per category
-        $returns = DB::table('categories_balance')
-            ->select('category_id',
-                DB::raw('SUM(quantity) as qty'),
-                DB::raw('SUM(total_price) as amount'))
-            ->where('type', 'رفض استلام طلب')
-            ->when(true, $withinPeriod)
-            ->groupBy('category_id')
-            ->get()
-            ->keyBy('category_id');
-
-        // Aggregate shipments per category (sales)
-        $salesByCategory = [];
-        foreach ($shipments as $row) {
-            $cid = (int)$row->category_id;
-            if (!isset($salesByCategory[$cid])) {
-                $salesByCategory[$cid] = ['qty' => 0.0, 'amount' => 0.0];
-            }
-            $salesByCategory[$cid]['qty'] += (float)$row->qty;
-            $salesByCategory[$cid]['amount'] += (float)$row->amount;
-        }
-
-        // 2) Fetch COGS entries per order within the period and allocate across categories by sales weight
-        $cogsByOrder = [];
-        $cogsEntries = AccountEntry::select('description', 'debit', 'credit', 'created_at')
-            ->when(true, $withinPeriod)
-            ->get();
-
-        foreach ($cogsEntries as $entry) {
-            if (!$entry->description) continue;
-            if (mb_strpos($entry->description, 'تكلفة البضاعة المباعة للطلب رقم') !== false) {
-                if (preg_match('/الطلب رقم\s+(\d+)/u', $entry->description, $m)) {
-                    $orderId = $m[1];
-                    $amount = (float)$entry->debit - (float)$entry->credit;
-                    $cogsByOrder[$orderId] = ($cogsByOrder[$orderId] ?? 0.0) + $amount;
-                }
-            }
-        }
-
-        // Total sales per order (for weights)
-        $salesByOrder = [];
-        foreach ($shipments as $row) {
-            $orderId = $row->invoice_number;
-            $salesByOrder[$orderId] = ($salesByOrder[$orderId] ?? 0.0) + (float)$row->amount;
-        }
-
-        // Allocate COGS to categories (from account_entries if available)
-        $allocatedCogs = []; // category_id => cogs
-        foreach ($shipments as $row) {
-            $orderId = $row->invoice_number;
-            $orderCogs = $cogsByOrder[$orderId] ?? 0.0;
-            $orderSales = $salesByOrder[$orderId] ?? 0.0;
-            if ($orderCogs <= 0 || $orderSales <= 0) continue;
-
-            $cid = (int)$row->category_id;
-            $weight = (float)$row->amount / $orderSales;
-            $allocatedCogs[$cid] = ($allocatedCogs[$cid] ?? 0.0) + ($orderCogs * $weight);
-        }
-
-        // Fallback: if no COGS from account_entries (e.g. cogs/inventory accounts not configured),
-        // calculate from categories table using avg cost (same formula as OrdersController)
-        if (empty($allocatedCogs)) {
-            $categories = DB::table('categories')->select('id', 'quantity', 'total_price', 'unit_price')->get()->keyBy('id');
-            foreach ($salesByCategory as $cid => $salesData) {
-                $salesQty = (float)($salesData['qty'] ?? 0);
-                $retQty = (float)(optional($returns->get($cid))->qty ?? 0);
-                $netQty = max(0, $salesQty - $retQty);
-                if ($netQty <= 0) continue;
-
-                $cat = $categories->get($cid);
-                $avgCost = 0.0;
-                if ($cat) {
-                    $q = (float)($cat->quantity ?? 0);
-                    $tp = (float)($cat->total_price ?? 0);
-                    $up = (float)($cat->unit_price ?? 0);
-                    if ($q > 0 && $tp != 0) {
-                        $avgCost = $tp / $q;
-                    } elseif ($up > 0) {
-                        $avgCost = $up;
-                    }
-                }
-                $allocatedCogs[$cid] = $netQty * $avgCost;
-            }
-        }
-
-        // 3) Build per-product rows
-        $categoryNames = DB::table('categories')->select('id', 'category_name')->get()->keyBy('id');
-
-        $productRows = [];
-        $categoryIds = array_unique(array_merge(array_keys($salesByCategory), array_keys($returns->toArray()), array_keys($allocatedCogs)));
-        foreach ($categoryIds as $cid) {
-            $sales = $salesByCategory[$cid]['amount'] ?? 0.0;
-            $salesQty = $salesByCategory[$cid]['qty'] ?? 0.0;
-            $ret = $returns->get($cid);
-            $retQty = $ret->qty ?? 0.0;
-            $retAmount = $ret->amount ?? 0.0;
-            $netSales = $sales - $retAmount;
-            $cogs = $allocatedCogs[$cid] ?? 0.0;
-            $gross = $netSales - $cogs;
-            $name = optional($categoryNames->get($cid))->category_name ?? ('#' . $cid);
-            $code = null; // category_code column may not exist in categories table
-
-            $productRows[] = [
-                'category_id' => $cid,
-                'category_code' => $code,
-                'category_name' => $name,
-                'sales_qty' => round($salesQty, 3),
-                'sales_amount' => round($sales, 2),
-                'returns_qty' => round($retQty, 3),
-                'returns_amount' => round($retAmount, 2),
-                'net_sales' => round($netSales, 2),
-                'cogs' => round($cogs, 2),
-                'gross_profit' => round($gross, 2),
-                'gross_margin_percent' => $netSales != 0 ? round(($gross / $netSales) * 100, 2) : 0,
-            ];
-        }
-
-        // Totals
-        $totals = [
-            'sales_qty' => round(array_sum(array_column($productRows, 'sales_qty')), 3),
-            'sales_amount' => round(array_sum(array_column($productRows, 'sales_amount')), 2),
-            'returns_qty' => round(array_sum(array_column($productRows, 'returns_qty')), 3),
-            'returns_amount' => round(array_sum(array_column($productRows, 'returns_amount')), 2),
-            'net_sales' => round(array_sum(array_column($productRows, 'net_sales')), 2),
-            'cogs' => round(array_sum(array_column($productRows, 'cogs')), 2),
-            'gross_profit' => round(array_sum(array_column($productRows, 'gross_profit')), 2),
-            'gross_margin_percent' => 0, // computed below
-        ];
-        $totals['gross_margin_percent'] = $totals['net_sales'] != 0
-            ? round(($totals['gross_profit'] / $totals['net_sales']) * 100, 2)
-            : 0;
-
-        // Sort by net sales desc for UI
-        usort($productRows, fn($a, $b) => $b['net_sales'] <=> $a['net_sales']);
-
-        return response()->json([
-            'date_from' => $start,
-            'date_to' => $end,
-            'totals' => $totals,
-            'data' => $productRows
-        ], 200);
+        return response()->json($result, 200);
     }
 
     /**
@@ -843,10 +844,22 @@ class AccountingReportController extends Controller
      */
     public function categoryProfitability(Request $request)
     {
-        $productResponse = $this->productPerformance($request);
-        $data = json_decode($productResponse->getContent(), true);
-        if (!isset($data['data'])) {
-            return $productResponse;
+        $data = $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+        ]);
+        if (! empty($data['date_from']) && ! empty($data['date_to']) && $data['date_to'] < $data['date_from']) {
+            return response()->json([
+                'message' => 'تاريخ النهاية يجب أن يكون بعد أو يساوي تاريخ البداية.',
+                'errors' => ['date_to' => ['بعد أو يساوي من تاريخ']],
+            ], 422);
+        }
+
+        $start = $request->date_from ?: date('Y-m-01');
+        $end = $request->date_to ?: date('Y-m-d');
+        $data = $this->productPerformanceReportService->computeForPeriod($start, $end);
+        if (! isset($data['data'])) {
+            return response()->json($data, 200);
         }
 
         $categoryIds = array_column($data['data'], 'category_id');
@@ -892,7 +905,8 @@ class AccountingReportController extends Controller
                 'returns_qty' => $row['returns_qty'],
                 'rejected_qty' => $row['returns_qty'],
                 'avg_selling_price' => $avgSellingPrice,
-                'avg_cost' => $avgCost,
+                'avg_cost' => $row['avg_unit_cost'] ?? $avgCost,
+                'ref_unit_cost' => $row['ref_unit_cost'] ?? null,
                 'net_profit' => $row['gross_profit'],
                 'total_profit' => $row['gross_profit'],
                 'profit_margin' => $row['gross_margin_percent'],
@@ -906,5 +920,61 @@ class AccountingReportController extends Controller
             'totals' => $data['totals'] ?? [],
             'data' => $rows
         ], 200);
+    }
+
+    /**
+     * Net COGS from categories_balance (same logic as product performance) when GL has no COGS lines.
+     */
+    private function netCogsFromCategoriesBalanceMovements(string $start, string $end): float
+    {
+        $wrAvgSubQuery = function () {
+            return DB::table('warehouse_ratings')
+                ->select('category_id', DB::raw('SUM(quantity * price) / NULLIF(SUM(quantity), 0) as wr_avg'))
+                ->where('quantity', '>', 0)
+                ->groupBy('category_id');
+        };
+
+        $costCase = 'CASE WHEN c.quantity > 0.0000001 AND IFNULL(c.total_price,0) != 0 THEN c.total_price / c.quantity WHEN IFNULL(c.unit_price,0) > 0.0000001 THEN c.unit_price WHEN IFNULL(wr.wr_avg,0) > 0.0000001 THEN wr.wr_avg ELSE 0 END';
+
+        $shipCogsRows = DB::table('categories_balance as cb')
+            ->join('categories as c', 'c.id', '=', 'cb.category_id')
+            ->leftJoinSub($wrAvgSubQuery(), 'wr', function ($join) {
+                $join->on('wr.category_id', '=', 'c.id');
+            })
+            ->where('cb.type', 'شحن طلب')
+            ->where('cb.created_at', '>=', $start . ' 00:00:00')
+            ->where('cb.created_at', '<=', $end . ' 23:59:59')
+            ->groupBy('cb.category_id')
+            ->select('cb.category_id', DB::raw("SUM(COALESCE(cb.cost_total, cb.quantity * ({$costCase}))) as cogs"))
+            ->get()
+            ->keyBy('category_id');
+
+        $retCogsRows = DB::table('categories_balance as cb')
+            ->join('categories as c', 'c.id', '=', 'cb.category_id')
+            ->leftJoinSub($wrAvgSubQuery(), 'wr', function ($join) {
+                $join->on('wr.category_id', '=', 'c.id');
+            })
+            ->where('cb.type', 'رفض استلام طلب')
+            ->where('cb.created_at', '>=', $start . ' 00:00:00')
+            ->where('cb.created_at', '<=', $end . ' 23:59:59')
+            ->groupBy('cb.category_id')
+            ->select('cb.category_id', DB::raw("SUM(COALESCE(cb.cost_total, cb.quantity * ({$costCase}))) as cogs"))
+            ->get()
+            ->keyBy('category_id');
+
+        $movementKeys = array_unique(array_merge(
+            array_keys($shipCogsRows->toArray()),
+            array_keys($retCogsRows->toArray())
+        ));
+
+        $total = 0.0;
+        foreach ($movementKeys as $cid) {
+            $cid = (int) $cid;
+            $ship = (float) (optional($shipCogsRows->get($cid))->cogs ?? 0);
+            $ret = (float) (optional($retCogsRows->get($cid))->cogs ?? 0);
+            $total += $ship - $ret;
+        }
+
+        return $total;
     }
 }

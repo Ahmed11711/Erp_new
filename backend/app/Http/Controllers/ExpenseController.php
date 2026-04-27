@@ -143,12 +143,17 @@ class ExpenseController extends Controller
     protected function createExpenseAccountingEntry($expenseType, $amount, $creditTreeId, $sourceName, $ref)
     {
         $treeExpense = TreeAccount::where('name', $expenseType)->where('level', 4)->first();
-        if (!$treeExpense || !$creditTreeId) {
-            Log::warning("Expense accounting: missing tree account for expense_type={$expenseType} or creditTreeId={$creditTreeId}");
+        if (!$treeExpense) {
+            Log::error("Expense accounting: tree account not found for expense_type={$expenseType}");
+            return;
+        }
+        if (!$creditTreeId) {
+            Log::error("Expense accounting: creditTreeId is null for ref={$ref}");
             return;
         }
 
         $batchCode = 'EXP-' . now()->format('YmdHis');
+        $accountingService = app(\App\Services\Accounting\AccountingService::class);
 
         // مدين: حساب المصروف
         AccountEntry::create([
@@ -159,7 +164,6 @@ class ExpenseController extends Controller
             'order_id' => null,
             'entry_batch_code' => $batchCode,
         ]);
-        $this->updateBalance($treeExpense->id, $amount, 'debit');
 
         // دائن: مصدر الدفع (خزينة/بنك/حساب خدمي)
         AccountEntry::create([
@@ -170,136 +174,182 @@ class ExpenseController extends Controller
             'order_id' => null,
             'entry_batch_code' => $batchCode,
         ]);
-        $this->updateBalance($creditTreeId, $amount, 'credit');
+
+        $accountingService->updateAccountHierarchyBalances($treeExpense->id);
+        $accountingService->updateAccountHierarchyBalances($creditTreeId);
     }
 
-    public function editExpense($id , Request $request)
+    public function editExpense($id, Request $request)
     {
-        $request->validate(
-            [
-                "expense_type"=>"in:مصروف ادارى,مصروف تسويق,مصروف تشغيل",
-                'bank_id' => 'nullable|exists:banks,id',
-                'kind_id' => 'required|numeric|exists:expense_kinds,id',
-                'expens_statement' => 'required|string',
-                'amount' => 'required|numeric',
-                'note' => 'required|string',
-                'address' => 'required|string'
-            ]);
-        $img_name ='';
-        if($request->hasFile('expense_image')){
+        $request->validate([
+            "expense_type" => "in:مصروف ادارى,مصروف تسويق,مصروف تشغيل",
+            'bank_id' => 'nullable|exists:banks,id',
+            'kind_id' => 'required|numeric|exists:expense_kinds,id',
+            'expens_statement' => 'required|string',
+            'amount' => 'required|numeric',
+            'note' => 'required|string',
+            'address' => 'required|string'
+        ]);
+
+        $img_name = '';
+        if ($request->hasFile('expense_image')) {
             $img = $request->file('expense_image');
             $img_name = time() . '.' . $img->extension();
             $img->move(public_path('images'), $img_name);
         }
 
-        $oldExpense = Expense::find($id);
-        $oldExpense->ref = $oldExpense->expense_number;
-        $oldExpense->status = 0;
-        $oldExpense->save();
-
-        $expense = Expense::create([
-            'expense_type' => request('expense_type'),
-            'bank_id' => request('bank_id'),
-            'user_id' => auth()->user()->id,
-            'kind_id' => request('kind_id'),
-            'expens_statement' => request('expens_statement'),
-            'amount' => request('amount'),
-            'note' => request('note'),
-            'address' => request('address'),
-            'ref' => $oldExpense->expense_number,
-            'status' => 0,
-            'expense_image' => $img_name,
-        ]);
-
-        // $expense->ref = $oldExpense->expense_number;
-        // $expense->status = 0;
-        // $expense->save();
-
-        $expenseKind = ExpenseKind::find($expense->kind_id);
-        $paid = (double)$request->amount - $oldExpense->amount;
-
-        if ($request->bank_id) {
-            $bank = Bank::find($request->bank_id);
-            if ($bank) {
-                $balance = (double) $bank->balance;
-                $bank->balance = $balance - $paid;
-                $bank->save();
-                DB::table('bank_details')->insert([
-                    'bank_id' => $request->bank_id,
-                    'details' => ' تعديل '.$expense->expense_type.' - '.$expenseKind->expense_kind.' الخاص برقم '.$oldExpense->expense_number,
-                    'ref' => $expense->expense_number,
-                    'type' => 'المصروفات',
-                    'amount' => $paid,
-                    'balance_before' => $balance,
-                    'balance_after' => $bank->balance,
-                    'date' => date('Y-m-d'),
-                    'created_at' => now(),
-                    'user_id'=> auth()->user()->id
-                ]);
+        DB::beginTransaction();
+        try {
+            $oldExpense = Expense::find($id);
+            if (!$oldExpense) {
+                throw new \Exception('المصروف غير موجود');
             }
-        }
 
-        return response()->json($expense, 201);
+            $affectedAccountIds = $this->reverseExpenseGlEntries($oldExpense->expense_number);
+
+            $oldExpense->ref = $oldExpense->expense_number;
+            $oldExpense->status = 0;
+            $oldExpense->save();
+
+            $expense = Expense::create([
+                'expense_type' => request('expense_type'),
+                'bank_id' => request('bank_id'),
+                'user_id' => auth()->user()->id,
+                'kind_id' => request('kind_id'),
+                'expens_statement' => request('expens_statement'),
+                'amount' => request('amount'),
+                'note' => request('note'),
+                'address' => request('address'),
+                'ref' => $oldExpense->expense_number,
+                'status' => 0,
+                'expense_image' => $img_name,
+            ]);
+
+            $expenseKind = ExpenseKind::find($expense->kind_id);
+            $paid = (double) $request->amount - $oldExpense->amount;
+
+            $creditTreeId = null;
+            $sourceName = '';
+
+            if ($request->bank_id) {
+                $bank = Bank::find($request->bank_id);
+                if ($bank) {
+                    $balance = (double) $bank->balance;
+                    $bank->balance = $balance - $paid;
+                    $bank->save();
+                    DB::table('bank_details')->insert([
+                        'bank_id' => $request->bank_id,
+                        'details' => ' تعديل ' . $expense->expense_type . ' - ' . $expenseKind->expense_kind . ' الخاص برقم ' . $oldExpense->expense_number,
+                        'ref' => $expense->expense_number,
+                        'type' => 'المصروفات',
+                        'amount' => $paid,
+                        'balance_before' => $balance,
+                        'balance_after' => $bank->balance,
+                        'date' => date('Y-m-d'),
+                        'created_at' => now(),
+                        'user_id' => auth()->user()->id
+                    ]);
+                    if ($bank->asset_id) {
+                        $creditTreeId = $bank->asset_id;
+                        $sourceName = $bank->name;
+                    }
+                }
+            }
+
+            $this->createExpenseAccountingEntry(
+                $expense->expense_type,
+                (double) $request->amount,
+                $creditTreeId,
+                $sourceName,
+                $expense->expense_number
+            );
+
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            foreach ($affectedAccountIds as $accountId) {
+                $accountingService->updateAccountHierarchyBalances($accountId);
+            }
+
+            DB::commit();
+            return response()->json($expense, 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Expense edit failed: ' . $e->getMessage());
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
-    public function deleteExpense($id , Request $request)
+    public function deleteExpense($id, Request $request)
     {
-
-        $oldExpense = Expense::find($id);
-        $oldExpense->ref = $oldExpense->expense_number;
-        $oldExpense->status = 1;
-        $oldExpense->save();
-
-        $expense = Expense::create([
-            'expense_type' => $oldExpense->expense_type,
-            'payment_type' => $oldExpense->payment_type ?? 'bank',
-            'bank_id' => $oldExpense->bank_id,
-            'safe_id' => $oldExpense->safe_id,
-            'service_account_id' => $oldExpense->service_account_id,
-            'user_id' => auth()->user()->id,
-            'kind_id' => $oldExpense->kind_id,
-            'expens_statement' => $oldExpense->expens_statement,
-            'amount' => -$oldExpense->amount,
-            'note' => $oldExpense->note,
-            'address' => $oldExpense->address,
-            'ref' => $oldExpense->expense_number,
-            'status' => 1,
-            'expense_image'=>''
-        ]);
-
-        // $expense->ref = $oldExpense->expense_number;
-        // $expense->status = 0;
-        // $expense->save();
-
-        $expenseKind = ExpenseKind::find($oldExpense->kind_id);
-        $paid = (double) -$oldExpense->amount;
-
-        if ($oldExpense->bank_id) {
-            $bank = Bank::find($oldExpense->bank_id);
-            if ($bank) {
-                $balance = (double) $bank->balance;
-                $bank->balance = $balance - $paid;
-                $bank->save();
-                DB::table('bank_details')->insert([
-                    'bank_id' => $oldExpense->bank_id,
-                    'details' => ' حذف '.$oldExpense->expense_type.' - '.$expenseKind->expense_kind.' الخاص برقم '.$oldExpense->expense_number,
-                    'ref' => $oldExpense->expense_number,
-                    'type' => 'المصروفات',
-                    'amount' => $paid,
-                    'balance_before' => $balance,
-                    'balance_after' => $bank->balance,
-                    'date' => date('Y-m-d'),
-                    'created_at' => now(),
-                    'user_id'=> auth()->user()->id
-                ]);
+        DB::beginTransaction();
+        try {
+            $oldExpense = Expense::find($id);
+            if (!$oldExpense) {
+                throw new \Exception('المصروف غير موجود');
             }
-        } elseif ($oldExpense->safe_id) {
-            Safe::where('id', $oldExpense->safe_id)->increment('balance', abs($paid));
-        } elseif ($oldExpense->service_account_id) {
-            ServiceAccount::where('id', $oldExpense->service_account_id)->increment('balance', abs($paid));
-        }
 
-        return response()->json($expense, 201);
+            $affectedAccountIds = $this->reverseExpenseGlEntries($oldExpense->expense_number);
+
+            $oldExpense->ref = $oldExpense->expense_number;
+            $oldExpense->status = 1;
+            $oldExpense->save();
+
+            $expense = Expense::create([
+                'expense_type' => $oldExpense->expense_type,
+                'payment_type' => $oldExpense->payment_type ?? 'bank',
+                'bank_id' => $oldExpense->bank_id,
+                'safe_id' => $oldExpense->safe_id,
+                'service_account_id' => $oldExpense->service_account_id,
+                'user_id' => auth()->user()->id,
+                'kind_id' => $oldExpense->kind_id,
+                'expens_statement' => $oldExpense->expens_statement,
+                'amount' => -$oldExpense->amount,
+                'note' => $oldExpense->note,
+                'address' => $oldExpense->address,
+                'ref' => $oldExpense->expense_number,
+                'status' => 1,
+                'expense_image' => ''
+            ]);
+
+            $expenseKind = ExpenseKind::find($oldExpense->kind_id);
+            $paid = (double) -$oldExpense->amount;
+
+            if ($oldExpense->bank_id) {
+                $bank = Bank::find($oldExpense->bank_id);
+                if ($bank) {
+                    $balance = (double) $bank->balance;
+                    $bank->balance = $balance - $paid;
+                    $bank->save();
+                    DB::table('bank_details')->insert([
+                        'bank_id' => $oldExpense->bank_id,
+                        'details' => ' حذف ' . $oldExpense->expense_type . ' - ' . $expenseKind->expense_kind . ' الخاص برقم ' . $oldExpense->expense_number,
+                        'ref' => $oldExpense->expense_number,
+                        'type' => 'المصروفات',
+                        'amount' => $paid,
+                        'balance_before' => $balance,
+                        'balance_after' => $bank->balance,
+                        'date' => date('Y-m-d'),
+                        'created_at' => now(),
+                        'user_id' => auth()->user()->id
+                    ]);
+                }
+            } elseif ($oldExpense->safe_id) {
+                Safe::where('id', $oldExpense->safe_id)->increment('balance', abs($paid));
+            } elseif ($oldExpense->service_account_id) {
+                ServiceAccount::where('id', $oldExpense->service_account_id)->increment('balance', abs($paid));
+            }
+
+            $accountingService = app(\App\Services\Accounting\AccountingService::class);
+            foreach ($affectedAccountIds as $accountId) {
+                $accountingService->updateAccountHierarchyBalances($accountId);
+            }
+
+            DB::commit();
+            return response()->json($expense, 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Expense delete failed: ' . $e->getMessage());
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function search(Request $request){
@@ -332,32 +382,36 @@ class ExpenseController extends Controller
     }
 
 
-    protected function updateBalance($accountId, $amount, $type)
+    protected function reverseExpenseGlEntries(string $expenseNumber): array
     {
-        $account = TreeAccount::find($accountId);
-        if (!$account) return;
+        $oldEntries = AccountEntry::where('entry_batch_code', 'LIKE', 'EXP-%')
+            ->where(function ($q) use ($expenseNumber) {
+                $q->where('description', 'LIKE', '% - ' . $expenseNumber)
+                  ->orWhere('description', 'LIKE', '%- ' . $expenseNumber);
+            })
+            ->get();
 
-        $isDebitNormal = in_array($account->type, ['asset', 'expense']);
-
-        if ($type === 'debit') {
-            $account->balance += $isDebitNormal ? $amount : -$amount;
-        } else { // credit
-            $account->balance += $isDebitNormal ? -$amount : $amount;
+        if ($oldEntries->isEmpty()) {
+            Log::info("No GL entries found to reverse for expense {$expenseNumber}");
+            return [];
         }
 
-        $account->save();
+        $reversalBatchCode = 'EXP-REV-' . now()->format('YmdHis');
+        $affectedAccountIds = [];
 
-        $parent = $account->parent;
-        while ($parent) {
-            if ($type === 'debit') {
-                $parent->balance += $isDebitNormal ? $amount : -$amount;
-            } else {
-                $parent->balance += $isDebitNormal ? -$amount : $amount;
-            }
-            $parent->save();
-
-            $parent = $parent->parent;
+        foreach ($oldEntries as $entry) {
+            AccountEntry::create([
+                'tree_account_id' => $entry->tree_account_id,
+                'debit' => $entry->credit,
+                'credit' => $entry->debit,
+                'description' => 'عكس - ' . $entry->description,
+                'order_id' => null,
+                'entry_batch_code' => $reversalBatchCode,
+            ]);
+            $affectedAccountIds[] = $entry->tree_account_id;
         }
+
+        return array_unique($affectedAccountIds);
     }
 
 }

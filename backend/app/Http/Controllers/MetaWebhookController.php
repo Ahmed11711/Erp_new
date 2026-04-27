@@ -48,7 +48,7 @@ class MetaWebhookController extends Controller
     public function handle(Request $request)
     {
         $data = $request->all();
-        // Log::info('Meta Webhook HANDLE data: ' . json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        Log::debug('Meta Webhook payload', ['json' => json_encode($data, JSON_UNESCAPED_UNICODE)]);
 
         if (isset($data['entry'])) {
             foreach ($data['entry'] as $entry) {
@@ -62,34 +62,73 @@ class MetaWebhookController extends Controller
 
                         foreach ($value['messages'] as $msg) {
                             $from = $msg['from'];
+                            $metaMessageId = $msg['id']; // preserve — never overwrite
                             $msgType = $msg['type'] ?? 'unknown';
                             Log::info("Incoming WhatsApp message from {$from}", [
+                                'meta_id' => $metaMessageId,
                                 'type' => $msgType,
                                 'has_context' => isset($msg['context']),
                                 'keys' => array_keys($msg),
-                                'msg_sample' => $msgType === 'text' ? ($msg['text']['body'] ?? null) : ($msg[$msgType] ?? null),
                             ]);
 
                             $buttonId = null;
                             $buttonTitle = null;
                             $contextId = $msg['context']['id'] ?? null;
 
-                            // Handle button reply - Meta can send as "interactive" or "button" or "text"
-                            if ($msgType === 'interactive') {
+                            $msgTypeLower = strtolower((string) $msgType);
+
+                            if ($msgTypeLower === 'interactive') {
                                 $interactive = $msg['interactive'] ?? [];
-                                $buttonReply = $interactive['button_reply'] ?? $interactive;
-                                if ($buttonReply) {
-                                    $buttonId = $buttonReply['id'] ?? null;
-                                    $buttonTitle = $buttonReply['title'] ?? null;
+                                if (isset($interactive['button_reply']) && is_array($interactive['button_reply'])) {
+                                    $br = $interactive['button_reply'];
+                                    $buttonId = $br['id'] ?? null;
+                                    $buttonTitle = $br['title'] ?? null;
+                                } elseif (isset($interactive['list_reply']) && is_array($interactive['list_reply'])) {
+                                    $lr = $interactive['list_reply'];
+                                    $buttonId = $lr['id'] ?? null;
+                                    $buttonTitle = $lr['title'] ?? null;
                                 }
-                            } elseif ($msgType === 'button') {
+                                if ($buttonId === null && $buttonTitle === null) {
+                                    Log::warning('Meta Webhook: interactive message without button_reply/list_reply', [
+                                        'interactive_keys' => array_keys($interactive),
+                                        'interactive_type' => $interactive['type'] ?? null,
+                                    ]);
+                                }
+                            } elseif ($msgTypeLower === 'button') {
                                 $button = $msg['button'] ?? [];
                                 $buttonId = $button['payload'] ?? $button['id'] ?? null;
                                 $buttonTitle = $button['text'] ?? $button['title'] ?? null;
-                            } elseif ($msgType === 'text') {
+                            } elseif ($msgTypeLower === 'text') {
                                 $body = trim($msg['text']['body'] ?? '');
-                                if (in_array($body, ['تأكيد الطلب', 'تأجيل الطلب', 'إلغاء الطلب', 'تعديل الطلب', 'إعادة الشحن'])) {
-                                    $buttonTitle = $body;
+                                $body = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $body);
+                                try {
+                                    $whatsappService = new MetaWhatsAppService($phoneNumberId);
+                                    if ($whatsappService->isConfigured() && $body !== '') {
+                                        $flowService = new OrderConfirmationFlowService($whatsappService);
+                                        if (! $flowService->handleTextReply($from, $body, $contextId)) {
+                                            $knownTitles = [
+                                                'تأكيد الطلب', 'تأجيل الطلب', 'إلغاء الطلب', 'تعديل الطلب', 'إعادة الشحن',
+                                                'تأكيد التجهيز', 'تأكيد الشحن', 'تاجيل الطلب',
+                                                'نعم إلغاء الطلب', 'لا أريد تأكيد الطلب', 'بعد يومين', 'بعد أسبوع', 'تحديد موعد آخر',
+                                                'أريد إعادة الشحن', 'أريد تعديل الطلب', 'أريد إلغاء الطلب', 'رفض الاستلام',
+                                                'خلال 3 أيام', 'تحديد موعد',
+                                                'Recharge', 'Edit Order', 'Cancel order', 'Cancel Order',
+                                                'Confirm Preparation', 'Confirm Shipping', 'Delay Shipping',
+                                                'Yes, cancel order', 'No, keep order',
+                                                'In two days', 'In one week', 'Another date',
+                                                'Within 3 days', 'Schedule a date',
+                                                'Write review', 'Leave a quick review', 'Leave a review', 'Quick review',
+                                                'اكتب تقييمك', 'اكتب رأيك', 'تقييم سريع',
+                                            ];
+                                            if (in_array($body, $knownTitles, true)) {
+                                                $buttonTitle = $body;
+                                            }
+                                        }
+                                    }
+                                } catch (\Throwable $e) {
+                                    Log::error('OrderConfirmationFlow: Text reply exception', [
+                                        'message' => $e->getMessage(),
+                                    ]);
                                 }
                             }
 
@@ -102,9 +141,19 @@ class MetaWebhookController extends Controller
                                 ]);
                                 try {
                                     $whatsappService = new MetaWhatsAppService($phoneNumberId);
-                                    if ($whatsappService->isConfigured()) {
+                                    if (! $whatsappService->isConfigured()) {
+                                        Log::warning('OrderConfirmationFlow: Meta WhatsApp not configured — no auto reply', [
+                                            'phone_number_id' => $phoneNumberId,
+                                        ]);
+                                    } else {
                                         $flowService = new OrderConfirmationFlowService($whatsappService);
-                                        $flowService->handleButtonReply($from, $buttonId, $contextId, $phoneNumberId, $buttonTitle);
+                                        $handled = $flowService->handleButtonReply($from, $buttonId, $contextId, $phoneNumberId, $buttonTitle);
+                                        if (! $handled) {
+                                            Log::warning('OrderConfirmationFlow: Button not handled', [
+                                                'button_id' => $buttonId,
+                                                'button_title' => $buttonTitle,
+                                            ]);
+                                        }
                                     }
                                 } catch (\Throwable $e) {
                                     Log::error('OrderConfirmationFlow: Exception', [
@@ -114,7 +163,7 @@ class MetaWebhookController extends Controller
                                 }
                             }
 
-                            $this->processMessage($msg, $contacts);
+                            $this->processMessage($msg, $contacts, $phoneNumberId);
                         }
                     }
 
@@ -154,45 +203,87 @@ private function sendStaticReply($to)
 
 
 
-    private function processMessage($messageData, $contacts)
+    private function processMessage($messageData, $contacts, ?string $phoneNumberId = null)
     {
-        $from = $messageData['from']; // Phone number
-        $id = $messageData['id']; // Message ID
+        $from = $messageData['from'];
+        $metaId = $messageData['id'];   // ← never overwrite this
         $type = $messageData['type'];
         $timestamp = $messageData['timestamp'];
-        
+
+        $mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+        $mediaId = null;
+        $mediaMime = null;
+        $mediaFilename = null;
+        $mediaCaption = null;
+        $storedType = $type;
+
         $body = '';
         if ($type === 'text') {
-            $body = $messageData['text']['body'];
+            $body = $messageData['text']['body'] ?? '';
+        } elseif (in_array($type, $mediaTypes, true) && isset($messageData[$type]) && is_array($messageData[$type])) {
+            $payload = $messageData[$type];
+            $mediaId = $payload['id'] ?? null;
+            $mediaMime = $payload['mime_type'] ?? null;
+            $mediaFilename = $payload['filename'] ?? null;
+            $mediaCaption = $payload['caption'] ?? null;
+            $body = ($mediaCaption !== null && $mediaCaption !== '')
+                ? $mediaCaption
+                : '[' . ucfirst($type) . ']';
+            Log::info('Webhook media extracted', [
+                'meta_id' => $metaId,
+                'type' => $type,
+                'media_id' => $mediaId,
+                'mime' => $mediaMime,
+            ]);
         } elseif ($type === 'interactive') {
-            // Extract button reply or list reply for readable display
             $interactive = $messageData['interactive'] ?? [];
             $buttonReply = $interactive['button_reply'] ?? null;
             $listReply = $interactive['list_reply'] ?? null;
-            if ($buttonReply && isset($buttonReply['title'])) {
-                $body = '🔘 ' . $buttonReply['title'];
+            if ($buttonReply) {
+                $brTitle = $buttonReply['title'] ?? null;
+                $brId = $buttonReply['id'] ?? null;
+                $body = $brTitle ? '🔘 ' . $brTitle : ($brId ? '🔘 ' . $brId : '[رسالة تفاعلية]');
             } elseif ($listReply && isset($listReply['title'])) {
                 $body = '📋 ' . $listReply['title'];
             } else {
                 $body = '[رسالة تفاعلية]';
             }
+        } elseif ($type === 'button') {
+            $button = $messageData['button'] ?? [];
+            $text = $button['text'] ?? $button['title'] ?? null;
+            $payload = $button['payload'] ?? $button['id'] ?? null;
+            $body = $text ? '🔘 ' . $text : ($payload ? '🔘 ' . $payload : '[زر تفاعلي]');
+        } elseif ($type === 'reaction') {
+            $emoji = $messageData['reaction']['emoji'] ?? '';
+            $body = $emoji !== '' ? $emoji : '[Reaction]';
+            $storedType = 'text';
+        } elseif ($type === 'contacts') {
+            $body = '[Contact Card]';
+            $storedType = 'text';
+        } elseif ($type === 'location') {
+            $lat = $messageData['location']['latitude'] ?? '';
+            $lon = $messageData['location']['longitude'] ?? '';
+            $body = "📍 Location: {$lat}, {$lon}";
+            $storedType = 'text';
         } else {
             $body = '[' . ucfirst($type) . ' Message]';
         }
 
-        // Get customer name from contacts if available
+        // Ensure body is never empty (DB column is NOT NULL)
+        if ($body === '' || $body === null) {
+            $body = '[' . ucfirst($type) . ']';
+        }
+
         $customerName = 'Customer ' . substr($from, -4);
         foreach ($contacts as $contact) {
-            if ($contact['wa_id'] === $from) {
+            if (($contact['wa_id'] ?? '') === $from) {
                 $customerName = $contact['profile']['name'] ?? $customerName;
                 break;
             }
         }
 
-        // Find or create customer
-        // Ensure phone starts with +
-        $phone = '+' . $from;
-        
+        $phone = '+' . ltrim($from, '+');
+
         $customer = Customer::firstOrCreate(
             ['phone' => $phone],
             [
@@ -202,38 +293,59 @@ private function sendStaticReply($to)
         );
 
         $receiverId = $customer->assigned_agent_id ?? $this->assignToAgent();
-         if (!$customer->assigned_agent_id && $receiverId) {
+        if (! $customer->assigned_agent_id && $receiverId) {
             $customer->assigned_agent_id = $receiverId;
             $customer->save();
         }
 
-        // Check for duplicates
-        if (Message::where('twilio_message_sid', $id)->exists()) {
+        if (Message::where('twilio_message_sid', $metaId)->exists()) {
+            Log::debug('Webhook duplicate skipped', ['meta_id' => $metaId]);
             return;
         }
 
-        // Create Message
-        Message::create([
+        $message = Message::create([
             'customer_id' => $customer->id,
             'sender_id' => null,
             'receiver_id' => $receiverId,
             'content' => $body,
+            'type' => $storedType ?: 'text',
+            'media_id' => $mediaId,
+            'media_mime_type' => $mediaMime,
+            'media_filename' => $mediaFilename,
+            'media_caption' => $mediaCaption,
             'direction' => 'inbound',
             'status' => 'received',
-            'twilio_message_sid' => $id, // Storing Meta ID in existing column
+            'twilio_message_sid' => $metaId,
+            'phone_number_id' => $phoneNumberId,
             'created_at' => date('Y-m-d H:i:s', $timestamp),
         ]);
 
-        Log::info('Meta Message Stored', ['id' => $id]);
+        Log::info('Meta Message Stored', [
+            'db_id' => $message->id,
+            'meta_id' => $metaId,
+            'type' => $storedType,
+            'media_id' => $mediaId,
+            'customer_id' => $customer->id,
+        ]);
     }
 
     private function processStatus($statusData)
     {
-        $id = $statusData['id'];
-        $status = $statusData['status'];
-        // $recipient_id = $statusData['recipient_id'];
+        $id = $statusData['id'] ?? null;
+        $status = $statusData['status'] ?? '';
+        $errors = $statusData['errors'] ?? null;
+        $recipientId = $statusData['recipient_id'] ?? null;
 
-        $message = Message::where('twilio_message_sid', $id)->first();
+        if (in_array($status, ['failed', 'undelivered'], true)) {
+            Log::warning('Meta WhatsApp delivery not completed', [
+                'id' => $id,
+                'status' => $status,
+                'recipient_id' => $recipientId,
+                'errors' => $errors,
+            ]);
+        }
+
+        $message = $id ? Message::where('twilio_message_sid', $id)->first() : null;
 
         if ($message && $message->status !== $status) {
             $message->status = $status;

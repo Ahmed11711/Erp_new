@@ -28,7 +28,7 @@ import { environment } from 'src/env/env';
                    <td>{{capital.date}}</td>
                    <td>{{capital.amount | number}}</td>
                    <td>
-                       {{ capital.target_type === 'bank' ? 'بنك' : 'خزينة' }}
+                       {{ depositPlaceLabel(capital.target_type) }}
                        (#{{capital.target_id}})
                    </td>
                    <td>{{capital.equity_account?.name}}</td>
@@ -52,9 +52,15 @@ export class ListCapitalsComponent implements OnInit {
     loading = false;
     p = 1;
     total = 0;
-    private apiUrl = environment.Url + '/capitals';
+    private apiUrl = environment.Url + '/accounting/capitals';
 
     constructor(private http: HttpClient) { }
+
+    depositPlaceLabel(targetType: string): string {
+        if (targetType === 'bank') return 'بنك';
+        if (targetType === 'service_account') return 'حساب خدمي';
+        return 'خزينة';
+    }
 
     ngOnInit() {
         this.getData(1);

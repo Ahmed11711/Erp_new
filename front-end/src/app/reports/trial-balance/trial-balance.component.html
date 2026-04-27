@@ -1,63 +1,58 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">ميزانية المراجعة</p></div>
-    </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
+    <h1 class="report-title">ميزانية المراجعة</h1>
+    <div class="report-topbar-side"></div>
   </div>
 
-
-  <div class="container-fluid">
-
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
-        <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+  <div class="report-panel">
+    <form class="mb-0" [formGroup]="form" (ngSubmit)="submitform()">
+      <div class="filter-chips flex-wrap">
+        <div class="chip chip-date">
+          <i class="fa-regular fa-calendar"></i>
+          <span class="date-range">
+            <input type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+            <span class="date-sep">—</span>
+            <input type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          </span>
         </div>
-        <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
-        </div>
-        <div class="col-md-3 d-flex align-items-end">
-            <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
+        <div class="chip chip-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" placeholder="البحث..." id="example-search-input">
         </div>
       </div>
     </form>
+  </div>
 
-
-    <table class="table table-bordered w-75 m-auto text-center">
-      <thead class="bg-dark text-white">
-        <tr>
-          <th rowspan="2" class="align-middle text-center">اسم الحساب</th>
-          <th colspan="2">رصيد اول المدة</th>
-          <th colspan="2">الحركة</th>
-          <th colspan="2">رصيد اخر المدة</th>
-        </tr>
-        <tr>
-          <th>مدين</th>
-          <th>دائن</th>
-          <th>مدين</th>
-          <th>دائن</th>
-          <th>مدين</th>
-          <th>دائن</th>
-
-        </tr>
-
-      </thead>
-      <tbody>
-        <tr *ngFor="let elm of data">
-          <td>{{elm.name}}</td>
-          <td>{{elm.type}}</td>
-          <td>0</td>
-        </tr>
-      </tbody>
-    </table>
-
+  <div class="report-content-card">
+    <div class="report-table-wrap">
+      <table class="table report-data-table text-center">
+        <thead>
+          <tr>
+            <th rowspan="2" class="align-middle text-center">اسم الحساب</th>
+            <th colspan="2">رصيد اول المدة</th>
+            <th colspan="2">الحركة</th>
+            <th colspan="2">رصيد اخر المدة</th>
+          </tr>
+          <tr>
+            <th>مدين</th>
+            <th>دائن</th>
+            <th>مدين</th>
+            <th>دائن</th>
+            <th>مدين</th>
+            <th>دائن</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let elm of data">
+            <td>{{ elm.name }}</td>
+            <td>{{ elm.type }}</td>
+            <td>0</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>

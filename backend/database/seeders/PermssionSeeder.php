@@ -26,5 +26,9 @@ class PermssionSeeder extends Seeder
         Permission::create(['name' => 'read system']);
         Permission::create(['name' => 'read Hr']);
         Permission::create(['name' => 'read Accounting']);
+        Permission::firstOrCreate(
+            ['name' => 'assign to whatsapp number'],
+            ['guard_name' => 'web']
+        );
     }
 }

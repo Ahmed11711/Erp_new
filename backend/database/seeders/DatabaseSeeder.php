@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             TreeAccountSeeder::class,
+            AccountingInventoryShippingAccountsSeeder::class,
             // StockSeeder::class
         ]);
 

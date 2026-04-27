@@ -46,6 +46,19 @@ class TreeAccountResource extends JsonResource
             'children' => $this->children && $this->children->count() > 0
                 ? self::collection($this->children)
                 : [],
+            'safes' => $this->whenLoaded('safes', function () {
+                return $this->safes->map(function ($safe) {
+                    return [
+                        'id' => $safe->id,
+                        'name' => $safe->name,
+                        'balance' => (float) $safe->balance,
+                        'type' => $safe->type,
+                        'is_inside_branch' => $safe->is_inside_branch,
+                        'branch_name' => $safe->branch_name,
+                    ];
+                });
+            }),
+            'detail_type' => $this->detail_type,
             'created_at' => $this->created_at->format('Y-m-d H:i') ?? null,
             'updated_at' => $this->updated_at->format('Y-m-d H:i') ?? null,
         ];

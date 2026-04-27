@@ -7,7 +7,13 @@
       <h1 class="header text-center mx-auto my-4">تفاصيل حساب المورد ( {{ name ||'' }} )</h1>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+      <button
+        *ngIf="supplierForPay"
+        type="button"
+        class="btn btn-success"
+        (click)="openPayDialog()">
+        سداد حساب المورد
+      </button>
     </div>
   </div>
 </div>

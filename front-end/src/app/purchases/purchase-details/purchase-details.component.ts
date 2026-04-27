@@ -16,23 +16,17 @@ export class PurchaseDetailsComponent implements OnInit{
 
 
   constructor(private route:ActivatedRoute , private invoiceService:InvoiceService){
-    // this.id = this.route.snapshot.params['id'];
-    this.id = sessionStorage.getItem('invoiceId');
+    this.id =
+      this.route.snapshot.paramMap.get('id') ||
+      this.route.snapshot.queryParamMap.get('invoiceId');
   }
 
-  ngOnInit(){
-    this.invoiceService.getInvoiceById(this.id).subscribe(res=>{
-      this.tracking = res['tracking'];
-      if (this.tracking && this.tracking.length > 1) {
-        this.invoiceService.getInvoiceById(this.tracking[this.tracking.length - 1]['invoice_number']).subscribe(res=>{
-          this.invoice = res['invoice'];
-          this.data = res['categories'];
-        });
-      } else {
-        this.invoice = res['invoice'];
-        this.data = res['categories'];
-      }
-    })
+  ngOnInit(): void {
+    this.invoiceService.getInvoiceById(this.id).subscribe((res) => {
+      this.invoice = res['invoice'];
+      this.data = res['categories'] ?? [];
+      this.tracking = res['tracking'] ?? [];
+    });
   }
 
   getInvoice(id){
@@ -42,7 +36,4 @@ export class PurchaseDetailsComponent implements OnInit{
     });
   }
 
-  ngOnDestroy(): void {
-    sessionStorage.removeItem('invoiceId');
-  }
 }

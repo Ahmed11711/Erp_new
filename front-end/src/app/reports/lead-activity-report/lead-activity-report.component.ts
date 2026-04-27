@@ -8,7 +8,7 @@ import { debounceTime } from 'rxjs/operators';
 @Component({
   selector: 'app-lead-activity-report',
   templateUrl: './lead-activity-report.component.html',
-  styleUrls: ['./lead-activity-report.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './lead-activity-report.component.css']
 })
 export class LeadActivityReportComponent implements OnInit {
   leads: any[] = [];

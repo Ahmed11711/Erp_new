@@ -242,7 +242,6 @@
                   <th>Notes</th>
                   <th>Status</th>
                   <th>By</th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,14 +253,9 @@
                     <i class="fa-solid recommender-status-icon" [ngClass]="rec.is_done ? 'fa-circle-check recommender-done' : 'fa-circle-xmark recommender-pending'" (click)="toggleRecommenderDone(rec)" [title]="rec.is_done ? 'Done - Click to change' : 'Pending - Click to change'"></i>
                   </td>
                   <td>{{ rec.user?.name || '-' }}</td>
-                  <td>
-                    <button class="btn btn-sm btn-outline-danger" (click)="deleteRecommender(rec.id)" title="Delete">
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
-                  </td>
                 </tr>
                 <tr *ngIf="!data?.recommenders?.length">
-                  <td colspan="6" class="text-muted">No follow-up reminders</td>
+                  <td colspan="5" class="text-muted">No follow-up reminders</td>
                 </tr>
               </tbody>
             </table>

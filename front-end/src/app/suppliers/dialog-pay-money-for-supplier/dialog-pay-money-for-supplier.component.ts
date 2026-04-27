@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SuppliersService } from '../services/suppliers.service';
 import { PaymentSourcesService, PaymentSourceItem } from 'src/app/accounting/services/payment-sources.service';
@@ -8,15 +8,20 @@ import { PaymentSourcesService, PaymentSourceItem } from 'src/app/accounting/ser
   templateUrl: './dialog-pay-money-for-supplier.component.html',
   styleUrls: ['./dialog-pay-money-for-supplier.component.css']
 })
-export class DialogPayMoneyForSupplierComponent {
+export class DialogPayMoneyForSupplierComponent implements OnInit {
 
-  paymentType: 'safe' | 'bank' | 'service_account' = 'bank';
+  /** نفس نمط فاتورة المشتريات: بنك / خزينة / حساب خدمي */
+  paymentType: 'bank' | 'safe' | 'service_account' = 'bank';
+  bankId: number | null = null;
+  safeId: number | null = null;
+  serviceAccountId: number | null = null;
+
   safes: PaymentSourceItem[] = [];
   banks: PaymentSourceItem[] = [];
   serviceAccounts: PaymentSourceItem[] = [];
-  sourceId: number | null = null;
 
-  constructor(public dialogRef: MatDialogRef<DialogPayMoneyForSupplierComponent>,
+  constructor(
+    public dialogRef: MatDialogRef<DialogPayMoneyForSupplierComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     private supplierService: SuppliersService,
     private paymentSources: PaymentSourcesService
@@ -30,10 +35,10 @@ export class DialogPayMoneyForSupplierComponent {
     });
   }
 
-  get sourceList(): PaymentSourceItem[] {
-    if (this.paymentType === 'safe') return this.safes;
-    if (this.paymentType === 'service_account') return this.serviceAccounts;
-    return this.banks;
+  paymentTypeChange(): void {
+    this.bankId = null;
+    this.safeId = null;
+    this.serviceAccountId = null;
   }
 
   onCloseClick(): void {
@@ -41,14 +46,30 @@ export class DialogPayMoneyForSupplierComponent {
   }
 
   get canSubmit(): boolean {
-    return !!this.sourceId && this.sourceId > 0;
+    if (this.paymentType === 'bank') {
+      return !!this.bankId && this.bankId > 0;
+    }
+    if (this.paymentType === 'safe') {
+      return !!this.safeId && this.safeId > 0;
+    }
+    if (this.paymentType === 'service_account') {
+      return !!this.serviceAccountId && this.serviceAccountId > 0;
+    }
+    return false;
   }
 
   submit(form: any) {
-    const payload: any = { amount: form.value.amount, payment_type: this.paymentType };
-    if (this.paymentType === 'safe') payload.safe_id = this.sourceId;
-    else if (this.paymentType === 'service_account') payload.service_account_id = this.sourceId;
-    else payload.bank_id = this.sourceId;
+    const payload: any = {
+      amount: form.value.amount,
+      payment_type: this.paymentType,
+    };
+    if (this.paymentType === 'safe') {
+      payload.safe_id = this.safeId;
+    } else if (this.paymentType === 'service_account') {
+      payload.service_account_id = this.serviceAccountId;
+    } else {
+      payload.bank_id = this.bankId;
+    }
 
     this.supplierService.supplierPay(this.data.supplier.id, payload).subscribe((res: any) => {
       if (res.message === 'success') {

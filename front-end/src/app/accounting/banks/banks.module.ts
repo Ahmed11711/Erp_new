@@ -8,6 +8,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { BankTransferComponent } from './bank-transfer.component';
 import { BankSafeTransferComponent } from './bank-safe-transfer.component';
 import { BankDepositWithdrawComponent } from './bank-deposit-withdraw.component';
@@ -28,8 +29,8 @@ import { BankDepositWithdrawComponent } from './bank-deposit-withdraw.component'
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
-    MatSelectModule
+    MatSelectModule,
+    MatSnackBarModule
   ]
 })
-export class BanksModule { }
-
+export class BanksModule {}

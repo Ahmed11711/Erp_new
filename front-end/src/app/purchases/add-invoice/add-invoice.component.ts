@@ -1,13 +1,13 @@
 import { DatePipe } from '@angular/common';
-import { Component, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { th } from 'date-fns/locale';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 import { SuppliersService } from 'src/app/suppliers/services/suppliers.service';
 import { InvoiceService } from '../service/invoice.service';
+import { finalize } from 'rxjs/operators';
 
 
 @Component({
@@ -15,8 +15,11 @@ import { InvoiceService } from '../service/invoice.service';
   templateUrl: './add-invoice.component.html',
   styleUrls: ['./add-invoice.component.css']
 })
-export class AddInvoiceComponent {
+export class AddInvoiceComponent implements OnInit {
   invoiceId;
+  errorMessage = '';
+  /** يمنع النقر المتكرر أثناء إرسال الفاتورة */
+  isSubmitting = false;
   products:any[] = [];
   categories : any[] = [];
   suppliers : any[] = [];
@@ -37,12 +40,13 @@ export class AddInvoiceComponent {
     private invoice: InvoiceService,
     private supplier: SuppliersService,
     private cat: CategoryService,
-    private activeRoute: ActivatedRoute
+    private route: ActivatedRoute
   ) { }
 
   ngOnInit(): void {
-    // this.invoiceId = this.activeRoute.snapshot.queryParams['invoiceId'];
-    this.invoiceId = sessionStorage.getItem('editInvoiceId');
+    this.invoiceId =
+      this.route.snapshot.paramMap.get('id') ||
+      this.route.snapshot.queryParamMap.get('editId');
     this.supplier.suppliersname().subscribe((res:any)=>{
       this.suppliers = res;
     })
@@ -63,7 +67,6 @@ export class AddInvoiceComponent {
 
     if (this.invoiceId) {
       this.invoice.getInvoiceById(this.invoiceId,true).subscribe(res=>{
-        console.log(res);
         this.products = res['categories'];
         let status:any = document.getElementById('status');
         status.value = res['invoice'].invoice_type;
@@ -174,10 +177,22 @@ export class AddInvoiceComponent {
   originalPrice = 0;
   date : any;
   productSelected = false;
+  /** يُرسل مع فاتورة المشتريات لربط السطر بصف واحد في categories (مخزن مواد خام) */
+  categoryId: number | null = null;
   selectEvent(item) {
-    this.originalPrice = item.category_price;
     this.productname = item.category_name;
-    this.productprice = item.category_price;
+    this.categoryId = item.id != null ? Number(item.id) : null;
+    const qty = Number(item.quantity) || 0;
+    const tp = Number(item.total_price) || 0;
+    const wac = qty > 0 ? tp / qty : 0;
+    if (wac > 0) {
+      this.productprice = Math.round(wac * 10000) / 10000;
+    } else if (item.unit_price != null && Number(item.unit_price) > 0) {
+      this.productprice = Number(item.unit_price);
+    } else {
+      this.productprice = item.category_price;
+    }
+    this.originalPrice = this.productprice;
     this.productUnit = item.measurement.unit
     this.productSelected = true;
   }
@@ -207,8 +222,15 @@ export class AddInvoiceComponent {
       this.priceEdited = true;
       this.invoicePriceEdited = 1;
     }
-    this.products.push({product_quantity:this.productQuantity,price_edited:this.priceEdited,
-      product_price:this.productprice,product_name:this.productname,total:this.productprice*this.productQuantity,product_unit:this.productUnit});
+    this.products.push({
+      product_quantity: this.productQuantity,
+      price_edited: this.priceEdited,
+      product_price: this.productprice,
+      product_name: this.productname,
+      total: this.productprice * this.productQuantity,
+      product_unit: this.productUnit,
+      category_id: this.categoryId,
+    });
     this.calc();
     this.priceEdited = false;
   }
@@ -219,6 +241,9 @@ export class AddInvoiceComponent {
   totalInvice = 0;
 
   addInvoice(form:any){
+    if (this.isSubmitting) {
+      return;
+    }
     let paidamount = this.paidamount;
     if (this.status === 'مرتجع') {
       paidamount = paidamount * -1;
@@ -250,10 +275,18 @@ export class AddInvoiceComponent {
       invoice.append('invoice_image', this.selectedImg, this.selectedImg.name);
     }
     invoice.append('products', JSON.stringify(this.products));
-    this.invoice.addInvoice(invoice).subscribe((res:any)=>{
-      console.log(res);
-      if(res.success==true){
-        this.router.navigate(['/dashboard/purchases/list_invoice']);
+    this.errorMessage = '';
+    this.isSubmitting = true;
+    this.invoice.addInvoice(invoice).pipe(
+      finalize(() => { this.isSubmitting = false; })
+    ).subscribe({
+      next: (res:any)=>{
+        if(res.success==true){
+          this.router.navigate(['/dashboard/purchases/list_invoice']);
+        }
+      },
+      error: (err) => {
+        this.errorMessage = err.error?.message || 'حدث خطأ أثناء حفظ الفاتورة';
       }
     })
   }
@@ -261,9 +294,7 @@ export class AddInvoiceComponent {
   resetInp(){
     this.productprice = 0;
     this.productQuantity = 0;
+    this.categoryId = null;
   }
 
-  ngOnDestroy(): void {
-    sessionStorage.removeItem('editInvoiceId');
-  }
 }

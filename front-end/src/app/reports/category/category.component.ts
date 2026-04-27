@@ -4,7 +4,7 @@ import { AccountingReportService } from 'src/app/accounting/services/accounting-
 @Component({
   selector: 'app-category',
   templateUrl: './category.component.html',
-  styleUrls: ['./category.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './category.component.css']
 })
 export class CategoryComponent implements OnInit {
   data: any[] = [];
@@ -14,8 +14,23 @@ export class CategoryComponent implements OnInit {
   searchTerm = '';
   loading = false;
   loadError = false;
+  showFilters = true;
+
+  expanded = new Set<number>();
 
   constructor(private reportService: AccountingReportService) {}
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
 
   ngOnInit(): void {
     const today = new Date();
@@ -31,29 +46,25 @@ export class CategoryComponent implements OnInit {
     this.loading = true;
     this.loadError = false;
     const params = { date_from: this.dateFrom || undefined, date_to: this.dateTo || undefined };
-    this.reportService.getProductPerformance(params).subscribe({
+    this.reportService.getCategoryProfitability(params).subscribe({
       next: (res) => {
-        const rows = (res?.data || []).map((r: any) => {
-          const salesQty = (r.sales_qty || 0);
-          const netQty = Math.max(0, salesQty - (r.returns_qty || 0));
-          return {
-            category_name: r.category_name,
-            category_type: '-',
-            measurement_unit: '-',
-            sales_qty: r.sales_qty,
-            sales_amount: r.sales_amount,
-            orders_count: 0,
-            returns_qty: r.returns_qty,
-            rejected_qty: r.returns_qty,
-            avg_selling_price: salesQty > 0 ? Math.round((r.sales_amount || 0) / salesQty * 100) / 100 : 0,
-            avg_cost: netQty > 0 ? Math.round((r.cogs || 0) / netQty * 100) / 100 : 0,
-            net_profit: r.gross_profit,
-            total_profit: r.gross_profit,
-            profit_margin: r.gross_margin_percent,
-            description: ''
-          };
-        });
-        this.data = rows;
+        this.data = (res?.data || []).map((r: any) => ({
+          category_name: r.category_name,
+          category_type: r.category_type ?? '-',
+          measurement_unit: r.measurement_unit ?? '-',
+          sales_qty: r.sales_qty,
+          sales_amount: r.sales_amount,
+          orders_count: r.orders_count ?? 0,
+          returns_qty: r.returns_qty,
+          rejected_qty: r.rejected_qty ?? r.returns_qty,
+          avg_selling_price: r.avg_selling_price,
+          avg_cost: r.avg_cost,
+          ref_unit_cost: r.ref_unit_cost != null && r.ref_unit_cost !== '' ? r.ref_unit_cost : '—',
+          net_profit: r.net_profit,
+          total_profit: r.total_profit,
+          profit_margin: r.profit_margin,
+          description: r.description ?? ''
+        }));
         this.applyFilter();
         this.loading = false;
       },
@@ -70,6 +81,10 @@ export class CategoryComponent implements OnInit {
     this.applyFilter();
   }
 
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
+  }
+
   applyFilter(): void {
     const term = (this.searchTerm || '').trim().toLowerCase();
     if (!term) {
@@ -80,5 +95,69 @@ export class CategoryComponent implements OnInit {
         (r.category_type || '').toLowerCase().includes(term)
       );
     }
+  }
+
+  private num(v: unknown): number {
+    if (v == null || v === '' || v === '—') {
+      return 0;
+    }
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  get sumSalesQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.sales_qty), 0);
+  }
+
+  get sumSalesAmount(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.sales_amount), 0);
+  }
+
+  get sumOrdersCount(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.orders_count), 0);
+  }
+
+  get sumReturnsQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.returns_qty), 0);
+  }
+
+  get sumRejectedQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.rejected_qty), 0);
+  }
+
+  get sumNetProfit(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.net_profit), 0);
+  }
+
+  get sumTotalProfit(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.total_profit), 0);
+  }
+
+  /** متوسط سعر البيع = إجمالي القيمة ÷ إجمالي القطع */
+  get aggregateAvgSellingPrice(): string {
+    if (!this.sumSalesQty) {
+      return '—';
+    }
+    return (this.sumSalesAmount / this.sumSalesQty).toFixed(2);
+  }
+
+  /** متوسط تكلفة مرجح بالكمية المباعة */
+  get aggregateAvgCost(): string {
+    if (!this.sumSalesQty) {
+      return '—';
+    }
+    const weighted = this.filteredData.reduce(
+      (s, r) => s + this.num(r.avg_cost) * this.num(r.sales_qty),
+      0
+    );
+    return (weighted / this.sumSalesQty).toFixed(2);
+  }
+
+  /** هامش ربح إجمالي % */
+  get aggregateProfitMargin(): string {
+    if (!this.sumSalesAmount) {
+      return '—';
+    }
+    return ((this.sumTotalProfit / this.sumSalesAmount) * 100).toFixed(2);
   }
 }

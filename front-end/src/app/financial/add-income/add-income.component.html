@@ -7,47 +7,99 @@
       <div><p class="title header w-50 m-auto">اضافة ايراد اخر</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container-fluid">
-    <div class="w-50 m-auto mt-5">
+    <div class="w-75 m-auto mt-4">
       <div *ngIf="errorform" class="alert alert-danger">
-        {{errorMessage}}
+        {{ errorMessage }}
       </div>
-      <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
+      <form class="mt-3" [formGroup]="form" (ngSubmit)="submitform()">
+
         <div class="row">
-          <div class="col-md-4">
-            <div class="form-group">
-              <input class="form-control"   placeholder="مبلغ الايراد"
-              [class.is-valid]="form.get('income_amount')?.errors ==null && form.get('income_amount')?.touched"
-              formControlName='income_amount' type="number" min="0" class="form-control">
-              <p *ngIf="form.get('income_amount')?.errors !=null && form.get('income_amount')?.touched"
-                class="error mb-0 text-danger">مطلوب</p>
-            </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label small text-muted">التاريخ</label>
+            <input formControlName="date" class="form-control" type="date" (change)="onDateFromChange($event)">
+            <p *ngIf="form.get('date')?.errors != null && form.get('date')?.touched" class="error mb-0 text-danger">مطلوب</p>
           </div>
-          <div class="col-md-4">
-            <input formControlName="date" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <div class="col-md-3 mb-3">
+            <label class="form-label small text-muted">مبلغ الإيراد</label>
+            <input class="form-control" placeholder="مبلغ الايراد"
+              [class.is-valid]="form.get('income_amount')?.errors == null && form.get('income_amount')?.touched"
+              formControlName="income_amount" type="number" min="0" step="0.01">
+            <p *ngIf="form.get('income_amount')?.errors != null && form.get('income_amount')?.touched"
+              class="error mb-0 text-danger">مبلغ صحيح مطلوب</p>
           </div>
-          <div class="col-md-4">
-            <div class="form-group">
-              <input class="form-control"   placeholder="نوع الايراد"
-              [class.is-valid]="form.get('type')?.errors ==null && form.get('type')?.touched"
-              formControlName='type' type="text" class="form-control">
-              <p *ngIf="form.get('type')?.errors !=null && form.get('type')?.touched"
-                class="error mb-0 text-danger">مطلوب</p>
-            </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label small text-muted">البيان / نوع الإيراد</label>
+            <input class="form-control" placeholder="نوع الايراد"
+              [class.is-valid]="form.get('type')?.errors == null && form.get('type')?.touched"
+              formControlName="type" type="text">
+            <p *ngIf="form.get('type')?.errors != null && form.get('type')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label small text-muted">مصدر التحصيل (مدين — نقدية)</label>
+            <select formControlName="payment_type" class="form-control type" (change)="onPaymentTypeChange()">
+              <option ngValue="safe">خزينة نقدية</option>
+              <option ngValue="bank">حساب بنكي</option>
+              <option ngValue="service_account">محفظة إلكترونية</option>
+            </select>
           </div>
         </div>
 
+        <div class="row mt-1">
+          <div class="col-md-4" *ngIf="paymentType === 'safe'">
+            <label class="form-label small text-muted">الخزينة</label>
+            <select formControlName="safe_id" class="form-control type">
+              <option [ngValue]="null" disabled>— اختر الخزينة —</option>
+              <option *ngFor="let elm of safesData" [ngValue]="elm.id">{{ elm.name }}</option>
+            </select>
+          </div>
+          <div class="col-md-4" *ngIf="paymentType === 'bank'">
+            <label class="form-label small text-muted">البنك</label>
+            <select formControlName="bank_id" class="form-control type">
+              <option [ngValue]="null" disabled>— اختر البنك —</option>
+              <option *ngFor="let elm of banksData" [ngValue]="elm.id">{{ elm.name }}</option>
+            </select>
+          </div>
+          <div class="col-md-4" *ngIf="paymentType === 'service_account'">
+            <label class="form-label small text-muted">المحفظة / الوسيط</label>
+            <select formControlName="service_account_id" class="form-control type">
+              <option [ngValue]="null" disabled>— اختر المحفظة —</option>
+              <option *ngFor="let elm of serviceAccountsData" [ngValue]="elm.id">{{ elm.name }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-md-4 mb-3">
+            <label class="form-label small text-muted">بحث في حساب الإيراد (دائن)</label>
+            <input type="text" class="form-control" [(ngModel)]="accountSearchTerm" [ngModelOptions]="{standalone: true}"
+              placeholder="كود أو اسم — اختياري" dir="rtl">
+          </div>
+          <div class="col-md-8 mb-3">
+            <label class="form-label small text-muted">حساب الإيراد في الشجرة (الدائن)</label>
+            <select formControlName="revenue_tree_account_id" class="form-control type">
+              <option [ngValue]="null" disabled>— اختر حساب إيراد فرعي —</option>
+              <option *ngFor="let acc of filteredRevenueAccounts" [ngValue]="acc.id">
+                {{ acc.code }} — {{ acc.name }}
+              </option>
+            </select>
+            <small class="text-muted d-block mt-1">القيد: من حيازة النقدية (خزينة/بنك/محفظة) إلى حساب الإيراد المختار.</small>
+            <p *ngIf="form.get('revenue_tree_account_id')?.errors != null && form.get('revenue_tree_account_id')?.touched"
+              class="error mb-0 text-danger">مطلوب</p>
+            <small class="text-muted" *ngIf="revenueAccounts.length && !filteredRevenueAccounts.length">
+              لا يوجد حساب يطابق البحث.
+            </small>
+          </div>
+        </div>
 
         <div class="text-center my-3">
-          <button [disabled]="form.invalid" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
+          <button type="submit" [disabled]="form.invalid || !isSourceSelected" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
         </div>
       </form>
-
     </div>
   </div>
 </div>

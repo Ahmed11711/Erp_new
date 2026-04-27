@@ -191,38 +191,6 @@ export class LeadDetailsComponent {
     });
   }
 
-  deleteRecommender(id: number) {
-    Swal.fire({
-      title: 'Delete Reminder?',
-      text: 'Are you sure you want to delete this reminder?',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Yes, Delete',
-      cancelButtonText: 'Cancel'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        this.CorparatesSalesService.deleteRecommender(id).subscribe({
-          next: () => {
-            Swal.fire({
-              title: 'Deleted',
-              icon: 'success',
-              timer: 2000,
-              showConfirmButton: false
-            });
-            this.getLead();
-          },
-          error: () => {
-            Swal.fire({
-              title: 'Error',
-              text: 'Failed to remove reminder',
-              icon: 'error', confirmButtonText: 'OK'
-            });
-          }
-        });
-      }
-    });
-  }
-
   addEmailToContact(contactId) {
     Swal.fire({
       title: 'Add Email',

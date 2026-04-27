@@ -1,4 +1,4 @@
-.header{
+.header {
   background-color: black;
   color: white;
   text-align: center;
@@ -6,42 +6,193 @@
   border-radius: 7px;
 }
 
-
-thead{
-  font-size: 1.5rem;
-  background-color: #82225e !important;
-}
-
-.btn-add{
-  border: #82225e solid thin !important;
-  font-size: 1.8rem;
-  padding: 0.1rem 1.5rem !important;
-  border-radius: 2rem;
-}
-
-i{
-  color: #82225e;
-  font-size: 1rem;
-}
-
-select , select:focus{
-  background-color: #82225e;
-  font-size: 1.4rem;
-  color: white;
-}
-
-input{
+thead {
   font-size: 1.2rem;
 }
 
-i{
-  cursor: pointer;
+select,
+select:focus {
+  background-color: #82225e;
+  font-size: 1.2rem;
+  color: white;
 }
 
+input[type="text"],
+input[type="number"] {
+  font-size: 1rem;
+}
 
-button , button:hover {
-  background-color: black !important;
-  font-size: 1.8rem;
-  padding: 0.5rem 2rem !important;
-  color: white;
+i { cursor: pointer; }
+
+.mfg-recipe-color-swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.section-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #82225e;
+}
+
+/* Master recipes table */
+.recipes-master-table {
+  font-size: 1rem;
+}
+
+.recipes-master-table thead {
+  background-color: #82225e;
+  color: #fff;
+}
+
+.recipes-master-table thead th {
+  font-weight: 600;
+  padding: 0.75rem;
+  white-space: nowrap;
+}
+
+.recipes-master-table tbody td {
+  vertical-align: middle;
+  padding: 0.6rem 0.75rem;
+}
+
+.recipe-name-cell:hover {
+  background-color: rgba(130, 34, 94, 0.05);
+}
+
+/* Detail cell */
+.detail-cell {
+  background-color: #fafbfc;
+  padding: 1.5rem !important;
+}
+
+.detail-content {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.detail-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #82225e;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Cost breakdown grid */
+.breakdown-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.breakdown-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  min-width: 140px;
+  text-align: center;
+  flex: 1;
+}
+
+.breakdown-card--total {
+  background: #82225e;
+  color: #fff;
+  border-color: #82225e;
+}
+
+.breakdown-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-bottom: 0.15rem;
+}
+
+.breakdown-value {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.breakdown-card--total .breakdown-label,
+.breakdown-card--total .breakdown-value {
+  color: #fff;
+}
+
+.text-danger {
+  color: #dc3545 !important;
+}
+
+/* Delete dialog */
+.delete-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+.delete-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 12px;
+  padding: 2rem;
+  z-index: 1001;
+  min-width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+/* Override button styles for this component */
+.btn-outline-primary {
+  background: transparent !important;
+  color: #82225e !important;
+  border-color: #82225e !important;
+  font-size: 0.85rem !important;
+  padding: 0.25rem 0.75rem !important;
+}
+
+.btn-outline-primary:hover {
+  background: #82225e !important;
+  color: #fff !important;
+}
+
+.btn-outline-danger {
+  background: transparent !important;
+  color: #dc3545 !important;
+  border-color: #dc3545 !important;
+  font-size: 0.85rem !important;
+  padding: 0.25rem 0.75rem !important;
+}
+
+.btn-outline-danger:hover {
+  background: #dc3545 !important;
+  color: #fff !important;
+}
+
+.btn-danger {
+  background-color: #dc3545 !important;
+  border-color: #dc3545 !important;
+  color: #fff !important;
+  font-size: 1rem !important;
+  padding: 0.4rem 1.5rem !important;
+}
+
+.btn-secondary {
+  background-color: #6c757d !important;
+  color: #fff !important;
+  font-size: 1rem !important;
+  padding: 0.4rem 1.5rem !important;
 }

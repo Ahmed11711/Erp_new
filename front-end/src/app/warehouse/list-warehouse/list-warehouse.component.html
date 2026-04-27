@@ -13,7 +13,10 @@
     <div class="row justify-content-center">
       <div class="col-md-6 text-center">
   <div class="container table-responsive py-5">
-    <table class="table table-bordered table-hover">
+    <p *ngIf="loading" class="text-muted py-3">جاري تحميل المخازن...</p>
+    <p *ngIf="loadError" class="alert alert-danger">{{ loadError }}</p>
+    <p *ngIf="!loading && !loadError && data.length === 0" class="text-muted py-3">لا توجد بيانات مخازن.</p>
+    <table class="table table-bordered table-hover" *ngIf="!loading && data.length > 0">
       <thead class="thead-dark">
         <tr>
           <!-- <th scope="col">#</th> -->
@@ -33,25 +36,25 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse:'مخزن مواد خام',balance:data?.Raw}">
+              <button mat-menu-item (click)="openWarehouseDetails(elm)">
                 <span>التفاصيل</span>
               </button>
-              <button mat-menu-item (click)="openDialog(elm)">
+              <button mat-menu-item *ngIf="elm.id" (click)="openDialog(elm)">
                 <span>تعديل البيانات</span>
               </button>
-              <button mat-menu-item routerLink="/dashboard/warehouse/warehousedetails" [queryParams]="{warehouse:'مخزن مواد خام'}">
+              <button mat-menu-item routerLink="/dashboard/warehouse/warehousedetails" [queryParams]="{warehouse: elm.name}">
                 <span>تتبع</span>
               </button>
-              <button mat-menu-item routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse:'مخزن مواد خام'}">
+              <button mat-menu-item (click)="openWarehouseTransfers(elm)">
                 <span>التحويلات</span>
               </button>
-              <button mat-menu-item (click)="deleteWarehouse(elm.id)">
+              <button mat-menu-item *ngIf="elm.id" (click)="deleteWarehouse(elm.id)">
                 <span>حذف</span>
               </button>
             </mat-menu>
           </td>
           <td *ngIf="url == 'listwarhouse'">
-            <button class="btn btn-secondary" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse:'مخزن مواد خام'}">
+            <button class="btn btn-secondary" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse: elm.name}">
               <span>التفاصيل</span>
             </button>
           </td>

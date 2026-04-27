@@ -13,6 +13,11 @@ export class CategoryService {
   return this.http.post(`${environment.Url}/categories`, data);
  }
 
+ /** قائمة الوصفات (BOM) لربط الصنف عند الإضافة أو التعديل */
+ listRecipes() {
+  return this.http.get<Array<{ id: number; recipe_name: string; description?: string | null }>>(`${environment.Url}/recipes`);
+ }
+
  editCategory(id: any, formData: any) {
   return this.http.post(`${environment.Url}/editcategory/${id}`, formData);
  }
@@ -28,10 +33,6 @@ export class CategoryService {
  getCategoryById(id: any) {
   return this.http.get(`${environment.Url}/category/${id}`);
  }
- updateCategoryCode(id: number, category_code: string) {
-  return this.http.patch(`${environment.Url}/categories/${id}/update-code`, { category_code });
- }
-
 
  searchCategories(items: number, page: number, search: any) {
   return this.http.get(`${environment.Url}/categories/search?itemsPerPage=${items}&page=${page}`, { params: search });
@@ -42,7 +43,8 @@ export class CategoryService {
  }
 
  getCatBywarehouse(warehouse: any) {
-  return this.http.get(`${environment.Url}/categories/categoryByWarehouse?warehouse=${warehouse}`);
+  const params = new HttpParams().set('warehouse', String(warehouse));
+  return this.http.get(`${environment.Url}/categories/categoryByWarehouse`, { params });
  }
 
  categoryDetails(warehouse: any, items: number, page: number, search: any) {
@@ -73,8 +75,12 @@ export class CategoryService {
   return this.http.get(`${environment.Url}/allcategories`)
  }
 
- monthlyInventory(warehouse) {
-  return this.http.get(`${environment.Url}/categories/monthlyinventory?warehouse=${warehouse}`)
+ monthlyInventory(warehouse: string, month?: string) {
+  let url = `${environment.Url}/categories/monthlyinventory?warehouse=${encodeURIComponent(warehouse)}`;
+  if (month) {
+   url += `&month=${encodeURIComponent(month)}`;
+  }
+  return this.http.get(`${url}`);
  }
 
  changeCategoryQuantity(id, status, quantity) {

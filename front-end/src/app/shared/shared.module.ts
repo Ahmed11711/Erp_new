@@ -10,7 +10,8 @@ import { AngularEditorComponent } from './angular-editor/angular-editor.componen
 import { AngularEditorModule } from '@kolkov/angular-editor';
 import { FormsModule } from '@angular/forms';
 import { MatDialogModule } from '@angular/material/dialog';
-
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { ConfirmDialogComponent } from './confirm-dialog/confirm-dialog.component';
 
 @NgModule({
   declarations: [
@@ -20,23 +21,26 @@ import { MatDialogModule } from '@angular/material/dialog';
     CustomDatePipe,
     CustomDayNamePipe,
     FixedTimePipe,
-    AngularEditorComponent
+    AngularEditorComponent,
+    ConfirmDialogComponent,
   ],
   imports: [
-
     CommonModule,
     AngularEditorModule,
     MatDialogModule,
-    FormsModule
+    MatSnackBarModule,
+    FormsModule,
   ],
   exports: [
-    TimeComponent, // Export the component
+    TimeComponent,
     CustomNumberPipe,
     CustomDatePipe,
     CustomDayNamePipe,
     FixedTimePipe,
     AngularEditorComponent,
-    MatDialogModule
+    MatDialogModule,
+    MatSnackBarModule,
+    ConfirmDialogComponent,
   ],
 })
-export class SharedModule { }
+export class SharedModule {}

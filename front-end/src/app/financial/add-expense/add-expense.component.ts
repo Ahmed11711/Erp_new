@@ -16,7 +16,8 @@ export class AddExpenseComponent implements OnInit{
   safesData:any[]=[];
   banksData:any[]=[];
   serviceAccountsData:any[]=[];
-  expenseKind:any[]=[];
+  /** كل فئات المصروف من الـ API (تحتوي expense_type + expense_kind) */
+  allExpenseKinds: any[] = [];
   dateFrom: string = new Date().toISOString().slice(0, 10);
   minDate!: string;
   maxDate!: string;
@@ -49,13 +50,15 @@ export class AddExpenseComponent implements OnInit{
   ngOnInit(): void {
     this.form.patchValue({
       payment_type: 'safe',
-      expense_type: 'نوع المصروف',
-      kind_id: 'فئة المصروف',
+      expense_type: null,
+      kind_id: null,
       created_at: this.dateFrom,
     });
     this.paymentType = 'safe';
 
-    this.expenseKindService.data().subscribe(result => this.expenseKind = result);
+    this.expenseKindService.data().subscribe((result) => {
+      this.allExpenseKinds = Array.isArray(result) ? result : [];
+    });
     this.paymentSourcesService.getPaymentSources().subscribe((res: any) => {
       this.safesData = res.safes || [];
       this.banksData = res.banks || [];
@@ -72,6 +75,19 @@ export class AddExpenseComponent implements OnInit{
     });
   }
 
+  /** فئات المصروف المطابقة لنوع المصروف المختار (المجموعة الرئيسية) */
+  get filteredExpenseKinds(): any[] {
+    const t = this.form?.get('expense_type')?.value;
+    if (!t) {
+      return [];
+    }
+    return this.allExpenseKinds.filter((k) => k.expense_type === t);
+  }
+
+  onExpenseTypeChange(): void {
+    this.form.patchValue({ kind_id: null });
+  }
+
   form:FormGroup = new FormGroup({
     'payment_type' : new FormControl('safe'),
     'safe_id' : new FormControl(null),
@@ -82,7 +98,6 @@ export class AddExpenseComponent implements OnInit{
     'expens_statement' : new FormControl(null, [Validators.required]),
     'amount' : new FormControl(null, [Validators.required]),
     'note' : new FormControl(null, [Validators.required]),
-    'address' : new FormControl(null, [Validators.required]),
     'created_at' : new FormControl(null, [Validators.required]),
     'expense_image' : new FormControl(null),
   })
@@ -123,7 +138,7 @@ export class AddExpenseComponent implements OnInit{
       formData.append('expens_statement', data.expens_statement);
       formData.append('amount', data.amount);
       formData.append('note', data.note);
-      formData.append('address', data.address);
+      formData.append('address', data.expens_statement || '');
       formData.append('created_at', `${data.created_at} ${this.time}`);
 
       if (data.payment_type === 'safe' && data.safe_id) {

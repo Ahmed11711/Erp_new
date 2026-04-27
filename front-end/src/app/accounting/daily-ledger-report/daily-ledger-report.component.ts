@@ -42,7 +42,9 @@ export class DailyLedgerReportComponent implements OnInit {
     this.filterForm = this.fb.group({
       date_from: [firstDay.toISOString().split('T')[0]],
       date_to: [today.toISOString().split('T')[0]],
-      account_id: ['']
+      account_id: [''],
+      /** إظهار حركات مرتبطة برأس قيد يومي فقط (مثل القيود من شاشة «القيود اليومية») */
+      daily_entry_only: [false]
     });
   }
 
@@ -80,11 +82,16 @@ export class DailyLedgerReportComponent implements OnInit {
     this.loading = true;
     const filters = this.filterForm.value;
 
-    const params = {
-      ...filters,
+    const params: Record<string, unknown> = {
+      date_from: filters.date_from,
+      date_to: filters.date_to,
+      account_id: filters.account_id,
       page: this.currentPage,
       per_page: this.perPage
     };
+    if (filters.daily_entry_only) {
+      params['daily_entry_only'] = 1;
+    }
 
     this.reportService.getDailyLedger(params).subscribe({
       next: (response) => {

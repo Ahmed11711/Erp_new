@@ -1,0 +1,8 @@
+UPDATE `tree_accounts` SET `balance` = 0;
+UPDATE `tree_accounts` SET `debit_balance` = 0;
+UPDATE `tree_accounts` SET `credit_balance` = 0;
+DELETE FROM `account_entries`;
+DELETE FROM `daily_entries`;
+DELETE FROM `daily_entry_items`;
+
+php artisan db:seed --class=AccountingInventoryShippingAccountsSeeder

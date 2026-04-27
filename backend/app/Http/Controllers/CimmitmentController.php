@@ -19,7 +19,11 @@ class CimmitmentController extends Controller
 
     public function index(Request $request)
     {
-        $query = Cimmitment::with(['supplier', 'expenseAccount', 'liabilityAccount']);
+        $query = Cimmitment::with([
+            'supplier:id,supplier_name',
+            'expenseAccount:id,name,code,type',
+            'liabilityAccount:id,name,code,type',
+        ]);
 
         if ($request->has('status')) {
             $query->where('status', $request->status);

@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { AdminOrderComponent } from './admin-order/admin-order.component';
 import { departmentGuard } from '../guards/department.guard';
+import { assignWhatsAppNumbersGuard } from '../guards/assign-whatsapp-numbers.guard';
 import { TrackingsComponent } from './trackings/trackings.component';
 import { WhatsappManagementComponent } from './whatsapp-management/whatsapp-management.component';
 
@@ -13,7 +14,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:'whatsapp-management', component:WhatsappManagementComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+    canActivate: [assignWhatsAppNumbersGuard],
   },
 ];
 

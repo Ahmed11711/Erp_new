@@ -1,4 +1,4 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { MatPaginator } from '@angular/material/paginator';
 import { CategoryService } from '../services/category.service';
 import { ProductionService } from '../services/production.service';
@@ -7,13 +7,19 @@ import { AuthService } from 'src/app/auth/auth.service';
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { ExcelService } from 'src/app/excel.service';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 @Component({
  selector: 'app-list-categories',
  templateUrl: './list-categories.component.html',
  styleUrls: ['./list-categories.component.css'],
 })
-export class ListCategoriesComponent {
+export class ListCategoriesComponent implements OnInit, OnDestroy {
+ private categoryNameInput$ = new Subject<string>();
+ private categoryNameSub = this.categoryNameInput$
+  .pipe(debounceTime(350), distinctUntilChanged())
+  .subscribe(() => this.search());
  selectedQuantityFilter: string = '';
  categories: any;
  productionData: any;
@@ -30,11 +36,6 @@ export class ListCategoriesComponent {
  line = '';
  param: any = {};
  allCategories: any[] = [];
-
- // --------- Inline Edit Code ---------
- editingCodeId: number | null = null; // الصف اللي بيعدل
- newCategoryCode: string = '';        // الكود الجديد أثناء التعديل
- // -----------------------------------
 
  @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
  @ViewChild('listcat', { static: false }) listcat!: NgForm;
@@ -57,6 +58,10 @@ export class ListCategoriesComponent {
   this.production.getProductions().subscribe((data: any) => {
    this.productionData = data;
   });
+ }
+
+ ngOnDestroy() {
+  this.categoryNameSub.unsubscribe();
  }
 
  exportTableToExcel() {
@@ -89,16 +94,17 @@ export class ListCategoriesComponent {
   this.search();
  }
 
- onCategorychange(event: any) {
-  this.category_name = event.target.value;
-  this.search();
+ onCategoryNameInput(value: string) {
+  this.category_name = value ?? '';
+  this.categoryNameInput$.next(this.category_name.trim());
  }
 
  search() {
   this.param = {};
   if (this.productionline) this.param['production_id'] = this.productionline;
   if (this.warehouse) this.param['warehouse'] = this.warehouse;
-  if (this.category_name) this.param['category_name'] = this.category_name;
+  const name = (this.category_name ?? '').trim();
+  if (name) this.param['category_name'] = name;
 
   this.category.searchCategories(this.pageSize, this.page + 1, this.param).subscribe((data: any) => {
    this.allCategories = data.data;
@@ -109,6 +115,7 @@ export class ListCategoriesComponent {
  }
 
  applyFilters() {
+  const nameFilter = (this.category_name ?? '').trim().toLowerCase();
   this.categories = this.allCategories.filter(item => {
    if (this.selectedQuantityFilter) {
     const qty = item.quantity;
@@ -118,9 +125,13 @@ export class ListCategoriesComponent {
      case 'more': if (qty <= 10) return false; break;
     }
    }
-   if (this.category_name && !item.category_name.includes(this.category_name)) return false;
+   if (nameFilter) {
+    const cn = (item.category_name ?? '').toLowerCase();
+    const ic = (item.item_code ?? '').toLowerCase();
+    if (!cn.includes(nameFilter) && !ic.includes(nameFilter)) return false;
+   }
    if (this.warehouse && item.warehouse != this.warehouse) return false;
-   if (this.productionline && item.production.production_line != this.productionline) return false;
+   if (this.productionline && String(item.production_id ?? '') !== String(this.productionline)) return false;
    return true;
   });
  }
@@ -150,9 +161,16 @@ export class ListCategoriesComponent {
    cancelButtonText: 'لا',
   }).then((result: any) => {
    if (result.isConfirmed) {
-    this.category.deleteCategory(id).subscribe(res => {
-     this.search();
-     Swal.fire({ icon: 'success', timer: 3000, showConfirmButton: false });
+    this.category.deleteCategory(id).subscribe({
+     next: () => {
+      this.search();
+      Swal.fire({ icon: 'success', timer: 3000, showConfirmButton: false });
+     },
+     error: (err) => {
+      const msg =
+       err?.error?.message ?? err?.error?.error ?? err?.message ?? 'تعذر تنفيذ الحذف';
+      Swal.fire({ icon: 'error', title: 'فشل الحذف', text: String(msg) });
+     },
     });
    }
   });
@@ -161,6 +179,23 @@ export class ListCategoriesComponent {
  // ------------------------
  // دوال لتلوين وتحديث الرصيد
  // ------------------------
+ /**
+  * متوسط تكلفة الوحدة (مرجّح): عند وجود كمية = total_price/quantity فقط (يطابق CategoryInventoryCostService).
+  * عند رصيد صفر يُستخدم unit_price ثم 0.
+  */
+ averageUnitCost(item: { quantity?: number; total_price?: number; unit_price?: number }): number {
+  const q = Number(item?.quantity ?? 0);
+  const tp = Number(item?.total_price ?? 0);
+  const up = Number(item?.unit_price ?? 0);
+  if (q > 0.0000001) {
+   return tp / q;
+  }
+  if (up > 0.0000001) {
+   return up;
+  }
+  return 0;
+ }
+
  getQuantityColor(quantity: number): string {
   if (quantity === 0) return '#ffcccc';
   if (quantity < 10) return '#ffe5b4';
@@ -195,32 +230,6 @@ export class ListCategoriesComponent {
     case '10': return qty > 0 && qty <= 10;
     case 'more': return qty > 10;
     default: return true;
-   }
-  });
- }
-
- // ------------------------
- // Inline Edit كود الصنف
- // ------------------------
- startEditCode(item: any) {
-  this.editingCodeId = item.id;
-  this.newCategoryCode = item.category_code;
- }
-
- saveCategoryCode(item: any) {
-  if (!this.newCategoryCode || this.newCategoryCode === item.category_code) {
-   this.editingCodeId = null;
-   return;
-  }
-
-  this.category.updateCategoryCode(item.id, this.newCategoryCode).subscribe({
-   next: (res: any) => {
-    item.category_code = this.newCategoryCode;
-    this.editingCodeId = null;
-   },
-   error: (err) => {
-    console.error(err);
-    this.editingCodeId = null;
    }
   });
  }

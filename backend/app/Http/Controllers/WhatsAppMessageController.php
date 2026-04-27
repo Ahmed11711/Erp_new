@@ -8,6 +8,7 @@ use App\Models\MessageTemplate;
 use App\Models\Order;
 use App\Services\MetaWhatsAppService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -118,15 +119,15 @@ class WhatsAppMessageController extends Controller
             $result = $whatsappService->sendMessage($phone, $messageContent);
 
             if ($result['success']) {
-                // Store message in database
                 $message = Message::create([
                     'customer_id' => $customer->id,
                     'sender_id' => auth()->id(),
-                    'receiver_id' => null, // Customer receives it
+                    'receiver_id' => null,
                     'content' => $messageContent,
                     'direction' => 'outbound',
                     'status' => 'sent',
                     'twilio_message_sid' => $result['message_sid'] ?? null,
+                    'phone_number_id' => $phoneNumberId,
                 ]);
 
                 Log::info('WhatsApp message sent successfully', [
@@ -286,12 +287,54 @@ class WhatsAppMessageController extends Controller
     public function getCustomers(Request $request)
     {
         try {
-            $customers = Customer::with(['assignedAgent', 'messages' => function ($query) {
+            $query = Customer::with(['assignedAgent', 'messages' => function ($query) {
                 $query->latest()->limit(1);
             }])
-            ->withCount('messages')
-            ->orderBy('updated_at', 'desc')
-            ->paginate($request->get('per_page', 20));
+                ->withCount('messages')
+                ->withMax('messages', 'created_at')
+                // Newest activity first: last message time; customers with no messages sink to the bottom.
+                ->orderByRaw('COALESCE(messages_max_created_at, ?) DESC', ['1970-01-01 00:00:00'])
+                // Tie-breakers: same last-message second → most recently touched row → stable id.
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id');
+
+            // Filter list: only customers who had at least one message in the date range (inclusive).
+            $fromRaw = $request->query('from_date');
+            $toRaw = $request->query('to_date');
+            if (! empty($fromRaw) || ! empty($toRaw)) {
+                $fromAt = null;
+                $toAt = null;
+                if (! empty($fromRaw)) {
+                    try {
+                        $fromAt = Carbon::parse($fromRaw)->startOfDay();
+                    } catch (\Throwable $e) {
+                        $fromAt = null;
+                    }
+                }
+                if (! empty($toRaw)) {
+                    try {
+                        $toAt = Carbon::parse($toRaw)->endOfDay();
+                    } catch (\Throwable $e) {
+                        $toAt = null;
+                    }
+                }
+
+                if ($fromAt && $toAt && $fromAt->gt($toAt)) {
+                    [$fromAt, $toAt] = [$toAt->copy()->startOfDay(), $fromAt->copy()->endOfDay()];
+                }
+
+                $query->whereHas('messages', function ($q) use ($fromAt, $toAt) {
+                    if ($fromAt && $toAt) {
+                        $q->whereBetween('created_at', [$fromAt, $toAt]);
+                    } elseif ($fromAt) {
+                        $q->where('created_at', '>=', $fromAt);
+                    } elseif ($toAt) {
+                        $q->where('created_at', '<=', $toAt);
+                    }
+                });
+            }
+
+            $customers = $query->paginate($request->get('per_page', 20));
 
             return response()->json([
                 'success' => true,
@@ -464,10 +507,16 @@ class WhatsAppMessageController extends Controller
             // Fallback when config is empty (e.g. config cache or file not deployed)
             if (empty($templates)) {
                 $templates = [
-                    ['name' => 'order_update', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب', 'حالة الطلب'], 'body_param_keys' => ['customer_name', 'id', 'order_status'], 'phone_number_id' => null],
-                    ['name' => 'order_confirmation', 'language' => 'en', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total'], 'phone_number_id' => null],
-                    ['name' => 'order_confirmation_flow', 'language' => 'ar', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
-                    ['name' => 'hello_world', 'language' => 'ar', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
+                    ['name' => 'order_confirmation', 'language' => 'en_US', 'body_params' => ['اسم العميل', 'رقم الطلب', 'المبلغ الإجمالي'], 'body_param_keys' => ['customer_name', 'id', 'net_total'], 'phone_number_id' => null],
+                    ['name' => 'order_confirmation_flow', 'language' => 'ar', 'ui_label' => 'تجهيز الطلب بالعربية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null, 'button_ids' => ['confirm_order', 'postpone_order', 'cancel_order']],
+                    ['name' => 'order_flow', 'language' => 'en_US', 'ui_label' => 'تجهيز الطلب بالإنجليزية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
+                    ['name' => 'confirm_order', 'language' => 'ar', 'ui_label' => 'تأكيد الطلب بالعربية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null, 'button_ids' => ['confirm_order', 'postpone_order', 'cancel_order']],
+                    ['name' => 'confirm_order', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'تأكيد الطلب بالإنجليزية', 'body_params' => ['اسم العميل', 'رقم الطلب'], 'body_param_keys' => ['customer_name', 'id'], 'phone_number_id' => null],
+                    ['name' => 'review_request', 'language' => 'ar', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
+                    ['name' => 'client_review', 'language' => 'ar', 'ui_label' => 'تقييم العميل بالعربية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
+                    ['name' => 'client_review', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'تقييم العميل بالإنجليزية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
+                    ['name' => 'feedback', 'language' => 'ar', 'ui_label' => 'فيد باك بالعربية', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
+                    ['name' => 'feedback', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'فيد باك بالانجليزية', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
                 ];
                 Log::warning('Meta templates loaded from fallback - config may be empty. Run: php artisan config:clear && php artisan config:cache');
             }
@@ -505,6 +554,8 @@ class WhatsAppMessageController extends Controller
             'language_code' => 'nullable|string|max:10',
             'body_parameters' => 'nullable|array',
             'body_parameters.*' => 'string',
+            'header_parameters' => 'nullable|array',
+            'header_parameters.*' => 'string',
             'phone_number_id' => 'nullable|string',
         ]);
 
@@ -540,7 +591,7 @@ class WhatsAppMessageController extends Controller
             $bodyParams = $request->body_parameters;
 
             $templatesConfig = config('whatsapp_meta_templates.templates', []);
-            $templateConfig = collect($templatesConfig)->firstWhere('name', $templateName);
+            $templateConfig = $this->resolveMetaTemplateConfig($templatesConfig, $templateName, $languageCode);
             if (!$templateConfig) {
                 return response()->json([
                     'success' => false,
@@ -558,7 +609,104 @@ class WhatsAppMessageController extends Controller
                 }
             }
 
+            $headerParams = $request->header_parameters;
+            if ($headerParams === null || $headerParams === []) {
+                $hKeys = $templateConfig['header_param_keys'] ?? [];
+                $headerParams = [];
+                foreach ($hKeys as $key) {
+                    $val = (string) ($order->{$key} ?? '');
+                    $headerParams[] = trim($val) === '' ? '-' : $val;
+                }
+            }
+
+            $headerFormat = $templateConfig['header_format'] ?? null;
+            if ($headerFormat === null && ! empty($templateConfig['header_param_keys'] ?? [])) {
+                $headerFormat = 'text';
+            }
+
             $components = [];
+            if (! in_array($headerFormat, ['omit', 'none'], true)) {
+                if ($headerFormat === 'image') {
+                    $imageUrls = [];
+                    foreach ($headerParams as $val) {
+                        $u = trim((string) $val);
+                        if ($u === '' || $u === '-') {
+                            $u = '';
+                        }
+                        $imageUrls[] = $u;
+                    }
+                    $hasAnyUrl = false;
+                    foreach ($imageUrls as $u) {
+                        if ($u !== '') {
+                            $hasAnyUrl = true;
+                            break;
+                        }
+                    }
+                    if (! $hasAnyUrl) {
+                        $fallback = trim((string) ($templateConfig['header_default_image_url'] ?? ''));
+                        if ($fallback === '' && in_array($templateName, ['client_review', 'feedback'], true)) {
+                            $fallback = trim((string) config('whatsapp_meta_templates.review_feedback_header_image_url', ''));
+                        }
+                        if ($fallback === '') {
+                            $fallback = trim((string) config('whatsapp_meta_templates.default_header_image_url', ''));
+                        }
+                        if ($fallback !== '') {
+                            $imageUrls = [$fallback];
+                        } else {
+                            return response()->json([
+                                'success' => false,
+                                'error' => 'قالب واتساب يتطلب صورة في الـ header. تأكد أن APP_URL في .env صحيح (https) وأن الملفات موجودة في public/images أو أضف header_default_image_url في config/whatsapp_meta_templates.php لهذا القالب.',
+                            ], 422);
+                        }
+                    }
+                    $parameters = [];
+                    foreach ($imageUrls as $u) {
+                        $link = trim((string) $u);
+                        if ($link === '' || $link === '-') {
+                            continue;
+                        }
+                        if (! str_starts_with(strtolower($link), 'http')) {
+                            return response()->json([
+                                'success' => false,
+                                'error' => 'رابط صورة الـ header غير صالح (يجب أن يبدأ بـ http أو https). راجع APP_URL أو header_default_image_url في config/whatsapp_meta_templates.php.',
+                            ], 422);
+                        }
+                        $link = $this->normalizeImageUrlForMeta($link);
+                        if ($link === '') {
+                            continue;
+                        }
+                        if ($this->isHeaderImageUrlUnreachableByMeta($link)) {
+                            return response()->json([
+                                'success' => false,
+                                'error' => 'رابط صورة الـ header لا يمكن لخوادم Meta الوصول إليه (localhost أو شبكة داخلية). عيّن في .env قيمة WHATSAPP_META_MEDIA_BASE_URL على نفس الدومين العام بـ HTTPS الذي يخدم مجلد public/images، أو غيّر APP_URL.',
+                            ], 422);
+                        }
+                        if (str_starts_with(strtolower($link), 'http://') && ! $this->isHeaderImageUrlUnreachableByMeta($link)) {
+                            Log::warning('Meta template header image uses HTTP; Meta may fail media fetch — prefer HTTPS', [
+                                'template' => $templateName,
+                                'host' => parse_url($link, PHP_URL_HOST),
+                            ]);
+                        }
+                        $parameters[] = ['type' => 'image', 'image' => ['link' => $link]];
+                    }
+                    if ($headerFormat === 'image' && empty($parameters)) {
+                        return response()->json([
+                            'success' => false,
+                            'error' => 'لم يُبنَ معامل صورة صالح للـ header. تأكد أن APP_URL صحيح وأن الملفات تحت public/images متاحة عبر المتصفح (أسماء بلا مسافات).',
+                        ], 422);
+                    }
+                    if (! empty($parameters)) {
+                        $components[] = ['type' => 'header', 'parameters' => $parameters];
+                    }
+                } elseif (! empty($headerParams)) {
+                    $parameters = [];
+                    foreach ($headerParams as $val) {
+                        $text = trim((string) $val) === '' ? '-' : (string) $val;
+                        $parameters[] = ['type' => 'text', 'text' => $text];
+                    }
+                    $components[] = ['type' => 'header', 'parameters' => $parameters];
+                }
+            }
             if (!empty($bodyParams)) {
                 $parameters = [];
                 foreach ($bodyParams as $val) {
@@ -568,11 +716,32 @@ class WhatsAppMessageController extends Controller
                 $components[] = ['type' => 'body', 'parameters' => $parameters];
             }
 
+            $resolvedLang = $templateConfig['api_language_code'] ?? ($templateConfig['language'] ?? $languageCode);
+            $languageAsIs = isset($templateConfig['api_language_code'])
+                && is_string($templateConfig['api_language_code'])
+                && trim($templateConfig['api_language_code']) !== '';
+            foreach ($components as $c) {
+                if (($c['type'] ?? '') === 'header' && ! empty($c['parameters'])) {
+                    foreach ($c['parameters'] as $p) {
+                        if (($p['type'] ?? '') === 'image' && ! empty($p['image']['link'])) {
+                            $hl = (string) $p['image']['link'];
+                            Log::info('Meta template header image URL (for delivery)', [
+                                'template' => $templateName,
+                                'host' => parse_url($hl, PHP_URL_HOST),
+                                'path' => parse_url($hl, PHP_URL_PATH),
+                            ]);
+                            break 2;
+                        }
+                    }
+                }
+            }
+
             $result = $whatsappService->sendTemplateMessage(
                 $phone,
                 $templateName,
-                $languageCode,
-                $components
+                $resolvedLang,
+                $components,
+                $languageAsIs
             );
 
             if ($result['success']) {
@@ -580,15 +749,24 @@ class WhatsAppMessageController extends Controller
                     ['phone' => $phone],
                     ['name' => $order->customer_name, 'assigned_agent_id' => auth()->id()]
                 );
-                // Build readable message for chat display
+                // Build readable message for chat display (نفس الاسم بلغات مختلفة)
+                $langKey = explode('_', $resolvedLang)[0];
                 $templateLabels = [
                     'order_confirmation' => 'تأكيد الطلب',
-                    'order_confirmation_flow' => 'فلو تأكيد الطلب',
+                    'order_flow|en' => 'تجهيز الطلب بالإنجليزية',
+                    'order_confirmation_flow|ar' => 'تجهيز الطلب بالعربية',
+                    'confirm_order|ar' => 'تأكيد الطلب بالعربية',
+                    'confirm_order|en' => 'تأكيد الطلب بالإنجليزية',
                     // 'order_update' => 'تحديث الطلب',
                     // 'hello_world' => 'رسالة ترحيب',
                     'review_request' => 'طلب تقييم',
+                    'client_review|en' => 'تقييم العميل بالإنجليزية',
+                    'client_review|ar' => 'تقييم العميل بالعربية',
+                    'feedback|en' => 'فيد باك بالانجليزية',
+                    'feedback|ar' => 'فيد باك بالعربية',
                 ];
-                $label = $templateLabels[$templateName] ?? $templateName;
+                $composite = $templateName . '|' . $langKey;
+                $label = $templateLabels[$composite] ?? $templateLabels[$templateName] ?? $templateName;
                 $messageContent = "📋 قالب: {$label} - الطلب #{$order->id} - {$order->customer_name} - {$order->net_total} ج.م";
                 Message::create([
                     'customer_id' => $customer->id,
@@ -600,9 +778,57 @@ class WhatsAppMessageController extends Controller
                     'status' => 'sent',
                     'twilio_message_sid' => $result['message_sid'] ?? null,
                 ]);
+
+                $followupText = isset($templateConfig['session_followup_text'])
+                    ? trim((string) $templateConfig['session_followup_text'])
+                    : '';
+                $followupSent = false;
+                $followupError = null;
+                if ($followupText !== '') {
+                    $followButtons = $templateConfig['session_followup_buttons'] ?? [];
+                    $followButtons = is_array($followButtons) ? array_values(array_filter($followButtons, function ($b) {
+                        return is_array($b) && ! empty($b['id']) && ! empty($b['title']);
+                    })) : [];
+
+                    if ($followButtons !== []) {
+                        $followRes = $whatsappService->sendInteractiveButtons($phone, $followupText, $followButtons);
+                    } else {
+                        $followRes = $whatsappService->sendMessage($phone, $followupText);
+                    }
+                    $followupSent = (bool) ($followRes['success'] ?? false);
+                    if (! $followupSent) {
+                        $followupError = $followRes['error'] ?? 'unknown';
+                        Log::warning('Meta template session follow-up failed', [
+                            'template' => $templateName,
+                            'order_id' => $order->id,
+                            'error' => $followupError,
+                        ]);
+                    } else {
+                        $preview = mb_strlen($followupText) > 200
+                            ? mb_substr($followupText, 0, 200).'…'
+                            : $followupText;
+                        if ($followButtons !== []) {
+                            $btnTitles = array_map(fn ($b) => $b['title'] ?? '', $followButtons);
+                            $preview = '[أزرار: '.implode(', ', $btnTitles).'] '.$preview;
+                        }
+                        Message::create([
+                            'customer_id' => $customer->id,
+                            'order_id' => $order->id,
+                            'sender_id' => auth()->id(),
+                            'receiver_id' => null,
+                            'content' => $preview,
+                            'direction' => 'outbound',
+                            'status' => 'sent',
+                            'twilio_message_sid' => $followRes['message_sid'] ?? null,
+                        ]);
+                    }
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Template sent successfully',
+                    'followup_sent' => $followupSent,
+                    'followup_error' => $followupError,
                 ], 200);
             }
 
@@ -789,5 +1015,185 @@ class WhatsAppMessageController extends Controller
                 'error' => 'An error occurred while removing user assignment',
             ], 500);
         }
+    }
+
+    /**
+     * Find customer by phone (last 10 digits match; supports Egypt formats and typos like +210… vs +2010…).
+     */
+    public function findCustomerByPhone(Request $request)
+    {
+        $phone = $request->query('phone');
+        if (!$phone) {
+            return response()->json(['success' => false, 'error' => 'phone required'], 422);
+        }
+
+        try {
+            $customer = $this->findCustomerByPhoneDigits($phone);
+            if (!$customer) {
+                return response()->json(['success' => true, 'customer' => null], 200);
+            }
+
+            return response()->json([
+                'success' => true,
+                'customer' => $customer,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('findCustomerByPhone', ['e' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'error' => 'lookup failed'], 500);
+        }
+    }
+
+    /**
+     * Last few WhatsApp lines for order list tooltip (by customer phone).
+     */
+    public function getWhatsAppSnippet(Request $request)
+    {
+        $phone = $request->query('phone');
+        if (!$phone) {
+            return response()->json(['success' => false, 'error' => 'phone required'], 422);
+        }
+
+        try {
+            $customer = $this->findCustomerByPhoneDigits($phone);
+            if (!$customer) {
+                return response()->json([
+                    'success' => true,
+                    'customer_id' => null,
+                    'lines' => [],
+                ], 200);
+            }
+
+            $messages = Message::where('customer_id', $customer->id)
+                ->orderByDesc('created_at')
+                ->limit(5)
+                ->get(['content', 'direction', 'created_at']);
+
+            $lines = [];
+            foreach ($messages->reverse()->values() as $m) {
+                $label = $m->direction === 'inbound' ? 'عميل' : 'رد';
+                $text = mb_strlen($m->content) > 120 ? mb_substr($m->content, 0, 120) . '…' : $m->content;
+                $lines[] = $label . ': ' . $text;
+            }
+
+            return response()->json([
+                'success' => true,
+                'customer_id' => $customer->id,
+                'lines' => $lines,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('getWhatsAppSnippet', ['e' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'error' => 'lookup failed'], 500);
+        }
+    }
+
+    /**
+     * يطابق قالب Meta بالاسم + اللغة (نفس الاسم يمكن أن يكون معتمداً بعدة لغات).
+     */
+    private function resolveMetaTemplateConfig(array $templates, string $templateName, string $languageCode): ?array
+    {
+        $reqShort = explode('_', $languageCode)[0];
+
+        return collect($templates)->first(function ($t) use ($templateName, $languageCode, $reqShort) {
+            if (($t['name'] ?? '') !== $templateName) {
+                return false;
+            }
+            $tl = (string) ($t['language'] ?? 'ar');
+            $cfgShort = explode('_', $tl)[0];
+
+            return $tl === $languageCode
+                || $cfgShort === $reqShort;
+        });
+    }
+
+    /**
+     * خوادم Meta تجلب صورة الـ header من الرابط؛ localhost وشبكات خاصة غير قابلة للوصول فيفشل التسليم رغم نجاح Graph.
+     */
+    private function isHeaderImageUrlUnreachableByMeta(string $url): bool
+    {
+        $parsed = parse_url($url);
+        $host = $parsed['host'] ?? '';
+        if ($host === '') {
+            return true;
+        }
+        if (strcasecmp($host, 'localhost') === 0) {
+            return true;
+        }
+        if (str_ends_with(strtolower($host), '.local')) {
+            return true;
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return ! filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+        }
+
+        return false;
+    }
+
+    /**
+     * ترميز مقاطع المسار في رابط الصورة (مسافات وأحرف خاصة) حتى يقبله جلب Meta للوسائط.
+     */
+    private function normalizeImageUrlForMeta(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        if (! preg_match('#^https?://#i', $url)) {
+            $base = rtrim((string) (config('whatsapp_meta_templates.media_base_url') ?: config('app.url')), '/');
+            if ($base === '') {
+                return $url;
+            }
+            $url = $base . '/' . ltrim($url, '/');
+        }
+        $parsed = parse_url($url);
+        if ($parsed === false || empty($parsed['scheme']) || empty($parsed['host'])) {
+            return $url;
+        }
+        $path = $parsed['path'] ?? '';
+        if ($path === '' || $path === '/') {
+            return $url;
+        }
+        $trimmed = trim($path, '/');
+        $segments = explode('/', $trimmed);
+        $encoded = implode('/', array_map('rawurlencode', $segments));
+        $newPath = '/' . $encoded;
+        $scheme = $parsed['scheme'];
+        $host = $parsed['host'];
+        $port = isset($parsed['port']) ? ':' . $parsed['port'] : '';
+        $query = isset($parsed['query']) ? '?' . $parsed['query'] : '';
+        $fragment = isset($parsed['fragment']) ? '#' . $parsed['fragment'] : '';
+
+        return $scheme . '://' . $host . $port . $newPath . $query . $fragment;
+    }
+
+    private function normalizePhoneDigits(string $phone): string
+    {
+        $d = preg_replace('/\D/', '', $phone);
+        if ($d === '') {
+            return '';
+        }
+        if (strlen($d) === 11 && str_starts_with($d, '0')) {
+            $d = '20' . substr($d, 1);
+        } elseif (strlen($d) === 10 && str_starts_with($d, '1')) {
+            $d = '20' . $d;
+        }
+
+        return $d;
+    }
+
+    private function findCustomerByPhoneDigits(string $phone): ?Customer
+    {
+        $digits = $this->normalizePhoneDigits($phone);
+        if ($digits === '') {
+            return null;
+        }
+
+        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+        return Customer::whereRaw(
+            "REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE ?",
+            ['%' . $last10]
+        )->first();
     }
 }

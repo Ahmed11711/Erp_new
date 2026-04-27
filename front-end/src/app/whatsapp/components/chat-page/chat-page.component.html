@@ -1,106 +1,463 @@
-<div class="container-fluid" dir="rtl">
-  <div class="row" style="height: calc(100vh - 100px);">
-    <!-- Customers List -->
-    <div class="col-md-3 border-end" style="overflow-y: auto; max-height: 100%;">
-      <div class="p-3 border-bottom">
-        <h5>المحادثات</h5>
+<div class="container-fluid wa-chat-page" dir="rtl">
+  <div class="row wa-chat-row g-0">
+    <!-- Customers (conversation) list -->
+    <div
+      #listScrollArea
+      class="col-md-3 border-end wa-customer-list wa-chat-main-col"
+      [class.wa-customer-list--loading]="listLoading"
+      (scroll)="onListScroll()"
+    >
+      <div class="wa-conv-list-sticky">
+      <div class="p-3 border-bottom wa-panel-header">
+        <h5 class="mb-0">المحادثات</h5>
       </div>
-      <div *ngIf="loading && !customerId" class="text-center p-3">
-        <p>جاري التحميل...</p>
+      <div class="wa-list-search-wrap border-bottom">
+        <div class="wa-list-search">
+          <mat-icon class="wa-list-search-icon">search</mat-icon>
+          <input
+            type="text"
+            [formControl]="listSearch"
+            placeholder="ابحث بالاسم أو رقم الجوال…"
+            autocomplete="off"
+          />
+        </div>
+        <button
+          type="button"
+          class="wa-list-search-clear"
+          *ngIf="listSearch.value"
+          (click)="clearListSearch()"
+          matTooltip="مسح البحث"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
       </div>
-      <div *ngFor="let customer of customers" 
-           class="p-3 border-bottom cursor-pointer"
-           [class.bg-light]="customerId === customer.id"
-           (click)="selectCustomer(customer)"
-           style="cursor: pointer;">
+      <div
+        class="wa-list-dates border-bottom"
+        [formGroup]="listFilterForm"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="wa-list-dates-label">نشاط الرسائل</div>
+        <div class="wa-list-dates-inputs">
+          <input
+            type="date"
+            class="wa-list-date-input"
+            formControlName="from_date"
+            [attr.aria-label]="'من تاريخ'"
+          />
+          <span class="wa-list-dates-sep">—</span>
+          <input
+            type="date"
+            class="wa-list-date-input"
+            formControlName="to_date"
+            [attr.aria-label]="'إلى تاريخ'"
+          />
+        </div>
+        <button
+          type="button"
+          class="wa-list-filters-clear"
+          *ngIf="hasListFilters"
+          (click)="clearListFiltersAll()"
+        >
+          مسح الكل
+        </button>
+      </div>
+      </div>
+      <div
+        *ngIf="listLoading"
+        class="text-center p-2 text-muted small wa-list-loading"
+      >
+        <p class="mb-0">جاري تحديث القائمة…</p>
+      </div>
+      <div *ngIf="loading && !customerId" class="text-center p-3 text-muted">
+        <p class="mb-0">جاري التحميل...</p>
+      </div>
+      <div
+        *ngIf="!loading && customers.length > 0 && !filteredCustomers.length"
+        class="text-center p-3 text-muted small"
+      >
+        <p class="mb-0">لا توجد نتائج مطابقة</p>
+      </div>
+      <div
+        *ngFor="let c of filteredCustomers"
+        class="wa-customer-item p-3 border-bottom"
+        [class.wa-customer-active]="customerId === c.id"
+        (click)="selectCustomer(c)"
+      >
         <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <strong>{{customer.name}}</strong>
-            <br>
-            <small class="text-muted">{{customer.phone}}</small>
-            <br>
-            <small class="text-muted" *ngIf="customer.messages_count > 0">
-              {{customer.messages_count}} رسالة
+          <div class="flex-grow-1 min-w-0">
+            <strong class="d-block text-truncate">{{ c.name }}</strong>
+            <small class="text-muted d-block text-truncate">{{ c.phone }}</small>
+            <small class="text-muted" *ngIf="c.messages_count > 0">
+              {{ c.messages_count }} رسالة
             </small>
           </div>
-          <button mat-icon-button (click)="openWhatsApp(customer); $event.stopPropagation()" 
-                  matTooltip="فتح واتساب">
+          <button
+            mat-icon-button
+            type="button"
+            (click)="openWhatsApp(c); $event.stopPropagation()"
+            matTooltip="فتح واتساب"
+          >
             <mat-icon>chat</mat-icon>
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Chat Area -->
-    <div class="col-md-9 d-flex flex-column" *ngIf="customerId && customer">
-      <!-- Chat Header -->
-      <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-        <div>
-          <h5>{{customer.name}}</h5>
-          <small class="text-muted">{{customer.phone}}</small>
+    <!-- Chat area -->
+    <div
+      class="col-md-9 d-flex flex-column wa-chat-main wa-chat-main-col"
+      *ngIf="customerId && customer"
+    >
+      <div
+        class="p-3 border-bottom wa-chat-header d-flex justify-content-between align-items-center"
+      >
+        <div class="min-w-0">
+          <h5 class="mb-0 text-truncate">{{ customer.name }}</h5>
+          <small class="text-muted">{{ customer.phone }}</small>
         </div>
-        <button mat-icon-button (click)="openWhatsApp(customer)" matTooltip="فتح واتساب">
+        <button
+          mat-icon-button
+          type="button"
+          (click)="openWhatsApp(customer)"
+          matTooltip="فتح واتساب"
+        >
           <mat-icon>open_in_new</mat-icon>
         </button>
       </div>
 
-      <!-- Messages -->
-      <div id="chat-messages" class="flex-grow-1 p-3" style="overflow-y: auto; background-color: #f5f5f5;">
-        <div *ngIf="loading" class="text-center">
-          <p>جاري التحميل...</p>
+      <!-- تصفية الرسائل: نطاق التاريخ + بحث داخل نصّ الرسائل (العمود الأيسر = بحث أسماء العملاء) -->
+      <form [formGroup]="filtersForm" class="wa-filters border-bottom">
+        <div class="wa-filters-row">
+          <div class="wa-filter-dates">
+            <input type="date" formControlName="from_date" aria-label="من تاريخ" />
+            <span class="wa-filter-sep">—</span>
+            <input type="date" formControlName="to_date" aria-label="إلى تاريخ" />
+          </div>
+          <button
+            type="button"
+            class="wa-filter-clear"
+            (click)="clearFilters()"
+            *ngIf="filtersForm.value.search || filtersForm.value.from_date || filtersForm.value.to_date"
+          >
+            مسح
+          </button>
         </div>
-        <div *ngFor="let message of messages" class="mb-3">
-          <div [class.text-end]="message.direction === 'outbound'" 
-               [class.text-start]="message.direction === 'inbound'">
-            <div class="d-inline-block p-3 rounded" 
-                 [class.bg-primary]="message.direction === 'outbound'"
-                 [class.text-white]="message.direction === 'outbound'"
-                 [class.bg-white]="message.direction === 'inbound'"
-                 [class.border]="message.direction === 'inbound'"
-                 style="max-width: 70%;">
-              <p class="mb-1">{{message.content}}</p>
-              <small [class.text-white-50]="message.direction === 'outbound'"
-                     [class.text-muted]="message.direction === 'inbound'">
-                {{formatDate(message.created_at)}}
-                <span *ngIf="message.sender" class="ms-2">
-                  - {{message.sender.name}}
-                </span>
-              </small>
-            </div>
+        <div class="wa-filters-row wa-filters-messages">
+          <div class="wa-filter-input wa-filter-messages">
+            <mat-icon class="wa-filter-icon">text_fields</mat-icon>
+            <input
+              type="text"
+              formControlName="search"
+              placeholder="بحث داخل نصّ الرسائل (اختياري)…"
+              autocomplete="off"
+            />
           </div>
         </div>
-        <div *ngIf="messages.length === 0 && !loading" class="text-center text-muted">
-          <p>لا توجد رسائل بعد</p>
+      </form>
+
+      <!-- Messages scroll area -->
+      <div
+        #scrollArea
+        class="flex-grow-1 wa-messages-scroll"
+        (scroll)="onScroll($event)"
+      >
+        <!-- Load more (older) at top -->
+        <div class="wa-load-more" *ngIf="hasMore">
+          <button
+            type="button"
+            class="wa-load-more-btn"
+            (click)="loadMore()"
+            [disabled]="loadingMore"
+          >
+            <span *ngIf="!loadingMore">تحميل رسائل أقدم</span>
+            <span *ngIf="loadingMore">جاري التحميل…</span>
+          </button>
+        </div>
+
+        <div *ngIf="loading" class="text-center p-4 text-muted">
+          <p class="mb-0">جاري التحميل...</p>
+        </div>
+
+        <ng-container *ngFor="let m of messages; trackBy: trackByMessage">
+          <div class="wa-msg-row">
+            <div
+              class="wa-msg-align"
+              [class.wa-msg-out]="m.direction === 'sent'"
+              [class.wa-msg-in]="m.direction === 'received'"
+            >
+              <div
+                class="wa-bubble"
+                [class.wa-bubble-out]="m.direction === 'sent'"
+                [class.wa-bubble-in]="m.direction === 'received'"
+              >
+                <!-- Media (image / sticker) -->
+                <div
+                  class="wa-media-wrap"
+                  *ngIf="isImage(m)"
+                  (click)="openPreview(m)"
+                >
+                  <img
+                    *ngIf="m._mediaObjectUrl; else imgPlaceholder"
+                    [src]="m._mediaObjectUrl"
+                    alt="صورة"
+                    loading="lazy"
+                    class="wa-media-img"
+                  />
+                  <ng-template #imgPlaceholder>
+                    <div
+                      class="wa-media-placeholder"
+                      (load)="ensureMedia(m)"
+                    >
+                      <span *ngIf="!m._mediaLoading" (click)="ensureMedia(m)">
+                        <mat-icon>image</mat-icon> تحميل الصورة
+                      </span>
+                      <span *ngIf="m._mediaLoading">
+                        <mat-icon class="wa-spin">sync</mat-icon> جارٍ التحميل…
+                      </span>
+                    </div>
+                  </ng-template>
+                  <button
+                    type="button"
+                    class="wa-media-dl"
+                    matTooltip="تحميل"
+                    (click)="downloadMedia(m, $event)"
+                  >
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+
+                <!-- Video -->
+                <div class="wa-media-wrap" *ngIf="m.type === 'video'">
+                  <video
+                    *ngIf="m._mediaObjectUrl"
+                    [src]="m._mediaObjectUrl"
+                    controls
+                    preload="metadata"
+                    class="wa-media-video"
+                  ></video>
+                  <div
+                    *ngIf="!m._mediaObjectUrl"
+                    class="wa-media-placeholder"
+                    (click)="ensureMedia(m)"
+                  >
+                    <mat-icon>play_circle</mat-icon> تشغيل الفيديو
+                  </div>
+                  <button
+                    type="button"
+                    class="wa-media-dl"
+                    matTooltip="تحميل"
+                    (click)="downloadMedia(m, $event)"
+                  >
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+
+                <!-- Audio -->
+                <div class="wa-media-audio" *ngIf="m.type === 'audio'">
+                  <audio
+                    *ngIf="m._mediaObjectUrl"
+                    [src]="m._mediaObjectUrl"
+                    controls
+                    preload="metadata"
+                  ></audio>
+                  <button
+                    *ngIf="!m._mediaObjectUrl"
+                    type="button"
+                    class="wa-audio-load"
+                    (click)="ensureMedia(m)"
+                  >
+                    <mat-icon>graphic_eq</mat-icon> تحميل التسجيل
+                  </button>
+                  <button
+                    type="button"
+                    class="wa-media-dl wa-media-dl-inline"
+                    matTooltip="تحميل"
+                    (click)="downloadMedia(m, $event)"
+                  >
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+
+                <!-- Document -->
+                <div class="wa-document" *ngIf="m.type === 'document'">
+                  <mat-icon>description</mat-icon>
+                  <div class="wa-document-info">
+                    <div class="wa-document-name">
+                      {{ m.media_filename || 'ملف مرفق' }}
+                    </div>
+                    <div class="wa-document-mime">{{ m.media_mime_type }}</div>
+                  </div>
+                  <button
+                    type="button"
+                    class="wa-media-dl wa-media-dl-inline"
+                    matTooltip="تحميل"
+                    (click)="downloadMedia(m, $event)"
+                  >
+                    <mat-icon>download</mat-icon>
+                  </button>
+                </div>
+
+                <!-- Text / caption -->
+                <div
+                  class="wa-msg-text-wrap"
+                  *ngIf="m.message"
+                  [class.wa-msg-text-expanded]="isMessageBodyExpanded(m)"
+                >
+                  <p class="wa-msg-text">{{ formatBubbleContent(m.message) }}</p>
+                </div>
+                <button
+                  *ngIf="shouldShowReadMoreToggle(m)"
+                  type="button"
+                  class="wa-msg-read-more"
+                  (click)="toggleMessageBodyExpand(m, $event)"
+                >
+                  {{ isMessageBodyExpanded(m) ? 'إظهار أقل' : 'اقرأ المزيد' }}
+                </button>
+
+                <div class="wa-msg-meta">
+                  <span>{{ formatDate(m.created_at) }}</span>
+                  <span *ngIf="m.sender" class="wa-msg-sender">
+                    — {{ m.sender.name }}
+                  </span>
+                  <mat-icon
+                    *ngIf="m.direction === 'sent' && m.status === 'read'"
+                    class="wa-tick wa-tick-read"
+                    >done_all</mat-icon
+                  >
+                  <mat-icon
+                    *ngIf="m.direction === 'sent' && m.status === 'delivered'"
+                    class="wa-tick"
+                    >done_all</mat-icon
+                  >
+                  <mat-icon
+                    *ngIf="m.direction === 'sent' && m.status === 'sent'"
+                    class="wa-tick"
+                    >done</mat-icon
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+
+        <div
+          *ngIf="messages.length === 0 && !loading"
+          class="text-center text-muted p-5"
+        >
+          <p class="mb-0">لا توجد رسائل</p>
         </div>
       </div>
 
-      <!-- Message Input -->
-      <div class="p-3 border-top bg-white">
-        <form [formGroup]="messageForm" (ngSubmit)="sendMessage()">
-          <div class="d-flex">
-            <input 
-              type="text" 
-              class="form-control me-2" 
-              formControlName="message"
-              placeholder="اكتب رسالة..."
-              [disabled]="sending">
-            <button 
-              type="submit" 
-              class="btn btn-primary"
-              [disabled]="messageForm.invalid || sending">
-              <span *ngIf="sending">جاري الإرسال...</span>
-              <span *ngIf="!sending">إرسال</span>
+      <!-- Suggestions + input -->
+      <div class="wa-footer border-top bg-white">
+        <div
+          class="wa-suggestions"
+          *ngIf="templates.length > 0 || quickSnippets.length > 0"
+        >
+          <span class="wa-suggestions-title">اقتراحات سريعة</span>
+          <div class="wa-chip-scroll">
+            <button
+              type="button"
+              class="wa-chip"
+              *ngFor="let t of templates"
+              (click)="applySuggestion(t.content)"
+            >
+              {{ t.name }}
+            </button>
+            <button
+              type="button"
+              class="wa-chip wa-chip-secondary"
+              *ngFor="let s of quickSnippets"
+              (click)="applySuggestion(s.text)"
+            >
+              {{ s.label }}
             </button>
           </div>
+        </div>
+        <form
+          [formGroup]="messageForm"
+          (ngSubmit)="sendMessage()"
+          class="wa-input-row p-3"
+        >
+          <mat-form-field appearance="outline" class="wa-input-field flex-grow-1">
+            <mat-label>اكتب رسالة…</mat-label>
+            <input
+              matInput
+              type="text"
+              formControlName="message"
+              autocomplete="off"
+              [disabled]="sending"
+            />
+          </mat-form-field>
+          <button
+            type="submit"
+            mat-raised-button
+            color="primary"
+            class="wa-send-btn"
+            [disabled]="messageForm.invalid || sending"
+          >
+            <span *ngIf="sending">جاري الإرسال...</span>
+            <span *ngIf="!sending">إرسال</span>
+          </button>
         </form>
       </div>
     </div>
 
-    <!-- No Customer Selected -->
-    <div class="col-md-9 d-flex align-items-center justify-content-center" *ngIf="!customerId">
+    <!-- Empty placeholder -->
+    <div
+      class="col-md-9 d-flex flex-column align-items-center justify-content-center wa-empty-bg wa-chat-main-col"
+      *ngIf="!customerId"
+    >
       <div class="text-center text-muted">
-        <mat-icon style="font-size: 64px; width: 64px; height: 64px;">chat</mat-icon>
-        <p class="mt-3">اختر محادثة لعرض الرسائل</p>
+        <mat-icon class="wa-empty-icon">chat</mat-icon>
+        <p class="mt-3 mb-0">اختر محادثة لعرض الرسائل</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Media lightbox -->
+  <div class="wa-lightbox" *ngIf="preview.open" (click)="closePreview()">
+    <div class="wa-lightbox-inner" (click)="$event.stopPropagation()">
+      <div class="wa-lightbox-bar">
+        <button
+          type="button"
+          class="wa-lightbox-btn"
+          (click)="preview.msg && downloadMedia(preview.msg)"
+        >
+          <mat-icon>download</mat-icon> تحميل
+        </button>
+        <button
+          type="button"
+          class="wa-lightbox-btn wa-lightbox-close"
+          (click)="closePreview()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="wa-lightbox-body">
+        <img
+          *ngIf="preview.kind === 'image' && preview.url"
+          [src]="preview.url"
+          alt="preview"
+          class="wa-lightbox-img"
+        />
+        <video
+          *ngIf="preview.kind === 'video' && preview.url"
+          [src]="preview.url"
+          controls
+          autoplay
+          class="wa-lightbox-video"
+        ></video>
+        <audio
+          *ngIf="preview.kind === 'audio' && preview.url"
+          [src]="preview.url"
+          controls
+          autoplay
+        ></audio>
+        <div *ngIf="!preview.url" class="wa-lightbox-loading">
+          <mat-icon class="wa-spin">sync</mat-icon> جارٍ التحميل…
+        </div>
       </div>
     </div>
   </div>

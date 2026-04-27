@@ -10,8 +10,17 @@ class Category extends Model
  use HasFactory;
  protected  $fillable = [
   'category_name',
+  'item_code',
+  'color',
+  'recipe_id',
+  'item_revision',
+  'lineage_root_id',
+  'replaces_item_id',
+  'replaced_by_item_id',
   'category_price',
-  'category_code',
+  'unit_price',
+  'total_price',
+  'sell_total_price',
   'initial_balance',
   'quantity',
   'minimum_quantity',
@@ -33,6 +42,11 @@ class Category extends Model
  }
  public function stock()
  {
-  return $this->belongsTo(stock::class);
+  return $this->belongsTo(Stock::class);
+ }
+
+ public function recipe()
+ {
+  return $this->belongsTo(Recipe::class);
  }
 }

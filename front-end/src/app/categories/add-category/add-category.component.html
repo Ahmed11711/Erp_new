@@ -19,7 +19,6 @@
 
  <form #addCat="ngForm" (ngSubmit)="addCategory(addCat)" enctype="multipart/form-data">
 
-  <!-- اسم الصنف وكود الصنف -->
   <div class="form-row">
    <div class="form-group col-md-6">
     <label for="category_name">اسم الصنف</label>
@@ -35,15 +34,6 @@
     <ng-template #notFoundTemplate let-notFound>
      <div [innerHTML]="notFound"></div>
     </ng-template>
-   </div>
-
-   <div class="form-group col-md-6">
-    <label for="category_code">كود الصنف</label>
-    <input type="text" name="category_code" ngModel #category_code="ngModel" class="form-control" id="category_code"
-     aria-describedby="category_code" required />
-    <div class="form-text text-danger" *ngIf="category_code.touched && category_code.invalid">
-     <div *ngIf="category_code.errors?.['required']">يجب ادخال كود الصنف</div>
-    </div>
    </div>
   </div>
 
@@ -83,6 +73,35 @@
    </div>
   </div>
 
+  <!-- كود الصنف، اللون، الوصفة (اختياري) -->
+  <div class="form-row mt-3">
+   <div class="form-group col-md-4">
+    <label for="item_code">كود الصنف</label>
+    <input type="text" name="item_code" ngModel class="form-control" id="item_code" maxlength="64"
+     autocomplete="off" placeholder="اختياري — يُولَّد تلقائياً إن تُرك فارغاً" />
+    <small class="form-text text-muted">لتمييز النسخ عند تغيير الوصفة؛ إن لم تدخل كوداً يُنشئ النظام كوداً تلقائياً.</small>
+   </div>
+   <div class="form-group col-md-4">
+    <label for="color">اللون</label>
+    <div class="d-flex align-items-center" style="gap:8px;">
+      <input type="text" name="color" ngModel #colorInput="ngModel" class="form-control" id="color" maxlength="128" placeholder="اختياري — مثال: Beige / Fur" />
+      <span class="color-preview"
+        *ngIf="colorInput.value"
+        [style.backgroundColor]="colorInput.value"
+        [title]="colorInput.value">
+      </span>
+    </div>
+   </div>
+   <div class="form-group col-md-4">
+    <label for="recipe_id">الوصفة (BOM)</label>
+    <select class="form-control" name="recipe_id" ngModel id="recipe_id">
+     <option value="">بدون وصفة</option>
+     <option *ngFor="let r of recipesData" [value]="r.id">{{ r.recipe_name }}</option>
+    </select>
+    <small class="form-text text-muted">سجّل الوصفة من التصنيع أولاً إن لم تظهر في القائمة.</small>
+   </div>
+  </div>
+
   <!-- المخزن، وحدة القياس، خط الانتاج -->
   <div class="form-row mt-3">
    <div class="form-group col-md-4">
@@ -97,7 +116,8 @@
                       || 
                       ((user == 'Admin' || user == 'Data Entry') 
                         && elm.name == 'مخزن منتج تام')
-                    )" [value]="elm.name">
+                    )"
+       [value]="elm.name">
        {{ elm.name }}
       </option>
      </ng-container>

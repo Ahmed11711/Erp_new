@@ -1,118 +1,529 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
-      <app-time></app-time>
+<div class="recipe-page container-fluid" dir="rtl">
+  <header class="recipe-page__header row align-items-center py-3">
+    <div class="col-md-4"><app-time></app-time></div>
+    <div class="col-md-4 text-center">
+      <h1 class="recipe-page__title">إضافة وصفة</h1>
+      <p class="recipe-page__subtitle text-muted mb-0">اختر المنتج النهائي، ثم أضف المواد الخام — تظهر في الجدول أسفل حقل الإضافة</p>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">اضافة وصفة</p></div>
+    <div class="col-md-4 text-md-left text-center">
+      <button type="button" class="btn recipe-btn-import" (click)="openImportPanel(importFilePicker)">
+        <span class="recipe-btn-import__icon" aria-hidden="true">⇪</span>
+        استيراد من Excel
+      </button>
+      <input
+        #importFilePicker
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        class="recipe-import-file-input"
+        (change)="onImportFileSelected($event)"
+        aria-hidden="true"
+      />
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
-  </div>
-
-
-  <div class="container mt-5">
-
-    <div class="row">
-      <div class="col-md-3">
-        <select id="inputState" class="form-control" (change)="productType($event)">
-          <option selected disabled>نوع المنتج</option>
-          <option value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
-          <option value="مخزن منتج تام">مخزن منتج تام</option>
-        </select>
+  </header>
+  <div class="recipe-page__content container pb-5">
+    <!-- ١ المنتج النهائي -->
+    <section class="recipe-card recipe-card--product">
+      <h2 class="recipe-card__heading"><span class="recipe-card__step">١</span> المنتج والمخزن</h2>
+      <p class="recipe-card__lead text-muted small mb-3">يحدد المنتج الذي ستُربَط به مكونات الوصفة.</p>
+      <div class="row align-items-end">
+        <div class="col-md-4 mb-3 mb-md-0">
+          <label class="mb-1 d-block small text-muted" for="productWarehouse">نوع المنتج</label>
+          <select id="productWarehouse" class="form-control recipe-select" (change)="productType($event)">
+            <option selected disabled value="">اختر نوع المخزن</option>
+            <option value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
+            <option value="مخزن منتج تام">مخزن منتج تام</option>
+          </select>
+        </div>
+        <div class="col-md-8" *ngIf="selectedWarehouse">
+          <label class="mb-1 d-block small text-muted" for="productSearch">المنتج النهائي</label>
+          <div *ngIf="loadingWarehouseProducts" class="text-muted small py-2">جاري تحميل الأصناف…</div>
+          <ng-autocomplete
+            #productAuto
+            *ngIf="!loadingWarehouseProducts && products.length > 0"
+            id="productSearch"
+            class="recipe-product-autocomplete"
+            [data]="products"
+            [searchKeyword]="catword"
+            [customFilter]="filterCategorySearch"
+            [minQueryLength]="1"
+            [debounceTime]="200"
+            notFoundText="لا توجد نتائج"
+            placeholder="ابحث باسم المنتج (مثلاً: Apron)…"
+            [selectedValueRender]="selectedCategoryLabel"
+            (selected)="onProductSelected($event)"
+            [itemTemplate]="productItemTemplate"
+            [notFoundTemplate]="productNotFoundTemplate"
+          >
+          </ng-autocomplete>
+          <ng-template #productItemTemplate let-item>
+            <div class="recipe-category-option">
+              <span class="recipe-category-option__name" [innerHTML]="item.category_name"></span>
+              <span class="recipe-category-option__code text-muted" dir="ltr" *ngIf="item.item_code">{{ item.item_code }}</span>
+              <span class="recipe-category-option__swatch" *ngIf="item.color" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
+              <span class="recipe-category-option__meta text-muted" *ngIf="item.measurement?.warehouse">{{
+                item.measurement.warehouse
+              }}</span>
+            </div>
+          </ng-template>
+          <ng-template #productNotFoundTemplate let-notFound>
+            <div class="text-muted small p-2">{{ notFound }}</div>
+          </ng-template>
+          <p *ngIf="!loadingWarehouseProducts && products.length === 0" class="text-warning small mb-0">
+            لا توجد أصناف مسجّلة في هذا المخزن.
+          </p>
+        </div>
       </div>
-      <div class="col-md-3" *ngIf="products.length !== 0">
-        <ng-autocomplete
-          [data]="products"
-          [searchKeyword]="catword"
-          placeholder="اسم المنتج"
-          (selected)='productChange($event)'
-          [itemTemplate]="itemTemplates"
-          [notFoundTemplate]="notFoundTemplate">
-        </ng-autocomplete>
+    </section>
 
-        <ng-template #itemTemplates let-item>
-          <a [innerHTML]="item.category_name"></a>
-        </ng-template>
-
-        <ng-template #notFoundTemplate let-notFound>
-          <div [innerHTML]="notFound"></div>
-        </ng-template>
+    <!-- ٢ إضافة مادة → تتدفق إلى الجدول (٣) -->
+    <section class="recipe-card recipe-card--add-ingredient" *ngIf="selectedWarehouse && !loadingWarehouseProducts">
+      <div class="row align-items-center recipe-add-ingredient-row">
+        <div class="col-md-4 col-lg-3 mb-2 mb-md-0">
+          <h2 class="recipe-card__heading recipe-card__heading--inline mb-0">
+            <span class="recipe-card__step">٢</span> إضافة مادة إلى الوصفة
+          </h2>
+        </div>
+        <div class="col-md-8 col-lg-9">
+          <ng-autocomplete
+            #ingredientAuto
+            *ngIf="recipes.length > 0 && product_id"
+            id="ingredientSearch"
+            class="recipe-ingredient-autocomplete"
+            [data]="recipes"
+            [searchKeyword]="catword2"
+            [customFilter]="filterCategorySearch"
+            [minQueryLength]="1"
+            [debounceTime]="200"
+            notFoundText="لا توجد نتائج"
+            placeholder="ابحث عن الصنف (مواد خام أو تحت التشغيل حسب نوع المنتج)…"
+            [selectedValueRender]="selectedCategoryLabel"
+            (selected)="onIngredientSelected($event)"
+            [itemTemplate]="ingredientItemTemplate"
+            [notFoundTemplate]="ingredientNotFoundTemplate"
+          >
+          </ng-autocomplete>
+          <p *ngIf="recipes.length === 0" class="text-muted small mb-0">لا توجد مواد مطابقة لنوع الوصفة المختار.</p>
+          <p *ngIf="recipes.length > 0 && !product_id" class="text-warning small mb-0">
+            اختر المنتج النهائي من الخطوة ١ أولاً حتى تُربَط المواد به.
+          </p>
+        </div>
       </div>
+      <ng-template #ingredientItemTemplate let-item>
+        <div class="recipe-category-option">
+          <span class="recipe-category-option__name" [innerHTML]="item.category_name"></span>
+          <span class="recipe-category-option__code text-muted" dir="ltr" *ngIf="item.item_code">{{ item.item_code }}</span>
+          <span class="recipe-category-option__swatch" *ngIf="item.color" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
+          <span class="recipe-category-option__meta text-muted" *ngIf="item.measurement?.warehouse">{{
+            item.measurement.warehouse
+          }}</span>
+        </div>
+      </ng-template>
+      <ng-template #ingredientNotFoundTemplate let-notFound>
+        <div class="text-muted small p-2">{{ notFound }}</div>
+      </ng-template>
+    </section>
+
+    <!-- ٣ جدول المكونات (نتيجة الخطوة ٢ ومربوط بالمنتج في ١) -->
+    <section class="recipe-card recipe-card--table" *ngIf="selectedWarehouse && !loadingWarehouseProducts">
+      <div class="recipe-table-toolbar">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+          <div>
+            <h2 class="recipe-card__heading mb-1"><span class="recipe-card__step">٣</span> مكونات الوصفة</h2>
+            <p class="recipe-card__lead text-muted small mb-0">الأصناف المضافة للمنتج المحدد في الخطوة ١</p>
+            <p class="recipe-sheet-hint small text-muted mb-0 mt-1" *ngIf="tableData.length">
+              تنقّل سريع: <kbd class="recipe-kbd">Tab</kbd> للصف التالي · <kbd class="recipe-kbd">Enter</kbd> للانتقال للأسفل
+            </p>
+          </div>
+          <span class="badge recipe-badge" *ngIf="tableData.length">{{ tableData.length }} صنف</span>
+        </div>
+      </div>
+      <div class="table-responsive recipe-table-wrap">
+        <table class="table table-hover recipe-table recipe-table--sheet mb-0">
+          <thead class="recipe-table__head">
+            <tr>
+              <th scope="col">الصنف</th>
+              <th scope="col">كود الصنف</th>
+              <th scope="col">اللون</th>
+              <th scope="col">النوع</th>
+              <th scope="col" class="text-center">الكمية المطلوبة</th>
+              <th scope="col">الوحدة</th>
+              <th scope="col" class="text-end recipe-table__num">التكلفة</th>
+              <th scope="col" class="text-end recipe-table__num">التكلفة الإجمالية</th>
+              <th scope="col" class="text-center">صورة</th>
+              <th scope="col" class="text-center recipe-col-actions">حذف</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="tableData.length === 0" class="recipe-row-empty">
+              <td colspan="10" class="recipe-empty">
+                <p class="mb-1 font-weight-bold">لا توجد أصناف بعد</p>
+                <p class="text-muted small mb-0">استخدم حقل «إضافة مادة إلى الوصفة» في الخطوة ٢ أعلاه لإضافة صفوف هنا.</p>
+              </td>
+            </tr>
+            <tr *ngFor="let elm of tableData; let i = index" class="recipe-table__row">
+              <td data-label="الصنف">{{ elm.category_name }}</td>
+              <td data-label="كود الصنف" dir="ltr">{{ elm.item_code || '—' }}</td>
+              <td data-label="اللون">
+                <span *ngIf="elm.color" class="recipe-table-color-cell">
+                  <span class="recipe-color-swatch" [style.backgroundColor]="elm.color" [attr.title]="elm.color"></span>
+                  <span class="recipe-color-label">{{ elm.color }}</span>
+                </span>
+                <span *ngIf="!elm.color">—</span>
+              </td>
+              <td data-label="النوع">{{ elm.measurement.warehouse }}</td>
+              <td data-label="الكمية" class="text-center">
+                <input
+                  class="form-control recipe-qty-input"
+                  type="number"
+                  min="1"
+                  step="any"
+                  [(ngModel)]="elm.quantity"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onQuantityModelChange(elm)"
+                  (keydown)="onRecipeQtyKeydown($event, i)"
+                  [attr.aria-label]="'الكمية لـ ' + elm.category_name"
+                />
+              </td>
+              <td data-label="الوحدة">{{ elm.measurement.unit }}</td>
+              <td data-label="التكلفة" class="text-end recipe-table__num">{{ elm.category_price }}</td>
+              <td data-label="الإجمالي" class="text-end font-weight-bold recipe-table__num">{{ elm.total_price }}</td>
+              <td data-label="صورة" class="text-center recipe-thumb-cell">
+                <img *ngIf="!imageFailed.has(elm.id)" class="recipe-thumb" [src]="imgUrl + elm.category_image" alt=""
+                  (error)="onImgError(elm.id)" />
+                <span *ngIf="imageFailed.has(elm.id)" class="recipe-thumb-placeholder" title="لا توجد صورة">—</span>
+              </td>
+              <td data-label="حذف" class="text-center recipe-actions-cell">
+                <button type="button" class="btn btn-sm recipe-btn-remove" (click)="removeRow(i)"
+                  [attr.aria-label]="'حذف ' + elm.category_name" title="حذف الصف">−</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ٤ التكاليف الإضافية (ماكينة، عمالة، كهرباء، هالك ...) -->
+    <section class="recipe-card recipe-card--extra-costs" *ngIf="selectedWarehouse && !loadingWarehouseProducts && tableData.length > 0">
+      <h2 class="recipe-card__heading"><span class="recipe-card__step">٤</span> تكاليف إضافية</h2>
+      <p class="recipe-card__lead text-muted small mb-3">أضف تكاليف الماكينة، العمالة، الكهرباء، نسبة الهالك أو أي تكلفة أخرى.</p>
+
+      <!-- Add new extra cost row -->
+      <div class="row align-items-end mb-3">
+        <div class="col-md-3 mb-2">
+          <label class="small text-muted mb-1 d-block">الاسم</label>
+          <input class="form-control" type="text" [(ngModel)]="newExtraCostName" placeholder="مثال: تكلفة الماكينة" />
+        </div>
+        <div class="col-md-2 mb-2">
+          <label class="small text-muted mb-1 d-block">النوع</label>
+          <select class="form-control recipe-select" [(ngModel)]="newExtraCostType">
+            <option value="fixed">مبلغ ثابت</option>
+            <option value="percentage">نسبة مئوية %</option>
+          </select>
+        </div>
+        <div class="col-md-2 mb-2">
+          <label class="small text-muted mb-1 d-block">القيمة</label>
+          <input class="form-control" type="number" min="0" step="any" [(ngModel)]="newExtraCostValue" placeholder="0" />
+        </div>
+        <div class="col-md-2 mb-2">
+          <button
+            type="button"
+            class="btn recipe-btn-primary btn-sm w-100"
+            [disabled]="!newExtraCostName || newExtraCostValue == null || newExtraCostValue < 0 || extraCostSaving"
+            (click)="addExtraCost(0)">
+            <span *ngIf="!extraCostSaving">+ إضافة</span>
+            <span *ngIf="extraCostSaving">جاري الحفظ…</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Extra costs table -->
+      <div class="table-responsive" *ngIf="extraCosts.length > 0">
+        <table class="table table-hover recipe-table mb-0">
+          <thead class="recipe-table__head">
+            <tr>
+              <th>الاسم</th>
+              <th>النوع</th>
+              <th class="text-end">القيمة</th>
+              <th class="text-end">المبلغ المحسوب</th>
+              <th class="text-center">إجراء</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let ec of extraCosts">
+              <ng-container *ngIf="editingExtraCostId !== ec.id">
+                <td>{{ ec.name }}</td>
+                <td>{{ ec.type === 'fixed' ? 'مبلغ ثابت' : 'نسبة مئوية' }}</td>
+                <td class="text-end">{{ ec.value }}{{ ec.type === 'percentage' ? '%' : '' }}</td>
+                <td class="text-end font-weight-bold">
+                  {{ ec.type === 'fixed' ? (ec.value | number: '1.0-2') : ((+ec.value / 100) * +(costBreakdown?.materials_cost || 0) | number: '1.0-2') }}
+                </td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-outline-primary mx-1" (click)="startEditExtraCost(ec)">تعديل</button>
+                  <button class="btn btn-sm btn-outline-danger mx-1" (click)="deleteExtraCost(0, ec.id)">حذف</button>
+                </td>
+              </ng-container>
+              <ng-container *ngIf="editingExtraCostId === ec.id">
+                <td><input class="form-control form-control-sm" [(ngModel)]="editExtraCostName" /></td>
+                <td>
+                  <select class="form-control form-control-sm" [(ngModel)]="editExtraCostType">
+                    <option value="fixed">مبلغ ثابت</option>
+                    <option value="percentage">نسبة مئوية %</option>
+                  </select>
+                </td>
+                <td><input class="form-control form-control-sm" type="number" min="0" step="any" [(ngModel)]="editExtraCostValue" /></td>
+                <td></td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-success mx-1" (click)="saveEditExtraCost(0, ec.id)">حفظ</button>
+                  <button class="btn btn-sm btn-secondary mx-1" (click)="cancelEditExtraCost()">إلغاء</button>
+                </td>
+              </ng-container>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Cost breakdown summary -->
+      <div class="recipe-cost-breakdown mt-3" *ngIf="costBreakdown">
+        <div class="row text-center">
+          <div class="col-md-3 mb-2">
+            <div class="recipe-breakdown-box">
+              <span class="recipe-breakdown-box__label">تكلفة المواد الخام</span>
+              <span class="recipe-breakdown-box__value">{{ costBreakdown.materials_cost | number: '1.0-2' }}</span>
+            </div>
+          </div>
+          <div class="col-md-3 mb-2">
+            <div class="recipe-breakdown-box">
+              <span class="recipe-breakdown-box__label">تكاليف ثابتة</span>
+              <span class="recipe-breakdown-box__value">{{ costBreakdown.fixed_costs | number: '1.0-2' }}</span>
+            </div>
+          </div>
+          <div class="col-md-3 mb-2">
+            <div class="recipe-breakdown-box">
+              <span class="recipe-breakdown-box__label">تكاليف نسبية</span>
+              <span class="recipe-breakdown-box__value">{{ costBreakdown.percentage_costs | number: '1.0-2' }}</span>
+            </div>
+          </div>
+          <div class="col-md-3 mb-2">
+            <div class="recipe-breakdown-box recipe-breakdown-box--total">
+              <span class="recipe-breakdown-box__label">التكلفة النهائية</span>
+              <span class="recipe-breakdown-box__value">{{ costBreakdown.final_cost | number: '1.0-2' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="row mt-2" *ngIf="costBreakdown.margin_percent != null">
+          <div class="col text-center">
+            <span class="badge" [class.badge-success]="+(costBreakdown.margin_percent ?? 0) >= 0"
+                                [class.badge-danger]="+(costBreakdown.margin_percent ?? 0) < 0">
+              هامش الربح: {{ +(costBreakdown.margin_percent ?? 0) * 100 | number: '1.0-2' }}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="recipe-card recipe-card--footer" *ngIf="selectedWarehouse && !loadingWarehouseProducts">
+      <h2 class="sr-only">التكلفة والتأكيد</h2>
+      <div class="row align-items-stretch">
+        <div class="col-md-4 mb-3 mb-md-0">
+          <label class="mb-1 d-block small text-muted" for="costType">نوع التكلفة</label>
+          <select id="costType" class="form-control recipe-select" (change)="priceType($event)">
+            <option selected disabled value="">اختر نوع التكلفة</option>
+            <option value="ثابت">ثابت</option>
+            <option value="متغير">متغير</option>
+          </select>
+        </div>
+        <div class="col-md-4 mb-3 mb-md-0" *ngIf="showChangedPrice">
+          <label class="mb-1 d-block small text-muted" for="variableCost">التكلفة المتغيرة</label>
+          <input id="variableCost" class="form-control" type="number" min="0" [(ngModel)]="changedPrice" (keyup)="calcTotalPrice()" />
+        </div>
+        <div class="col-md-4 ml-md-auto">
+          <div class="recipe-total-box">
+            <span class="recipe-total-box__label">إجمالي التكلفة</span>
+            <span class="recipe-total-box__value">{{ totalPrice | number : '1.0-2' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="text-center mt-4">
+        <button type="button" class="btn recipe-btn-primary px-5" (click)="confirmOrder()">تأكيد الوصفة</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- استيراد الوصفات من إكسيل — نافذة معاينة وقرارات                -->
+  <!-- ============================================================= -->
+  <div class="recipe-import-backdrop" *ngIf="importPanelOpen" (click)="closeImportPanel()"></div>
+  <aside class="recipe-import-modal" *ngIf="importPanelOpen" role="dialog" aria-modal="true" aria-labelledby="recipeImportTitle">
+    <header class="recipe-import-modal__header">
+      <h2 id="recipeImportTitle" class="recipe-import-modal__title">استيراد وصفات من ملف Excel</h2>
+      <button type="button" class="recipe-import-modal__close" (click)="closeImportPanel()" aria-label="إغلاق">✕</button>
+    </header>
+
+    <div class="recipe-import-modal__body">
+      <!-- حالة رفع الملف -->
+      <div *ngIf="importUploading" class="recipe-import-state">
+        <div class="recipe-spinner" role="status" aria-label="جاري التحميل"></div>
+        <p class="mb-0 text-muted">جاري تحليل الملف…</p>
+      </div>
+
+      <!-- حالة تنفيذ الاستيراد النهائي -->
+      <div *ngIf="importConfirming" class="recipe-import-state">
+        <div class="recipe-spinner" role="status" aria-label="جاري الحفظ"></div>
+        <p class="mb-0 text-muted">جاري حفظ الوصفات…</p>
+      </div>
+
+      <!-- رسالة نجاح -->
+      <div *ngIf="importSuccess && !importUploading && !importConfirming" class="recipe-import-alert recipe-import-alert--success">
+        <strong class="d-block mb-1">تم استيراد الوصفة بنجاح</strong>
+        <span class="d-block mb-2">{{ importSuccess }}</span>
+        <div class="recipe-import-success-actions">
+          <button type="button" class="btn recipe-btn-link" (click)="openItemsPage()">
+            عرض قائمة الأصناف
+          </button>
+          <button type="button" class="btn recipe-btn-link" (click)="reloadRecipesList()">
+            عرض الوصفات
+          </button>
+        </div>
+      </div>
+
+      <!-- خطأ -->
+      <div *ngIf="importError && !importUploading && !importConfirming" class="recipe-import-alert recipe-import-alert--error">
+        {{ importError }}
+      </div>
+
+      <!-- إرشادات (قبل اختيار الملف) -->
+      <div *ngIf="!importPreview && !importUploading && !importConfirming && !importSuccess" class="recipe-import-hint">
+        <p class="mb-2">
+          ارفع ملف <strong>.xlsx</strong> بنفس تنسيق ملف الأصناف المعتاد:
+          أعمدة <em>اسم الصنف</em> و <em>الخامات</em> و <em>الكمية</em> (بالإضافة إلى <em>الوحدة</em> و <em>السعر</em> اختياريًا).
+        </p>
+        <!-- <p class="mb-0 small text-muted">
+          يتم تجاهل صفوف «سعر المكن / سعر القص / الاجمالي / نسبه هالك / اجمالي التكاليف المباشرة» تلقائيًا.
+        </p> -->
+      </div>
+
+      <!-- نتيجة المعاينة -->
+      <ng-container *ngIf="importPreview && !importUploading && !importConfirming">
+        <div class="recipe-import-summary">
+          <span class="recipe-import-summary__chip">
+            <span class="recipe-import-summary__num">{{ importPreview.summary.recipes_total }}</span> وصفة
+          </span>
+          <span class="recipe-import-summary__chip" [class.recipe-import-summary__chip--warn]="importPreview.summary.missing_items_total > 0">
+            <span class="recipe-import-summary__num">{{ importPreview.summary.missing_items_total }}</span> صنف ناقص
+          </span>
+          <span class="recipe-import-summary__chip" [class.recipe-import-summary__chip--warn]="importPreview.summary.existing_recipes_total > 0">
+            <span class="recipe-import-summary__num">{{ importPreview.summary.existing_recipes_total }}</span> وصفة مكررة
+          </span>
+        </div>
+        <p class="recipe-import-message">{{ importPreview.message }}</p>
+
+        <!-- أ) الأصناف الناقصة -->
+        <section *ngIf="importPreview.missing_items.length > 0" class="recipe-import-section">
+          <h3 class="recipe-import-section__title">الأصناف التالية غير موجودة:</h3>
+          <ul class="recipe-import-missing-list">
+            <li *ngFor="let name of importPreview.missing_items">{{ name }}</li>
+          </ul>
+          <label class="recipe-import-check">
+            <input type="checkbox" [(ngModel)]="allowCreateMissingItems" name="allowCreateMissingItems" />
+            إنشاء الأصناف واستكمال الاستيراد (ستُضاف كمواد خام بسعر 0)
+          </label>
+        </section>
+
+        <!-- ب) الوصفات المتعارضة -->
+        <section *ngIf="importPreview.existing_recipes.length > 0" class="recipe-import-section">
+          <h3 class="recipe-import-section__title">الوصفة موجودة بالفعل — اختر الإجراء:</h3>
+          <div class="recipe-import-conflict-list">
+            <div *ngFor="let r of importPreview.recipes" class="recipe-import-conflict" [hidden]="!r.exists">
+              <div class="recipe-import-conflict__name">
+                <strong>{{ r.recipe_name }}</strong>
+                <small class="text-muted">{{ r.ingredients_count }} مكوِّن</small>
+              </div>
+              <div class="recipe-import-conflict__actions" role="group">
+                <button type="button"
+                  class="recipe-action-btn"
+                  [class.recipe-action-btn--active]="recipeActionsMap[r.normalized_name] === 'replace'"
+                  (click)="setRecipeAction(r, 'replace')">
+                  استبدال
+                </button>
+                <button type="button"
+                  class="recipe-action-btn"
+                  [class.recipe-action-btn--active]="recipeActionsMap[r.normalized_name] === 'create_new'"
+                  (click)="setRecipeAction(r, 'create_new')">
+                  إنشاء نسخة جديدة
+                </button>
+                <button type="button"
+                  class="recipe-action-btn recipe-action-btn--muted"
+                  [class.recipe-action-btn--active]="recipeActionsMap[r.normalized_name] === 'skip'"
+                  (click)="setRecipeAction(r, 'skip')">
+                  تخطي
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ج) معاينة تفصيلية قابلة للطي -->
+        <details class="recipe-import-details">
+          <summary>معاينة الوصفات المستوردة ({{ importPreview.recipes.length }})</summary>
+          <div class="recipe-import-recipes">
+            <article *ngFor="let r of importPreview.recipes" class="recipe-import-recipe">
+              <header class="recipe-import-recipe__header">
+                <strong>{{ r.recipe_name }}</strong>
+                <span class="recipe-import-badge" *ngIf="r.exists">موجودة</span>
+                <span class="recipe-import-badge recipe-import-badge--new" *ngIf="!r.exists">جديدة</span>
+              </header>
+              <table class="recipe-import-recipe__table">
+                <thead>
+                  <tr>
+                    <th>المادة (من الملف)</th>
+                    <th>الصنف المطابق في النظام</th>
+                    <th class="text-center">الكمية</th>
+                    <th>الوحدة</th>
+                    <th class="text-center">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let ing of r.ingredients">
+                    <td>{{ ing.item_name }}</td>
+                    <td>
+                      <ng-container *ngIf="ing.item_exists; else willCreate">
+                        <div class="recipe-import-match">
+                          <span class="recipe-import-match__name">{{ ing.existing_item_name }}</span>
+                          <small class="recipe-import-match__meta text-muted">
+                            <span *ngIf="ing.existing_item_id">#{{ ing.existing_item_id }}</span>
+                            <span *ngIf="ing.existing_item_price != null"> · سعر: {{ ing.existing_item_price | number: '1.0-2' }}</span>
+                          </small>
+                        </div>
+                      </ng-container>
+                      <ng-template #willCreate>
+                        <span class="text-muted">—</span>
+                      </ng-template>
+                    </td>
+                    <td class="text-center">{{ ing.quantity }}</td>
+                    <td>{{ ing.unit || '—' }}</td>
+                    <td class="text-center">
+                      <span class="recipe-import-badge recipe-import-badge--ok" *ngIf="ing.item_exists">مطابق</span>
+                      <span class="recipe-import-badge recipe-import-badge--missing" *ngIf="!ing.item_exists">سيُنشأ</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+          </div>
+        </details>
+      </ng-container>
     </div>
 
-
-  </div> <br>
-
-
-  <div class="container-fluid text-center">
-    <table class="table w-75 m-auto">
-      <thead class="bg-dark text-white">
-        <th>الصنف</th>
-        <th>النوع</th>
-        <th>الكمية المطلوبة</th>
-        <th>الوحده</th>
-        <th>التكلفه</th>
-        <th>التكلفه الاجماليه</th>
-        <th>صوره الصنف</th>
-      </thead>
-      <tbody>
-        <tr *ngFor="let elm of tableData; let i = index">
-          <td>{{elm.category_name}}</td>
-          <td>{{elm.measurement.warehouse}}</td>
-          <td class="text-center"><input class="form-control w-25 m-auto" type="number" min="1" [value]="elm.quantity" (change)="quantityChange($event , i)"></td>
-          <td>{{elm.measurement.unit}}</td>
-          <td>{{elm.category_price}}</td>
-          <td>{{elm.total_price}}</td>
-          <td><img class="img-fluid" style="width: 30px;" [src]="imgUrl+elm.category_image" alt="category image"></td>
-        </tr>
-
-      </tbody>
-    </table>
-  </div>
-  <hr>
-  <div class="w-25 m-auto mt-5" *ngIf="products.length !== 0">
-    <ng-autocomplete
-      [data]="recipes"
-      [searchKeyword]="catword2"
-      placeholder="اسم الصنف"
-      (selected)='recipesChange($event)'
-      [itemTemplate]="itemTemplates"
-      [notFoundTemplate]="notFoundTemplate">
-    </ng-autocomplete>
-
-    <ng-template #itemTemplates let-item>
-      <a [innerHTML]="item.category_name"></a>
-    </ng-template>
-
-    <ng-template #notFoundTemplate let-notFound>
-      <div [innerHTML]="notFound"></div>
-    </ng-template>
-  </div>
-
-  <div class="row mt-5 d-flex justify-content-center">
-    <div class="col-md-2 d-flex align-items-center">
-      <select id="inputState" class="form-control" (change)="priceType($event)">
-        <option selected disabled>نوع التكلفة</option>
-        <option value="ثابت">ثابت</option>
-        <option value="متغير">متغير</option>
-      </select>
-    </div>
-
-    <div class="col-md-1 offset-md-1" *ngIf="showChangedPrice">
-      <h3 class="text-center"> التكلفة المتغيره</h3>
-      <h4><input class="form-control" type="number" min="1" [(ngModel)]="changedPrice" (keyup)="calcTotalPrice()"></h4>
-    </div>
-
-    <div class="col-md-2 text-center">
-      <h3>اجمالى التكلفة</h3>
-      <h4>{{totalPrice}}</h4>
-    </div>
-  </div>
-
-  <div class="text-center mt-3">
-    <button (click)="confirmOrder()" class="btn">تأكيد</button>
-  </div>
-
+    <footer class="recipe-import-modal__footer" *ngIf="!importUploading && !importConfirming">
+      <button type="button" class="btn recipe-btn-cancel" (click)="closeImportPanel()">إلغاء</button>
+      <button
+        type="button"
+        class="btn recipe-btn-primary"
+        *ngIf="importPreview && !importSuccess"
+        [disabled]="!canConfirmImport()"
+        (click)="confirmImport()">
+        تأكيد الاستيراد
+      </button>
+    </footer>
+  </aside>
 </div>

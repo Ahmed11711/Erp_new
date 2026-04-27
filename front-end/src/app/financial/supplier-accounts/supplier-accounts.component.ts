@@ -1,5 +1,5 @@
-import { Component } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { MatPaginator } from '@angular/material/paginator';
 import { AuthService } from 'src/app/auth/auth.service';
 import { TransactionService } from '../services/transaction.service';
 
@@ -8,36 +8,89 @@ import { TransactionService } from '../services/transaction.service';
   templateUrl: './supplier-accounts.component.html',
   styleUrls: ['./supplier-accounts.component.css']
 })
-export class SupplierAccountsComponent {
+export class SupplierAccountsComponent implements OnInit {
 
-  data:any[] = [];
+  data: any[] = [];
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
-  pageSizeOptions = [15,50,100];
+  pageSizeOptions = [15, 50, 100];
   user: any;
 
-  constructor(private TransactionService : TransactionService, private route:Router, private authService:AuthService ) {
-  }
+  /** فلاتر البحث */
+  supplier_name = '';
+  supplier_phone = '';
+  /** '' = الكل؛ want/own كما في API الموردين */
+  selectedStatus: '' | 'want' | 'own' = '';
 
-  ngOnInit(){
+  param: Record<string, string> = {};
+
+  @ViewChild(MatPaginator, { static: false }) paginator!: MatPaginator;
+
+  constructor(
+    private TransactionService: TransactionService,
+    private authService: AuthService
+  ) {}
+
+  ngOnInit() {
     this.user = this.authService.getUser();
-    this.search(arguments);
+    this.applyParamsFromForm();
+    this.loadData();
   }
 
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
-    this.search(arguments);
+    this.loadData();
   }
 
-  param = {};
-  search(event:any){
-    this.TransactionService.searchSupplier(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
-      this.data = res.data;
-      this.length=res.total;
-      this.pageSize=res.per_page;
-    })
+  applyParamsFromForm(): void {
+    this.param = {};
+    const name = (this.supplier_name ?? '').trim();
+    if (name) {
+      this.param['supplier_name'] = name;
+    }
+    const phone = (this.supplier_phone ?? '').trim();
+    if (phone) {
+      this.param['supplier_phone'] = phone;
+    }
+    if (this.selectedStatus === 'want' || this.selectedStatus === 'own') {
+      this.param['status'] = this.selectedStatus;
+    }
+  }
+
+  /** تنفيذ البحث من النموذج */
+  runSearch(): void {
+    this.page = 0;
+    this.paginator?.firstPage();
+    this.applyParamsFromForm();
+    this.loadData();
+  }
+
+  clearSearch(): void {
+    this.supplier_name = '';
+    this.supplier_phone = '';
+    this.selectedStatus = '';
+    this.page = 0;
+    this.paginator?.firstPage();
+    this.param = {};
+    this.loadData();
+  }
+
+  loadData(): void {
+    this.TransactionService.searchSupplier(this.pageSize, this.page + 1, this.param).subscribe({
+      next: (res: any) => {
+        this.data = Array.isArray(res?.data) ? res.data : [];
+        this.length = typeof res?.total === 'number' ? res.total : 0;
+        if (typeof res?.per_page === 'number') {
+          this.pageSize = res.per_page;
+        }
+      },
+      error: () => {
+        this.data = [];
+        this.length = 0;
+      },
+    });
   }
 }

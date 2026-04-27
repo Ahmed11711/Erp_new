@@ -20,6 +20,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatTabsModule } from '@angular/material/tabs';
 import { TokenInterceptor } from './token.interceptor';
 import { HomeComponent } from './home/home.component';
 import { SharedModule } from './shared/shared.module';
@@ -63,7 +64,7 @@ import { LeadStatusService } from './services/lead-status.service';
     SharedModule,
     NgxPaginationModule,
     MatPaginatorModule,
-    
+    MatTabsModule,
   ],
   providers: [
     LoadingService,

@@ -1,0 +1,106 @@
+.wrap {
+  padding: 16px 20px 32px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ic {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eceff1;
+  font-size: 0.85rem;
+}
+
+.sync-pill.ok {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.sync-pill.err {
+  background: #ffebee;
+  color: #b71c1c;
+}
+
+.muted {
+  color: #607d8b;
+  font-size: 0.85rem;
+}
+
+.small {
+  font-size: 0.78rem;
+}
+
+.tab-body {
+  padding: 16px 0;
+}
+
+table.full {
+  width: 100%;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.badge-ok {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.badge-warn {
+  background: #fff8e1;
+  color: #f57f17;
+}
+
+.badge-bad {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.badge-neutral {
+  background: #eceff1;
+  color: #37474f;
+}
+
+mat-form-field.dense {
+  width: 100%;
+  margin: 4px 0;
+}
+
+.preview {
+  white-space: pre-wrap;
+  margin: 0;
+  font-size: 0.75rem;
+  max-width: 720px;
+}

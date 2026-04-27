@@ -16,7 +16,10 @@ class Asset extends Model
         'asset_date',
         'purchase_date',
         'payment_amount',
+        'payment_source_type',
         'bank_id',
+        'safe_id',
+        'service_account_id',
         'asset_amount',
         'purchase_price',
         'current_value',
@@ -25,10 +28,21 @@ class Asset extends Model
         'asset_account_id',
         'depreciation_account_id',
         'expense_account_id',
+        'last_depreciation_date',
     ];
 
     public function bank(){
         return $this->belongsTo(Bank::class);
+    }
+
+    public function safe()
+    {
+        return $this->belongsTo(Safe::class);
+    }
+
+    public function serviceAccount()
+    {
+        return $this->belongsTo(ServiceAccount::class);
     }
 
     public function assetAccount()

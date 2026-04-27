@@ -1,46 +1,13 @@
-.header{
-  background-color: black;
-  color: white;
-  text-align: center;
-  font-size: 2rem;
-  border-radius: 7px;
+/* تفاصيل كشف الحساب — يكمّل report-page-shell */
+.report-page .card-header.bg-info {
+  background: #4f46e5 !important;
+  border-radius: 12px 12px 0 0;
 }
 
-
-thead{
-  font-size: 1.5rem;
+table.report-data-table tfoot .text-success {
+  color: #15803d !important;
 }
 
-.btn-add{
-  border: #82225e solid thin !important;
-  font-size: 1.8rem;
-  padding: 0.1rem 1.5rem !important;
-  border-radius: 2rem;
-}
-
-select , select:focus{
-  background-color: #82225e;
-  color: white;
-  font-size: 1.3rem;
-}
-
-input{
-  font-size: 1.2rem;
-}
-
-i{
-  cursor: pointer;
-}
-
-.submit , .submit:hover{
-  background-color: black !important;
-  font-size: 1.8rem;
-  padding: 0.5rem 2rem !important;
-  color: white;
-}
-
-tfoot{
-  background-color: #82225e;
-  color: white;
-  font-size: 1.5rem;
+table.report-data-table tfoot .text-danger {
+  color: #b91c1c !important;
 }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderConfirmationSession extends Model
 {
-    protected $fillable = ['customer_phone', 'order_id', 'flow_state'];
+    protected $fillable = ['customer_phone', 'order_id', 'flow_state', 'flow_locale'];
 
     public function order(): BelongsTo
     {

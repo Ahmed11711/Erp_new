@@ -30,8 +30,20 @@ class Safe extends Model
 
     public function transactions()
     {
-        return $this->hasMany(SafeTransaction::class, 'from_safe_id')
-            ->orWhere('to_safe_id', $this->id);
+        return SafeTransaction::where(function ($q) {
+            $q->where('from_safe_id', $this->id)
+              ->orWhere('to_safe_id', $this->id);
+        });
+    }
+
+    public function outgoingTransactions()
+    {
+        return $this->hasMany(SafeTransaction::class, 'from_safe_id');
+    }
+
+    public function incomingTransactions()
+    {
+        return $this->hasMany(SafeTransaction::class, 'to_safe_id');
     }
 }
 

@@ -6,6 +6,7 @@ import { SafesComponent } from './safes.component';
 import { SafeDepositWithdrawComponent } from './safe-deposit-withdraw.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 
 @NgModule({
   declarations: [
@@ -18,8 +19,8 @@ import { MatDialogModule } from '@angular/material/dialog';
     SharedModule,
     FormsModule,
     ReactiveFormsModule,
-    MatDialogModule
+    MatDialogModule,
+    MatSnackBarModule
   ]
 })
-export class SafesModule { }
-
+export class SafesModule {}

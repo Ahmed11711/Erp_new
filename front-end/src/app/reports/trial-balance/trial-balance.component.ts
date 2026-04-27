@@ -4,7 +4,7 @@ import { FormGroup, FormControl, Validators } from '@angular/forms';
 @Component({
   selector: 'app-trial-balance',
   templateUrl: './trial-balance.component.html',
-  styleUrls: ['./trial-balance.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './trial-balance.component.css']
 })
 export class TrialBalanceComponent {
 

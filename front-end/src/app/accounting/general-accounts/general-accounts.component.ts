@@ -19,7 +19,8 @@ export class GeneralAccountsComponent implements OnInit {
     { value: 'liability', label: 'التزامات' },
     { value: 'equity', label: 'حقوق ملكية' },
     { value: 'revenue', label: 'إيرادات' },
-    { value: 'expense', label: 'مصروفات' }
+    { value: 'expense', label: 'مصروفات' },
+    { value: 'settlement', label: 'تسوية' }
   ];
 
   constructor(private treeAccountService: TreeAccountService) { }
@@ -60,6 +61,27 @@ export class GeneralAccountsComponent implements OnInit {
   getAccountTypeLabel(type: string): string {
     const found = this.accountTypes.find(t => t.value === type);
     return found ? found.label : type;
+  }
+
+  /** جذر / مجموعة / تفصيلي — وفق دليل حسابات هرمي (بدون حقل يدوي). */
+  getHierarchyRole(account: TreeAccount): string {
+    if (!account.parent_id) {
+      return 'جذر';
+    }
+    const id = account.id;
+    if (id != null && this.accounts.some(a => a.parent_id === id)) {
+      return 'مجموعة';
+    }
+    return 'تفصيلي';
+  }
+
+  /** نفس منطق شجرة الحسابات: للخصوم/الإيرادات/حقوق الملكية عرض الرصيد الطبيعي (−balance). */
+  getDisplayBalance(account: TreeAccount): number {
+    const b = account.balance ?? 0;
+    if (account.type === 'liability' || account.type === 'equity' || account.type === 'revenue' || account.type === 'settlement') {
+      return -b;
+    }
+    return b;
   }
 
   refresh() {

@@ -7,48 +7,69 @@
       <div><p class="title header w-50 m-auto">العهد</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container-fluid">
+    <div *ngIf="loadError" class="alert alert-danger">{{ loadError }}</div>
 
-
-    <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="row">
-        <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
-        </div>
-        <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
-        </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="example-search-input">
-        </div>
+    <div class="row mb-3">
+      <div class="col-md-2">
+        <label for="cov-from">من تاريخ</label>
+        <input id="cov-from" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
       </div>
-    </form>
+      <div class="col-md-2">
+        <label for="cov-to">الى تاريخ</label>
+        <input id="cov-to" class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <input
+          class="form-control border-end-0 border rounded-pill"
+          type="search"
+          placeholder="البحث في الوصف أو المصدر أو المتحصل..."
+          [(ngModel)]="searchWord"
+          (ngModelChange)="applyFilters()"
+        >
+      </div>
+    </div>
 
-
-    <table class="table table-bordered m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>التاريخ</th>
-        <th>متحصل العهدة</th>
-        <th>المبلغ</th>
-        <th>السبب</th>
-        <th>بواسطة</th>
-      </thead>
-
-      <tfoot>
-        <tr>
-          <td>الاجمالى</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-          <td>0</td>
-        </tr>
-      </tfoot>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-bordered m-auto text-center" dir="rtl">
+        <thead class="bg-dark text-white">
+          <tr>
+            <th>التاريخ</th>
+            <th>نوع العهدة</th>
+            <th>متحصل العهدة</th>
+            <th>مصدر الصرف (محاسبة)</th>
+            <th>المبلغ</th>
+            <th>السبب</th>
+            <th>ملاحظات</th>
+            <th>بواسطة</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let elm of tableData">
+            <td>{{ formatDate(elm.transaction_date) }}</td>
+            <td>{{ elm.covenant_type }}</td>
+            <td>{{ holderLabel(elm.holder_kind) }}</td>
+            <td class="text-start">{{ paymentSourceLabel(elm) }}</td>
+            <td>{{ elm.amount }}</td>
+            <td class="text-start">{{ elm.description || '—' }}</td>
+            <td class="text-start">{{ elm.note || '—' }}</td>
+            <td>{{ elm.user?.name || '—' }}</td>
+          </tr>
+          <tr *ngIf="!tableData.length">
+            <td colspan="8" class="text-muted py-4">لا توجد بيانات مطابقة للفلتر الحالي.</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="text-end fw-bold">الإجمالي</td>
+            <td class="fw-bold">{{ totalAmount | number : '1.2-2' }}</td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
 </div>
