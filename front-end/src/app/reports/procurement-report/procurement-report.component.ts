@@ -5,7 +5,7 @@ import { InvoiceService } from 'src/app/purchases/service/invoice.service';
 @Component({
   selector: 'app-procurement-report',
   templateUrl: './procurement-report.component.html',
-  styleUrls: ['./procurement-report.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './procurement-report.component.css']
 })
 export class ProcurementReportComponent implements OnInit {
 
@@ -17,6 +17,7 @@ export class ProcurementReportComponent implements OnInit {
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15, 50, 100];
+  showFilters = true;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
@@ -119,6 +120,10 @@ export class ProcurementReportComponent implements OnInit {
     this.router.navigate(['/dashboard/purchases/add_invoice', id]);
   }
 
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
+  }
+
   getTotals(): { product: number; shipping: number; grand: number; paid: number; due: number } {
     return this.invoices.reduce(
       (acc, item) => ({
@@ -130,5 +135,19 @@ export class ProcurementReportComponent implements OnInit {
       }),
       { product: 0, shipping: 0, grand: 0, paid: 0, due: 0 }
     );
+  }
+
+  expanded = new Set<number>();
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
   }
 }

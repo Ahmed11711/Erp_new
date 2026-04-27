@@ -1,98 +1,140 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">تقرير المخزون</p></div>
-    </div>
-    <div class="col-3 d-flex align-items-center justify-content-end"></div>
+    <h1 class="report-title">تقرير المخزون</h1>
+    <div class="report-topbar-side"></div>
   </div>
 
-  <div class="container-fluid">
-    <form class="my-5">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-2">
-          <label class="form-label">من تاريخ</label>
-          <input class="form-control" type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="load()">
+  <div class="filter-chips">
+    <button type="button" class="chip chip-filter" (click)="toggleFilters()">
+      <i class="fa-solid fa-sliders"></i>
+      <span>فلترة</span>
+    </button>
+    <div class="chip chip-select" *ngIf="showFilters">
+      <i class="fa-solid fa-warehouse"></i>
+      <select [(ngModel)]="warehouse" name="warehouse" (change)="load()">
+        <option *ngFor="let w of warehouses" [value]="w.value">{{ w.label }}</option>
+      </select>
+    </div>
+    <div class="chip chip-date" *ngIf="showFilters">
+      <i class="fa-regular fa-calendar"></i>
+      <span class="date-range">
+        <input type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="load()">
+        <span class="date-sep">—</span>
+        <input type="date" [(ngModel)]="dateTo" name="dateTo" (change)="load()">
+      </span>
+    </div>
+    <div class="chip chip-search" *ngIf="showFilters">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" placeholder="بحث..." [(ngModel)]="searchTerm" name="searchTerm" (input)="onSearchChange()">
+    </div>
+    <div class="chip chip-apply" *ngIf="showFilters">
+      <button type="button" (click)="load()" [disabled]="loading">تحديث</button>
+    </div>
+  </div>
+
+  <div class="summary-grid" *ngIf="!loading && !loadError && data.length > 0">
+    <div class="summary-card neutral">
+      <div class="summary-icon"><i class="fa-solid fa-list"></i></div>
+      <div class="summary-label">عدد الحركات (الصفحة)</div>
+      <div class="summary-value">{{ filteredRowCount | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card new-qty">
+      <div class="summary-icon"><i class="fa-solid fa-right-left"></i></div>
+      <div class="summary-label">إجمالي الحركة</div>
+      <div class="summary-value">{{ sumQuantity | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card new-value">
+      <div class="summary-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+      <div class="summary-label">رصيد أول</div>
+      <div class="summary-value">{{ sumBalanceBefore | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card returns">
+      <div class="summary-icon"><i class="fa-solid fa-box"></i></div>
+      <div class="summary-label">رصيد آخر</div>
+      <div class="summary-value">{{ sumBalanceAfter | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="state-box">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+  <div *ngIf="!loading && loadError" class="state-box--danger">
+    حدث خطأ في تحميل البيانات. تأكد من الاتصال بالخادم وتسجيل الدخول.
+  </div>
+  <div *ngIf="!loading && !loadError && data.length === 0" class="state-box empty">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>لا توجد بيانات لهذه الفترة أو المخزن المحدد.</p>
+  </div>
+
+  <div class="items-list" *ngIf="!loading && !loadError && filteredData.length > 0">
+    <div class="item-card" *ngFor="let r of filteredData; let i = index; trackBy: trackByIndex"
+      [class.expanded]="expanded.has(i)">
+      <div class="item-head">
+        <button class="item-chevron" type="button" (click)="toggleExpand(i)">
+          <i class="fa-solid" [ngClass]="expanded.has(i) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div class="item-title" (click)="toggleExpand(i)">{{ r.category_name }}</div>
+      </div>
+
+      <div class="item-stats">
+        <div class="stat">
+          <div class="stat-head"><span>الصنف</span></div>
+          <div class="stat-value net">{{ r.category_name }}</div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">الى تاريخ</label>
-          <input class="form-control" type="date" [(ngModel)]="dateTo" name="dateTo" (change)="load()">
+        <div class="stat">
+          <div class="stat-head"><span>رصيد أول</span></div>
+          <div class="stat-value new-value">{{ r.balance_before != null ? (r.balance_before | customNumber) : '—' }}</div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">المخزن</label>
-          <select class="form-control" [(ngModel)]="warehouse" name="warehouse" (change)="load()">
-            <option *ngFor="let w of warehouses" [value]="w.value">{{ w.label }}</option>
-          </select>
+        <div class="stat">
+          <div class="stat-head"><span>الحركة</span></div>
+          <div class="stat-value new-qty">{{ r.quantity != null ? (r.quantity | customNumber) : '—' }}</div>
         </div>
-        <div class="col-md-2">
-          <button class="btn btn-primary w-100" type="button" (click)="load()" [disabled]="loading">تحديث</button>
+        <div class="stat">
+          <div class="stat-head"><span>رصيد آخر</span></div>
+          <div class="stat-value returns">{{ r.balance_after != null ? (r.balance_after | customNumber) : '—' }}</div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">البحث</label>
-          <input class="form-control" type="search" placeholder="البحث..." [(ngModel)]="searchTerm" name="searchTerm" (input)="onSearchChange()">
+        <div class="stat">
+          <div class="stat-head"><span>البيان</span></div>
+          <div class="stat-value orders">{{ r.type }}</div>
         </div>
       </div>
-    </form>
 
-    <div *ngIf="loading" class="text-center my-4">
-      <div class="spinner-border text-primary" role="status"></div>
-    </div>
+      <button class="item-details-toggle" type="button" (click)="toggleExpand(i)">
+        <span>عرض التفاصيل</span>
+        <i class="fa-solid" [ngClass]="expanded.has(i) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+      </button>
 
-    <div *ngIf="!loading && loadError" class="alert alert-danger text-center my-4">
-      حدث خطأ في تحميل البيانات. تأكد من الاتصال بالخادم وتسجيل الدخول.
-    </div>
-
-    <div *ngIf="!loading && !loadError && data.length === 0" class="alert alert-info text-center my-4">
-      لا توجد بيانات لهذه الفترة أو المخزن المحدد.
-    </div>
-
-    <div class="table-responsive" *ngIf="!loading && !loadError && data.length > 0">
-      <table class="table table-bordered table-striped w-75 m-auto text-center">
-        <thead class="bg-dark text-white">
-          <tr>
-            <th>الصنف</th>
-            <th>المخزن</th>
-            <th>وحدة القياس</th>
-            <th>رصيد اول</th>
-            <th>الحركة</th>
-            <th>رصيد اخر</th>
-            <th>التاريخ</th>
-            <th>البيان</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let r of filteredData">
-            <td class="text-start">{{ r.category_name }}</td>
-            <td>{{ r.warehouse || warehouse }}</td>
-            <td>{{ r.measurement_unit || '-' }}</td>
-            <td>{{ r.balance_before }}</td>
-            <td>{{ r.quantity }}</td>
-            <td>{{ r.balance_after }}</td>
-            <td>{{ formatDate(r.created_at) }}</td>
-            <td>{{ r.type }}</td>
-          </tr>
-          <tr *ngIf="searchTerm && filteredData.length === 0" class="table-warning">
-            <td colspan="8" class="text-center">لا توجد نتائج تطابق البحث</td>
-          </tr>
-        </tbody>
-        <tfoot *ngIf="filteredData.length > 0">
-          <tr>
-            <td colspan="3">الإجمالي</td>
-            <td>{{ sumBalanceBefore }}</td>
-            <td>{{ sumQuantity }}</td>
-            <td>{{ sumBalanceAfter }}</td>
-            <td>—</td>
-            <td>—</td>
-          </tr>
-        </tfoot>
-      </table>
-      <div class="d-flex justify-content-center my-2">
-        <mat-paginator [length]="length" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"
-          (page)="onPageChange($event)" showFirstLastButtons>
-        </mat-paginator>
+      <div class="item-details" *ngIf="expanded.has(i)">
+        <div class="detail">
+          <div class="detail-label">المخزن</div>
+          <div class="detail-value">{{ r.warehouse || warehouse }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">وحدة القياس</div>
+          <div class="detail-value">{{ r.measurement_unit || '-' }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">التاريخ</div>
+          <div class="detail-value">{{ formatDate(r.created_at) }}</div>
+        </div>
       </div>
     </div>
+  </div>
+
+  <div class="paginator-wrap" *ngIf="!loading && !loadError && filteredData.length > 0">
+    <mat-paginator
+      [length]="length"
+      [pageSize]="pageSize"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onPageChange($event)"
+      showFirstLastButtons>
+    </mat-paginator>
   </div>
 </div>

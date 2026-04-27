@@ -1,82 +1,111 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">تقرير شركات الشحن</p></div>
+    <h1 class="report-title">تقرير شركات الشحن</h1>
+    <div class="report-topbar-side"></div>
+  </div>
+
+  <div class="filter-chips">
+    <button type="button" class="chip chip-filter" (click)="toggleFilters()">
+      <i class="fa-solid fa-sliders"></i>
+      <span>فلترة</span>
+    </button>
+    <div class="chip chip-date" *ngIf="showFilters">
+      <i class="fa-regular fa-calendar"></i>
+      <span class="date-range">
+        <input id="ship-from" type="date" name="dateFrom" [(ngModel)]="dateFrom" (ngModelChange)="onDatesChange()">
+        <span class="date-sep">—</span>
+        <input id="ship-to" type="date" name="dateTo" [(ngModel)]="dateTo" (ngModelChange)="onDatesChange()">
+      </span>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
+    <div class="chip chip-search" *ngIf="showFilters">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" placeholder="البحث..." name="shipSearch" [(ngModel)]="searchKeyword" (ngModelChange)="onSearchInput()">
     </div>
   </div>
 
+  <div class="summary-grid" *ngIf="!loading && data.length > 0">
+    <div class="summary-card returns">
+      <div class="summary-icon"><i class="fa-solid fa-xmark"></i></div>
+      <div class="summary-label">رفض الاستلام</div>
+      <div class="summary-value">{{ totalRefused | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card new-value">
+      <div class="summary-icon"><i class="fa-solid fa-check"></i></div>
+      <div class="summary-label">تم التحصيل</div>
+      <div class="summary-value">{{ totalCollected | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card net">
+      <div class="summary-icon"><i class="fa-solid fa-percent"></i></div>
+      <div class="summary-label">نسبة التحصيل</div>
+      <div class="summary-value">{{ aggregateCollectionPercentage }}%</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card orders">
+      <div class="summary-icon"><i class="fa-solid fa-bag-shopping"></i></div>
+      <div class="summary-label">إجمالي الطلبات</div>
+      <div class="summary-value">{{ totalOrders | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+  </div>
 
-  <div class="container-fluid">
+  <div *ngIf="loading" class="state-box">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
 
-    <div class="my-5">
-      <div class="row">
-        <div class="col-md-2">
-          <label for="ship-from">من تاريخ</label>
-          <input id="ship-from" class="form-control" type="date" name="dateFrom"
-            [(ngModel)]="dateFrom" (ngModelChange)="onDatesChange()">
+  <div class="state-box empty" *ngIf="!loading && data.length === 0">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>لا توجد بيانات لهذه الفترة.</p>
+  </div>
+
+  <div class="items-list" *ngIf="!loading && data.length > 0">
+    <div class="item-card" *ngFor="let row of data; let i = index; trackBy: trackByIndex"
+      [class.expanded]="expanded.has(i)">
+      <div class="item-head">
+        <button class="item-chevron" type="button" (click)="toggleExpand(i)">
+          <i class="fa-solid" [ngClass]="expanded.has(i) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div class="item-title" (click)="toggleExpand(i)">{{ row.name }} ({{ row.type }})</div>
+      </div>
+
+      <div class="item-stats">
+        <div class="stat">
+          <div class="stat-head"><span>عدد الطلبات</span></div>
+          <div class="stat-value orders">{{ row.orders_count | customNumber }}</div>
         </div>
-        <div class="col-md-2">
-          <label for="ship-to">الى تاريخ</label>
-          <input id="ship-to" class="form-control" type="date" name="dateTo"
-            [(ngModel)]="dateTo" (ngModelChange)="onDatesChange()">
+        <div class="stat">
+          <div class="stat-head"><span>تم التحصيل</span></div>
+          <div class="stat-value new-value">{{ row.collected_count | customNumber }}</div>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..."
-            name="shipSearch" [(ngModel)]="searchKeyword" (ngModelChange)="onSearchInput()">
+        <div class="stat">
+          <div class="stat-head"><span>رفض الاستلام</span></div>
+          <div class="stat-value returns">{{ row.refused_count | customNumber }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head"><span>نسبة التحصيل</span></div>
+          <div class="stat-value net">{{ row.collection_percentage }}%</div>
+        </div>
+      </div>
+
+      <button class="item-details-toggle" type="button" (click)="toggleExpand(i)">
+        <span>عرض التفاصيل</span>
+        <i class="fa-solid" [ngClass]="expanded.has(i) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+      </button>
+
+      <div class="item-details" *ngIf="expanded.has(i)">
+        <div class="detail">
+          <div class="detail-label">سبب الرفض</div>
+          <div class="detail-value">{{ row.refusal_reasons || '—' }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">الفترة</div>
+          <div class="detail-value">{{ row.period_from }} — {{ row.period_to }}</div>
         </div>
       </div>
     </div>
-
-
-    <table class="table table-bordered w-75 m-auto text-center">
-      <thead class="bg-dark text-white">
-        <tr>
-          <th>الاسم</th>
-          <th>نوع</th>
-          <th>عدد الطلبات</th>
-          <th>عدد الطلبات تم التحصيل</th>
-          <th>عدد الطلبات رفض الاستلام</th>
-          <th>نسبة تم التحصيل</th>
-          <th>سبب رفض الاستلام</th>
-          <th>التاريخ</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngIf="loading">
-          <td colspan="8">جاري التحميل...</td>
-        </tr>
-        <tr *ngIf="!loading && data.length === 0">
-          <td colspan="8">لا توجد بيانات في هذه الفترة</td>
-        </tr>
-        <tr *ngFor="let row of data">
-          <td>{{ row.name }}</td>
-          <td>{{ row.type }}</td>
-          <td>{{ row.orders_count }}</td>
-          <td>{{ row.collected_count }}</td>
-          <td>{{ row.refused_count }}</td>
-          <td>{{ row.collection_percentage }}%</td>
-          <td class="text-wrap" style="max-width: 220px;">{{ row.refusal_reasons || '—' }}</td>
-          <td>{{ row.period_from }} — {{ row.period_to }}</td>
-        </tr>
-      </tbody>
-      <tfoot *ngIf="!loading && data.length > 0">
-        <tr>
-          <td colspan="2">الإجمالي</td>
-          <td>{{ totalOrders }}</td>
-          <td>{{ totalCollected }}</td>
-          <td>{{ totalRefused }}</td>
-          <td>{{ aggregateCollectionPercentage }}%</td>
-          <td>—</td>
-          <td>{{ dateFrom }} — {{ dateTo }}</td>
-        </tr>
-      </tfoot>
-    </table>
-
-
   </div>
 </div>

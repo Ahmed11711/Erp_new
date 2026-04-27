@@ -1,3 +1,17 @@
+/**
+ * WhatsApp-like layout: fill the area under the dashboard toolbar and keep
+ * scroll inside the conversation list + message pane (no full-page growth).
+ */
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* Fill mat-sidenav-content (dashboard gives it flex + min-height: 0) */
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .wa-chat-page {
   --wa-out: #056162;
   --wa-out-text: #fff;
@@ -5,24 +19,182 @@
   --wa-bg: #e8e4dc;
   --wa-chip: #e8f4ea;
   --wa-chip-border: #b7d7be;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
 .wa-chat-row {
-  min-height: calc(100vh - 100px);
-  max-height: calc(100vh - 100px);
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .wa-chat-row {
+    flex-wrap: nowrap;
+  }
+}
+
+/* Bootstrap columns become flex columns so overflow-y works on children */
+.wa-chat-main-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .wa-customer-list {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  max-height: 100%;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   background: #fafafa;
+  position: relative;
+}
+
+.wa-customer-list--loading {
+  opacity: 0.95;
+}
+
+/* العنوان + البحث يبقيان ظاهرين عند التمرير داخل القائمة */
+.wa-conv-list-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 
 .wa-panel-header {
   background: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 1;
+}
+
+/* بحث داخل قائمة المحادثات (عمود اليمين) */
+.wa-list-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.5rem 0.6rem;
+  background: #fafafa;
+}
+
+.wa-list-search {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem 0.2rem 0.35rem;
+}
+
+.wa-list-search input {
+  border: none;
+  outline: none;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.86rem;
+  background: transparent;
+  padding: 0.35rem 0.4rem;
+}
+
+.wa-list-search-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: #667781;
+  flex-shrink: 0;
+}
+
+.wa-list-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #667781;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wa-list-search-clear:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.wa-list-search-clear mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+/* تصفية القائمة بالتاريخ (يظهر عملاء بوجود رسالة ضمن النطاق) */
+.wa-list-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem 0.65rem;
+  background: #fafafa;
+}
+
+.wa-list-dates-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #667781;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.wa-list-dates-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.wa-list-date-input {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0.28rem 0.4rem;
+  font-size: 0.78rem;
+  background: #fff;
+  color: #111;
+}
+
+.wa-list-dates-sep {
+  color: #9aa0a3;
+  flex-shrink: 0;
+}
+
+.wa-list-filters-clear {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #0277bd;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.wa-list-loading {
+  background: #f0f0f0;
+  border-bottom: 1px solid #e8e8e8;
+  font-size: 0.8rem;
 }
 
 .wa-customer-item {
@@ -40,7 +212,9 @@
 }
 
 .wa-chat-main {
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
   background: var(--wa-bg);
 }
 
@@ -50,10 +224,15 @@
 }
 
 .wa-messages-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 1rem 1.25rem;
   background-color: var(--wa-bg);
   background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8c4bc' fill-opacity='0.25'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  scroll-behavior: smooth;
 }
 
 .wa-msg-row {
@@ -249,8 +428,9 @@
 }
 
 .wa-empty-bg {
+  flex: 1 1 auto;
+  min-height: 0;
   background: #fafafa;
-  min-height: calc(100vh - 100px);
 }
 
 .wa-empty-icon {
@@ -266,4 +446,378 @@
 
 #chat-messages {
   scroll-behavior: smooth;
+}
+
+/* ───────── Filters bar (داخل منطقة الشات) ───────── */
+.wa-filters {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 0.45rem;
+  padding: 0.5rem 0.75rem;
+  background: #f6f6f6;
+}
+
+.wa-filters-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.wa-filters-messages {
+  padding-top: 0.1rem;
+}
+
+.wa-filter-messages {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.wa-filter-input {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  padding: 0.25rem 0.75rem;
+}
+
+.wa-filter-input input {
+  border: none;
+  outline: none;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  background: transparent;
+  padding: 0.25rem 0.5rem;
+}
+
+.wa-filter-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: #667781;
+}
+
+.wa-filter-dates {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.wa-filter-dates input[type='date'] {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+  background: #fff;
+}
+
+.wa-filter-sep {
+  color: #999;
+}
+
+.wa-filter-clear {
+  background: transparent;
+  border: none;
+  color: #0277bd;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ───────── Load more (top) ───────── */
+.wa-load-more {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0.5rem 0;
+}
+
+.wa-load-more-btn {
+  background: #fff;
+  border: 1px solid #d7d7d7;
+  color: #075e54;
+  padding: 0.35rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.wa-load-more-btn[disabled] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ───────── Media bubbles ───────── */
+.wa-media-wrap {
+  position: relative;
+  margin: -0.15rem -0.45rem 0.4rem;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 320px;
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.wa-media-img,
+.wa-media-video {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  background: #000;
+}
+
+.wa-media-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 140px;
+  color: #555;
+  background: #e9e9e9;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+.wa-media-dl {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.wa-media-dl:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.wa-media-dl-inline {
+  position: static;
+  margin-inline-start: 0.5rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.wa-media-dl mat-icon,
+.wa-media-dl-inline mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.wa-media-audio {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.wa-media-audio audio {
+  flex: 1;
+  min-width: 180px;
+}
+
+.wa-audio-load {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.wa-document {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  margin-bottom: 0.35rem;
+}
+
+.wa-bubble-in .wa-document {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.wa-document mat-icon {
+  font-size: 28px;
+  width: 28px;
+  height: 28px;
+}
+
+.wa-document-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.wa-document-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wa-document-mime {
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+/* ───────── Delivery ticks ───────── */
+.wa-tick {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-inline-start: 0.2rem;
+  opacity: 0.85;
+}
+
+.wa-tick-read {
+  color: #34b7f1;
+  opacity: 1;
+}
+
+.wa-spin {
+  animation: wa-spin 1s linear infinite;
+}
+
+@keyframes wa-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ───────── Lightbox ───────── */
+.wa-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.wa-lightbox-inner {
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wa-lightbox-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.wa-lightbox-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.wa-lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.wa-lightbox-close {
+  padding: 0.4rem;
+}
+
+.wa-lightbox-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.wa-lightbox-img {
+  max-width: 90vw;
+  max-height: 80vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.wa-lightbox-video {
+  max-width: 90vw;
+  max-height: 80vh;
+  background: #000;
+}
+
+.wa-lightbox-loading {
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2rem;
+}
+
+/* Narrow screens: columns stack; allow page scroll so nothing is unusably clipped */
+@media (max-width: 767.98px) {
+  :host {
+    flex: 1 1 auto;
+    overflow: visible;
+    height: auto;
+    max-height: none;
+  }
+
+  .wa-chat-page {
+    overflow: visible;
+    min-height: calc(100dvh - 120px);
+  }
+
+  .wa-chat-row {
+    flex-wrap: wrap;
+    overflow: visible;
+    height: auto;
+  }
+
+  .wa-customer-list {
+    max-height: 45dvh;
+  }
+
+  .wa-chat-main {
+    min-height: 50dvh;
+    max-height: none;
+  }
+
+  .wa-messages-scroll {
+    min-height: 200px;
+    max-height: 50dvh;
+  }
 }

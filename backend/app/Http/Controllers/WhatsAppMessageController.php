@@ -8,6 +8,7 @@ use App\Models\MessageTemplate;
 use App\Models\Order;
 use App\Services\MetaWhatsAppService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -118,15 +119,15 @@ class WhatsAppMessageController extends Controller
             $result = $whatsappService->sendMessage($phone, $messageContent);
 
             if ($result['success']) {
-                // Store message in database
                 $message = Message::create([
                     'customer_id' => $customer->id,
                     'sender_id' => auth()->id(),
-                    'receiver_id' => null, // Customer receives it
+                    'receiver_id' => null,
                     'content' => $messageContent,
                     'direction' => 'outbound',
                     'status' => 'sent',
                     'twilio_message_sid' => $result['message_sid'] ?? null,
+                    'phone_number_id' => $phoneNumberId,
                 ]);
 
                 Log::info('WhatsApp message sent successfully', [
@@ -286,12 +287,54 @@ class WhatsAppMessageController extends Controller
     public function getCustomers(Request $request)
     {
         try {
-            $customers = Customer::with(['assignedAgent', 'messages' => function ($query) {
+            $query = Customer::with(['assignedAgent', 'messages' => function ($query) {
                 $query->latest()->limit(1);
             }])
-            ->withCount('messages')
-            ->orderBy('updated_at', 'desc')
-            ->paginate($request->get('per_page', 20));
+                ->withCount('messages')
+                ->withMax('messages', 'created_at')
+                // Newest activity first: last message time; customers with no messages sink to the bottom.
+                ->orderByRaw('COALESCE(messages_max_created_at, ?) DESC', ['1970-01-01 00:00:00'])
+                // Tie-breakers: same last-message second → most recently touched row → stable id.
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id');
+
+            // Filter list: only customers who had at least one message in the date range (inclusive).
+            $fromRaw = $request->query('from_date');
+            $toRaw = $request->query('to_date');
+            if (! empty($fromRaw) || ! empty($toRaw)) {
+                $fromAt = null;
+                $toAt = null;
+                if (! empty($fromRaw)) {
+                    try {
+                        $fromAt = Carbon::parse($fromRaw)->startOfDay();
+                    } catch (\Throwable $e) {
+                        $fromAt = null;
+                    }
+                }
+                if (! empty($toRaw)) {
+                    try {
+                        $toAt = Carbon::parse($toRaw)->endOfDay();
+                    } catch (\Throwable $e) {
+                        $toAt = null;
+                    }
+                }
+
+                if ($fromAt && $toAt && $fromAt->gt($toAt)) {
+                    [$fromAt, $toAt] = [$toAt->copy()->startOfDay(), $fromAt->copy()->endOfDay()];
+                }
+
+                $query->whereHas('messages', function ($q) use ($fromAt, $toAt) {
+                    if ($fromAt && $toAt) {
+                        $q->whereBetween('created_at', [$fromAt, $toAt]);
+                    } elseif ($fromAt) {
+                        $q->where('created_at', '>=', $fromAt);
+                    } elseif ($toAt) {
+                        $q->where('created_at', '<=', $toAt);
+                    }
+                });
+            }
+
+            $customers = $query->paginate($request->get('per_page', 20));
 
             return response()->json([
                 'success' => true,

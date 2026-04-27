@@ -1,19 +1,22 @@
-<div class="container-fluid">
+<div class="container-fluid" dir="rtl">
   <div class="row py-3">
     <div class="col-4 d-flex align-items-center">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">وصفات التصنيع</p></div>
+    <div class="col-4">
+      <div><p class="title header w-75 m-auto">وصفات التصنيع</p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+    <div class="col-4 d-flex align-items-center justify-content-end" style="gap:10px;">
+      <button class="btn btn-sm btn-danger" *ngIf="selectedIds.size > 0" [disabled]="bulkDeleting"
+        (click)="bulkDelete()">
+        <span *ngIf="!bulkDeleting">حذف المحدد ({{ selectedIds.size }})</span>
+        <span *ngIf="bulkDeleting">جاري الحذف…</span>
+      </button>
     </div>
   </div>
 
-
-  <div class="container mt-5">
-
+  <!-- Filters (BOM view) -->
+  <div class="container mt-3">
     <div class="row">
       <div class="col-md-3">
         <select id="inputState" class="form-control" (change)="productType($event)">
@@ -27,54 +30,206 @@
           [data]="products"
           [searchKeyword]="catword"
           placeholder="اسم المنتج"
-          (selected)='productChange($event)'
+          (selected)="productChange($event)"
           (inputCleared)="resetProductFilter()"
           [itemTemplate]="itemTemplates"
           [notFoundTemplate]="notFoundTemplate">
         </ng-autocomplete>
-
         <ng-template #itemTemplates let-item>
           <a [innerHTML]="item.category_name"></a>
         </ng-template>
-
         <ng-template #notFoundTemplate let-notFound>
           <div [innerHTML]="notFound"></div>
         </ng-template>
       </div>
     </div>
+  </div>
 
+  <!-- ════════════════════════════════════════════════════════ -->
+  <!-- Recipes list with detail expand                         -->
+  <!-- ════════════════════════════════════════════════════════ -->
+  <div class="container-fluid mt-4">
+    <h3 class="section-title">جميع الوصفات ({{ recipes.length }})</h3>
 
-  </div> <br>
+    <p *ngIf="recipes.length === 0" class="text-muted text-center py-4">لا توجد وصفات مسجلة.</p>
 
+    <table class="table table-bordered recipes-master-table" *ngIf="recipes.length > 0">
+      <thead>
+        <tr>
+          <th class="text-center" style="width:40px;">
+            <input type="checkbox" [checked]="selectedIds.size === recipes.length && recipes.length > 0"
+              (change)="toggleSelectAll()" title="تحديد الكل" />
+          </th>
+          <th>#</th>
+          <th>اسم الوصفة</th>
+          <th class="text-center">عدد المكونات</th>
+          <th class="text-center">تكاليف إضافية</th>
+          <th class="text-center">الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let r of recipes; let i = index">
+          <!-- Master row -->
+          <tr [class.table-active]="expandedRecipeId === r.id">
+            <td class="text-center">
+              <input type="checkbox" [checked]="selectedIds.has(r.id)" (change)="toggleSelect(r.id)" />
+            </td>
+            <td>{{ i + 1 }}</td>
+            <td class="recipe-name-cell" (click)="toggleDetail(r.id)" style="cursor:pointer;">
+              <strong>{{ r.recipe_name }}</strong>
+              <small class="text-muted d-block" *ngIf="r.description">{{ r.description }}</small>
+            </td>
+            <td class="text-center">{{ r.ingredients_count || 0 }}</td>
+            <td class="text-center">{{ r.extra_costs_count || 0 }}</td>
+            <td class="text-center" style="white-space:nowrap;">
+              <button class="btn btn-sm btn-outline-primary mx-1" (click)="toggleDetail(r.id)"
+                title="عرض التفاصيل">
+                {{ expandedRecipeId === r.id ? '▲ إخفاء' : '▼ تفاصيل' }}
+              </button>
+              <button class="btn btn-sm btn-outline-danger mx-1" (click)="askDelete(r.id)"
+                title="حذف الوصفة">
+                حذف
+              </button>
+            </td>
+          </tr>
 
-  <div class="container-fluid text-center">
+          <!-- Detail row (expandable) -->
+          <tr *ngIf="expandedRecipeId === r.id">
+            <td colspan="6" class="detail-cell">
+              <div *ngIf="loadingDetail" class="text-center py-3 text-muted">جاري تحميل التفاصيل…</div>
+
+              <div *ngIf="!loadingDetail && expandedDetail" class="detail-content">
+                <!-- Materials -->
+                <h5 class="detail-section-title">المواد الخام ({{ expandedDetail.ingredients?.length || 0 }})</h5>
+                <table class="table table-sm table-hover mb-3" *ngIf="expandedDetail.ingredients?.length > 0">
+                  <thead>
+                    <tr>
+                      <th>الصنف</th>
+                      <th>كود الصنف</th>
+                      <th class="text-center">الكمية</th>
+                      <th class="text-end">تكلفة الوحدة</th>
+                      <th class="text-end">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let ing of expandedDetail.ingredients">
+                      <td>{{ ing.item?.category_name || '—' }}</td>
+                      <td dir="ltr">{{ ing.item?.item_code || '—' }}</td>
+                      <td class="text-center">{{ ing.quantity }}</td>
+                      <td class="text-end">{{ ing.unit_cost | number:'1.0-4' }}</td>
+                      <td class="text-end font-weight-bold">{{ ing.quantity * ing.unit_cost | number:'1.0-2' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <!-- Extra Costs -->
+                <h5 class="detail-section-title">التكاليف الإضافية ({{ expandedDetail.extra_costs?.length || 0 }})</h5>
+                <table class="table table-sm table-hover mb-3" *ngIf="expandedDetail.extra_costs?.length > 0">
+                  <thead>
+                    <tr>
+                      <th>الاسم</th>
+                      <th>النوع</th>
+                      <th class="text-end">القيمة</th>
+                      <th class="text-end">المبلغ المحسوب</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let ec of expandedDetail.extra_costs">
+                      <td>{{ ec.name }}</td>
+                      <td>{{ ec.type === 'fixed' ? 'مبلغ ثابت' : 'نسبة مئوية' }}</td>
+                      <td class="text-end">{{ ec.value }}{{ ec.type === 'percentage' ? '%' : '' }}</td>
+                      <td class="text-end font-weight-bold">
+                        {{ ec.type === 'fixed'
+                          ? (ec.value | number:'1.0-2')
+                          : ((+ec.value / 100) * +(expandedBreakdown?.materials_cost || 0) | number:'1.0-2') }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p *ngIf="!expandedDetail.extra_costs?.length" class="text-muted small">لا توجد تكاليف إضافية.</p>
+
+                <!-- Cost Breakdown -->
+                <div class="breakdown-grid" *ngIf="expandedBreakdown">
+                  <div class="breakdown-card">
+                    <span class="breakdown-label">تكلفة المواد</span>
+                    <span class="breakdown-value">{{ expandedBreakdown.materials_cost | number:'1.0-2' }}</span>
+                  </div>
+                  <div class="breakdown-card">
+                    <span class="breakdown-label">تكاليف ثابتة</span>
+                    <span class="breakdown-value">{{ expandedBreakdown.fixed_costs | number:'1.0-2' }}</span>
+                  </div>
+                  <div class="breakdown-card">
+                    <span class="breakdown-label">تكاليف نسبية</span>
+                    <span class="breakdown-value">{{ expandedBreakdown.percentage_costs | number:'1.0-2' }}</span>
+                  </div>
+                  <div class="breakdown-card breakdown-card--total">
+                    <span class="breakdown-label">التكلفة النهائية</span>
+                    <span class="breakdown-value">{{ expandedBreakdown.final_cost | number:'1.0-2' }}</span>
+                  </div>
+                  <div class="breakdown-card" *ngIf="expandedBreakdown.selling_price">
+                    <span class="breakdown-label">سعر البيع</span>
+                    <span class="breakdown-value">{{ expandedBreakdown.selling_price | number:'1.0-2' }}</span>
+                  </div>
+                  <div class="breakdown-card" *ngIf="expandedBreakdown.margin_percent != null">
+                    <span class="breakdown-label">هامش الربح</span>
+                    <span class="breakdown-value" [class.text-danger]="+(expandedBreakdown.margin_percent ?? 0) < 0">
+                      {{ +(expandedBreakdown.margin_percent ?? 0) * 100 | number:'1.0-2' }}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════ -->
+  <!-- BOM Table (legacy view)                                 -->
+  <!-- ════════════════════════════════════════════════════════ -->
+  <div class="container-fluid text-center mt-4" *ngIf="tableData.length > 0">
+    <h3 class="section-title">قائمة المواد (BOM)</h3>
     <table class="table w-75 m-auto">
       <thead class="bg-dark text-white">
         <th>المنتج</th>
+        <th>كود الصنف</th>
+        <th>اللون</th>
         <th>النوع</th>
         <th>الرصيد</th>
         <th>الكمية المطلوبة</th>
-        <th>عدد الخدمات المطلوبة</th>
-        <th>حاله الخامه</th>
-        <th>عدد الخدمات غير المتوفره</th>
         <th>اجمالى التكلفه</th>
       </thead>
       <tbody>
         <tr *ngFor="let elm of tableData">
-          <td>{{elm.product.category_name}}</td>
-          <td>{{elm.product.warehouse}}</td>
-          <td>{{elm.product.initial_balance}}</td>
-          <td>{{elm.product.minimum_quantity}}</td>
-          <td>-</td>
-          <td>-</td>
-          <td>-</td>
-          <td>{{elm.total}}</td>
+          <td>{{ elm.product.category_name }}</td>
+          <td dir="ltr">{{ elm.product.item_code || '—' }}</td>
+          <td>
+            <span *ngIf="elm.product.color" class="d-inline-flex align-items-center" style="gap: 6px;">
+              <span class="mfg-recipe-color-swatch" [style.backgroundColor]="elm.product.color"
+                [attr.title]="elm.product.color"></span>
+              <span>{{ elm.product.color }}</span>
+            </span>
+            <span *ngIf="!elm.product.color">—</span>
+          </td>
+          <td>{{ elm.product.warehouse }}</td>
+          <td>{{ elm.product.initial_balance }}</td>
+          <td>{{ elm.product.minimum_quantity }}</td>
+          <td>{{ elm.total }}</td>
         </tr>
-
       </tbody>
     </table>
   </div>
   <hr>
 
-
+  <!-- Delete confirmation dialog -->
+  <div class="delete-overlay" *ngIf="confirmDeleteId != null" (click)="cancelDelete()"></div>
+  <div class="delete-dialog" *ngIf="confirmDeleteId != null">
+    <p class="mb-3"><strong>هل أنت متأكد من حذف هذه الوصفة؟</strong></p>
+    <p class="text-muted small">سيتم حذف جميع المكونات والتكاليف الإضافية وسجلات المخزون المرتبطة.</p>
+    <div class="d-flex justify-content-center" style="gap:10px;">
+      <button class="btn btn-danger" (click)="confirmDelete()">نعم، احذف</button>
+      <button class="btn btn-secondary" (click)="cancelDelete()">إلغاء</button>
+    </div>
+  </div>
 </div>

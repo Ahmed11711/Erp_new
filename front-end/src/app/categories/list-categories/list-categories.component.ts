@@ -127,7 +127,8 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
    }
    if (nameFilter) {
     const cn = (item.category_name ?? '').toLowerCase();
-    if (!cn.includes(nameFilter)) return false;
+    const ic = (item.item_code ?? '').toLowerCase();
+    if (!cn.includes(nameFilter) && !ic.includes(nameFilter)) return false;
    }
    if (this.warehouse && item.warehouse != this.warehouse) return false;
    if (this.productionline && String(item.production_id ?? '') !== String(this.productionline)) return false;

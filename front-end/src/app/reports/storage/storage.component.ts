@@ -4,7 +4,7 @@ import { CategoryService } from 'src/app/categories/services/category.service';
 @Component({
   selector: 'app-storage',
   templateUrl: './storage.component.html',
-  styleUrls: ['./storage.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './storage.component.css']
 })
 export class StorageComponent implements OnInit {
   data: any[] = [];
@@ -19,6 +19,7 @@ export class StorageComponent implements OnInit {
   page = 0;
   pageSize = 15;
   pageSizeOptions = [15, 50, 100];
+  showFilters = true;
 
   warehouses = [
     { value: 'مخزن مواد خام', label: 'مخزن المواد الخام' },
@@ -110,5 +111,27 @@ export class StorageComponent implements OnInit {
 
   get sumBalanceAfter(): number {
     return this.filteredData.reduce((s, r) => s + this.num(r.balance_after), 0);
+  }
+
+  get filteredRowCount(): number {
+    return this.filteredData.length;
+  }
+
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
+  }
+
+  expanded = new Set<number>();
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
   }
 }

@@ -1,3 +1,11 @@
+.lead-topbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .header {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: white;

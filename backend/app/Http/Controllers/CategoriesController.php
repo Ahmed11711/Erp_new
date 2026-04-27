@@ -15,9 +15,11 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\CategoryMonthlyInventory;
 use App\Http\Resources\V2\Category\CategoryResource;
 use App\Http\Requests\V2\Category\GetCategoryByStock;
+use App\Models\Item;
 use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
+use App\Services\Items\ItemCodeService;
 
 class CategoriesController extends Controller
 {
@@ -93,7 +95,10 @@ class CategoriesController extends Controller
    'warehouse' => 'required|string',
    'production_id' => 'required|numeric|exists:productions,id',
    'measurement_id' => 'required|numeric|exists:measurements,id',
-   'category_image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:500',
+   'category_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:500',
+   'item_code' => 'nullable|string|max:64|unique:categories,item_code',
+   'color' => 'nullable|string|max:128',
+   'recipe_id' => 'nullable|integer|exists:recipes,id',
   ]);
   $img_name = '';
   if ($request->hasFile('category_image')) {
@@ -130,7 +135,13 @@ class CategoriesController extends Controller
    'measurement_id' => request('measurement_id'),
    'category_image' => $img_name,
    'stock_id' => $stockId,
+   'color' => $request->input('color'),
+   'item_code' => $request->filled('item_code') ? trim((string) $request->input('item_code')) : null,
   ];
+
+  if ($request->filled('recipe_id')) {
+   $attrs['recipe_id'] = (int) $request->input('recipe_id');
+  }
 
   // الرصيد الافتتاحي = كمية أولية؛ عمود «الرصيد» في القائمة يعرض quantity وليس initial_balance فقط
   if ($openQty > 0.0000001) {
@@ -143,6 +154,11 @@ class CategoriesController extends Controller
   }
 
   $category = Category::create($attrs);
+
+  if ($category->item_code === null || $category->item_code === '') {
+   app(ItemCodeService::class)->ensureCode(Item::query()->findOrFail($category->id));
+   $category->refresh();
+  }
 
   if ($openQty > 0.0000001) {
    DB::table('categories_balance')->insert([
@@ -185,7 +201,10 @@ class CategoriesController extends Controller
    'warehouse' => 'required|string',
    'production_id' => 'required|numeric|exists:productions,id',
    'measurement_id' => 'required|numeric|exists:measurements,id',
-   'category_image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:500',
+   'category_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:500',
+   'item_code' => 'nullable|string|max:64|unique:categories,item_code,'.$id,
+   'color' => 'nullable|string|max:128',
+   'recipe_id' => 'nullable|integer|exists:recipes,id',
 
   ]);
 
@@ -219,7 +238,7 @@ class CategoriesController extends Controller
    }
   }
 
-  $category->update([
+  $update = [
    'category_name' => $request->input('category_name'),
    'category_price' => $request->input('category_price'),
    'initial_balance' => $request->input('initial_balance'),
@@ -227,10 +246,28 @@ class CategoriesController extends Controller
    'warehouse' => $request->input('warehouse'),
    'production_id' => $request->input('production_id'),
    'measurement_id' => $request->input('measurement_id'),
-   'category_image' => $img_name,
    'stock_id' => $stockId,
+   'color' => $request->input('color'),
+  ];
 
-  ]);
+  if ($img_name !== '') {
+   $update['category_image'] = $img_name;
+  }
+
+  if ($request->has('item_code')) {
+   $update['item_code'] = $request->filled('item_code') ? trim((string) $request->input('item_code')) : null;
+  }
+
+  if ($request->has('recipe_id')) {
+   $update['recipe_id'] = $request->filled('recipe_id') ? (int) $request->input('recipe_id') : null;
+  }
+
+  $category->update($update);
+
+  if (($category->item_code === null || $category->item_code === '') && $request->has('item_code')) {
+   app(ItemCodeService::class)->ensureCode(Item::query()->findOrFail($category->id));
+   $category->refresh();
+  }
 
 
   return response()->json($category, 200);
@@ -634,6 +671,7 @@ class CategoriesController extends Controller
    ->select(
     'categories.id as category_id',
     'categories.category_name as category_name',
+    'categories.category_image as category_image',
     'categories.quantity as warehouse_balance',
     DB::raw('SUM(CASE WHEN orders.order_type = "جديد" THEN order_products.quantity ELSE 0 END) as total_quantity_new'),
     DB::raw('SUM(CASE WHEN orders.order_type = "طلب مرتجع" THEN order_products.quantity ELSE 0 END) as total_quantity_return'),
@@ -651,7 +689,7 @@ class CategoriesController extends Controller
    $query->where('categories.production_id', $request->production_id);
   }
 
-  $categorySales = $query->groupBy('categories.id', 'categories.category_name', 'categories.quantity');
+  $categorySales = $query->groupBy('categories.id', 'categories.category_name', 'categories.category_image', 'categories.quantity');
 
   if ($request->has('sort')) {
    if ($request->sort == 'category_name' || $request->sort == 'total_quantity_return' || $request->sort == 'total_postpone') {

@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 import { HomeRoutingModule } from './home-routing.module';
 import { HomeComponent } from './home.component';
@@ -20,6 +21,7 @@ import { AngularEditorComponent } from '@kolkov/angular-editor';
   ],
   imports: [
     CommonModule,
+    FormsModule,
     HomeRoutingModule,
     MatIconModule,
     SharedModule,

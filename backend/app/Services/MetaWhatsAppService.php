@@ -442,4 +442,91 @@ class MetaWhatsAppService
     {
         return !empty($this->phoneNumberId) && !empty($this->accessToken);
     }
+
+    /**
+     * Access token used by the current service instance (used by media proxy).
+     */
+    public function getAccessTokenForMedia(): ?string
+    {
+        return $this->accessToken;
+    }
+
+    /**
+     * Resolve the short-lived (5 min) media download URL + metadata for a given Meta media id.
+     *
+     * @return array{success:bool, url?:string, mime_type?:string, file_size?:int, sha256?:string, error?:string}
+     */
+    public function fetchMediaMeta(string $mediaId): array
+    {
+        if (empty($this->accessToken) || $mediaId === '') {
+            return ['success' => false, 'error' => 'Meta WhatsApp not configured or missing media id'];
+        }
+
+        try {
+            $response = Http::withToken($this->accessToken)
+                ->timeout(20)
+                ->get("https://graph.facebook.com/{$this->metaVersion}/{$mediaId}");
+
+            if (! $response->successful()) {
+                Log::warning('Meta media metadata fetch failed', [
+                    'media_id' => $mediaId,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return ['success' => false, 'error' => 'Failed to resolve media metadata'];
+            }
+
+            $json = $response->json();
+            if (empty($json['url'])) {
+                return ['success' => false, 'error' => 'Media URL missing in response'];
+            }
+
+            return [
+                'success' => true,
+                'url' => $json['url'],
+                'mime_type' => $json['mime_type'] ?? null,
+                'file_size' => isset($json['file_size']) ? (int) $json['file_size'] : null,
+                'sha256' => $json['sha256'] ?? null,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Meta media metadata exception', ['error' => $e->getMessage()]);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Download raw bytes for a Meta media id. Returns binary body ready to stream.
+     *
+     * @return array{success:bool, body?:string, mime_type?:string, error?:string}
+     */
+    public function downloadMediaBytes(string $mediaId): array
+    {
+        $meta = $this->fetchMediaMeta($mediaId);
+        if (! $meta['success']) {
+            return $meta;
+        }
+
+        try {
+            $response = Http::withToken($this->accessToken)
+                ->timeout(60)
+                ->get($meta['url']);
+
+            if (! $response->successful()) {
+                Log::warning('Meta media binary fetch failed', [
+                    'media_id' => $mediaId,
+                    'status' => $response->status(),
+                ]);
+                return ['success' => false, 'error' => 'Failed to download media bytes'];
+            }
+
+            return [
+                'success' => true,
+                'body' => $response->body(),
+                'mime_type' => $meta['mime_type'] ?? $response->header('Content-Type') ?? 'application/octet-stream',
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Meta media download exception', ['error' => $e->getMessage()]);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
 }

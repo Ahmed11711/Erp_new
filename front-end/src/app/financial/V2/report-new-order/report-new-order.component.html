@@ -1,73 +1,193 @@
-<div class="container-fluid">
-
-  <!-- الهيدر -->
-  <div class="row py-3 align-items-center">
-    <!-- الوقت على اليسار -->
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page items-report">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-
-     <div class="col-4 text-center">
-      <p class="title header m-0">تقرير الاوردرات</p>
-    </div>
-
-     <div class="col-4 d-flex align-items-center justify-content-end">
-      <button class="btn btn-secondary d-flex align-items-center" (click)="goBack()">
-        <mat-icon>arrow_back</mat-icon>
-       </button>
+    <h1 class="report-title">تقرير الأوردرات</h1>
+    <div class="report-topbar-side report-actions">
+      <button type="button" class="tool-btn print-btn" (click)="goBack()" title="رجوع">
+        <i class="fa-solid fa-arrow-right"></i>
+      </button>
     </div>
   </div>
 
-  <!-- الجدول -->
-  <div class="container-fluid">
-    <table class="table w-75 m-auto text-center table-hover">
-      <thead class="bg-dark text-white">
-        <tr>
-          <th scope="col">#</th>
-          <th scope="col">رقم الاوردر</th>
-          <th scope="col">اسم العميل</th>
-          <th scope="col">دائن</th>
-          <th scope="col">مدين</th>
-          <th scope="col"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let item of data; let i = index">
-          <td>{{item?.entry_batch_code}}</td>
-          <td>{{ item?.order_id }}</td>
-          <td>{{ item?.customer_name }}</td>
-          <td dir="ltr">{{ item?.total_credit ?? 0 | customNumber }}</td>
-          <td dir="ltr">{{ item?.total_debit ?? 0 | customNumber }}</td>
-          <td>
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
-              <mat-icon>more_vert</mat-icon>
-            </span>
-            <mat-menu #menu="matMenu">
-          <button
-  mat-menu-item
-  [routerLink]="['/dashboard/financial/report-order-new-details']"
-  [queryParams]="{ order_id: item.order_id }">
-  <span>تفاصيل</span>
-</button>
-
-            </mat-menu>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <!-- paginator -->
-    <div class="mt-4 d-flex justify-content-center">
-      <mat-paginator
-        #paginator
-        class="demo-paginator"
-        [length]="length"
-        showFirstLastButtons
-        (page)="onPageChange($event)"
-        [pageSizeOptions]="pageSizeOptions"
-        [pageSize]="pageSize"
-        aria-label="Select page">
-      </mat-paginator>
+  <div class="filter-chips">
+    <button type="button" class="chip chip-filter" (click)="toggleFilters()">
+      <i class="fa-solid fa-sliders"></i>
+      <span>فلترة</span>
+    </button>
+    <div class="chip chip-search" *ngIf="showFilters">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input
+        type="search"
+        name="searchTerm"
+        placeholder="بحث برقم الأوردر أو اسم العميل أو رمز القيد…"
+        [(ngModel)]="searchTerm"
+        (ngModelChange)="onSearchInput()"
+        autocomplete="off"
+      />
     </div>
+    <div class="chip chip-apply" *ngIf="showFilters">
+      <button type="button" (click)="loadAll()" [disabled]="loading">
+        {{ loading ? 'جاري التحميل…' : 'تحديث' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="summary-grid" *ngIf="!loading && rawData.length > 0">
+    <div class="summary-card orders">
+      <div class="summary-icon"><i class="fa-solid fa-list-ol"></i></div>
+      <div class="summary-label">عدد السجلات (بعد البحث)</div>
+      <div class="summary-value">{{ summaryCount | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+    <div class="summary-card new-value">
+      <div class="summary-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
+      <div class="summary-label">إجمالي المدين</div>
+      <div class="summary-value">{{ summaryDebit | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card returns">
+      <div class="summary-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+      <div class="summary-label">إجمالي الدائن</div>
+      <div class="summary-value">{{ summaryCredit | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card new-qty">
+      <div class="summary-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+      <div class="summary-label">الصافي (مدين − دائن)</div>
+      <div class="summary-value">{{ summaryNet | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="state-box">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+
+  <div class="state-box empty" *ngIf="!loading && !rawData.length">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>لا توجد بيانات.</p>
+  </div>
+
+  <div
+    class="state-box empty"
+    *ngIf="!loading && rawData.length && !length && searchTerm.trim()"
+  >
+    <i class="fa-regular fa-folder-open"></i>
+    <p>لا توجد نتائج تطابق البحث.</p>
+  </div>
+
+  <div class="items-list" *ngIf="!loading && length">
+    <div
+      class="item-card"
+      *ngFor="let item of data; let i = index; trackBy: trackByRowKey"
+      [class.expanded]="isExpanded(item)"
+    >
+      <div class="item-head">
+        <button
+          class="item-chevron"
+          type="button"
+          (click)="toggleExpand(item)"
+          [attr.aria-expanded]="isExpanded(item)"
+          aria-label="عرض التفاصيل"
+        >
+          <i class="fa-solid" [ngClass]="isExpanded(item) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div class="item-title" (click)="toggleExpand(item)">
+          {{ item?.customer_name || '—' }}
+        </div>
+        <div class="item-thumb">
+          <div class="thumb-fallback">
+            <i class="fa-solid fa-receipt"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="item-stats">
+        <div class="stat">
+          <div class="stat-head">
+            <i class="fa-solid fa-hashtag"></i>
+            <span>تسلسل</span>
+          </div>
+          <div class="stat-value">{{ rowDisplayIndex(i) | customNumber }}</div>
+          <div class="stat-unit">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head">
+            <i class="fa-solid fa-bag-shopping"></i>
+            <span>رقم الأوردر</span>
+          </div>
+          <div class="stat-value orders">{{ item?.order_id }}</div>
+          <div class="stat-unit">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head">
+            <i class="fa-solid fa-arrow-trend-down"></i>
+            <span>دائن</span>
+          </div>
+          <div class="stat-value returns" dir="ltr">{{ item?.total_credit ?? 0 | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head">
+            <i class="fa-solid fa-arrow-trend-up"></i>
+            <span>مدين</span>
+          </div>
+          <div class="stat-value new-value" dir="ltr">{{ item?.total_debit ?? 0 | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head">
+            <i class="fa-solid fa-barcode"></i>
+            <span>رمز القيد</span>
+          </div>
+          <div class="stat-value">{{ item?.entry_batch_code || '—' }}</div>
+          <div class="stat-unit">&nbsp;</div>
+        </div>
+      </div>
+
+      <button class="item-details-toggle" type="button" (click)="toggleExpand(item)">
+        <span>عرض التفاصيل</span>
+        <i class="fa-solid" [ngClass]="isExpanded(item) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+      </button>
+
+      <div class="item-details" *ngIf="isExpanded(item)">
+        <div class="detail">
+          <div class="detail-label">رقم الأوردر</div>
+          <div class="detail-value">{{ item?.order_id }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">اسم العميل</div>
+          <div class="detail-value">{{ item?.customer_name || '—' }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">رمز القيد</div>
+          <div class="detail-value">{{ item?.entry_batch_code || '—' }}</div>
+        </div>
+        <div class="detail detail-actions">
+          <a
+            class="detail-link"
+            [routerLink]="['/dashboard/financial/report-order-new-details']"
+            [queryParams]="{ order_id: item.order_id }"
+          >
+            <i class="fa-solid fa-circle-info"></i>
+            تفاصيل القيد والأوردر
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="paginator-wrap" *ngIf="!loading && length">
+    <mat-paginator
+      [length]="length"
+      [pageSize]="pageSize"
+      [pageSizeOptions]="pageSizeOptions"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      aria-label="تصفح الصفحات"
+    >
+    </mat-paginator>
   </div>
 </div>

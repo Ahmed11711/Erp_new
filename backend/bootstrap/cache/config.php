@@ -282,7 +282,7 @@
       array (
         'driver' => 'sqlite',
         'url' => NULL,
-        'database' => 'magalis',
+        'database' => 'newerp',
         'prefix' => '',
         'foreign_key_constraints' => true,
       ),
@@ -292,7 +292,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'magalis',
+        'database' => 'newerp',
         'username' => 'root',
         'password' => '',
         'unix_socket' => '',
@@ -312,7 +312,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'magalis',
+        'database' => 'newerp',
         'username' => 'root',
         'password' => '',
         'charset' => 'utf8',
@@ -327,7 +327,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'magalis',
+        'database' => 'newerp',
         'username' => 'root',
         'password' => '',
         'charset' => 'utf8',
@@ -414,6 +414,20 @@
       'threads' => 1,
       'time' => 4,
     ),
+  ),
+  'items_import' => 
+  array (
+    'new_item' => 
+    array (
+      'production_id' => NULL,
+      'measurement_id' => NULL,
+      'warehouse' => 'مخزن مواد خام',
+      'category_price' => 0.0,
+      'initial_balance' => 0.0,
+      'minimum_quantity' => 0.0,
+      'category_image' => '',
+    ),
+    'item_code_prefix' => 'ITM-',
   ),
   'jwt' => 
   array (

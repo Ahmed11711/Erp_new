@@ -7,3 +7,8 @@ UPDATE categories
 SET unit_price = category_price
 WHERE ABS(IFNULL(unit_price, 0)) < 0.0000001
   AND category_price IS NOT NULL;
+
+
+     composer install --no-dev --optimize-autoloader
+
+        composer require phpoffice/phpspreadsheet:^5.7

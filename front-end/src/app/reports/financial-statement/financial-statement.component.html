@@ -1,19 +1,14 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div>
-        <p class="title header w-50 m-auto">كشف حساب تفصيلي</p>
-      </div>
-    </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-    </div>
+    <h1 class="report-title">كشف حساب تفصيلي</h1>
+    <div class="report-topbar-side"></div>
   </div>
 
-  <div class="container-fluid">
-    <ul class="nav nav-tabs fs-statement-tabs mb-0 px-2 pt-2" role="tablist">
+  <div class="report-tabs-wrap">
+    <ul class="nav report-tabs" role="tablist">
       <li class="nav-item" role="presentation">
         <button
           type="button"
@@ -35,9 +30,11 @@
         </button>
       </li>
     </ul>
+  </div>
 
+  <div class="container-fluid p-0">
     <!-- تبويب الشجرة المحاسبية -->
-    <div class="border border-top-0 rounded-bottom p-3 mb-3" *ngIf="activeTab === 'ledger'">
+    <div class="report-panel" *ngIf="activeTab === 'ledger'">
       <form [formGroup]="ledgerForm" (ngSubmit)="submitLedgerForm()">
         <div class="row align-items-end">
           <div class="col-md-2">
@@ -88,7 +85,7 @@
     </div>
 
     <!-- تبويب الخزن / البنوك / الخدمات -->
-    <div class="border border-top-0 rounded-bottom p-3 mb-3" *ngIf="activeTab === 'cash'">
+    <div class="report-panel" *ngIf="activeTab === 'cash'">
       <form [formGroup]="cashForm" (ngSubmit)="submitCashForm()">
         <div class="row align-items-end">
           <div class="col-md-2">
@@ -138,7 +135,7 @@
       </form>
     </div>
 
-    <div *ngIf="errorMessage" class="alert alert-danger">
+    <div *ngIf="errorMessage" class="state-box--danger">
       {{ errorMessage }}
     </div>
 
@@ -171,15 +168,18 @@
       </div>
     </div>
 
-    <div *ngIf="data.length > 0" class="table-responsive">
-      <table class="table table-bordered table-striped text-center">
-        <thead class="bg-dark text-white">
-          <th>التاريخ</th>
-          <th *ngIf="details?.consolidated">الحساب الفرعي</th>
-          <th>البيان / الشرح</th>
-          <th class="text-success">مدين</th>
-          <th class="text-danger">دائن</th>
-          <th>الرصيد المتحرك</th>
+    <div *ngIf="data.length > 0" class="report-content-card">
+      <div class="report-table-wrap">
+      <table class="table report-data-table text-center">
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th *ngIf="details?.consolidated">الحساب الفرعي</th>
+            <th>البيان / الشرح</th>
+            <th class="text-success">مدين</th>
+            <th class="text-danger">دائن</th>
+            <th>الرصيد المتحرك</th>
+          </tr>
         </thead>
         <tbody>
           <tr *ngFor="let item of data">
@@ -200,9 +200,10 @@
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
 
-    <div *ngIf="details && data.length == 0" class="alert alert-warning text-center">
+    <div *ngIf="details && data.length == 0" class="state-box--warning">
       لا توجد حركات في الفترة المحددة
     </div>
 

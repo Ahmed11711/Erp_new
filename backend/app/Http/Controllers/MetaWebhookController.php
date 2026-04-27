@@ -48,7 +48,7 @@ class MetaWebhookController extends Controller
     public function handle(Request $request)
     {
         $data = $request->all();
-        // Log::info('Meta Webhook HANDLE data: ' . json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        Log::debug('Meta Webhook payload', ['json' => json_encode($data, JSON_UNESCAPED_UNICODE)]);
 
         if (isset($data['entry'])) {
             foreach ($data['entry'] as $entry) {
@@ -62,12 +62,13 @@ class MetaWebhookController extends Controller
 
                         foreach ($value['messages'] as $msg) {
                             $from = $msg['from'];
+                            $metaMessageId = $msg['id']; // preserve — never overwrite
                             $msgType = $msg['type'] ?? 'unknown';
                             Log::info("Incoming WhatsApp message from {$from}", [
+                                'meta_id' => $metaMessageId,
                                 'type' => $msgType,
                                 'has_context' => isset($msg['context']),
                                 'keys' => array_keys($msg),
-                                'msg_sample' => $msgType === 'text' ? ($msg['text']['body'] ?? null) : ($msg[$msgType] ?? null),
                             ]);
 
                             $buttonId = null;
@@ -76,7 +77,6 @@ class MetaWebhookController extends Controller
 
                             $msgTypeLower = strtolower((string) $msgType);
 
-                            // Handle button / list reply — استخراج button_reply حتى لو تغيّر ترتيب الحقول أو type
                             if ($msgTypeLower === 'interactive') {
                                 $interactive = $msg['interactive'] ?? [];
                                 if (isset($interactive['button_reply']) && is_array($interactive['button_reply'])) {
@@ -101,7 +101,6 @@ class MetaWebhookController extends Controller
                             } elseif ($msgTypeLower === 'text') {
                                 $body = trim($msg['text']['body'] ?? '');
                                 $body = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $body);
-                                // جلسة فلو (1/2/3 أو نسخ العبارة): يُعالَج قبل محاكاة أزرار القالب
                                 try {
                                     $whatsappService = new MetaWhatsAppService($phoneNumberId);
                                     if ($whatsappService->isConfigured() && $body !== '') {
@@ -164,7 +163,7 @@ class MetaWebhookController extends Controller
                                 }
                             }
 
-                            $this->processMessage($msg, $contacts);
+                            $this->processMessage($msg, $contacts, $phoneNumberId);
                         }
                     }
 
@@ -204,31 +203,46 @@ private function sendStaticReply($to)
 
 
 
-    private function processMessage($messageData, $contacts)
+    private function processMessage($messageData, $contacts, ?string $phoneNumberId = null)
     {
-        $from = $messageData['from']; // Phone number
-        $id = $messageData['id']; // Message ID
+        $from = $messageData['from'];
+        $metaId = $messageData['id'];   // ← never overwrite this
         $type = $messageData['type'];
         $timestamp = $messageData['timestamp'];
-        
+
+        $mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+        $mediaId = null;
+        $mediaMime = null;
+        $mediaFilename = null;
+        $mediaCaption = null;
+        $storedType = $type;
+
         $body = '';
         if ($type === 'text') {
-            $body = $messageData['text']['body'];
+            $body = $messageData['text']['body'] ?? '';
+        } elseif (in_array($type, $mediaTypes, true) && isset($messageData[$type]) && is_array($messageData[$type])) {
+            $payload = $messageData[$type];
+            $mediaId = $payload['id'] ?? null;
+            $mediaMime = $payload['mime_type'] ?? null;
+            $mediaFilename = $payload['filename'] ?? null;
+            $mediaCaption = $payload['caption'] ?? null;
+            $body = ($mediaCaption !== null && $mediaCaption !== '')
+                ? $mediaCaption
+                : '[' . ucfirst($type) . ']';
+            Log::info('Webhook media extracted', [
+                'meta_id' => $metaId,
+                'type' => $type,
+                'media_id' => $mediaId,
+                'mime' => $mediaMime,
+            ]);
         } elseif ($type === 'interactive') {
-            // Extract button reply or list reply for readable display
             $interactive = $messageData['interactive'] ?? [];
             $buttonReply = $interactive['button_reply'] ?? null;
             $listReply = $interactive['list_reply'] ?? null;
             if ($buttonReply) {
-                $title = $buttonReply['title'] ?? null;
-                $id = $buttonReply['id'] ?? null;
-                if ($title) {
-                    $body = '🔘 ' . $title;
-                } elseif ($id) {
-                    $body = '🔘 ' . $id;
-                } else {
-                    $body = '[رسالة تفاعلية]';
-                }
+                $brTitle = $buttonReply['title'] ?? null;
+                $brId = $buttonReply['id'] ?? null;
+                $body = $brTitle ? '🔘 ' . $brTitle : ($brId ? '🔘 ' . $brId : '[رسالة تفاعلية]');
             } elseif ($listReply && isset($listReply['title'])) {
                 $body = '📋 ' . $listReply['title'];
             } else {
@@ -238,30 +252,38 @@ private function sendStaticReply($to)
             $button = $messageData['button'] ?? [];
             $text = $button['text'] ?? $button['title'] ?? null;
             $payload = $button['payload'] ?? $button['id'] ?? null;
-            if ($text) {
-                $body = '🔘 ' . $text;
-            } elseif ($payload) {
-                $body = '🔘 ' . $payload;
-            } else {
-                $body = '[زر تفاعلي]';
-            }
+            $body = $text ? '🔘 ' . $text : ($payload ? '🔘 ' . $payload : '[زر تفاعلي]');
+        } elseif ($type === 'reaction') {
+            $emoji = $messageData['reaction']['emoji'] ?? '';
+            $body = $emoji !== '' ? $emoji : '[Reaction]';
+            $storedType = 'text';
+        } elseif ($type === 'contacts') {
+            $body = '[Contact Card]';
+            $storedType = 'text';
+        } elseif ($type === 'location') {
+            $lat = $messageData['location']['latitude'] ?? '';
+            $lon = $messageData['location']['longitude'] ?? '';
+            $body = "📍 Location: {$lat}, {$lon}";
+            $storedType = 'text';
         } else {
             $body = '[' . ucfirst($type) . ' Message]';
         }
 
-        // Get customer name from contacts if available
+        // Ensure body is never empty (DB column is NOT NULL)
+        if ($body === '' || $body === null) {
+            $body = '[' . ucfirst($type) . ']';
+        }
+
         $customerName = 'Customer ' . substr($from, -4);
         foreach ($contacts as $contact) {
-            if ($contact['wa_id'] === $from) {
+            if (($contact['wa_id'] ?? '') === $from) {
                 $customerName = $contact['profile']['name'] ?? $customerName;
                 break;
             }
         }
 
-        // Find or create customer
-        // Ensure phone starts with +
-        $phone = '+' . $from;
-        
+        $phone = '+' . ltrim($from, '+');
+
         $customer = Customer::firstOrCreate(
             ['phone' => $phone],
             [
@@ -271,29 +293,40 @@ private function sendStaticReply($to)
         );
 
         $receiverId = $customer->assigned_agent_id ?? $this->assignToAgent();
-         if (!$customer->assigned_agent_id && $receiverId) {
+        if (! $customer->assigned_agent_id && $receiverId) {
             $customer->assigned_agent_id = $receiverId;
             $customer->save();
         }
 
-        // Check for duplicates
-        if (Message::where('twilio_message_sid', $id)->exists()) {
+        if (Message::where('twilio_message_sid', $metaId)->exists()) {
+            Log::debug('Webhook duplicate skipped', ['meta_id' => $metaId]);
             return;
         }
 
-        // Create Message
-        Message::create([
+        $message = Message::create([
             'customer_id' => $customer->id,
             'sender_id' => null,
             'receiver_id' => $receiverId,
             'content' => $body,
+            'type' => $storedType ?: 'text',
+            'media_id' => $mediaId,
+            'media_mime_type' => $mediaMime,
+            'media_filename' => $mediaFilename,
+            'media_caption' => $mediaCaption,
             'direction' => 'inbound',
             'status' => 'received',
-            'twilio_message_sid' => $id, // Storing Meta ID in existing column
+            'twilio_message_sid' => $metaId,
+            'phone_number_id' => $phoneNumberId,
             'created_at' => date('Y-m-d H:i:s', $timestamp),
         ]);
 
-        Log::info('Meta Message Stored', ['id' => $id]);
+        Log::info('Meta Message Stored', [
+            'db_id' => $message->id,
+            'meta_id' => $metaId,
+            'type' => $storedType,
+            'media_id' => $mediaId,
+            'customer_id' => $customer->id,
+        ]);
     }
 
     private function processStatus($statusData)

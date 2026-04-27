@@ -4,7 +4,7 @@ import { AccountingReportService } from 'src/app/accounting/services/accounting-
 @Component({
   selector: 'app-product-performance',
   templateUrl: './product-performance.component.html',
-  styleUrls: ['./product-performance.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './product-performance.component.css']
 })
 export class ProductPerformanceComponent implements OnInit {
   dateFrom: string | null = null;
@@ -14,8 +14,37 @@ export class ProductPerformanceComponent implements OnInit {
 
   rows: any[] = [];
   totals: any = { sales_qty: 0, sales_amount: 0, returns_qty: 0, returns_amount: 0, net_sales: 0, cogs: 0, avg_unit_cost: 0, gross_profit: 0, gross_margin_percent: 0 };
+  /** Client-side filter on loaded rows (matches `category_name` from API). */
+  itemSearch = '';
+  showFilters = true;
+
+  expanded = new Set<number>();
 
   constructor(private reportService: AccountingReportService) {}
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
+
+  get filteredRows(): any[] {
+    const q = (this.itemSearch || '').trim().toLowerCase();
+    if (!q) {
+      return this.rows;
+    }
+    return this.rows.filter((r) =>
+      String(r?.category_name ?? '')
+        .toLowerCase()
+        .includes(q)
+    );
+  }
 
   ngOnInit(): void {
     const today = new Date();
@@ -57,5 +86,9 @@ export class ProductPerformanceComponent implements OnInit {
         this.loadError = msg;
       }
     });
+  }
+
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
   }
 }

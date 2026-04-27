@@ -1,27 +1,29 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-    <div class="col-5 d-flex justify-content-center align-items-center">
-      <div><p class="title header m-auto px-2">قائمة الدخل</p></div>
+    <h1 class="report-title">قائمة الدخل</h1>
+    <div class="report-topbar-side"></div>
+  </div>
+
+  <div class="filter-chips">
+    <div class="chip chip-date">
+      <i class="fa-regular fa-calendar"></i>
+      <span class="date-range">
+        <span class="me-1 text-muted small">من</span>
+        <input type="date" [value]="dateFrom" (change)="onDateFromChange($event)">
+        <span class="date-sep">—</span>
+        <span class="me-1 text-muted small">إلى</span>
+        <input type="date" [value]="dateTo" (change)="onDateToChange($event)">
+      </span>
     </div>
   </div>
 
-  <div class="row m-2">
-    <div class="col-md-3">
-      <label>من تاريخ</label>
-      <input class="form-control" type="date" [value]="dateFrom" (change)="onDateFromChange($event)">
-    </div>
-    <div class="col-md-3">
-      <label>إلى تاريخ</label>
-      <input class="form-control" type="date" [value]="dateTo" (change)="onDateToChange($event)">
-    </div>
-  </div>
-
-  <div class="container">
-    <table id="capture" class="table table-bordered table-hover text-center income-statement">
-      <thead class="bg-dark text-white">
+  <div class="report-content-card">
+    <div class="report-table-wrap">
+    <table id="capture" class="table report-data-table text-center income-statement">
+      <thead>
         <tr>
           <th class="w-50">البيان</th>
           <th>جزئي</th>
@@ -185,5 +187,6 @@
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </div>

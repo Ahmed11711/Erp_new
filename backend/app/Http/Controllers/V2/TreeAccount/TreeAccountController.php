@@ -191,7 +191,13 @@ class TreeAccountController extends BaseController
                         ->lockForUpdate()
                         ->first();
 
-                    $validated['code'] = (string) ($lastRoot ? ((int) $lastRoot->code + 1) : 1);
+                    $code = (string) ($lastRoot ? ((int) $lastRoot->code + 1) : 1);
+
+                    while (TreeAccount::where('code', $code)->exists()) {
+                        $code = (string) ((int) $code + 1);
+                    }
+
+                    $validated['code'] = $code;
                     $validated['level'] = 1;
                 } else {
                     $parent = TreeAccount::find($validated['parent_id']);
@@ -206,7 +212,13 @@ class TreeAccountController extends BaseController
 
                     $lastChild = TreeAccount::queryLastChildUnderParentLocked($parent);
                     $resolved = TreeAccount::resolveNextChildCodeAndLevel($parent, $lastChild);
-                    $validated['code'] = $resolved['code'];
+                    $code = $resolved['code'];
+
+                    while (TreeAccount::where('code', $code)->exists()) {
+                        $code = (string) ((int) $code + 1);
+                    }
+
+                    $validated['code'] = $code;
                     $validated['level'] = $resolved['level'];
                 }
 

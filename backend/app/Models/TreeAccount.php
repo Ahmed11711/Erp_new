@@ -49,7 +49,13 @@ class TreeAccount extends Model
             }
             $lastChild = static::queryLastChildUnderParentLocked($parent);
             $resolved = static::resolveNextChildCodeAndLevel($parent, $lastChild);
-            $this->setAttribute('code', $resolved['code']);
+            $code = $resolved['code'];
+
+            while (static::where('code', $code)->exists()) {
+                $code = (string) ((int) $code + 1);
+            }
+
+            $this->setAttribute('code', $code);
             $this->setAttribute('level', $resolved['level']);
 
             return;

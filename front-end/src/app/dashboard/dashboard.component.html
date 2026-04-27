@@ -396,6 +396,10 @@
                                 *ngIf="user == 'Admin'">
                                 <span>تقرير مبيعات المنتجات</span>
                             </a>
+                            <a mat-list-item routerLink="/dashboard/categoriesreports" routerLinkActive="active"
+                                *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                <span>تقارير الأصناف</span>
+                            </a>
                             <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
                                 *ngIf="user == 'Admin'">
                                 <span>تقرير المخزون</span>

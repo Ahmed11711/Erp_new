@@ -4,7 +4,7 @@ import { CategoryService } from 'src/app/categories/services/category.service';
 @Component({
   selector: 'app-product-sales',
   templateUrl: './product-sales.component.html',
-  styleUrls: ['./product-sales.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './product-sales.component.css']
 })
 export class ProductSalesComponent implements OnInit {
   data: any[] = [];
@@ -18,8 +18,23 @@ export class ProductSalesComponent implements OnInit {
   page = 0;
   pageSize = 50;
   pageSizeOptions = [15, 50, 100];
+  showFilters = true;
+
+  expanded = new Set<number>();
 
   constructor(private categoryService: CategoryService) {}
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
 
   ngOnInit(): void {
     const today = new Date();
@@ -73,5 +88,31 @@ export class ProductSalesComponent implements OnInit {
         (r.category_name || '').toLowerCase().includes(term)
       );
     }
+  }
+
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
+  }
+
+  private num(v: unknown): number {
+    if (v == null || v === '' || v === '—') {
+      return 0;
+    }
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** إجماليات الصفحة الحالية (بعد البحث المحلي) */
+  get pageSumOrders(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.total_orders), 0);
+  }
+  get pageSumNewQty(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.total_quantity_new), 0);
+  }
+  get pageSumNewValue(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.total_new), 0);
+  }
+  get pageSumReturnValue(): number {
+    return this.filteredData.reduce((s, r) => s + this.num(r.total_postpone), 0);
   }
 }

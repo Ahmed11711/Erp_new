@@ -323,7 +323,22 @@ export class AccountingTreeComponent implements OnInit {
   }
 
   findAccountById(id: number): TreeAccount | null {
-    return this.accounts.find(acc => acc.id === id) || null;
+    return this.findInTree(this.accounts, id);
+  }
+
+  private findInTree(nodes: TreeAccount[], id: number): TreeAccount | null {
+    for (const node of nodes) {
+      if (node.id === id) {
+        return node;
+      }
+      if (node.children?.length) {
+        const found = this.findInTree(node.children, id);
+        if (found) {
+          return found;
+        }
+      }
+    }
+    return null;
   }
 
   recalculateAllBalances(): void {

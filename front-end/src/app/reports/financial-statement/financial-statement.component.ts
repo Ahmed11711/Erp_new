@@ -10,7 +10,7 @@ import { ServiceAccountsService } from 'src/app/financial/services/service-accou
 @Component({
   selector: 'app-financial-statement',
   templateUrl: './financial-statement.component.html',
-  styleUrls: ['./financial-statement.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './financial-statement.component.css']
 })
 export class FinancialStatementComponent implements OnInit {
 

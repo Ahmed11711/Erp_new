@@ -13,6 +13,11 @@ export class CategoryService {
   return this.http.post(`${environment.Url}/categories`, data);
  }
 
+ /** قائمة الوصفات (BOM) لربط الصنف عند الإضافة أو التعديل */
+ listRecipes() {
+  return this.http.get<Array<{ id: number; recipe_name: string; description?: string | null }>>(`${environment.Url}/recipes`);
+ }
+
  editCategory(id: any, formData: any) {
   return this.http.post(`${environment.Url}/editcategory/${id}`, formData);
  }

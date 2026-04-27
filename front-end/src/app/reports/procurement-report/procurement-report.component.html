@@ -1,106 +1,134 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">تقرير المشتريات</p></div>
+    <h1 class="report-title">تقرير المشتريات</h1>
+    <div class="report-topbar-side"></div>
+  </div>
+
+  <div class="filter-chips">
+    <button type="button" class="chip chip-filter" (click)="toggleFilters()">
+      <i class="fa-solid fa-sliders"></i>
+      <span>فلترة</span>
+    </button>
+    <div class="chip chip-date" *ngIf="showFilters">
+      <i class="fa-regular fa-calendar"></i>
+      <span class="date-range">
+        <input id="proc-date-from" type="date" [(ngModel)]="dateFrom" (ngModelChange)="onDatesChange()">
+        <span class="date-sep">—</span>
+        <input id="proc-date-to" type="date" [(ngModel)]="dateTo" (ngModelChange)="onDatesChange()">
+      </span>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
+    <div class="chip chip-search" *ngIf="showFilters">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" placeholder="البحث..." id="proc-search-input"
+        [(ngModel)]="searchKeyword" (ngModelChange)="onSearchInput()" autocomplete="off">
     </div>
   </div>
 
+  <div class="summary-grid" *ngIf="invoices?.length">
+    <div class="summary-card returns">
+      <div class="summary-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+      <div class="summary-label">مستحق للمورد</div>
+      <div class="summary-value">{{ getTotals().due | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card new-value">
+      <div class="summary-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+      <div class="summary-label">المدفوع</div>
+      <div class="summary-value">{{ getTotals().paid | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card new-qty">
+      <div class="summary-icon"><i class="fa-solid fa-truck"></i></div>
+      <div class="summary-label">شحن التوريد</div>
+      <div class="summary-value">{{ getTotals().shipping | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card orders">
+      <div class="summary-icon"><i class="fa-solid fa-boxes-stacked"></i></div>
+      <div class="summary-label">تكلفة البضاعة</div>
+      <div class="summary-value">{{ getTotals().product | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+  </div>
 
-  <div class="container-fluid">
+  <div class="state-box empty" *ngIf="!invoices?.length">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>لا توجد بيانات لهذه الفترة.</p>
+  </div>
 
+  <div class="items-list" *ngIf="invoices?.length">
+    <div class="item-card" *ngFor="let item of invoices; let i = index; trackBy: trackByIndex"
+      [class.expanded]="expanded.has(i)">
+      <div class="item-head">
+        <button class="item-chevron" type="button" (click)="toggleExpand(i)">
+          <i class="fa-solid" [ngClass]="expanded.has(i) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div class="item-title" (click)="toggleExpand(i)">{{ item?.invoice_number }} — {{ item?.supplier?.supplier_name }}</div>
+      </div>
 
-    <div class="my-5">
-      <div class="row">
-        <div class="col-md-2">
-          <label for="proc-date-from">من تاريخ</label>
-          <input id="proc-date-from" class="form-control" type="date" [(ngModel)]="dateFrom" (ngModelChange)="onDatesChange()">
+      <div class="item-stats">
+        <div class="stat">
+          <div class="stat-head"><span>تكلفة البضاعة</span></div>
+          <div class="stat-value orders">{{ displayProductTotal(item) | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
         </div>
-        <div class="col-md-2">
-          <label for="proc-date-to">الى تاريخ</label>
-          <input id="proc-date-to" class="form-control" type="date" [(ngModel)]="dateTo" (ngModelChange)="onDatesChange()">
+        <div class="stat">
+          <div class="stat-head"><span>شحن التوريد</span></div>
+          <div class="stat-value new-qty">{{ displayShippingTotal(item) | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <input class="form-control border-end-0 border rounded-pill" type="search" placeholder="البحث..." id="proc-search-input"
-            [(ngModel)]="searchKeyword" (ngModelChange)="onSearchInput()" autocomplete="off">
+        <div class="stat">
+          <div class="stat-head"><span>المدفوع</span></div>
+          <div class="stat-value new-value">{{ displayAmount(item, 'paid_amount') | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head"><span>مستحق للمورد</span></div>
+          <div class="stat-value returns">{{ displayAmount(item, 'due_amount') | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
+        </div>
+      </div>
+
+      <button class="item-details-toggle" type="button" (click)="toggleExpand(i)">
+        <span>عرض التفاصيل</span>
+        <i class="fa-solid" [ngClass]="expanded.has(i) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+      </button>
+
+      <div class="item-details" *ngIf="expanded.has(i)">
+        <div class="detail">
+          <div class="detail-label">الصنف</div>
+          <div class="detail-value">{{ item?.first_product_name || '—' }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">وحدة القياس</div>
+          <div class="detail-value">{{ item?.first_product_unit || '—' }}</div>
+        </div>
+        <div class="detail">
+          <div class="detail-label">إجمالي الفاتورة</div>
+          <div class="detail-value profit">{{ displayGrandTotal(item) | customNumber }}</div>
+          <div class="detail-unit">EGP</div>
+        </div>
+        <div class="detail" style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+          <button class="btn btn-link btn-sm p-0" (click)="invoiceDetails(item?.id)">تفاصيل</button>
+          <button class="btn btn-link btn-sm p-0" (click)="editInvoice(item?.id)" *ngIf="item?.status != 1">تعديل</button>
         </div>
       </div>
     </div>
+  </div>
 
-
-    <table class="table table-bordered m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>رقم فاتوره الشراء</th>
-        <th>الصنف</th>
-        <th>وحدة القياس</th>
-        <th>المورد</th>
-        <th>تكلفة البضاعة</th>
-        <th>شحن التوريد</th>
-        <th>إجمالي الفاتورة</th>
-        <th>المدفوع</th>
-        <th>رصيد سابق المورد</th>
-        <th>رصيد سابق للخامة</th>
-        <th>مستحق للمورد</th>
-        <th>تفاصيل</th>
-        <th>تعديل</th>
-      </thead>
-      <tbody>
-        <tr *ngIf="!invoices?.length">
-          <td colspan="13">لا توجد بيانات</td>
-        </tr>
-        <tr *ngFor="let item of invoices" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
-          <td>{{ item?.invoice_number }}</td>
-          <td>{{ item?.first_product_name || '—' }}</td>
-          <td>{{ item?.first_product_unit || '—' }}</td>
-          <td>{{ item?.supplier?.supplier_name }}</td>
-          <td dir="ltr">{{ displayProductTotal(item) | customNumber }}</td>
-          <td dir="ltr">{{ displayShippingTotal(item) | customNumber }}</td>
-          <td dir="ltr">{{ displayGrandTotal(item) | customNumber }}</td>
-          <td dir="ltr">{{ displayAmount(item, 'paid_amount') | customNumber }}</td>
-          <td dir="ltr">0</td>
-          <td dir="ltr">0</td>
-          <td dir="ltr">{{ displayAmount(item, 'due_amount') | customNumber }}</td>
-          <td>
-            <button type="button" class="btn btn-link btn-sm p-0" (click)="invoiceDetails(item?.id)">تفاصيل</button>
-          </td>
-          <td>
-            <button type="button" class="btn btn-link btn-sm p-0" (click)="editInvoice(item?.id)" *ngIf="item?.status != 1">تعديل</button>
-          </td>
-        </tr>
-      </tbody>
-      <tfoot *ngIf="invoices?.length">
-        <tr>
-          <td>الاجمالى</td>
-          <td>—</td>
-          <td>—</td>
-          <td>—</td>
-          <td dir="ltr">{{ getTotals().product | customNumber }}</td>
-          <td dir="ltr">{{ getTotals().shipping | customNumber }}</td>
-          <td dir="ltr">{{ getTotals().grand | customNumber }}</td>
-          <td dir="ltr">{{ getTotals().paid | customNumber }}</td>
-          <td dir="ltr">0</td>
-          <td dir="ltr">0</td>
-          <td dir="ltr">{{ getTotals().due | customNumber }}</td>
-          <td></td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-
-    <div class="mt-4" *ngIf="length > 0">
-      <mat-paginator
-        class="demo-paginator"
-        [length]="length"
-        showFirstLastButtons
-        (page)="onPageChange($event)"
-        [pageSizeOptions]="pageSizeOptions"
-        [pageSize]="pageSize"
-        [pageIndex]="page"
-        aria-label="Select page">
-      </mat-paginator>
-    </div>
+  <div class="paginator-wrap" *ngIf="invoices?.length && length > 0">
+    <mat-paginator
+      class="demo-paginator"
+      [length]="length"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
+      aria-label="Select page">
+    </mat-paginator>
+  </div>
 </div>

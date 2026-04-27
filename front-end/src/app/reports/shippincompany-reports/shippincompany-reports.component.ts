@@ -4,7 +4,7 @@ import { ShippingCompanyService } from 'src/app/shipping/services/shipping-compa
 @Component({
   selector: 'app-shippincompany-reports',
   templateUrl: './shippincompany-reports.component.html',
-  styleUrls: ['./shippincompany-reports.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './shippincompany-reports.component.css']
 })
 export class ShippincompanyReportsComponent implements OnInit {
 
@@ -14,6 +14,7 @@ export class ShippincompanyReportsComponent implements OnInit {
   searchKeyword = '';
   loading = false;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
+  showFilters = true;
 
   constructor(private shippingCompany: ShippingCompanyService) {
     const today = new Date();
@@ -85,4 +86,21 @@ export class ShippincompanyReportsComponent implements OnInit {
     return ((this.totalCollected / this.totalOrders) * 100).toFixed(2);
   }
 
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
+  }
+
+  expanded = new Set<number>();
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
 }

@@ -48,7 +48,7 @@
     </select>
    </div>
    <div class="form-group col-md-3">
-    <input type="text" name="type" placeholder="اسم الصنف" autocomplete="off" ngModel #type="ngModel"
+    <input type="text" name="type" placeholder="اسم الصنف أو كود الصنف" autocomplete="off" ngModel #type="ngModel"
      class="form-control" (ngModelChange)="onCategoryNameInput($event)" [(ngModel)]="category_name" />
    </div>
    <div class="form-group col-md-3">
@@ -65,6 +65,8 @@
       <tr>
        <th>#</th>
        <th>اسم الصنف</th>
+       <th>كود الصنف</th>
+       <th>اللون</th>
        <th>المخزن</th>
        <th>فرع الانتاج</th>
        <th>الوحدة</th>
@@ -79,6 +81,14 @@
       <tr *ngFor="let item of categories; let i = index">
        <th>{{ i + 1 }}</th>
        <td>{{ item.category_name }}</td>
+       <td dir="ltr">{{ item.item_code || '—' }}</td>
+       <td>
+        <span *ngIf="item.color" class="d-inline-flex align-items-center" style="gap: 6px;">
+         <span class="category-color-swatch" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
+         <span>{{ item.color }}</span>
+        </span>
+        <span *ngIf="!item.color">—</span>
+       </td>
        <td>{{ item.warehouse }}</td>
        <td>{{ item.production.production_line }}</td>
        <td>{{ item.measurement.unit }}</td>

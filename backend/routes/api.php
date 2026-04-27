@@ -53,6 +53,26 @@ Route::get('/test', function () {
 Route::get('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'verify']);
 Route::post('/meta/webhook', [\App\Http\Controllers\MetaWebhookController::class, 'handle']);
 
+Route::get('/meta/webhook-health', function () {
+    $hasMediaId = \Illuminate\Support\Facades\Schema::hasColumn('messages', 'media_id');
+    $hasType = \Illuminate\Support\Facades\Schema::hasColumn('messages', 'type');
+    $hasPhoneNumberId = \Illuminate\Support\Facades\Schema::hasColumn('messages', 'phone_number_id');
+    $latestInbound = \App\Models\Message::where('direction', 'inbound')
+        ->orderByDesc('id')
+        ->first(['id', 'type', 'media_id', 'content', 'created_at']);
+    $totalMedia = \App\Models\Message::whereNotNull('media_id')
+        ->where('media_id', '!=', '')
+        ->count();
+    return response()->json([
+        'columns_ok' => $hasMediaId && $hasType && $hasPhoneNumberId,
+        'has_media_id_column' => $hasMediaId,
+        'has_type_column' => $hasType,
+        'has_phone_number_id_column' => $hasPhoneNumberId,
+        'total_media_messages' => $totalMedia,
+        'latest_inbound' => $latestInbound,
+    ]);
+});
+
 Route::post('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'handle']);
 Route::post('/webhooks/shipping/update', [\App\Http\Controllers\ShippingPartnerWebhookController::class, 'update']);
 
@@ -78,6 +98,12 @@ Route::middleware('auth')->group(function () {
     Route::get('sentnotification', [App\Http\Controllers\NotificationController::class, 'sentNotifiy']);
     Route::get('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readNotify']);
     Route::post('notification/{id}', [App\Http\Controllers\NotificationController::class, 'readOrderNotify']);
+
+    // WhatsApp-Web style chat API (cursor pagination + media proxy)
+    Route::get('conversations/{conversation_id}/messages', [App\Http\Controllers\ConversationController::class, 'messages'])
+        ->whereNumber('conversation_id');
+    Route::get('media/{id}', [App\Http\Controllers\ConversationController::class, 'media'])
+        ->whereNumber('id');
 
     // WhatsApp Messaging Routes
     Route::prefix('whatsapp/')->group(function () {
@@ -185,6 +211,32 @@ Route::middleware('auth')->group(function () {
         Route::get('getCategoryByStockId', [CategoriesController::class, 'getCategoryByStockId']);
 
         Route::post('categories', [CategoriesController::class, 'store']);
+        Route::get('recipes', [\App\Http\Controllers\RecipeController::class, 'index']);
+        Route::post('recipes', [\App\Http\Controllers\RecipeController::class, 'store']);
+        Route::post('recipes/bulk-delete', [\App\Http\Controllers\RecipeController::class, 'bulkDestroy']);
+
+        // Interactive Excel import (literal paths — must be before {id} wildcard)
+        Route::post('recipes/import', [\App\Http\Controllers\RecipeImportController::class, 'preview']);
+        Route::post('recipes/import/confirm', [\App\Http\Controllers\RecipeImportController::class, 'confirm']);
+        Route::post('recipes/import/cancel', [\App\Http\Controllers\RecipeImportController::class, 'cancel']);
+
+        // Recipe detail, CRUD, execution, stock check, movements
+        Route::get('recipes/{id}', [\App\Http\Controllers\RecipeController::class, 'show'])->whereNumber('id');
+        Route::put('recipes/{id}', [\App\Http\Controllers\RecipeController::class, 'update'])->whereNumber('id');
+        Route::delete('recipes/{id}', [\App\Http\Controllers\RecipeController::class, 'destroy'])->whereNumber('id');
+        Route::get('recipes/{id}/check-stock', [\App\Http\Controllers\RecipeController::class, 'checkStock'])->whereNumber('id');
+        Route::post('recipes/{id}/execute', [\App\Http\Controllers\RecipeController::class, 'execute'])->whereNumber('id');
+        Route::get('recipes/{id}/movements', [\App\Http\Controllers\RecipeController::class, 'movements'])->whereNumber('id');
+
+        // Recipe extra costs (dynamic cost lines: machine, labor, overhead, etc.)
+        Route::get('recipes/{recipeId}/extra-costs', [\App\Http\Controllers\RecipeExtraCostController::class, 'index'])->whereNumber('recipeId');
+        Route::post('recipes/{recipeId}/extra-costs', [\App\Http\Controllers\RecipeExtraCostController::class, 'store'])->whereNumber('recipeId');
+        Route::put('recipes/{recipeId}/extra-costs/{extraCostId}', [\App\Http\Controllers\RecipeExtraCostController::class, 'update'])->whereNumber(['recipeId', 'extraCostId']);
+        Route::delete('recipes/{recipeId}/extra-costs/{extraCostId}', [\App\Http\Controllers\RecipeExtraCostController::class, 'destroy'])->whereNumber(['recipeId', 'extraCostId']);
+        Route::get('recipes/{recipeId}/breakdown', [\App\Http\Controllers\RecipeExtraCostController::class, 'breakdown'])->whereNumber('recipeId');
+
+        Route::post('categories/{id}/revision-roll-forward', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'rollForward']);
+        Route::get('categories/{id}/revision-lineage', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'lineage']);
 
         Route::get('category/{id}', [CategoriesController::class, 'getCategoryById']);
         Route::post('editcategory/{id}', [CategoriesController::class, 'editCategory']);

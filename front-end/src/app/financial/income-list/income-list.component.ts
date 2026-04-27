@@ -12,7 +12,7 @@ import { IncomeListService } from '../services/income-list.service';
 @Component({
   selector: 'app-income-list',
   templateUrl: './income-list.component.html',
-  styleUrls: ['./income-list.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './income-list.component.css']
 })
 export class IncomeListComponent implements OnInit{
   month;

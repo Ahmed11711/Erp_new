@@ -4,7 +4,7 @@ import { AccountingReportService } from 'src/app/accounting/services/accounting-
 @Component({
   selector: 'app-category',
   templateUrl: './category.component.html',
-  styleUrls: ['./category.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './category.component.css']
 })
 export class CategoryComponent implements OnInit {
   data: any[] = [];
@@ -14,8 +14,23 @@ export class CategoryComponent implements OnInit {
   searchTerm = '';
   loading = false;
   loadError = false;
+  showFilters = true;
+
+  expanded = new Set<number>();
 
   constructor(private reportService: AccountingReportService) {}
+
+  toggleExpand(index: number): void {
+    if (this.expanded.has(index)) {
+      this.expanded.delete(index);
+    } else {
+      this.expanded.add(index);
+    }
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
 
   ngOnInit(): void {
     const today = new Date();
@@ -64,6 +79,10 @@ export class CategoryComponent implements OnInit {
 
   onSearchChange(): void {
     this.applyFilter();
+  }
+
+  toggleFilters(): void {
+    this.showFilters = !this.showFilters;
   }
 
   applyFilter(): void {
