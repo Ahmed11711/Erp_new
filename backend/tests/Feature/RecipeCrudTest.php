@@ -11,6 +11,7 @@ use App\Models\RecipeIngredient;
 use App\Models\Stock;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Enums\InventoryMovementType;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -54,13 +55,11 @@ class RecipeCrudTest extends TestCase
 
     private function makeRawMaterial(string $name, float $price): Category
     {
-        return Category::create([
+        $cat = Category::create([
             'category_name'   => $name . '_' . uniqid(),
             'category_price'  => $price,
             'unit_price'      => $price,
             'initial_balance' => 100,
-            'quantity'        => 100,
-            'total_price'     => $price * 100,
             'minimum_quantity' => 0,
             'warehouse'       => 'مخزن مواد خام',
             'production_id'   => $this->production->id,
@@ -68,6 +67,11 @@ class RecipeCrudTest extends TestCase
             'stock_id'        => $this->rawStock->id,
             'category_image'  => '',
         ]);
+        $cat->quantity = 100;
+        $cat->total_price = $price * 100;
+        $cat->save();
+
+        return $cat;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -228,9 +232,13 @@ class RecipeCrudTest extends TestCase
 
         StockMovement::create([
             'category_id'    => $mat->id,
+            'warehouse_stock_id' => $mat->stock_id,
             'warehouse_name' => 'مخزن مواد خام',
             'direction'      => 'out',
+            'movement_type'  => InventoryMovementType::RecipeExecution->value,
             'quantity'       => 5,
+            'unit_cost'      => 10,
+            'total_cost'     => 50,
             'reference_type' => 'recipe',
             'reference_id'   => $recipe->id,
         ]);

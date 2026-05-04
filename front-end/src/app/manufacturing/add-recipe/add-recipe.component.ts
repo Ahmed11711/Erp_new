@@ -113,6 +113,8 @@ export class AddRecipeComponent implements OnInit{
     }
     this.selectedWarehouse = warehouse;
     this.tableData = [];
+    this.extraCosts = [];
+    this.costBreakdown = null;
     this.imageFailed.clear();
     this.products = [];
     this.recipes = [];
@@ -172,7 +174,10 @@ export class AddRecipeComponent implements OnInit{
   productChange(event: any) {
     this.product_id = event.id;
     this.tableData = [];
+    this.extraCosts = [];
+    this.costBreakdown = null;
     this.imageFailed.clear();
+    this.calcTotalPrice();
   }
 
   onProductSelected(item: any) {
@@ -267,6 +272,10 @@ export class AddRecipeComponent implements OnInit{
 
   totalPrice:number=0;
   calcTotalPrice(){
+    if (this.extraCosts.length > 0) {
+      this.computeLocalCostBreakdown();
+      return;
+    }
     this.totalPrice = 0;
     this.tableData.forEach(elm=>{
       this.totalPrice += elm.total_price;
@@ -274,6 +283,7 @@ export class AddRecipeComponent implements OnInit{
     if (this.changedPrice !== 0) {
       this.totalPrice += this.changedPrice;
     }
+    this.costBreakdown = null;
   }
 
   changedPrice:number=0;
@@ -285,6 +295,7 @@ export class AddRecipeComponent implements OnInit{
       this.changedPrice=0;
       this.showChangedPrice= false;
     }
+    this.calcTotalPrice();
   }
   // data for backend
   product_id!:number;
@@ -293,8 +304,20 @@ export class AddRecipeComponent implements OnInit{
       const products = this.tableData.map(elm=>{
         return {id:elm.id , quantity:elm.quantity , total_price:elm.total_price}
       })
-      const data = {product_id:this.product_id , total:this.totalPrice , products}
-      this.manufacturingService.addRecipe(data).subscribe({
+      const extra_costs = this.extraCosts.map((ec) => ({
+        name: ec.name,
+        type: ec.type,
+        value: +ec.value,
+      }));
+      const data: Record<string, unknown> = {
+        product_id: this.product_id,
+        total: this.totalPrice,
+        products,
+      };
+      if (extra_costs.length > 0) {
+        data.extra_costs = extra_costs;
+      }
+      this.manufacturingService.addRecipe(data as any).subscribe({
         next: (result) => {
           if (result === 'success') {
             this.route.navigate(['/dashboard/manufacturing/recipes']);
@@ -516,10 +539,12 @@ export class AddRecipeComponent implements OnInit{
   extraCosts: RecipeExtraCost[] = [];
   costBreakdown: CostBreakdown | null = null;
 
+  /** صفوف مؤقتة قبل حفظ الوصفة — لا يوجد طلب لـ /recipes/0/extra-costs */
+  private nextLocalExtraCostId = -1;
+
   newExtraCostName = '';
   newExtraCostType: 'fixed' | 'percentage' = 'fixed';
   newExtraCostValue: number | null = null;
-  extraCostSaving = false;
   editingExtraCostId: number | null = null;
   editExtraCostName = '';
   editExtraCostType: 'fixed' | 'percentage' = 'fixed';
@@ -535,29 +560,49 @@ export class AddRecipeComponent implements OnInit{
     });
   }
 
-  addExtraCost(recipeId: number): void {
-    if (!this.newExtraCostName || this.newExtraCostValue == null || this.newExtraCostValue < 0) {
+  /** إضافة تكلفة إضافية قبل حفظ الوصفة — تخزين محلي فقط (يُرسل مع تأكيد الوصفة). */
+  addExtraCost(): void {
+    const name = this.newExtraCostName?.trim();
+    const val = this.newExtraCostValue;
+    if (!name || val == null || Number(val) < 0) {
       return;
     }
-    this.extraCostSaving = true;
-    this.manufacturingService.addExtraCost(recipeId, {
-      name: this.newExtraCostName,
+    const row: RecipeExtraCost = {
+      id: this.nextLocalExtraCostId--,
+      recipe_id: 0,
+      name,
       type: this.newExtraCostType,
-      value: this.newExtraCostValue,
-    }).subscribe({
-      next: (res) => {
-        this.extraCosts.push(res.extra_cost);
-        this.costBreakdown = res.breakdown;
-        this.newExtraCostName = '';
-        this.newExtraCostValue = null;
-        this.newExtraCostType = 'fixed';
-        this.extraCostSaving = false;
-        this.recalcTotalWithExtras();
-      },
-      error: () => {
-        this.extraCostSaving = false;
-      },
-    });
+      value: Number(val),
+    };
+    this.extraCosts.push(row);
+    this.newExtraCostName = '';
+    this.newExtraCostValue = null;
+    this.newExtraCostType = 'fixed';
+    this.computeLocalCostBreakdown();
+  }
+
+  /** نفس منطق CostCalculationService: مواد + ثابت + نسبة من تكلفة المواد + تكلفة متغيرة إن وُجدت */
+  private computeLocalCostBreakdown(): void {
+    const materials = this.tableData.reduce((s, e) => s + (+e.total_price || 0), 0);
+    let fixed = 0;
+    let pctSum = 0;
+    for (const ec of this.extraCosts) {
+      if (ec.type === 'fixed') {
+        fixed += +ec.value;
+      } else {
+        pctSum += (materials * (+ec.value)) / 100;
+      }
+    }
+    const variable = Number(this.changedPrice) || 0;
+    const finalCost = materials + fixed + pctSum + variable;
+    this.costBreakdown = {
+      materials_cost: String(materials),
+      fixed_costs: String(fixed),
+      percentage_costs: String(pctSum),
+      final_cost: String(finalCost),
+      margin_percent: null,
+    };
+    this.recalcTotalWithExtras();
   }
 
   startEditExtraCost(ec: RecipeExtraCost): void {
@@ -571,35 +616,37 @@ export class AddRecipeComponent implements OnInit{
     this.editingExtraCostId = null;
   }
 
-  saveEditExtraCost(recipeId: number, extraCostId: number): void {
+  saveEditExtraCost(extraCostId: number): void {
     if (this.editExtraCostValue == null || this.editExtraCostValue < 0) {
       return;
     }
-    this.manufacturingService.updateExtraCost(recipeId, extraCostId, {
-      name: this.editExtraCostName,
-      type: this.editExtraCostType,
-      value: this.editExtraCostValue,
-    }).subscribe({
-      next: (res) => {
-        const idx = this.extraCosts.findIndex((e) => e.id === extraCostId);
-        if (idx >= 0) {
-          this.extraCosts[idx] = res.extra_cost;
-        }
-        this.costBreakdown = res.breakdown;
-        this.editingExtraCostId = null;
-        this.recalcTotalWithExtras();
-      },
-    });
+    if (extraCostId < 0) {
+      const idx = this.extraCosts.findIndex((e) => e.id === extraCostId);
+      if (idx >= 0) {
+        const name = this.editExtraCostName?.trim() || this.extraCosts[idx].name;
+        this.extraCosts[idx] = {
+          ...this.extraCosts[idx],
+          name,
+          type: this.editExtraCostType,
+          value: Number(this.editExtraCostValue),
+        };
+      }
+      this.editingExtraCostId = null;
+      this.computeLocalCostBreakdown();
+      return;
+    }
   }
 
-  deleteExtraCost(recipeId: number, extraCostId: number): void {
-    this.manufacturingService.deleteExtraCost(recipeId, extraCostId).subscribe({
-      next: (res) => {
-        this.extraCosts = this.extraCosts.filter((e) => e.id !== extraCostId);
-        this.costBreakdown = res.breakdown;
-        this.recalcTotalWithExtras();
-      },
-    });
+  deleteExtraCost(extraCostId: number): void {
+    if (extraCostId < 0) {
+      this.extraCosts = this.extraCosts.filter((e) => e.id !== extraCostId);
+      if (this.extraCosts.length === 0) {
+        this.costBreakdown = null;
+        this.calcTotalPrice();
+      } else {
+        this.computeLocalCostBreakdown();
+      }
+    }
   }
 
   /** Recalculate the on-screen total, incorporating extra costs from the breakdown. */

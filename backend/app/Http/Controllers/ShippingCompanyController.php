@@ -21,7 +21,24 @@ class ShippingCompanyController extends Controller
     public function index()
     {
         $shippingCompanies = ShippingCompany::all();
-        return response()->json($shippingCompanies, 200);
+
+        // عمود shipping_companies.orders_count في الجدول قيمة قديمة (افتراضي 0) ولا يُحدَّث مع الشحن.
+        // العدد الحقيقي «تحت التحصيل» = صفوف shipping_company_details بحالة تم شحن ولم تُغلق بعد.
+        $pendingByCompany = DB::table('shipping_company_details')
+            ->select('shipping_company_id', DB::raw('COUNT(DISTINCT order_id) as cnt'))
+            ->where('status', 'تم شحن')
+            ->where('is_done', 0)
+            ->groupBy('shipping_company_id')
+            ->pluck('cnt', 'shipping_company_id');
+
+        $payload = $shippingCompanies->map(function (ShippingCompany $sc) use ($pendingByCompany) {
+            $row = $sc->toArray();
+            $row['orders_count'] = (int) ($pendingByCompany[$sc->id] ?? 0);
+
+            return $row;
+        });
+
+        return response()->json($payload->values(), 200);
     }
 
     public function shippingcompanySelect()
@@ -41,11 +58,16 @@ class ShippingCompanyController extends Controller
         $request->validate([
             'name' => 'required',
             'type' => 'required|in:مندوب,شركة',
+            'receivable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
-        ShippingCompany::create([
+        $data = [
             'name' => $request->name,
             'type' => $request->type,
-        ]);
+        ];
+        if ($request->exists('receivable_tree_account_id')) {
+            $data['receivable_tree_account_id'] = $request->receivable_tree_account_id;
+        }
+        ShippingCompany::create($data);
 
         return response()->json("created", 201);
     }
@@ -98,12 +120,9 @@ class ShippingCompanyController extends Controller
         }
 
         if ($request->has('order_status')) {
-            $search->where(function ($query) use ($request) {
-                $query->where('status', $request->order_status)
-                    ->where(function ($subquery) {
-                        $subquery->where('is_done', '=', 0);
-                    });
-            });
+            // Do not filter by is_done: rows are marked is_done=1 after collection/refusal/etc.
+            // while status may still be "تم شحن"; excluding them emptied كشف حساب شركة الشحن.
+            $search->where('status', $request->order_status);
         }
 
 
@@ -119,16 +138,15 @@ class ShippingCompanyController extends Controller
             });
         }
 
-        $search->with('order')->with([
-            'order.order_details',
+        $search->with([
             'order' => function ($query) {
-                $query->withCount([
+                $query->with('order_details')->withCount([
                     'notifications as review_notifications_count' => function ($query) {
                         $query->where('type', 'مراجعة')
                             ->where('send_from', auth()->id());
                     }
                 ]);
-            }
+            },
         ]);
         $search->orderBy('id', 'desc');
 
@@ -172,12 +190,17 @@ class ShippingCompanyController extends Controller
         $request->validate([
             'name' => 'required',
             'type' => 'required|in:مندوب,شركة',
+            'receivable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
 
-        $companyToUpdate->update([
+        $payload = [
             'name' => $request->name,
             'type' => $request->type,
-        ]);
+        ];
+        if ($request->exists('receivable_tree_account_id')) {
+            $payload['receivable_tree_account_id'] = $request->receivable_tree_account_id;
+        }
+        $companyToUpdate->update($payload);
         return response()->json("updated", 200);
     }
 

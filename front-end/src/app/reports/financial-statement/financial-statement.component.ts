@@ -37,6 +37,7 @@ export class FinancialStatementComponent implements OnInit {
     { value: 'expense', label: 'مصروفات' },
     { value: 'revenue', label: 'إيرادات' },
     { value: 'equity', label: 'حقوق ملكية' },
+    { value: 'settlement', label: 'حسابات تسوية' },
     { value: 'safe_only', label: 'خزن فقط' },
     { value: 'bank_only', label: 'بنوك فقط' },
     { value: 'cash_bank', label: 'خزن وبنوك (أصول نقدية)' },
@@ -250,6 +251,8 @@ export class FinancialStatementComponent implements OnInit {
       base = base.filter((a) => a.type === 'revenue');
     } else if (sourceType === 'equity') {
       base = base.filter((a) => a.type === 'equity');
+    } else if (sourceType === 'settlement') {
+      base = base.filter((a) => a.type === 'settlement');
     } else if (sourceType === 'safe_only') {
       base = base.filter((a) => this.isSafeLeaf(a));
     } else if (sourceType === 'bank_only') {

@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { AddRecipeComponent } from './add-recipe/add-recipe.component';
 import { ManufacturingRecipesComponent } from './manufacturing-recipes/manufacturing-recipes.component';
+import { ManufacturingBomListComponent } from './manufacturing-bom-list/manufacturing-bom-list.component';
 import { ManufacturingConfirmationComponent } from './manufacturing-confirmation/manufacturing-confirmation.component';
 import { ManufacturingOrdersComponent } from './manufacturing-orders/manufacturing-orders.component';
 import { ManufacturingAdditionsComponent } from './manufacturing-additions/manufacturing-additions.component';
@@ -12,6 +13,9 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:'recipes' , component:ManufacturingRecipesComponent,
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  },
+  {path:'bom' , component:ManufacturingBomListComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:'confirmation' , component:ManufacturingConfirmationComponent,

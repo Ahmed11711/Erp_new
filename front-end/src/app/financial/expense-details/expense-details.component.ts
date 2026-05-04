@@ -31,4 +31,71 @@ export class ExpenseDetailsComponent {
 
   }
 
+  resolvePaymentType(row: any): string {
+    if (!row) {
+      return 'bank';
+    }
+    if (row.payment_type) {
+      return row.payment_type;
+    }
+    if (row.safe_id) {
+      return 'safe';
+    }
+    if (row.service_account_id) {
+      return 'service_account';
+    }
+    return 'bank';
+  }
+
+  paymentPlaceLabel(row: any): string {
+    const pt = this.resolvePaymentType(row);
+    if (pt === 'safe') {
+      return 'خزينة';
+    }
+    if (pt === 'bank') {
+      return 'بنك';
+    }
+    if (pt === 'service_account') {
+      return 'حساب خدمي';
+    }
+    return '—';
+  }
+
+  paymentSourceName(row: any): string {
+    const pt = this.resolvePaymentType(row);
+    if (pt === 'safe') {
+      return row?.safe?.name ?? '—';
+    }
+    if (pt === 'bank') {
+      return row?.bank?.name ?? '—';
+    }
+    return row?.service_account?.name ?? '—';
+  }
+
+  treeAccountLine(acc: { code?: string; name?: string } | null | undefined): string {
+    if (!acc) {
+      return '—';
+    }
+    const code = acc.code != null && String(acc.code).trim() !== '' ? String(acc.code) : '';
+    const name = acc.name != null && String(acc.name).trim() !== '' ? String(acc.name) : '';
+    if (code && name) {
+      return `${code} · ${name}`;
+    }
+    return name || code || '—';
+  }
+
+  creditTreeFromRow(row: any): { code?: string; name?: string } | null {
+    if (!row) {
+      return null;
+    }
+    const pt = this.resolvePaymentType(row);
+    if (pt === 'safe') {
+      return row.safe?.account ?? null;
+    }
+    if (pt === 'bank') {
+      return row.bank?.asset ?? null;
+    }
+    return row.service_account?.account ?? null;
+  }
+
 }

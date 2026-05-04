@@ -39,8 +39,8 @@
               <button mat-menu-item (click)="openWarehouseDetails(elm)">
                 <span>التفاصيل</span>
               </button>
-              <button mat-menu-item *ngIf="elm.id" (click)="openDialog(elm)">
-                <span>تعديل البيانات</span>
+              <button mat-menu-item (click)="openDialog(elm)">
+                <span>{{ elm.id ? 'تعديل البيانات' : 'ربط المخزن بالحساب' }}</span>
               </button>
               <button mat-menu-item routerLink="/dashboard/warehouse/warehousedetails" [queryParams]="{warehouse: elm.name}">
                 <span>تتبع</span>
@@ -53,10 +53,10 @@
               </button>
             </mat-menu>
           </td>
-          <td *ngIf="url == 'listwarhouse'">
-            <button class="btn btn-secondary" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse: elm.name}">
-              <span>التفاصيل</span>
-            </button>
+          <td *ngIf="url == 'listwarhouse'" class="text-nowrap">
+            <a class="btn btn-secondary btn-sm mb-1" routerLink="/dashboard/warehouse/monthlyinventory" [queryParams]="{warehouse: elm.name}">سجلات الجرد</a>
+            <a class="btn btn-primary btn-sm mb-1 mr-1" routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse: elm.name}">أصناف وجرد</a>
+            <a class="btn btn-outline-secondary btn-sm mb-1" routerLink="/dashboard/warehouse/inventory-import">Excel</a>
           </td>
         </tr>
       </tbody>

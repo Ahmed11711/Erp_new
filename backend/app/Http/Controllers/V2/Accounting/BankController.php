@@ -8,10 +8,10 @@ use App\Models\BankTransaction;
 use App\Models\Safe;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Carbon\Carbon;
 
 class BankController extends Controller
 {
@@ -35,33 +35,141 @@ class BankController extends Controller
 
     /**
      * Store a newly created resource in storage.
+     * يُنشئ حساباً فرعياً في شجرة الحسابات تحت الحساب الأب (مثل الخزن)، ويربط البنك بهذا الحساب الفرعي.
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $balance = (float) ($request->input('balance', 0));
+
+        $rules = [
             'name' => 'required|string',
-            'type' => 'nullable|string', // e.g., Current, Savings
-            'balance' => 'nullable|numeric',
+            'type' => 'nullable|string',
+            'balance' => 'nullable|numeric|min:0',
             'usage' => 'nullable|string',
-            'asset_id' => 'required|exists:tree_accounts,id', // Should match existing Bank model relation
-        ]);
+            'parent_account_id' => 'nullable|exists:tree_accounts,id',
+            'asset_id' => 'nullable|exists:tree_accounts,id',
+            'counter_account_id' => 'nullable|exists:tree_accounts,id',
+        ];
+
+        $parentId = $request->input('parent_account_id') ?? $request->input('asset_id');
+        if (!$parentId) {
+            return response()->json([
+                'errors' => ['parent_account_id' => ['يجب اختيار الحساب الأب في شجرة الحسابات']],
+            ], 422);
+        }
+
+        if ($balance > 0.000001) {
+            $rules['counter_account_id'] = 'required|exists:tree_accounts,id';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $bank = Bank::create([
-            'name' => $request->name,
-            'type' => $request->type ?? 'main',
-            'balance' => $request->balance ?? 0,
-            'usage' => $request->usage,
-            'asset_id' => $request->asset_id,
-        ]);
+        DB::beginTransaction();
+        try {
+            $parentAccount = TreeAccount::find($parentId);
 
-        return response()->json([
-            'message' => 'تم إنشاء البنك بنجاح',
-            'data' => $bank->load('asset')
-        ], 201);
+            $lastChild = TreeAccount::where('parent_id', $parentAccount->id)
+                ->orderByDesc('code')
+                ->lockForUpdate()
+                ->first();
+
+            switch ($parentAccount->level) {
+                case 1:
+                    $newCode = $lastChild ? $lastChild->code + 1 : ($parentAccount->code * 10 + 1);
+                    $newLevel = 2;
+                    break;
+                case 2:
+                    if (!$lastChild) {
+                        if ($parentAccount->code < 100) {
+                            $parentCode = (string) $parentAccount->code;
+                            $newCode = (int) ($parentCode[0] . '0' . $parentCode[1]);
+                        } else {
+                            $newCode = $parentAccount->code * 10 + 1;
+                        }
+                    } else {
+                        $newCode = $lastChild->code + 1;
+                    }
+                    $newLevel = 3;
+                    break;
+                case 3:
+                    $newCode = $lastChild ? $lastChild->code + 1 : ($parentAccount->code * 10 + 1);
+                    $newLevel = 4;
+                    break;
+                default:
+                    $newCode = $lastChild ? $lastChild->code + 1 : ($parentAccount->code * 10 + 1);
+                    $newLevel = ($parentAccount->level ?? 1) + 1;
+                    break;
+            }
+
+            $childAccount = TreeAccount::create([
+                'name' => 'بنك - ' . $request->name,
+                'name_en' => 'Bank - ' . $request->name,
+                'code' => $newCode,
+                'type' => $parentAccount->type,
+                'level' => $newLevel,
+                'parent_id' => $parentAccount->id,
+                'balance' => 0,
+                'debit_balance' => 0,
+                'credit_balance' => 0,
+                'is_trading_account' => false,
+                'detail_type' => 'bank',
+            ]);
+
+            $bank = Bank::create([
+                'name' => $request->name,
+                'type' => $request->type ?? 'main',
+                'balance' => $balance,
+                'usage' => $request->usage,
+                'asset_id' => $childAccount->id,
+            ]);
+
+            if ($balance > 0.000001) {
+                $bankAccountId = (int) $childAccount->id;
+                $counterId = (int) $request->counter_account_id;
+
+                if ($bankAccountId === $counterId) {
+                    throw new \Exception('الحساب المقابل يجب أن يكون مختلفاً عن حساب البنك');
+                }
+                $now = now();
+                $desc = 'رصيد افتتاحي بنك - ' . $bank->name;
+
+                AccountEntry::create([
+                    'tree_account_id' => $bankAccountId,
+                    'debit' => $balance,
+                    'credit' => 0,
+                    'description' => $desc,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                AccountEntry::create([
+                    'tree_account_id' => $counterId,
+                    'debit' => 0,
+                    'credit' => $balance,
+                    'description' => $desc,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+                /** @var AccountingService $accService */
+                $accService = app(AccountingService::class);
+                $accService->updateAccountHierarchyBalances($bankAccountId);
+                $accService->updateAccountHierarchyBalances($counterId);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'تم إنشاء البنك بنجاح',
+                'data' => $bank->load('asset'),
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -93,16 +201,26 @@ class BankController extends Controller
             'name' => 'sometimes|string',
             'type' => 'nullable|string',
             'usage' => 'nullable|string',
-            'asset_id' => 'nullable|exists:tree_accounts,id',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $oldName = $bank->name;
         $bank->update($request->only([
-            'name', 'type', 'usage', 'asset_id'
+            'name', 'type', 'usage',
         ]));
+
+        if ($request->has('name') && $request->name !== $oldName && $bank->asset_id) {
+            $treeAccount = TreeAccount::find($bank->asset_id);
+            if ($treeAccount && $treeAccount->detail_type === 'bank') {
+                $treeAccount->update([
+                    'name' => 'بنك - ' . $request->name,
+                    'name_en' => 'Bank - ' . $request->name,
+                ]);
+            }
+        }
 
         return response()->json([
             'message' => 'تم تحديث بيانات البنك بنجاح',
@@ -125,9 +243,27 @@ class BankController extends Controller
             return response()->json(['message' => 'لا يمكن حذف البنك لأن رصيده لا يساوي صفر'], 422);
         }
 
-        $bank->delete();
+        DB::beginTransaction();
+        try {
+            $accountId = $bank->asset_id;
+            $bank->delete();
 
-        return response()->json(['message' => 'تم حذف البنك بنجاح'], 200);
+            if ($accountId) {
+                $treeAccount = TreeAccount::find($accountId);
+                if ($treeAccount && $treeAccount->detail_type === 'bank') {
+                    $hasEntries = AccountEntry::where('tree_account_id', $accountId)->exists();
+                    if (!$hasEntries) {
+                        $treeAccount->delete();
+                    }
+                }
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'تم حذف البنك بنجاح'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     /**

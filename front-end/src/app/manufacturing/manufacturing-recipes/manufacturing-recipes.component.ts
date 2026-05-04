@@ -1,9 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import {
-  ManufacturingService,
-  RecipeExtraCost,
-  CostBreakdown,
-} from '../services/manufacturing.service';
+import { ManufacturingService, CostBreakdown } from '../services/manufacturing.service';
 
 @Component({
   selector: 'app-manufacturing-recipes',
@@ -11,15 +7,10 @@ import {
   styleUrls: ['./manufacturing-recipes.component.css'],
 })
 export class ManufacturingRecipesComponent implements OnInit {
-  products: any[] = [];
-  catword = 'category_name';
-  tableData: any[] = [];
-
-  /** Recipe BOM list from /manufacture */
-  allBomData: any[] = [];
-
   /** Recipe models from /recipes API with ingredients, extra costs, breakdown */
   recipes: any[] = [];
+  /** بحث في اسم الوصفة والوصف */
+  recipeSearchQuery = '';
   expandedRecipeId: number | null = null;
   expandedDetail: any = null;
   expandedBreakdown: CostBreakdown | null = null;
@@ -36,7 +27,26 @@ export class ManufacturingRecipesComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadRecipes();
-    this.loadBomData();
+  }
+
+  get filteredRecipes(): any[] {
+    const q = this.recipeSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return this.recipes;
+    }
+    return this.recipes.filter(
+      (r) =>
+        (r.recipe_name || '').toLowerCase().includes(q) ||
+        (r.description || '').toLowerCase().includes(q)
+    );
+  }
+
+  /** تحديد الكل في القائمة المفلترة (للقالب — لا يدعم arrow functions) */
+  get isAllFilteredSelected(): boolean {
+    const list = this.filteredRecipes;
+    return (
+      list.length > 0 && list.every((recipe) => this.selectedIds.has(recipe.id))
+    );
   }
 
   loadRecipes(): void {
@@ -45,54 +55,6 @@ export class ManufacturingRecipesComponent implements OnInit {
         this.recipes = data;
       },
     });
-  }
-
-  loadBomData(): void {
-    this.manufacturingService.getAllRecipes().subscribe({
-      next: (result: any) => {
-        this.allBomData = result;
-        this.tableData = result;
-        this.getProducts();
-      },
-    });
-  }
-
-  getProducts(): void {
-    this.products = [];
-    const seen = new Set<number>();
-    this.tableData.forEach((elm) => {
-      const p = elm.product;
-      if (p?.id != null && !seen.has(p.id)) {
-        seen.add(p.id);
-        this.products.push(p);
-      }
-    });
-  }
-
-  productType(e: any): void {
-    this.products = [];
-    this.manufacturingService.getAllRecipes().subscribe((result: any) => {
-      this.tableData = result.filter(
-        (elm: any) => elm.product.warehouse === e.target.value
-      );
-      this.getProducts();
-    });
-  }
-
-  productChange(event: { id?: number }): void {
-    const productId = event?.id;
-    if (productId == null) {
-      return;
-    }
-    this.manufacturingService.getAllRecipes().subscribe((result) => {
-      this.tableData = result.filter(
-        (elm) => Number(elm.product_id) === Number(productId)
-      );
-    });
-  }
-
-  resetProductFilter(): void {
-    this.loadBomData();
   }
 
   // ──────────────────────────────────────────────────────────
@@ -150,7 +112,6 @@ export class ManufacturingRecipesComponent implements OnInit {
           this.expandedBreakdown = null;
         }
         this.selectedIds.delete(id);
-        this.loadBomData();
       },
     });
   }
@@ -168,10 +129,13 @@ export class ManufacturingRecipesComponent implements OnInit {
   }
 
   toggleSelectAll(): void {
-    if (this.selectedIds.size === this.recipes.length) {
-      this.selectedIds.clear();
+    const list = this.filteredRecipes;
+    const allSelected =
+      list.length > 0 && list.every((r) => this.selectedIds.has(r.id));
+    if (allSelected) {
+      list.forEach((r) => this.selectedIds.delete(r.id));
     } else {
-      this.recipes.forEach((r) => this.selectedIds.add(r.id));
+      list.forEach((r) => this.selectedIds.add(r.id));
     }
   }
 
@@ -187,7 +151,6 @@ export class ManufacturingRecipesComponent implements OnInit {
           this.selectedIds.clear();
           this.expandedRecipeId = null;
           this.loadRecipes();
-          this.loadBomData();
         },
         error: () => {
           this.bulkDeleting = false;

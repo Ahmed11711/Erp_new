@@ -3,26 +3,37 @@
 namespace App\Http\Controllers;
 
 use App\Models\ExpenseKind;
+use App\Models\TreeAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class ExpenseKindController extends Controller
 {
-    public function index(){
-        $data = ExpenseKind::all();
+    public function index()
+    {
+        $data = ExpenseKind::with('treeAccount')->orderBy('id')->get();
+
         return response()->json($data, 200);
     }
 
-    public function store(Request $request){
-
-        Log::alert("Creating Expense Kind: ", [$request->all()]);
-        $request->validate([
-            "expense_type"=>"in:مصروف ادارى,مصروف تسويق,مصروف تشغيل",
-            "expense_kind"=>"required|string",
+    public function store(Request $request)
+    {
+        Log::alert('Creating Expense Kind: ', [$request->all()]);
+        $validated = $request->validate([
+            'expense_type' => 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل',
+            'expense_kind' => 'required|string|max:255',
+            'tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
-        $data = ExpenseKind::create($request->only(['expense_type', 'expense_kind']));
-        return response()->json($data, 201);
+        if (! empty($validated['tree_account_id'])) {
+            $acc = TreeAccount::find((int) $validated['tree_account_id']);
+            if (! $acc || $acc->type !== 'expense') {
+                return response()->json(['message' => 'حساب الشجرة يجب أن يكون من نوع مصروف'], 422);
+            }
+        }
+        $data = ExpenseKind::create($validated);
+
+        return response()->json($data->load('treeAccount'), 201);
     }
 
     /**
@@ -30,14 +41,21 @@ class ExpenseKindController extends Controller
      */
     public function update(Request $request, ExpenseKind $expense_kind)
     {
-        $request->validate([
+        $validated = $request->validate([
             'expense_type' => 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل',
             'expense_kind' => 'required|string|max:255',
+            'tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
+        if (array_key_exists('tree_account_id', $validated) && $validated['tree_account_id'] !== null) {
+            $acc = TreeAccount::find((int) $validated['tree_account_id']);
+            if (! $acc || $acc->type !== 'expense') {
+                return response()->json(['message' => 'حساب الشجرة يجب أن يكون من نوع مصروف'], 422);
+            }
+        }
 
-        $expense_kind->update($request->only(['expense_type', 'expense_kind']));
+        $expense_kind->update($validated);
 
-        return response()->json($expense_kind->fresh(), 200);
+        return response()->json($expense_kind->fresh()->load('treeAccount'), 200);
     }
 
     public function search(Request $request){
@@ -52,7 +70,7 @@ class ExpenseKindController extends Controller
             $search->where('id', $request->state);
         }
 
-        $search = $search->paginate($itemsPerPage);
+        $search = $search->with('treeAccount')->orderBy('id')->paginate($itemsPerPage);
 
         return response()->json($search, 200);
     }

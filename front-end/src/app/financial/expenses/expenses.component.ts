@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ExpenseService } from '../services/expense.service';
 
@@ -7,7 +7,7 @@ import { ExpenseService } from '../services/expense.service';
   templateUrl: './expenses.component.html',
   styleUrls: ['./expenses.component.css']
 })
-export class ExpensesComponent {
+export class ExpensesComponent implements OnInit {
 
   data:any[]=[];
   tableData:any[]=[];
@@ -133,6 +133,79 @@ export class ExpensesComponent {
       }
     }
     )
+  }
+
+  /** سجلات قديمة بلا payment_type */
+  resolvePaymentType(row: any): string {
+    if (row?.payment_type) {
+      return row.payment_type;
+    }
+    if (row?.safe_id) {
+      return 'safe';
+    }
+    if (row?.service_account_id) {
+      return 'service_account';
+    }
+    return 'bank';
+  }
+
+  paymentPlaceLabel(row: any): string {
+    const pt = this.resolvePaymentType(row);
+    if (pt === 'safe') {
+      return 'خزينة';
+    }
+    if (pt === 'bank') {
+      return 'بنك';
+    }
+    if (pt === 'service_account') {
+      return 'حساب خدمي';
+    }
+    return '—';
+  }
+
+  paymentSourceName(row: any): string {
+    const pt = this.resolvePaymentType(row);
+    if (pt === 'safe') {
+      return row?.safe?.name ?? '—';
+    }
+    if (pt === 'bank') {
+      return row?.bank?.name ?? '—';
+    }
+    return row?.service_account?.name ?? '—';
+  }
+
+  treeAccountLine(acc: { code?: string; name?: string } | null | undefined): string {
+    if (!acc) {
+      return '—';
+    }
+    const code = acc.code != null && String(acc.code).trim() !== '' ? String(acc.code) : '';
+    const name = acc.name != null && String(acc.name).trim() !== '' ? String(acc.name) : '';
+    if (code && name) {
+      return `${code} · ${name}`;
+    }
+    return name || code || '—';
+  }
+
+  creditTreeFromRow(row: any): { code?: string; name?: string } | null {
+    const pt = this.resolvePaymentType(row);
+    if (pt === 'safe') {
+      return row?.safe?.account ?? null;
+    }
+    if (pt === 'bank') {
+      return row?.bank?.asset ?? null;
+    }
+    return row?.service_account?.account ?? null;
+  }
+
+  truncateNote(text: string | null | undefined, maxLen = 40): string {
+    if (text == null || text === '') {
+      return '—';
+    }
+    const s = String(text).trim();
+    if (s.length <= maxLen) {
+      return s;
+    }
+    return s.slice(0, maxLen) + '…';
   }
 
 }

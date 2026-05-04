@@ -15,10 +15,17 @@ class ShippingCompany extends Model
         'orders_count',
         'refused_orders_percentage',
         'tree_account_id',
+        'receivable_tree_account_id',
     ];
 
     public function treeAccount()
     {
         return $this->belongsTo(TreeAccount::class, 'tree_account_id');
+    }
+
+    /** ذمم أصول: مستحق من الشركة (تحصيل/شحن) — منفصل عن tree_account_id لذمم مصروف الشحن */
+    public function receivableTreeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'receivable_tree_account_id');
     }
 }

@@ -12,7 +12,9 @@
 
   <div class="container">
     <p class="text-muted small mb-2">
-      كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري). إذا ظهر عمود «نوع المصروف» فارغاً للسجلات القديمة، اختر النوع من القائمة ثم اضغط «حفظ».
+      كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري).
+      <strong>حساب الشجرة (مدين):</strong> اختر حساب مصروف طرفي في الشجرة لكل فئة — يُستخدم عند صرف المصروف في القيد المحاسبي.
+      إذا تركت «تلقائي» يُستخدم حساب احتياطي حسب نوع المصروف الرئيسي فقط.
     </p>
     <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
 
@@ -36,6 +38,15 @@
             formControlName="expense_kind" type="text">
           <p *ngIf="form.get('expense_kind')?.errors !=null && form.get('expense_kind')?.touched"
             class="error mb-0 text-danger">مطلوب</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">حساب الشجرة للقيد المدين <span class="text-muted">(اختياري)</span></label>
+          <select class="form-control" formControlName="tree_account_id">
+            <option [ngValue]="null">— تلقائي حسب نوع المصروف —</option>
+            <option *ngFor="let acc of expenseLeafAccounts" [ngValue]="acc.id">
+              {{ acc.code }} — {{ acc.name }}
+            </option>
+          </select>
         </div>
         <div class="text-center my-3">
           <button [disabled]="form.invalid" *ngIf="addbtn" type="submit" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
@@ -61,12 +72,13 @@
         </select>
       </div>
     </div>
-    <table class="table w-75 m-auto table-bordered">
+    <table class="table w-100 m-auto table-bordered">
       <thead class="bg-dark text-white">
         <tr>
           <th>فئة المصروف</th>
           <th>نوع المصروف (الربط)</th>
-          <th style="width: 140px;">—</th>
+          <th>حساب الشجرة (مدين)</th>
+          <th style="width: 170px;">—</th>
         </tr>
       </thead>
       <tbody>
@@ -82,6 +94,15 @@
               <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
               <option ngValue="مصروف تسويق">مصروف تسويق</option>
               <option ngValue="مصروف ادارى">مصروف ادارى</option>
+            </select>
+          </td>
+          <td>
+            <select class="form-control form-control-sm" [(ngModel)]="elm.tree_account_id"
+              [ngModelOptions]="{standalone: true}" [name]="'a'+elm.id">
+              <option [ngValue]="null">— تلقائي —</option>
+              <option *ngFor="let acc of expenseLeafAccounts" [ngValue]="acc.id">
+                {{ acc.code }} — {{ acc.name }}
+              </option>
             </select>
           </td>
           <td class="text-nowrap">

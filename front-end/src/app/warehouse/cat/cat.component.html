@@ -72,9 +72,9 @@
           <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'">{{item.total_price | customNumber}}</td>
           <td dir="ltr" *ngIf="warehouse =='مخزن منتج تام'">{{item.sell_total_price | customNumber}}</td>
           <td>
-            <a class="btn btn-success" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام'" (click)="addQuantiy(item.id , item.category_name)">+</a>
+            <a class="btn btn-success" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام' || warehouse =='مخزن منتج تحت التشغيل'" (click)="addQuantiy(item.id , item.category_name)">+</a>
             <a class="btn btn-dark mx-2" [routerLink]="['/dashboard/warehouse/cat_details',item.id]">التفاصيل</a>
-            <a class="btn btn-danger" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام'" (click)="removeQuantiy(item.id, item.category_name)">-</a>
+            <a class="btn btn-danger" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام' || warehouse =='مخزن منتج تحت التشغيل'" (click)="removeQuantiy(item.id, item.category_name)">-</a>
           </td>
         </tr>
       </tbody>

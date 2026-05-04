@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Item;
 use App\Models\Recipe;
 use App\Models\RecipeExtraCost;
 use App\Models\RecipeIngredient;
 use App\Models\StockMovement;
+use App\Models\ProductionOrder;
+use App\Enums\ProductionOrderStatus;
+use App\Exceptions\Manufacturing\ProductAlreadyCompletedException;
+use App\Services\Manufacturing\RecipeStructureValidator;
 use App\Services\Items\CostCalculationService;
 use App\Services\Items\InventoryService;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +28,7 @@ class RecipeController extends Controller
     public function index(): JsonResponse
     {
         $rows = Recipe::query()
+            ->with(['outputItem:id,category_name,product_type'])
             ->withCount(['ingredients', 'extraCosts'])
             ->orderBy('recipe_name')
             ->get();
@@ -53,6 +59,7 @@ class RecipeController extends Controller
         $data = $request->validate([
             'recipe_name'              => ['required', 'string', 'max:255'],
             'description'              => ['nullable', 'string'],
+            'output_item_id'           => ['nullable', 'integer', 'exists:categories,id'],
             'ingredients'              => ['required', 'array', 'min:1'],
             'ingredients.*.item_id'    => ['required', 'integer', 'exists:categories,id'],
             'ingredients.*.quantity'   => ['required', 'numeric', 'gt:0'],
@@ -63,32 +70,50 @@ class RecipeController extends Controller
             'extra_costs.*.value'      => ['required', 'numeric', 'min:0'],
         ]);
 
-        $recipe = DB::transaction(function () use ($data) {
-            $recipe = Recipe::create([
-                'recipe_name' => $data['recipe_name'],
-                'description' => $data['description'] ?? null,
-            ]);
-
-            foreach ($data['ingredients'] as $ing) {
-                RecipeIngredient::create([
-                    'recipe_id' => $recipe->id,
-                    'item_id'   => $ing['item_id'],
-                    'quantity'  => $ing['quantity'],
-                    'unit_cost' => $ing['unit_cost'] ?? null,
+        try {
+            $recipe = DB::transaction(function () use ($data) {
+                $recipe = Recipe::create([
+                    'recipe_name' => $data['recipe_name'],
+                    'description' => $data['description'] ?? null,
                 ]);
-            }
 
-            foreach (($data['extra_costs'] ?? []) as $ec) {
-                RecipeExtraCost::create([
-                    'recipe_id' => $recipe->id,
-                    'name'      => $ec['name'],
-                    'type'      => $ec['type'],
-                    'value'     => $ec['value'],
-                ]);
-            }
+                foreach ($data['ingredients'] as $ing) {
+                    RecipeIngredient::create([
+                        'recipe_id' => $recipe->id,
+                        'item_id'   => $ing['item_id'],
+                        'quantity'  => $ing['quantity'],
+                        'unit_cost' => $ing['unit_cost'] ?? null,
+                    ]);
+                }
 
-            return $recipe;
-        });
+                foreach (($data['extra_costs'] ?? []) as $ec) {
+                    RecipeExtraCost::create([
+                        'recipe_id' => $recipe->id,
+                        'name'      => $ec['name'],
+                        'type'      => $ec['type'],
+                        'value'     => $ec['value'],
+                    ]);
+                }
+
+                if (! empty($data['output_item_id'])) {
+                    $outputId = (int) $data['output_item_id'];
+                    if (Recipe::query()->where('output_item_id', $outputId)->exists()) {
+                        throw new \InvalidArgumentException('Another recipe already owns this output product.');
+                    }
+                    $recipe->output_item_id = $outputId;
+                    $recipe->save();
+                    Item::query()->whereKey($outputId)->update(['recipe_id' => $recipe->id]);
+                    RecipeStructureValidator::assertValidForRecipe(
+                        $recipe->fresh(['ingredients.item']),
+                        $outputId
+                    );
+                }
+
+                return $recipe;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         $recipe->load(['ingredients.item', 'extraCosts']);
         $breakdown = $this->costService->breakdownForRecipe($recipe);
@@ -110,6 +135,7 @@ class RecipeController extends Controller
         $data = $request->validate([
             'recipe_name'              => ['sometimes', 'string', 'max:255'],
             'description'              => ['nullable', 'string'],
+            'output_item_id'           => ['sometimes', 'nullable', 'integer', 'exists:categories,id'],
             'ingredients'              => ['sometimes', 'array', 'min:1'],
             'ingredients.*.item_id'    => ['required', 'integer', 'exists:categories,id'],
             'ingredients.*.quantity'   => ['required', 'numeric', 'gt:0'],
@@ -121,39 +147,81 @@ class RecipeController extends Controller
             'extra_costs.*.value'      => ['required', 'numeric', 'min:0'],
         ]);
 
-        DB::transaction(function () use ($recipe, $data) {
-            if (isset($data['recipe_name'])) {
-                $recipe->recipe_name = $data['recipe_name'];
-            }
-            if (array_key_exists('description', $data)) {
-                $recipe->description = $data['description'];
-            }
-            $recipe->save();
-
-            if (isset($data['ingredients'])) {
-                RecipeIngredient::where('recipe_id', $recipe->id)->delete();
-                foreach ($data['ingredients'] as $ing) {
-                    RecipeIngredient::create([
-                        'recipe_id' => $recipe->id,
-                        'item_id'   => $ing['item_id'],
-                        'quantity'  => $ing['quantity'],
-                        'unit_cost' => $ing['unit_cost'] ?? null,
-                    ]);
-                }
+        try {
+            $mutatesBom = isset($data['ingredients']) || isset($data['extra_costs']) || array_key_exists('output_item_id', $data);
+            if ($mutatesBom && $this->recipeLockedByCompletedProduction((int) $recipe->id)) {
+                throw new ProductAlreadyCompletedException(
+                    'Recipe cannot be changed: a production order has already completed for this recipe.'
+                );
             }
 
-            if (isset($data['extra_costs'])) {
-                RecipeExtraCost::where('recipe_id', $recipe->id)->delete();
-                foreach ($data['extra_costs'] as $ec) {
-                    RecipeExtraCost::create([
-                        'recipe_id' => $recipe->id,
-                        'name'      => $ec['name'],
-                        'type'      => $ec['type'],
-                        'value'     => $ec['value'],
-                    ]);
+            DB::transaction(function () use ($recipe, $data) {
+                if (isset($data['recipe_name'])) {
+                    $recipe->recipe_name = $data['recipe_name'];
                 }
-            }
-        });
+                if (array_key_exists('description', $data)) {
+                    $recipe->description = $data['description'];
+                }
+                $recipe->save();
+
+                if (array_key_exists('output_item_id', $data)) {
+                    $newOutput = $data['output_item_id'] !== null ? (int) $data['output_item_id'] : null;
+                    $prevOutput = $recipe->output_item_id ? (int) $recipe->output_item_id : null;
+                    if ($prevOutput && $prevOutput !== $newOutput) {
+                        Item::query()->whereKey($prevOutput)->update(['recipe_id' => null]);
+                    }
+                    if ($newOutput) {
+                        $dup = Recipe::query()
+                            ->where('output_item_id', $newOutput)
+                            ->where('id', '!=', $recipe->id)
+                            ->exists();
+                        if ($dup) {
+                            throw new \InvalidArgumentException('Another recipe already owns this output product.');
+                        }
+                        $recipe->output_item_id = $newOutput;
+                        $recipe->save();
+                        Item::query()->whereKey($newOutput)->update(['recipe_id' => $recipe->id]);
+                    } else {
+                        $recipe->output_item_id = null;
+                        $recipe->save();
+                    }
+                }
+
+                if (isset($data['ingredients'])) {
+                    RecipeIngredient::where('recipe_id', $recipe->id)->delete();
+                    foreach ($data['ingredients'] as $ing) {
+                        RecipeIngredient::create([
+                            'recipe_id' => $recipe->id,
+                            'item_id'   => $ing['item_id'],
+                            'quantity'  => $ing['quantity'],
+                            'unit_cost' => $ing['unit_cost'] ?? null,
+                        ]);
+                    }
+                }
+
+                if (isset($data['extra_costs'])) {
+                    RecipeExtraCost::where('recipe_id', $recipe->id)->delete();
+                    foreach ($data['extra_costs'] as $ec) {
+                        RecipeExtraCost::create([
+                            'recipe_id' => $recipe->id,
+                            'name'      => $ec['name'],
+                            'type'      => $ec['type'],
+                            'value'     => $ec['value'],
+                        ]);
+                    }
+                }
+
+                $outputId = $recipe->fresh()->output_item_id;
+                if ($outputId) {
+                    RecipeStructureValidator::assertValidForRecipe(
+                        $recipe->fresh(['ingredients.item']),
+                        (int) $outputId
+                    );
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         $recipe->load(['ingredients.item', 'extraCosts']);
         $breakdown = $this->costService->breakdownForRecipe($recipe);
@@ -172,20 +240,33 @@ class RecipeController extends Controller
     {
         $recipe = Recipe::findOrFail($id);
 
-        DB::transaction(function () use ($recipe) {
-            StockMovement::where('reference_type', 'recipe')
-                ->where('reference_id', $recipe->id)
-                ->delete();
+        try {
+            if ($this->recipeLockedByCompletedProduction((int) $recipe->id)) {
+                throw new ProductAlreadyCompletedException(
+                    'Cannot delete recipe: a production order has already completed for this recipe.'
+                );
+            }
 
-            RecipeExtraCost::where('recipe_id', $recipe->id)->delete();
-            RecipeIngredient::where('recipe_id', $recipe->id)->delete();
+            DB::transaction(function () use ($recipe) {
+                StockMovement::where('reference_type', 'recipe')
+                    ->where('reference_id', $recipe->id)
+                    ->delete();
 
-            DB::table('categories')->where('recipe_id', $recipe->id)->update(['recipe_id' => null]);
+                RecipeExtraCost::where('recipe_id', $recipe->id)->delete();
+                RecipeIngredient::where('recipe_id', $recipe->id)->delete();
 
-            $recipe->delete();
-        });
+                DB::table('categories')->where('recipe_id', $recipe->id)->update(['recipe_id' => null]);
+                if ($recipe->output_item_id) {
+                    Item::query()->whereKey((int) $recipe->output_item_id)->update(['recipe_id' => null]);
+                }
 
-        return response()->json(['message' => 'تم حذف الوصفة وجميع البيانات المرتبطة بها.']);
+                $recipe->delete();
+            });
+
+            return response()->json(['message' => 'تم حذف الوصفة وجميع البيانات المرتبطة بها.']);
+        } catch (ProductAlreadyCompletedException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     /**
@@ -210,6 +291,11 @@ class RecipeController extends Controller
             RecipeIngredient::whereIn('recipe_id', $ids)->delete();
 
             DB::table('categories')->whereIn('recipe_id', $ids)->update(['recipe_id' => null]);
+            foreach (Recipe::query()->whereIn('id', $ids)->get(['id', 'output_item_id']) as $r) {
+                if ($r->output_item_id) {
+                    Item::query()->whereKey((int) $r->output_item_id)->update(['recipe_id' => null]);
+                }
+            }
 
             $count = Recipe::whereIn('id', $ids)->delete();
         });
@@ -284,5 +370,13 @@ class RecipeController extends Controller
         $movements = $this->inventoryService->movementsForReference('recipe', $recipe->id);
 
         return response()->json(['movements' => $movements]);
+    }
+
+    private function recipeLockedByCompletedProduction(int $recipeId): bool
+    {
+        return ProductionOrder::query()
+            ->where('recipe_id', $recipeId)
+            ->where('status', ProductionOrderStatus::Completed)
+            ->exists();
     }
 }

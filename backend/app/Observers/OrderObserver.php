@@ -116,8 +116,11 @@ class OrderObserver
             $batchCode = 'PARTCOLLECT-' . $order->id . '-' . now()->format('YmdHis');
             $desc = 'تحصيل جزئي / زيادة دفعة مقدمة — طلب رقم ' . $order->id;
 
+            $creditReceivableId = $this->salesOrderAccounting->resolvePrepaidCreditTreeAccountId($order)
+                ?? $customerAccount->id;
+
             app(LedgerJournalService::class)->postCustomerCollection(
-                $customerAccount->id,
+                $creditReceivableId,
                 $cashAccountId,
                 $amount,
                 $desc,
@@ -160,8 +163,11 @@ class OrderObserver
             $batchCode = 'PREPAID-REV-' . $order->id . '-' . now()->format('YmdHis');
             $desc = 'تخفيض دفعة مقدمة — طلب رقم ' . $order->id;
 
+            $creditReceivableId = $this->salesOrderAccounting->resolvePrepaidCreditTreeAccountId($order)
+                ?? $customerAccount->id;
+
             app(LedgerJournalService::class)->postCustomerCollectionReversal(
-                $customerAccount->id,
+                $creditReceivableId,
                 $cashAccountId,
                 $amount,
                 $desc,

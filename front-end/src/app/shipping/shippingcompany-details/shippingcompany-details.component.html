@@ -41,8 +41,8 @@
             <select id="review" class="form-control" type="text" class="form-control"  (change)="search($event)">
               <option disabled>المراجعة</option>
               <option value="1">تم المراجعة</option>
-              <option selected value="0">لم يتم المراجعة</option>
-              <option value="all">الكل</option>
+              <option value="0">لم يتم المراجعة</option>
+              <option selected value="all">الكل</option>
             </select>
           </div>
         </div>
@@ -54,6 +54,11 @@
           <h4>المبلغ الكلي</h4>
           <p>{{totalPrice | customNumber}}</p>
         </div>
+        <div class="col-md-2 d-flex align-items-end" *ngIf="canBulkCollectRole">
+          <button type="button" class="btn btn-primary w-100"
+            [disabled]="selectedOrders.length === 0"
+            (click)="openBulkCollect()">تحصيل المحدد</button>
+        </div>
 
       </div>
     </form>
@@ -62,7 +67,7 @@
     <table class="table m-auto text-center table-hover">
       <thead class="bg-dark text-white">
         <tr>
-          <th colspan="12">الطلبــــــات</th>
+          <th colspan="13">الطلبــــــات</th>
         </tr>
         <tr>
           <th>نوع الطلب</th>
@@ -92,11 +97,12 @@
               <button (click)="sendNotification(elm)" mat-menu-item *ngFor="let elm of userdata" [id]="elm.id">{{elm.name}}</button>
             </mat-menu>
           </th>
+          <th *ngIf="canBulkCollectRole" aria-label="تحديد"></th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let elm of tableData">
-          <td>{{elm.order.order_type}}</td>
+        <tr *ngFor="let elm of tableData; trackBy: trackByDetailId">
+          <td>{{elm?.order?.order_type}}</td>
           <td [ngClass]="elm.old_amount  ? 'bg-danger': '' ">
             <a [routerLink]="['/dashboard/shipping/orderdetails', elm.order_id]" target="_blank">
               <span style="cursor: pointer;">
@@ -105,9 +111,9 @@
             </a>
             <!-- <span class="cursor-pointer" [routerLink]="['/dashboard/shipping/orderdetails',elm.order_id]">{{elm.order_id}}</span> -->
           </td>
-          <td>{{elm.order.customer_name}}</td>
-          <td>{{elm.order.customer_phone_1}}</td>
-          <td>{{elm.order.order_date}}</td>
+          <td>{{elm?.order?.customer_name}}</td>
+          <td>{{elm?.order?.customer_phone_1}}</td>
+          <td>{{elm?.order?.order_date}}</td>
           <td>{{elm.shipping_date}}</td>
           <td>
             <span>{{elm.collect_date}}</span>
@@ -116,22 +122,22 @@
           <td>{{elm?.order?.order_details?.edits}}</td>
           <td dir="ltr"><span *ngIf="elm.old_amount">{{elm?.old_amount | customNumber}} - </span>{{elm?.amount | customNumber}} </td>
           <td *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management'  || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="elm.status=='تم شحن'  && elm.order.order_status=='تم شحن'">
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="elm.status=='تم شحن'  && elm?.order?.order_status=='تم شحن'">
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu" >
-              <button mat-menu-item *ngIf="elm.status=='تم شحن' && elm.order.order_status=='تم شحن' " [routerLink]="['/dashboard/shipping/collectorder',elm.order_id]">
+              <button mat-menu-item *ngIf="elm.status=='تم شحن' && elm?.order?.order_status=='تم شحن' " [routerLink]="['/dashboard/shipping/collectorder',elm.order_id]">
                 <span> تحصيل الطلب</span>
               </button>
 
               <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm.order.order_status=='تم شحن') && elm.order.customer_type=='افراد'" (click)="refuseOrder(elm.order.customer_type,elm.order_id)">
+                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm?.order?.order_status=='تم شحن') && elm?.order?.customer_type=='افراد'" (click)="refuseOrder(elm?.order?.customer_type, elm.order_id)">
                   <span> رفض استلام</span>
                 </button>
               </ng-container>
 
               <ng-container *ngIf="user == 'Admin'  || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm.order.order_status=='تم شحن') && elm.order.customer_type=='شركة'" (click)="changeOrderStatus(elm.order.customer_type,elm.order_id,'رفض استلام','refused')">
+                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm?.order?.order_status=='تم شحن') && elm?.order?.customer_type=='شركة'" (click)="changeOrderStatus(elm?.order?.customer_type,elm.order_id,'رفض استلام','refused')">
                   <span> رفض استلام</span>
                 </button>
               </ng-container>
@@ -145,7 +151,7 @@
               <button (click)="sendNotification(elm)" mat-menu-item *ngFor="let elm of userdata" [id]="elm.id">{{elm.name}}</button>
             </mat-menu>
           </td>
-          <td *ngIf="user == 'Admin'">
+          <td *ngIf="canBulkCollectRole">
             <input [disabled]="elm?.order?.order_details?.reviewed == 1" [id]="elm.order_id" type="checkbox"  (change)="selectOrder($event,elm)">
           </td>
 
@@ -157,6 +163,8 @@
       <mat-paginator #paginator
       class="demo-paginator"
       [length]="length"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
       showFirstLastButtons
       (page)="onPageChange($event)"
       [pageSizeOptions]="pageSizeOptions"

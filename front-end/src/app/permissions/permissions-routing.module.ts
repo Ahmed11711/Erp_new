@@ -27,7 +27,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:"priceoffer" , component:PriceOffersComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service','Corparates']}
   },
   {path:"offerconditions" , component:OfferConditionsComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
@@ -48,16 +48,16 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:"priceoffer1" , component:PriceOffer1Component,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service','Corparates']}
   },
   {path:"priceoffer2" , component:PriceOffer2Component,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service','Corparates']}
   },
   {path:"offer1/:id" , component:Offer1DetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service','Corparates']}
   },
   {path:"offer2/:id" , component:Offer2DetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Shipping Management','Customer Service','Corparates']}
   },
 
 ];

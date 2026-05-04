@@ -42,3 +42,13 @@ i{
 ::ng-deep .mat-mdc-paginator-container{
   justify-content: center !important;
 }
+
+.table-expenses thead th {
+  font-size: 0.95rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.table-expenses tbody td {
+  font-size: 0.95rem;
+}

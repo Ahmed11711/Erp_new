@@ -26,6 +26,12 @@ export class DashboardComponent implements OnDestroy {
   user!:string;
   userName!:string;
 
+  /** قسم «الإيصالات والأذونات» + روابط عروض الأسعار: Corparates يرى داخل القسم عروض الأسعار فقط (الباقي Admin). */
+  get showReceiptsAndPermissionsMenu(): boolean {
+    const u = this.user;
+    return u === 'Corparates' || u === 'Admin' || u === 'Data Entry' || u === 'Shipping Management' || u === 'Customer Service';
+  }
+
   /** True if the current user is assigned to at least one WhatsApp number */
   hasWhatsAppAccess = false;
   /** صلاحية إدارة تعيين المستخدمين لأرقام الواتساب (صفحة admin/whatsapp-management) */

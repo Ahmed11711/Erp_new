@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ExpenseKindService } from '../services/expense-kind.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { TreeAccountService } from '../../accounting/services/tree-account.service';
 
 @Component({
   selector: 'app-expenses-kind',
@@ -21,6 +22,8 @@ export class ExpensesKindComponent implements OnInit {
   data:any[]=[];
   savingRowId: number | null = null;
 
+  /** حسابات مصروف طرفية (للقيد المدين) */
+  expenseLeafAccounts: { id: number; code?: string; name: string }[] = [];
 
   length = 50;
   pageSize = 15;
@@ -29,12 +32,45 @@ export class ExpensesKindComponent implements OnInit {
 
   constructor(
     private expenseKindService: ExpenseKindService,
-    private toast: ToastService
+    private toast: ToastService,
+    private treeAccountService: TreeAccountService
   ) {}
 
   ngOnInit(){
     this.expenseKindService.data().subscribe(result=>this.expenseKind=result);
+    this.loadExpenseAccounts();
     this.getData();
+  }
+
+  private loadExpenseAccounts(): void {
+    this.treeAccountService.getAll().subscribe({
+      next: (res: any) => {
+        const raw = res?.data ?? res ?? [];
+        const list = Array.isArray(raw) ? raw : [];
+        const flat = this.flattenAccounts(list);
+        this.expenseLeafAccounts = flat
+          .filter((a: any) => a?.type === 'expense' && (!a.children || a.children.length === 0))
+          .map((a: any) => ({
+            id: a.id,
+            code: a.code,
+            name: a.name,
+          }))
+          .sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true }));
+      },
+      error: () => {
+        this.expenseLeafAccounts = [];
+      },
+    });
+  }
+
+  private flattenAccounts(accounts: any[], result: any[] = []): any[] {
+    (accounts || []).forEach((acc) => {
+      result.push(acc);
+      if (acc.children && acc.children.length) {
+        this.flattenAccounts(acc.children, result);
+      }
+    });
+    return result;
   }
 
   onPageChange(event:any){
@@ -61,7 +97,8 @@ export class ExpensesKindComponent implements OnInit {
     this.expenseKindService.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
       this.data = (res.data || []).map((row: any) => ({
         ...row,
-        expense_type: row.expense_type || null
+        expense_type: row.expense_type || null,
+        tree_account_id: row.tree_account_id != null ? Number(row.tree_account_id) : null,
       }));
       this.length=res.total;
       this.pageSize=res.per_page;
@@ -74,7 +111,8 @@ export class ExpensesKindComponent implements OnInit {
 
   form:FormGroup = new FormGroup({
     'expense_type' :new FormControl(null , [Validators.required ]),
-    'expense_kind' :new FormControl(null , [Validators.required ])
+    'expense_kind' :new FormControl(null , [Validators.required ]),
+    'tree_account_id': new FormControl<number | null>(null),
   })
 
   openForm(){
@@ -84,7 +122,8 @@ export class ExpensesKindComponent implements OnInit {
     this.addbtn = true;
     this.form.patchValue({
       expense_type: null,
-      expense_kind: null
+      expense_kind: null,
+      tree_account_id: null,
     });
   }
 
@@ -92,14 +131,19 @@ export class ExpensesKindComponent implements OnInit {
     if (this.addForm) {
       if (this.form.valid) {
         const v = this.form.value;
-        this.expenseKindService.add(v).subscribe({
+        const payload = {
+          expense_type: v.expense_type,
+          expense_kind: v.expense_kind,
+          tree_account_id: v.tree_account_id != null && v.tree_account_id !== '' ? Number(v.tree_account_id) : null,
+        };
+        this.expenseKindService.add(payload).subscribe({
           next: () => {
             this.toast.success('تمت إضافة الفئة وربطها بالنوع');
             this.openbtn = true;
             this.formdiv = false;
             this.expenseKindService.data().subscribe((r) => (this.expenseKind = r));
             this.getData();
-            this.form.reset({ expense_type: null, expense_kind: null });
+            this.form.reset({ expense_type: null, expense_kind: null, tree_account_id: null });
           },
           error: (err) => {
             this.toast.error(err.error?.message || 'تعذر الحفظ');
@@ -121,7 +165,11 @@ export class ExpensesKindComponent implements OnInit {
       return;
     }
     this.savingRowId = elm.id;
-    this.expenseKindService.update(elm.id, { expense_type, expense_kind }).subscribe({
+    this.expenseKindService.update(elm.id, {
+      expense_type,
+      expense_kind,
+      tree_account_id: elm.tree_account_id != null && elm.tree_account_id !== '' ? Number(elm.tree_account_id) : null,
+    }).subscribe({
       next: () => {
         this.toast.success('تم حفظ الربط');
         this.savingRowId = null;

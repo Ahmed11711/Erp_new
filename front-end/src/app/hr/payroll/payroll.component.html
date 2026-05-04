@@ -6,14 +6,14 @@
     <div class="col-5">
       <div><p class="title header w-50 m-auto">كشف المرتبات</p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+    <div class="col-3 d-flex align-items-center justify-content-end flex-wrap">
+      <button type="button" class="btn btn-outline-primary btn-sm my-1" (click)="bulkSalaryDisbursement()">
+        صرف مرتبات الجميع
+      </button>
     </div>
   </div>
 
-
   <div class="container-fluid">
-
 
     <form class="mt-5" [formGroup]="form" (ngSubmit)="submitform()">
       <div class="col-md-2">

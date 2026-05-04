@@ -180,10 +180,15 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
  // دوال لتلوين وتحديث الرصيد
  // ------------------------
  /**
-  * متوسط تكلفة الوحدة (مرجّح): عند وجود كمية = total_price/quantity فقط (يطابق CategoryInventoryCostService).
-  * عند رصيد صفر يُستخدم unit_price ثم 0.
+  * متوسط تكلفة الوحدة (مرجّح): قيمة المخزون بالتكلفة ÷ الكمية (total_price) لكل المخازن.
   */
- averageUnitCost(item: { quantity?: number; total_price?: number; unit_price?: number }): number {
+ averageUnitCost(item: {
+  quantity?: number;
+  total_price?: number;
+  sell_total_price?: number;
+  unit_price?: number;
+  warehouse?: string;
+ }): number {
   const q = Number(item?.quantity ?? 0);
   const tp = Number(item?.total_price ?? 0);
   const up = Number(item?.unit_price ?? 0);
@@ -212,6 +217,15 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
   this.category.updateQuantity(item.id, value).subscribe((res: any) => {
    if (res.success) {
     item.quantity = res.quantity;
+    if (res.total_price !== undefined && res.total_price !== null) {
+     item.total_price = res.total_price;
+    }
+    if (res.sell_total_price !== undefined && res.sell_total_price !== null) {
+     item.sell_total_price = res.sell_total_price;
+    }
+    if (res.unit_price !== undefined && res.unit_price !== null) {
+     item.unit_price = res.unit_price;
+    }
    } else {
     Swal.fire({ icon: 'error', title: 'فشل تحديث الرصيد' });
     this.search();

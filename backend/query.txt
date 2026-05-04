@@ -12,3 +12,6 @@ WHERE ABS(IFNULL(unit_price, 0)) < 0.0000001
      composer install --no-dev --optimize-autoloader
 
         composer require phpoffice/phpspreadsheet:^5.7
+
+
+        php artisan erp:reset-inventory-testing --force

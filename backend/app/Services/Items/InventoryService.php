@@ -2,9 +2,12 @@
 
 namespace App\Services\Items;
 
+use App\Enums\InventoryMovementType;
 use App\Models\Category;
 use App\Models\Recipe;
 use App\Models\StockMovement;
+use App\Services\CategoryInventoryCostService;
+use App\Services\Inventory\InventoryMovementLedgerService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -12,7 +15,7 @@ use Illuminate\Support\Facades\DB;
  *
  * 1. Deducting raw materials from Raw Material Warehouse.
  * 2. Adding finished product to Finished Goods Warehouse.
- * 3. Logging every movement in stock_movements.
+ * 3. Logging every movement in inventory_movements.
  *
  * All operations run inside a single DB transaction.
  */
@@ -24,11 +27,7 @@ class InventoryService
     /**
      * Execute a recipe: deduct ingredients, add finished product.
      *
-     * @param  Recipe   $recipe         The recipe to execute
-     * @param  int      $finishedItemId The category_id of the finished good
-     * @param  int      $batchQty       How many units of the finished product to produce (default 1)
-     * @param  string   $performedBy    Name of the user performing this
-     * @return array{movements: StockMovement[], deducted: array, produced: array}
+     * @return array{movements: \Illuminate\Support\Collection, deducted: array, produced: array}
      *
      * @throws \RuntimeException  When insufficient stock for any raw material
      * @throws \InvalidArgumentException  When ingredient references are invalid
@@ -44,8 +43,9 @@ class InventoryService
         $this->validateBeforeExecution($recipe, $finishedItemId, $batchQty);
 
         return DB::transaction(function () use ($recipe, $finishedItemId, $batchQty, $performedBy) {
-            $movements = [];
+            $movements = collect();
             $deducted  = [];
+            $ledger = app(InventoryMovementLedgerService::class);
 
             foreach ($recipe->ingredients as $ingredient) {
                 $requiredQty = bcmul((string) $ingredient->quantity, (string) $batchQty, 6);
@@ -75,21 +75,20 @@ class InventoryService
                 $rawItem->total_price = bcmul($newQty, (string) ($rawItem->unit_price ?: $rawItem->category_price ?: '0'), 4);
                 $rawItem->save();
 
-                $movement = StockMovement::create([
-                    'category_id'        => $rawItem->id,
-                    'warehouse_stock_id' => $rawItem->stock_id,
-                    'warehouse_name'     => $rawItem->warehouse ?? self::WAREHOUSE_RAW,
-                    'direction'          => 'out',
-                    'quantity'           => $requiredQty,
-                    'unit_cost'          => $unitCost,
-                    'total_cost'         => $totalCost,
-                    'reference_type'     => 'recipe',
-                    'reference_id'       => $recipe->id,
-                    'reason'             => "Recipe execution: {$recipe->recipe_name}",
-                    'performed_by'       => $performedBy,
-                ]);
+                $movement = $ledger->appendOutboundMovement(
+                    $rawItem->fresh(),
+                    InventoryMovementType::RecipeExecution,
+                    $requiredQty,
+                    (float) $unitCost,
+                    (float) $totalCost,
+                    'recipe',
+                    $recipe->id,
+                    "Recipe execution: {$recipe->recipe_name}",
+                    null,
+                    $performedBy
+                );
 
-                $movements[] = $movement;
+                $movements->push($movement);
                 $deducted[]  = [
                     'item_id'   => $rawItem->id,
                     'item_name' => $rawItem->category_name,
@@ -101,30 +100,36 @@ class InventoryService
             $finishedItem = Category::lockForUpdate()->findOrFail($finishedItemId);
             $costService  = app(CostCalculationService::class);
             $breakdown    = $costService->calculateFinalCost($recipe->ingredients, $recipe->extraCosts);
-            $unitFinalCost = bcmul($breakdown['final_cost'], (string) $batchQty, 4);
+            /** إجمالي تكلفة الدُفعة (نهائي الوصفة × كمية الدُفعة) */
+            $batchTotalCost = bcmul($breakdown['final_cost'], (string) $batchQty, 4);
 
             $prevQty = (string) ($finishedItem->quantity ?? '0');
             $newQty  = bcadd($prevQty, (string) $batchQty, 6);
 
-            $finishedItem->quantity         = $newQty;
+            $finishedItem->quantity = $newQty;
+            $finishedItem->total_price = bcadd(
+                (string) ($finishedItem->total_price ?? '0'),
+                $batchTotalCost,
+                4
+            );
             $finishedItem->sell_total_price = bcmul($newQty, (string) ($finishedItem->category_price ?: '0'), 4);
             $finishedItem->save();
+            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $finishedItem->id);
 
-            $inMovement = StockMovement::create([
-                'category_id'        => $finishedItem->id,
-                'warehouse_stock_id' => $finishedItem->stock_id,
-                'warehouse_name'     => $finishedItem->warehouse ?? self::WAREHOUSE_FINISHED,
-                'direction'          => 'in',
-                'quantity'           => $batchQty,
-                'unit_cost'          => $breakdown['final_cost'],
-                'total_cost'         => $unitFinalCost,
-                'reference_type'     => 'recipe',
-                'reference_id'       => $recipe->id,
-                'reason'             => "Finished goods from recipe: {$recipe->recipe_name}",
-                'performed_by'       => $performedBy,
-            ]);
+            $inMovement = $ledger->appendInboundMovement(
+                $finishedItem->fresh(),
+                InventoryMovementType::RecipeExecution,
+                (string) $batchQty,
+                (float) $breakdown['final_cost'],
+                (float) $batchTotalCost,
+                'recipe',
+                $recipe->id,
+                "Finished goods from recipe: {$recipe->recipe_name}",
+                null,
+                $performedBy
+            );
 
-            $movements[] = $inMovement;
+            $movements->push($inMovement);
 
             return [
                 'movements' => $movements,
@@ -133,7 +138,7 @@ class InventoryService
                     'item_id'    => $finishedItem->id,
                     'item_name'  => $finishedItem->category_name,
                     'quantity'   => $batchQty,
-                    'final_cost' => $unitFinalCost,
+                    'final_cost' => (float) $batchTotalCost,
                 ],
             ];
         });

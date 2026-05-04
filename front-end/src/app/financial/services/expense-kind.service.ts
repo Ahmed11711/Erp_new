@@ -28,7 +28,7 @@ export class ExpenseKindService {
     return this.http.delete<any>(`${environment.Url}/expense_kind/${id}`)
   }
 
-  update(id: number, body: { expense_type: string; expense_kind: string }): Observable<any> {
+  update(id: number, body: { expense_type: string; expense_kind: string; tree_account_id?: number | null }): Observable<any> {
     return this.http.put<any>(`${environment.Url}/expense_kind/${id}`, body);
   }
 }

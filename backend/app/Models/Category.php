@@ -13,6 +13,8 @@ class Category extends Model
   'item_code',
   'color',
   'recipe_id',
+  'product_type',
+  'allow_wip_sale',
   'item_revision',
   'lineage_root_id',
   'replaces_item_id',
@@ -22,7 +24,6 @@ class Category extends Model
   'total_price',
   'sell_total_price',
   'initial_balance',
-  'quantity',
   'minimum_quantity',
   'warehouse',
   'production_id',
@@ -32,6 +33,11 @@ class Category extends Model
   'status',
   'stock_id',
  ];
+
+ protected $casts = [
+     'allow_wip_sale' => 'boolean',
+ ];
+
  public function production()
  {
   return $this->belongsTo(Production::class);

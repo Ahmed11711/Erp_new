@@ -15,19 +15,18 @@ use Illuminate\Support\Facades\Log;
  * Double-entry accounting for sales orders.
  *
  * Invoice (order recognition):
- *   Dr  Customer (AR)     = net product + shipping charged to customer
- *   Cr  Sales revenue = net product (after discount)
- *   Cr  Shipping revenue  = shipping charged to customer (if applicable)
+ *   Dr  Receivables (Customer و/أو ذمم وسيط شحن/تحصيل حسب الإعداد)
+ *   Cr  Sales revenue + Shipping revenue
+ *
+ * تقسيم الذمم (عند ربط حسابات أصول لشركة الشحن و/أو شركة التحصيل في order_details):
+ *   - جزء الدفعة المقدمة prepayment → حساب ذمة شركة التحصيل (مثل Paymob) إن وُجد، وإلا ذمة العميل
+ *   - الباقي (تحصيل عند التسليم) → ذمة شركة الشحن (مثل Bosta) إن وُجد، وإلا ذمة العميل
  *
  * Prepaid / advance on the same order (cash in):
  *   Dr  Cash/Bank/Safe
- *   Cr  Customer (AR)
+ *   Cr  نفس حساب الذمة المستخدم في الفاتورة للجزء المدفوع مقدماً (شركة تحصيل أو عميل)
  *
- * Customer AR balance convention (sub-ledger): debit − credit
- *   > 0  => customer still owes (receivable)
- *   < 0  => customer prepaid / credit (unapplied receipts)
- *
- * Courier cost (ShippingCourierAccountingService) never posts to the customer account.
+ * Courier cost (ShippingCourierAccountingService) لا يمر على ذمم المبيعات.
  */
 class SalesOrderAccountingService
 {
@@ -44,18 +43,25 @@ class SalesOrderAccountingService
     }
 
     /**
-     * Rebuild invoice recognition lines after order totals / lines change.
-     * Removes only invoice batches (ORD-{id}-*), not prepaid (ORD-PREPAID-*) or collections (PARTCOLLECT-*).
+     * إعادة بناء قيود الفاتورة؛ واختيارياً إعادة بناء قيود الدفعة المقدمة بعد ربط شركات الشحن/التحصيل.
+     *
+     * @param  bool  $rebuildPrepaid  عند true يُحذف ORD-PREPAID-* ويُعاد إنشاؤه بمحاسبة وسيط التحصيل
      */
-    public function refreshOrderRecognition(Order $order): void
+    public function refreshOrderRecognition(Order $order, bool $rebuildPrepaid = false): void
     {
-        DB::transaction(function () use ($order) {
+        DB::transaction(function () use ($order, $rebuildPrepaid) {
             $pattern = 'ORD-' . $order->id . '-%';
             AccountEntry::where('order_id', $order->id)
                 ->where('entry_batch_code', 'like', $pattern)
                 ->delete();
 
-            $this->writeEntries($order, skipPrepaid: true);
+            if ($rebuildPrepaid) {
+                AccountEntry::where('order_id', $order->id)
+                    ->where('entry_batch_code', 'like', 'ORD-PREPAID-' . $order->id . '-%')
+                    ->delete();
+            }
+
+            $this->writeEntries($order, skipPrepaid: ! $rebuildPrepaid);
         });
     }
 
@@ -95,14 +101,16 @@ class SalesOrderAccountingService
         $batchCode = 'ORD-' . $order->id . '-' . now()->format('YmdHis');
         $desc = 'فاتورة مبيعات — طلب رقم ' . $order->id;
 
-        $lines = [
-            [
-                'account_id' => $customerAccount->id,
-                'debit' => $grandTotal,
+        $receivableDebits = $this->buildSplitReceivableDebits($order, $customerAccount, $grandTotal);
+        $lines = [];
+        foreach ($receivableDebits as $row) {
+            $lines[] = [
+                'account_id' => $row['account_id'],
+                'debit' => $row['amount'],
                 'credit' => 0,
-                'description' => 'ذمم العميل — إجمالي الفاتورة',
-            ],
-        ];
+                'description' => $row['description'],
+            ];
+        }
 
         if ($netProductSales > 0) {
             $lines[] = [
@@ -150,6 +158,8 @@ class SalesOrderAccountingService
             $prepaidBatch = 'ORD-PREPAID-' . $order->id . '-' . now()->format('YmdHis');
             $prepaidDesc = 'دفعة مقدمة — طلب رقم ' . $order->id;
 
+            $creditReceivableId = $this->resolvePrepaidCreditTreeAccountId($order) ?? $customerAccount->id;
+
             $this->journal->postBalancedJournal(
                 [
                     [
@@ -159,10 +169,10 @@ class SalesOrderAccountingService
                         'description' => 'تحصيل دفعة مقدمة — نقدية/بنك',
                     ],
                     [
-                        'account_id' => $customerAccount->id,
+                        'account_id' => $creditReceivableId,
                         'debit' => 0,
                         'credit' => $prepaid,
-                        'description' => 'تخفيض ذمة العميل — دفعة مقدمة',
+                        'description' => 'تخفيض ذمة (عميل/وسيط تحصيل) — دفعة مقدمة',
                     ],
                 ],
                 $prepaidDesc,
@@ -170,6 +180,80 @@ class SalesOrderAccountingService
                 $prepaidBatch
             );
         }
+    }
+
+    /**
+     * مدين الفاتورة: توزيع على ذمة شركة تحصيل (جزء مدفوع مقدماً) وذمة شركة شحن (الباقي عند الاستلام).
+     *
+     * @return array<int, array{account_id: int, amount: float, description: string}>
+     */
+    private function buildSplitReceivableDebits(Order $order, TreeAccount $customerAccount, float $grandTotal): array
+    {
+        $order->loadMissing(['order_details.shipping_company', 'order_details.collection_company']);
+
+        $prepaid = (float) ($order->prepaid_amount ?? 0);
+        $prepaidPart = round(min($prepaid, $grandTotal), 2);
+        $codPart = round(max(0, $grandTotal - $prepaidPart), 2);
+
+        $od = $order->order_details;
+        $shipAr = $od?->shipping_company?->receivable_tree_account_id;
+        $collectAr = $od?->collection_company?->receivable_tree_account_id;
+
+        $buckets = [];
+
+        if ($prepaidPart > 0.009) {
+            $aid = $collectAr ? (int) $collectAr : (int) $customerAccount->id;
+            $buckets[$aid] = ($buckets[$aid] ?? 0) + $prepaidPart;
+        }
+        if ($codPart > 0.009) {
+            $aid = $shipAr ? (int) $shipAr : (int) $customerAccount->id;
+            $buckets[$aid] = ($buckets[$aid] ?? 0) + $codPart;
+        }
+
+        $out = [];
+        foreach ($buckets as $accountId => $amount) {
+            $label = 'ذمم العميل — إجمالي الفاتورة';
+            if ($accountId === (int) $customerAccount->id) {
+                $label = 'ذمم العميل — إجمالي الفاتورة';
+            } elseif ($collectAr && $accountId === (int) $collectAr) {
+                $label = 'ذمة شركة تحصيل — جزء مدفوع مقدماً/إلكترونياً';
+            } elseif ($shipAr && $accountId === (int) $shipAr) {
+                $label = 'ذمة شركة شحن — مستحق عند التحصيل من العميل';
+            }
+
+            $out[] = [
+                'account_id' => $accountId,
+                'amount' => round($amount, 2),
+                'description' => $label,
+            ];
+        }
+
+        if ($out === []) {
+            $out[] = [
+                'account_id' => (int) $customerAccount->id,
+                'amount' => round($grandTotal, 2),
+                'description' => 'ذمم العميل — إجمالي الفاتورة',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * حساب ذمة الدفعة المقدمة: شركة التحصيل إن وُجد ربط وحساب أصول، وإلا عميل الطلب.
+     */
+    public function resolvePrepaidCreditTreeAccountId(Order $order): ?int
+    {
+        $order->loadMissing(['order_details.collection_company']);
+
+        $c = $order->order_details?->collection_company;
+        if ($c && $c->receivable_tree_account_id) {
+            return (int) $c->receivable_tree_account_id;
+        }
+
+        $cust = $this->resolveCustomerAccount($order);
+
+        return $cust?->id;
     }
 
     /**

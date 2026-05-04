@@ -63,4 +63,9 @@ class User extends Authenticatable implements JWTSubject{
     {
         return $this->hasMany(Customer::class, 'assigned_agent_id');
     }
+
+    public function offers()
+    {
+        return $this->hasMany(Offers::class, 'user_id');
+    }
 }

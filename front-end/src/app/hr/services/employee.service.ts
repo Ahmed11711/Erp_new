@@ -89,6 +89,10 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/employeemonthpaid`,formData)
   }
 
+  bulkSalaryPayment(formData: { month: number; year: number; source_type: string; source_id: number; payments: { employee_id: number; amount: number }[] }): Observable<any> {
+    return this.http.post<any>(`${environment.Url}/employeemonthpaid/bulk`, formData);
+  }
+
   addExtraHours(formData:any):Observable<any>
   {
     return this.http.post<any>(`${environment.Url}/employeeextrahours`,formData)

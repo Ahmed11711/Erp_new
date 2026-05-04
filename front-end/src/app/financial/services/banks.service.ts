@@ -17,9 +17,8 @@ export class BanksService {
     return this.http.post<Bank>(`${environment.Url}/banks`,formData)
   }
 
-  edit(id:number,formData:Bank):Observable<Bank>
-  {
-    return this.http.put<Bank>(`${environment.Url}/banks/${id}`,formData)
+  edit(id: number, formData: Partial<Bank>): Observable<Bank> {
+    return this.http.put<Bank>(`${environment.Url}/banks/${id}`, formData);
   }
 
   data(){

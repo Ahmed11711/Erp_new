@@ -157,11 +157,27 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">الحساب المرتبط (شجرة الحسابات) <span class="text-danger">*</span></label>
-        <select class="form-control" [(ngModel)]="newBank.asset_id">
-          <option [ngValue]="null" disabled>اختر الحساب</option>
+        <label class="form-label">الحساب الأب (شجرة الحسابات) <span class="text-danger">*</span></label>
+        <select class="form-control" [(ngModel)]="newBank.parent_account_id">
+          <option [ngValue]="null" disabled>اختر الحساب الأب</option>
           <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
         </select>
+        <small class="form-text text-muted">
+          <i class="fas fa-info-circle"></i>
+          سيتم إنشاء حساب فرعي تلقائياً تحت هذا الحساب (مثل الخزن) وربط البنك به
+        </small>
+      </div>
+
+      <div class="form-group" *ngIf="newBank.balance > 0">
+        <label class="form-label">الحساب المقابل للرصيد الافتتاحي <span class="text-danger">*</span></label>
+        <select class="form-control" [(ngModel)]="newBank.counter_account_id">
+          <option [ngValue]="null" disabled>اختر الحساب المقابل</option>
+          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
+        </select>
+        <small class="form-text text-muted">
+          <i class="fas fa-info-circle"></i>
+          قيد: مدين حساب البنك، دائن هذا الحساب
+        </small>
       </div>
     </div>
     <div class="erp-modal__footer">
@@ -192,10 +208,14 @@
         <input type="text" class="form-control" [(ngModel)]="selectedBank.usage">
       </div>
       <div class="form-group">
-        <label class="form-label">الحساب المرتبط <span class="text-danger">*</span></label>
-        <select class="form-control" [(ngModel)]="selectedBank.asset_id">
-          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
-        </select>
+        <label class="form-label">الحساب المرتبط في الشجرة</label>
+        <p class="form-control-plaintext border rounded px-2 py-1 bg-light" *ngIf="selectedBank.asset">
+          <i class="fas fa-sitemap"></i> {{ selectedBank.asset.name }} — {{ selectedBank.asset.code }}
+        </p>
+        <small class="form-text text-muted">
+          <i class="fas fa-info-circle"></i>
+          يُنشأ تلقائياً عند إضافة البنك ولا يمكن تغييره من هنا
+        </small>
       </div>
     </div>
     <div class="erp-modal__footer">

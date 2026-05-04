@@ -1,19 +1,20 @@
 <div class="container content">
   <div class="d-flex justify-content-center align-items-center h-100" style="flex-direction: column;">
-    <h1 class="text-center"> اضافة</h1>
+    <h1 class="text-center">{{ data.id ? 'تعديل مخزن' : (data.name ? 'ربط المخزن بالحساب' : 'اضافة مخزن') }}</h1>
   </div>
     <form class="text-start" [formGroup]="form" (ngSubmit)="submitform()">
       <div class="mb-3">
-        <input class="form-control"   placeholder="الاسم"
+        <input class="form-control" placeholder="الاسم"
+        [readonly]="!!data.lockWarehouseName"
         [class.is-valid]="form.get('name')?.errors ==null && form.get('name')?.touched"
-        formControlName='name' type="text" class="form-control">
+        formControlName="name" type="text">
         <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
           class="error mb-0 text-danger">مطلوب</p>
       </div>
       <div class="mb-3">
         <input class="form-control"   placeholder="الرصيد"
         [class.is-valid]="form.get('balance')?.errors ==null && form.get('balance')?.touched"
-        formControlName='balance' type="number" class="form-control" min="1">
+        formControlName='balance' type="number" class="form-control" min="0" step="any">
         <p *ngIf="form.get('balance')?.errors !=null && form.get('balance')?.touched"
           class="error mb-0 text-danger">مطلوب</p>
       </div>

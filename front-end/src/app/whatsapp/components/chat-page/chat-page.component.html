@@ -109,51 +109,59 @@
       *ngIf="customerId && customer"
     >
       <div
-        class="p-3 border-bottom wa-chat-header d-flex justify-content-between align-items-center"
+        class="p-3 border-bottom wa-chat-header d-flex justify-content-between align-items-center flex-wrap gap-2"
       >
-        <div class="min-w-0">
-          <h5 class="mb-0 text-truncate">{{ customer.name }}</h5>
-          <small class="text-muted">{{ customer.phone }}</small>
-        </div>
-        <button
-          mat-icon-button
-          type="button"
-          (click)="openWhatsApp(customer)"
-          matTooltip="فتح واتساب"
-        >
-          <mat-icon>open_in_new</mat-icon>
-        </button>
-      </div>
-
-      <!-- تصفية الرسائل: نطاق التاريخ + بحث داخل نصّ الرسائل (العمود الأيسر = بحث أسماء العملاء) -->
-      <form [formGroup]="filtersForm" class="wa-filters border-bottom">
-        <div class="wa-filters-row">
-          <div class="wa-filter-dates">
-            <input type="date" formControlName="from_date" aria-label="من تاريخ" />
-            <span class="wa-filter-sep">—</span>
-            <input type="date" formControlName="to_date" aria-label="إلى تاريخ" />
+        <div class="d-flex align-items-center gap-2 wa-chat-header-identity flex-shrink-0 min-w-0">
+          <div class="min-w-0">
+            <h5 class="mb-0 text-truncate">{{ customer.name }}</h5>
+            <small class="text-muted">{{ customer.phone }}</small>
           </div>
           <button
+            mat-icon-button
             type="button"
-            class="wa-filter-clear"
-            (click)="clearFilters()"
-            *ngIf="filtersForm.value.search || filtersForm.value.from_date || filtersForm.value.to_date"
+            (click)="openWhatsApp(customer)"
+            matTooltip="فتح واتساب"
           >
-            مسح
+            <mat-icon>open_in_new</mat-icon>
           </button>
         </div>
-        <div class="wa-filters-row wa-filters-messages">
-          <div class="wa-filter-input wa-filter-messages">
-            <mat-icon class="wa-filter-icon">text_fields</mat-icon>
-            <input
-              type="text"
-              formControlName="search"
-              placeholder="بحث داخل نصّ الرسائل (اختياري)…"
-              autocomplete="off"
-            />
+
+        <!-- تصفية الرسائل بجانب الاسم (بدون صف إضافي → مساحة أعلى للرسائل) -->
+        <form
+          [formGroup]="filtersForm"
+          class="wa-header-filters flex-grow-1 min-w-0"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="wa-header-filters-inner">
+            <div class="wa-filter-dates wa-filter-dates--compact">
+              <input type="date" formControlName="from_date" aria-label="من تاريخ" />
+              <span class="wa-filter-sep">—</span>
+              <input type="date" formControlName="to_date" aria-label="إلى تاريخ" />
+            </div>
+            <div class="wa-filter-input wa-filter-messages wa-filter-messages--header">
+              <mat-icon class="wa-filter-icon">text_fields</mat-icon>
+              <input
+                type="text"
+                formControlName="search"
+                placeholder="بحث داخل نصّ الرسائل (اختياري)…"
+                autocomplete="off"
+              />
+            </div>
+            <button
+              type="button"
+              class="wa-filter-clear flex-shrink-0"
+              (click)="clearFilters()"
+              *ngIf="
+                filtersForm.value.search ||
+                filtersForm.value.from_date ||
+                filtersForm.value.to_date
+              "
+            >
+              مسح
+            </button>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
 
       <!-- Messages scroll area -->
       <div

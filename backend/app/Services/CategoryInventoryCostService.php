@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\TreeAccount;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -49,6 +50,16 @@ class CategoryInventoryCostService
             ->value('v');
 
         return $v !== null ? (float) $v : 0.0;
+    }
+
+    /**
+     * تكلفة الوحدة المرجعية عند تعديل الكمية يدوياً (تعيين رصيد) بحيث يبقى متوسط التكلفة المرجّح منطقياً:
+     * قيمة المخزون بالتكلفة ÷ الكمية (total_price) لجميع المخازن بما فيها منتج تام.
+     * sell_total_price يعبّر عن تتبع منفصل لقيمة البيع وليس متوسط تكلفة المخزون.
+     */
+    public static function averageValuationPerUnitForManualAdjustment(int $categoryId): float
+    {
+        return static::resolveReferenceUnitCost($categoryId);
     }
 
     public static function syncUnitPriceFromWeightedAverage(int $categoryId): void
@@ -104,5 +115,39 @@ class CategoryInventoryCostService
             ->first();
 
         return $row ? (int) $row->id : null;
+    }
+
+    /**
+     * تجميع إجماليات بنود الفاتورة حسب حساب المخزون في الشجرة (كل مخزن → asset_id في stocks).
+     *
+     * @param  iterable<int|string, mixed>  $invoiceCategoryRows
+     * @return array<int, float>  tree_account_id => مجموع التكلفة على هذا الحساب
+     */
+    public static function aggregatePurchaseLineTotalsByInventoryTreeAccount(iterable $invoiceCategoryRows): array
+    {
+        $map = [];
+        foreach ($invoiceCategoryRows as $line) {
+            $productName = is_object($line) ? ($line->product_name ?? '') : ($line['product_name'] ?? '');
+            $cid = static::resolveCategoryIdForPurchaseLine($line, (string) $productName);
+            if (! $cid) {
+                continue;
+            }
+            $acc = TreeAccount::resolveInventoryAccountForCategoryId((int) $cid);
+            if (! $acc) {
+                continue;
+            }
+            $total = is_object($line)
+                ? (float) ($line->total ?? 0)
+                : (float) ($line['total'] ?? 0);
+            $map[$acc->id] = ($map[$acc->id] ?? 0) + $total;
+        }
+
+        return $map;
+    }
+
+    /** حساب مخزون الجرد لصنف (لمخزنه). */
+    public static function resolveInventoryTreeAccountForCategoryId(int $categoryId): ?TreeAccount
+    {
+        return TreeAccount::resolveInventoryAccountForCategoryId($categoryId);
     }
 }

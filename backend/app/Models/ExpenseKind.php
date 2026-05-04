@@ -9,8 +9,14 @@ class ExpenseKind extends Model
 {
     use HasFactory;
 
-    protected $fillable=[
-        "expense_type",
-        "expense_kind"
+    protected $fillable = [
+        'expense_type',
+        'expense_kind',
+        'tree_account_id',
     ];
+
+    public function treeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
+    }
 }

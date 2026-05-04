@@ -12,6 +12,10 @@ export class ManufacturingOrdersComponent implements OnInit {
   data: any[] = [];
   tableData: any[] = [];
 
+  /** Cleared after first HTTP response (success or error). */
+  listPending = true;
+  listError: string | null = null;
+
   private _name: string = '';
   status: string = 'حاله التصنيع';
   private _date: any;
@@ -22,13 +26,32 @@ export class ManufacturingOrdersComponent implements OnInit {
     this.getData();
   }
 
-  getData(){
-    this.manufacturingService.confirmed().subscribe((result: any) => {
-      this.data = result;
-      this.tableData = result;
-      result.forEach(elm => {
-        this.products.push(elm.product);
-      });
+  getData(): void {
+    this.listPending = true;
+    this.listError = null;
+    this.products = [];
+    this.manufacturingService.confirmed().subscribe({
+      next: (result: any) => {
+        const rows = Array.isArray(result) ? result : [];
+        this.data = rows;
+        this.tableData = [...rows];
+        const seen = new Set<number>();
+        rows.forEach((elm) => {
+          const p = elm?.product;
+          if (p?.id != null && !seen.has(p.id)) {
+            seen.add(p.id);
+            this.products.push(p);
+          }
+        });
+        this.listPending = false;
+      },
+      error: () => {
+        this.data = [];
+        this.tableData = [];
+        this.listError =
+          'تعذر تحميل أوامر التصنيع. تحقق من تسجيل الدخول أو صلاحيات القسم.';
+        this.listPending = false;
+      },
     });
   }
 

@@ -228,10 +228,9 @@
           <button
             type="button"
             class="btn recipe-btn-primary btn-sm w-100"
-            [disabled]="!newExtraCostName || newExtraCostValue == null || newExtraCostValue < 0 || extraCostSaving"
-            (click)="addExtraCost(0)">
-            <span *ngIf="!extraCostSaving">+ إضافة</span>
-            <span *ngIf="extraCostSaving">جاري الحفظ…</span>
+            [disabled]="!newExtraCostName?.trim() || newExtraCostValue == null || newExtraCostValue < 0"
+            (click)="addExtraCost()">
+            <span>+ إضافة</span>
           </button>
         </div>
       </div>
@@ -259,7 +258,7 @@
                 </td>
                 <td class="text-center">
                   <button class="btn btn-sm btn-outline-primary mx-1" (click)="startEditExtraCost(ec)">تعديل</button>
-                  <button class="btn btn-sm btn-outline-danger mx-1" (click)="deleteExtraCost(0, ec.id)">حذف</button>
+                  <button class="btn btn-sm btn-outline-danger mx-1" (click)="deleteExtraCost(ec.id)">حذف</button>
                 </td>
               </ng-container>
               <ng-container *ngIf="editingExtraCostId === ec.id">
@@ -273,7 +272,7 @@
                 <td><input class="form-control form-control-sm" type="number" min="0" step="any" [(ngModel)]="editExtraCostValue" /></td>
                 <td></td>
                 <td class="text-center">
-                  <button class="btn btn-sm btn-success mx-1" (click)="saveEditExtraCost(0, ec.id)">حفظ</button>
+                  <button class="btn btn-sm btn-success mx-1" (click)="saveEditExtraCost(ec.id)">حفظ</button>
                   <button class="btn btn-sm btn-secondary mx-1" (click)="cancelEditExtraCost()">إلغاء</button>
                 </td>
               </ng-container>

@@ -1,0 +1,82 @@
+<div class="container-fluid py-4">
+  <div class="row mb-3">
+    <div class="col">
+      <h1 class="header">استيراد Excel والجرد</h1>
+      <p class="text-muted mb-0">
+        الأصناف والأرصدة الافتتاحية وتسوية الجرد الفعلي تتم من هنا عبر ملفات ‎.xlsx / .xls‎ أو ‎.csv‎ (نفس الأعمدة).
+        صلاحيات API تطابق مسار المشتريات (إداري، محاسبة، لوجستيات).
+      </p>
+      <p class="small text-secondary mb-0 mt-2">
+        النماذج محفوظة بـ <strong>Unicode UTF-16</strong> و<strong>فاصل TAB بين الأعمدة</strong> حتى يعرض Excel كل عمود منفصلاً (وليس كل البيانات في خلية واحدة). يمكن أيضاً استخدام فاصلة منقوطة أو فاصلة؛ الخادم يكتشف الفاصل تلقائياً.
+      </p>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5">1) إضافة / تحديث الأصناف (بدون كميات مخزون)</h2>
+      <p class="small text-muted mb-2">
+        إلزامي: <strong>اسم الصنف</strong>، <strong>سعر التكلفة</strong>.
+        يُفضّل تحديد: <strong>المخزن</strong> (الافتراضي مخزن مواد خام)، <strong>رقم الوحدة</strong> (أو يُستخدم 1)، <strong>رقم الانتاج</strong> أو <strong>فرع الانتاج</strong> (اسم خط الإنتاج كما في النظام).
+        اختياري إضافي: <strong>كود الصنف</strong>، <strong>اللون</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
+      </p>
+      <p class="small mb-2">
+        <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/items-sample.csv" download="نموذج-أصناف.csv">تحميل نموذج CSV (أصناف)</a>
+      </p>
+      <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('items', $event)" class="form-control mb-2" />
+      <button type="button" class="btn btn-primary" [disabled]="!itemsFile || loadingItems" (click)="uploadItems()">
+        {{ loadingItems ? 'جاري الرفع...' : 'رفع ملف الأصناف' }}
+      </button>
+      <p *ngIf="messageItems" class="text-success mt-2 mb-0">{{ messageItems }}</p>
+      <p *ngIf="errorItems" class="text-danger mt-2 mb-0">{{ errorItems }}</p>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5">2) الأرصدة الافتتاحية (حركات مخزون + قيد محاسبي)</h2>
+      <p class="small text-muted mb-2">
+        إلزامي: <strong>اسم الصنف</strong> (أو مطابقة بـ <strong>الكود</strong>)، <strong>الكمية</strong>، <strong>تكلفة الوحدة</strong>؛ واختياري <strong>المخزن</strong>.
+        أعمدة بيانات الصنف (كلها اختيارية): <strong>الكود</strong>، <strong>اللون</strong>، <strong>فرع الانتاج</strong>، <strong>رقم الوحدة</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
+      </p>
+      <p class="small mb-2">
+        <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/opening-sample.csv" download="نموذج-أرصدة-افتتاحية.csv">تحميل نموذج CSV (أرصدة افتتاحية)</a>
+      </p>
+      <label class="d-flex align-items-center gap-2 mb-2">
+        <input type="checkbox" [(ngModel)]="createMissingItems" />
+        <span>إنشاء صنف جديد إذا لم يُعثر عليه</span>
+      </label>
+      <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('opening', $event)" class="form-control mb-2" />
+      <button type="button" class="btn btn-primary" [disabled]="!openingFile || loadingOpening" (click)="uploadOpening()">
+        {{ loadingOpening ? 'جاري الرفع...' : 'رفع الأرصدة الافتتاحية' }}
+      </button>
+      <p *ngIf="messageOpening" class="text-success mt-2 mb-0">{{ messageOpening }}</p>
+      <p *ngIf="errorOpening" class="text-danger mt-2 mb-0">{{ errorOpening }}</p>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5">3) جرد وتسوية (الكمية الفعلية مقابل النظام)</h2>
+      <p class="small text-muted mb-2">
+        إلزامي: <strong>اسم الصنف</strong> أو <strong>الكود</strong>، <strong>الكمية الفعلية</strong>؛ واختياري <strong>المخزن</strong>.
+        للتحديث الاختياري لبيانات الصنف: <strong>الكود</strong>، <strong>اللون</strong>، <strong>فرع الانتاج</strong>، <strong>رقم الوحدة</strong>، <strong>المرجع</strong>.
+      </p>
+      <p class="small mb-2">
+        <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/adjustment-sample.csv" download="نموذج-جرد-وتسوية.csv">تحميل نموذج CSV (جرد وتسوية)</a>
+      </p>
+      <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('adjustment', $event)" class="form-control mb-2" />
+      <button type="button" class="btn btn-primary" [disabled]="!adjustmentFile || loadingAdjustment" (click)="uploadAdjustment()">
+        {{ loadingAdjustment ? 'جاري الرفع...' : 'رفع ملف الجرد' }}
+      </button>
+      <p *ngIf="messageAdjustment" class="text-success mt-2 mb-0">{{ messageAdjustment }}</p>
+      <p *ngIf="errorAdjustment" class="text-danger mt-2 mb-0">{{ errorAdjustment }}</p>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <strong>الجرد الشهري (الواجهة القديمة):</strong>
+    من القائمة <strong>المخازن → الجرد الشهري</strong> أو من صفحة أصناف المخزن زر
+    <strong>تسجيل الجرد الشهري</strong> — مسار مختلف عن تسوية Excel أعلاه.
+  </div>
+</div>

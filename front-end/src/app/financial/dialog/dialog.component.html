@@ -35,11 +35,20 @@
         <select dir="rtl" class="form-control"   placeholder="الاصل"
           [class.is-valid]="form.get('asset_id')?.errors ==null && form.get('asset_id')?.touched"
           formControlName='asset_id' type="text" class="form-control">
-          <option value="0" disabled selected>الاصل</option>
+          <option value="0" disabled selected>الحساب الأب (شجرة الحسابات)</option>
           <option [value]="elm?.id" *ngFor="let elm of assetData">{{elm?.name}}</option>
         </select>
         <p *ngIf="form.get('asset_id')?.errors !=null && form.get('asset_id')?.touched"
           class="error mb-0 text-danger">مطلوب</p>
+        <small *ngIf="!data?.id" class="text-muted d-block mt-1">يُنشأ حساب فرعي للبنك تحت هذا الحساب تلقائياً</small>
+      </div>
+      <div class="mb-3" *ngIf="!data?.id && (form.get('balance')?.value > 0)">
+        <select dir="rtl" class="form-control"
+          formControlName="counter_account_id" type="text" class="form-control">
+          <option [ngValue]="null" disabled selected>الحساب المقابل للرصيد الافتتاحي</option>
+          <option [ngValue]="elm?.id" *ngFor="let elm of assetData">{{elm?.name}}</option>
+        </select>
+        <small class="text-muted d-block mt-1">مطلوب عند وجود رصيد افتتاحي</small>
       </div>
       <div class="text-center">
         <button type="submit" class="btn text-white">{{data.id ? 'تعديل' : 'اضافة'}}</button>

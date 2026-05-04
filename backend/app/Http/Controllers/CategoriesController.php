@@ -20,6 +20,8 @@ use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
 use App\Services\Items\ItemCodeService;
+use App\Enums\InventoryMovementType;
+use App\Services\Inventory\InventoryMovementLedgerService;
 
 class CategoriesController extends Controller
 {
@@ -99,6 +101,8 @@ class CategoriesController extends Controller
    'item_code' => 'nullable|string|max:64|unique:categories,item_code',
    'color' => 'nullable|string|max:128',
    'recipe_id' => 'nullable|integer|exists:recipes,id',
+   'product_type' => 'nullable|string|in:raw_material,semi_finished,finished',
+   'allow_wip_sale' => 'nullable|boolean',
   ]);
   $img_name = '';
   if ($request->hasFile('category_image')) {
@@ -143,14 +147,11 @@ class CategoriesController extends Controller
    $attrs['recipe_id'] = (int) $request->input('recipe_id');
   }
 
-  // الرصيد الافتتاحي = كمية أولية؛ عمود «الرصيد» في القائمة يعرض quantity وليس initial_balance فقط
-  if ($openQty > 0.0000001) {
-   $attrs['quantity'] = $openQty;
-   if ($warehouse === 'مخزن منتج تام') {
-    $attrs['sell_total_price'] = $openQty * $cost;
-   } else {
-    $attrs['total_price'] = $openQty * $cost;
-   }
+  if ($request->filled('product_type')) {
+   $attrs['product_type'] = (string) $request->input('product_type');
+  }
+  if ($request->has('allow_wip_sale')) {
+   $attrs['allow_wip_sale'] = $request->boolean('allow_wip_sale');
   }
 
   $category = Category::create($attrs);
@@ -161,6 +162,22 @@ class CategoriesController extends Controller
   }
 
   if ($openQty > 0.0000001) {
+   /** @var InventoryMovementLedgerService $ledger */
+   $ledger = app(InventoryMovementLedgerService::class);
+   $ledger->recordInbound(
+    $category->fresh(),
+    InventoryMovementType::OpeningBalance,
+    $openQty,
+    $cost,
+    $openQty * $cost,
+    true,
+    'category_opening',
+    (int) $category->id,
+    'رصيد افتتاحي — إنشاء صنف',
+    null,
+    auth()->check() ? auth()->user()->name : 'النظام'
+   );
+
    DB::table('categories_balance')->insert([
     'invoice_number' => 'OB',
     'category_id' => $category->id,
@@ -180,10 +197,12 @@ class CategoriesController extends Controller
    }
    $openingValue = $openQty * $cost;
    if ($openingValue > 0.00001) {
+    $invAcc = TreeAccount::resolveInventoryAccountForCategoryId((int) $category->id);
     app(InventoryGlPostingService::class)->postOpeningInventory(
      $openingValue,
      'رصيد افتتاحي — ' . $category->category_name . ' (صنف #' . $category->id . ')',
-     auth()->id()
+     auth()->id(),
+     $invAcc
     );
    }
   }
@@ -205,6 +224,8 @@ class CategoriesController extends Controller
    'item_code' => 'nullable|string|max:64|unique:categories,item_code,'.$id,
    'color' => 'nullable|string|max:128',
    'recipe_id' => 'nullable|integer|exists:recipes,id',
+   'product_type' => 'nullable|string|in:raw_material,semi_finished,finished',
+   'allow_wip_sale' => 'nullable|boolean',
 
   ]);
 
@@ -260,6 +281,13 @@ class CategoriesController extends Controller
 
   if ($request->has('recipe_id')) {
    $update['recipe_id'] = $request->filled('recipe_id') ? (int) $request->input('recipe_id') : null;
+  }
+
+  if ($request->has('product_type')) {
+   $update['product_type'] = $request->filled('product_type') ? (string) $request->input('product_type') : null;
+  }
+  if ($request->has('allow_wip_sale')) {
+   $update['allow_wip_sale'] = $request->boolean('allow_wip_sale');
   }
 
   $category->update($update);
@@ -373,107 +401,303 @@ class CategoriesController extends Controller
   return response()->json($catName, 200);
  }
 
- public function changeCategoryQuantityss(Request $request)
- {
-  $id = $request->id;           // الرقم التعريفي للصنف
-  $status = $request->status;   // عادة "update"
-  $quantity = $request->quantity; // الرقم الجديد
+public function changeCategoryQuantityss(Request $request)
+{
+ $id = (int) $request->route('id', $request->id);
+ $quantity = (float) $request->quantity;
 
-  // مثال تحديث الصنف
-  $category = Category::find($id);
-  if (!$category) {
-   return response()->json(['success' => false, 'message' => 'الصنف غير موجود']);
+ $category = Category::find($id);
+ if (!$category) {
+  return response()->json(['success' => false, 'message' => 'الصنف غير موجود']);
+ }
+
+ DB::beginTransaction();
+ try {
+  /** @var InventoryMovementLedgerService $ledger */
+  $ledger = app(InventoryMovementLedgerService::class);
+  $before = (float) $category->quantity;
+  $delta = $quantity - $before;
+  if (abs($delta) < 0.0000001) {
+   DB::commit();
+
+   return response()->json([
+    'success' => true,
+    'quantity' => $category->quantity,
+    'total_price' => $category->total_price,
+    'sell_total_price' => $category->sell_total_price,
+    'unit_price' => $category->unit_price,
+   ]);
   }
 
-  $category->quantity = $quantity;
-  $category->save();
+  $unitRef = CategoryInventoryCostService::averageValuationPerUnitForManualAdjustment($id);
+  if ($unitRef < 0.0000001) {
+   $unitRef = (float) $category->category_price;
+   $det = DB::table('categories_balance')->where('category_id', $id)->latest()->first();
+   if ($det && isset($det->price) && (float) $det->price > 0.0000001) {
+    $unitRef = (float) $det->price;
+   }
+  }
+
+  if ($delta > 0) {
+   $ledger->recordInbound(
+    $category,
+    InventoryMovementType::ManualAdjustment,
+    $delta,
+    $unitRef,
+    abs($delta) * $unitRef,
+    true,
+    'manual_quantity_set',
+    (int) $category->id,
+    'تعديل كمية (تعيين)',
+    null,
+    auth()->check() ? auth()->user()->name : null
+   );
+  } else {
+   $ledger->recordOutbound(
+    $category,
+    InventoryMovementType::ManualAdjustment,
+    abs($delta),
+    $unitRef,
+    abs($delta) * $unitRef,
+    true,
+    'manual_quantity_set',
+    (int) $category->id,
+    'تعديل كمية (تعيين)',
+    null,
+    auth()->check() ? auth()->user()->name : null
+   );
+  }
+
+  $glAmount = abs($delta) * $unitRef;
+  if ($glAmount > 0.00001) {
+   $invAcc = TreeAccount::resolveInventoryAccountForCategoryId($id);
+   if ($invAcc) {
+    $gl = app(InventoryGlPostingService::class);
+    $glLabel = 'تعديل كمية يدوي — ' . ($category->fresh()->category_name ?? ('صنف #' . $id));
+    if ($delta > 0) {
+     $gl->postPhysicalCountGain($glAmount, $invAcc, $glLabel, auth()->id());
+    } else {
+     $gl->postPhysicalCountLoss($glAmount, $invAcc, $glLabel, auth()->id());
+    }
+   }
+  }
+
+  DB::commit();
+
+  $fresh = $category->fresh();
 
   return response()->json([
    'success' => true,
-   'quantity' => $category->quantity
+   'quantity' => $fresh->quantity,
+   'total_price' => $fresh->total_price,
+   'sell_total_price' => $fresh->sell_total_price,
+   'unit_price' => $fresh->unit_price,
   ]);
+ } catch (\Throwable $e) {
+  DB::rollBack();
+
+  return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+ }
+}
+
+
+
+public function changeCategoryQuantity(Request $request)
+{
+ $quantity = $request->quantity;
+ $category = Category::find($request->id);
+ if (! $category) {
+  return response()->json(['message' => 'الصنف غير موجود'], 404);
  }
 
-
-
- public function changeCategoryQuantity(Request $request)
- {
-  $quantity = $request->quantity;
-  $category = Category::find($request->id);
-  $categorPrice = $category->category_price;
-  $ref = null;
-  if ($request->status == 'add' && $quantity > 0) {
-   $ref = 'CH+';
+ /** @var InventoryMovementLedgerService $ledger */
+ $ledger = app(InventoryMovementLedgerService::class);
+ $categorPrice = $category->category_price;
+ $ref = null;
+ if ($request->status == 'add' && $quantity > 0) {
+  $ref = 'CH+';
+ }
+ if ($request->status == 'add' && $quantity < 0) {
+  $ref = 'CH-';
+ }
+ if ($request->status == 'add' && $quantity !== 0) {
+  $cat_details = DB::table('categories_balance')->where('category_id', $request->id)->latest()->first();
+  if ($cat_details) {
+   $categorPrice = $cat_details->price;
   }
-  if ($request->status == 'add' && $quantity < 0) {
-   $ref = 'CH-';
+  $balanceBefore = (float) $category->quantity;
+  $qd = (float) $quantity;
+
+  $unitRef = CategoryInventoryCostService::averageValuationPerUnitForManualAdjustment((int) $request->id);
+  if ($unitRef < 0.0000001) {
+   $unitRef = (float) $categorPrice;
   }
-  if ($request->status == 'add' && $quantity !== 0) {
-   $cat_details =  DB::table('categories_balance')->where('category_id', $request->id)->latest()->first();
-   if ($cat_details) {
-    $categorPrice = $cat_details->price;
+
+  DB::beginTransaction();
+  try {
+   if ($qd > 0) {
+    $ledger->recordInbound(
+     $category,
+     InventoryMovementType::ManualAdjustment,
+     abs($qd),
+     (float) $unitRef,
+     abs($qd) * (float) $unitRef,
+     true,
+     'manual_adjustment',
+     (int) $category->id,
+     'تعديل الصنف — إضافة/خصم',
+     null,
+     auth()->user()->name
+    );
+   } elseif ($qd < 0) {
+    $ledger->recordOutbound(
+     $category,
+     InventoryMovementType::ManualAdjustment,
+     abs($qd),
+     (float) $unitRef,
+     abs($qd) * (float) $unitRef,
+     true,
+     'manual_adjustment',
+     (int) $category->id,
+     'تعديل الصنف — إضافة/خصم',
+     null,
+     auth()->user()->name
+    );
    }
+
+   $glAmount = abs($qd) * (float) $unitRef;
+   if ($glAmount > 0.00001) {
+    $invAcc = TreeAccount::resolveInventoryAccountForCategoryId((int) $request->id);
+    if ($invAcc) {
+     $gl = app(InventoryGlPostingService::class);
+     $glLabel = 'تعديل كمية (+/-) — ' . ($category->fresh()->category_name ?? ('صنف #' . $request->id));
+     if ($qd > 0) {
+      $gl->postPhysicalCountGain($glAmount, $invAcc, $glLabel, auth()->id());
+     } else {
+      $gl->postPhysicalCountLoss($glAmount, $invAcc, $glLabel, auth()->id());
+     }
+    }
+   }
+
+   $category->refresh();
    DB::table('categories_balance')->insert([
     'invoice_number' => $ref,
     'category_id' => $request->id,
     'type' => 'تعديل الصنف',
     'quantity' => $quantity,
-    'balance_before' => $category->quantity,
-    'balance_after' => $category->quantity + $quantity,
-    'price' => $categorPrice,
-    'total_price' => $categorPrice * $quantity,
-    'unit_cost' => $categorPrice,
-    'cost_total' => $categorPrice * $quantity,
+    'balance_before' => $balanceBefore,
+    'balance_after' => (float) $category->quantity,
+    'price' => $unitRef,
+    'total_price' => $unitRef * $quantity,
+    'unit_cost' => $unitRef,
+    'cost_total' => $unitRef * $quantity,
     'by' => auth()->user()->name,
-    'created_at' => now()
+    'created_at' => now(),
    ]);
-   $category->quantity = $category->quantity + $quantity;
-   if ($category->warehouse == 'مخزن منتج تام') {
-    $category->sell_total_price = $category->sell_total_price + ($quantity * $categorPrice);
-   } else {
-    $category->total_price = $category->total_price + ($quantity * $categorPrice);
-   }
-   $category->save();
    if ($category->warehouse !== 'مخزن منتج تام') {
     CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
    }
-   return response()->json('success', 200);
+   DB::commit();
+  } catch (\Throwable $e) {
+   DB::rollBack();
+
+   return response()->json(['message' => $e->getMessage()], 422);
   }
 
-  if ($request->status == 'edit' && is_numeric($quantity) && (float) $quantity >= 0) {
-   $cat_details =  DB::table('categories_balance')->where('category_id', $request->id)->latest()->first();
-   if ($cat_details) {
-    $categorPrice = $cat_details->price;
+  return response()->json('success', 200);
+ }
+
+ if ($request->status == 'edit' && is_numeric($quantity) && (float) $quantity >= 0) {
+  $cat_details = DB::table('categories_balance')->where('category_id', $request->id)->latest()->first();
+  if ($cat_details) {
+   $categorPrice = $cat_details->price;
+  }
+  $ref = 'CHQ';
+  $balanceBefore = (float) $category->quantity;
+  $targetQty = (float) $quantity;
+  $delta = $targetQty - $balanceBefore;
+
+  $unitRef = CategoryInventoryCostService::averageValuationPerUnitForManualAdjustment((int) $request->id);
+  if ($unitRef < 0.0000001) {
+   $unitRef = (float) $categorPrice;
+  }
+
+  DB::beginTransaction();
+  try {
+   if (abs($delta) > 0.0000001) {
+    if ($delta > 0) {
+     $ledger->recordInbound(
+      $category,
+      InventoryMovementType::ManualAdjustment,
+      $delta,
+      (float) $unitRef,
+      abs($delta) * (float) $unitRef,
+      true,
+      'manual_adjustment_edit',
+      (int) $category->id,
+      'تعديل الصنف — تعيين كمية',
+      null,
+      auth()->user()->name
+     );
+    } else {
+     $ledger->recordOutbound(
+      $category,
+      InventoryMovementType::ManualAdjustment,
+      abs($delta),
+      (float) $unitRef,
+      abs($delta) * (float) $unitRef,
+      true,
+      'manual_adjustment_edit',
+      (int) $category->id,
+      'تعديل الصنف — تعيين كمية',
+      null,
+      auth()->user()->name
+     );
+    }
+
+    $glAmount = abs($delta) * (float) $unitRef;
+    if ($glAmount > 0.00001) {
+     $invAcc = TreeAccount::resolveInventoryAccountForCategoryId((int) $request->id);
+     if ($invAcc) {
+      $gl = app(InventoryGlPostingService::class);
+      $glLabel = 'تعيين كمية (مخازن) — ' . ($category->fresh()->category_name ?? ('صنف #' . $request->id));
+      if ($delta > 0) {
+       $gl->postPhysicalCountGain($glAmount, $invAcc, $glLabel, auth()->id());
+      } else {
+       $gl->postPhysicalCountLoss($glAmount, $invAcc, $glLabel, auth()->id());
+      }
+     }
+    }
    }
-   $ref = 'CHQ';
-   $totalPrice = $categorPrice * ($quantity - $category->quantity);
+
+   $category->refresh();
    DB::table('categories_balance')->insert([
     'invoice_number' => $ref,
     'category_id' => $request->id,
     'type' => 'تعديل الصنف',
-    'quantity' => $quantity - $category->quantity,
-    'balance_before' => $category->quantity,
-    'balance_after' => $quantity,
-    'price' => $categorPrice,
-    'total_price' => $categorPrice * ($quantity - $category->quantity),
-    'unit_cost' => $categorPrice,
-    'cost_total' => $categorPrice * ($quantity - $category->quantity),
+    'quantity' => $targetQty - $balanceBefore,
+    'balance_before' => $balanceBefore,
+    'balance_after' => (float) $category->quantity,
+    'price' => $unitRef,
+    'total_price' => $unitRef * ($targetQty - $balanceBefore),
+    'unit_cost' => $unitRef,
+    'cost_total' => $unitRef * ($targetQty - $balanceBefore),
     'by' => auth()->user()->name,
-    'created_at' => now()
+    'created_at' => now(),
    ]);
-   $category->quantity = $quantity;
-   if ($category->warehouse == 'مخزن منتج تام') {
-    $category->sell_total_price = $category->sell_total_price + $totalPrice;
-   } else {
-    $category->total_price = $category->total_price + $totalPrice;
-   }
-   $category->save();
    if ($category->warehouse !== 'مخزن منتج تام') {
     CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
    }
-   return response()->json('success', 200);
+   DB::commit();
+  } catch (\Throwable $e) {
+   DB::rollBack();
+
+   return response()->json(['message' => $e->getMessage()], 422);
   }
+
+  return response()->json('success', 200);
  }
+}
 
  public function categoryByWarehouse(Request $request)
  {
@@ -667,6 +891,20 @@ class CategoriesController extends Controller
  {
   $itemsPerPage = $request->input('itemsPerPage', 15);
 
+  $matchingCategoryIds = null;
+  $searchRaw = $request->input('search');
+  if ($searchRaw !== null && $searchRaw !== '') {
+   $searchTerm = trim((string) $searchRaw);
+   if ($searchTerm !== '') {
+    $likeTerm = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $searchTerm).'%';
+    $matchingCategoryIds = DB::table('categories')
+     ->where('category_name', 'like', $likeTerm)
+     ->pluck('id')
+     ->map(fn ($id) => (int) $id)
+     ->all();
+   }
+  }
+
   $query = DB::table('order_products')
    ->select(
     'categories.id as category_id',
@@ -689,6 +927,10 @@ class CategoriesController extends Controller
    $query->where('categories.production_id', $request->production_id);
   }
 
+  if (is_array($matchingCategoryIds)) {
+   $query->whereIn('categories.id', $matchingCategoryIds);
+  }
+
   $categorySales = $query->groupBy('categories.id', 'categories.category_name', 'categories.category_image', 'categories.quantity');
 
   if ($request->has('sort')) {
@@ -706,6 +948,10 @@ class CategoriesController extends Controller
    $period = $productPerformanceReportService->computeForPeriod($request->date_from, $request->date_to);
    $profitabilityTotals = $period['totals'];
    $byCategoryId = $period['by_category_id'];
+   if (is_array($matchingCategoryIds)) {
+    $byCategoryId = array_intersect_key($byCategoryId, array_flip($matchingCategoryIds));
+    $profitabilityTotals = $this->aggregateProfitabilityTotalsFromRows(array_values($byCategoryId));
+   }
   }
 
   foreach ($categorySales->items() as $item) {
@@ -773,5 +1019,51 @@ class CategoriesController extends Controller
  public function destroy($id)
  {
   //
+ }
+
+ /**
+  * @param  array<int, array<string, mixed>>  $productRows
+  * @return array<string, float|int>
+  */
+ private function aggregateProfitabilityTotalsFromRows(array $productRows): array
+ {
+  if ($productRows === []) {
+   return [
+    'sales_qty' => 0,
+    'sales_amount' => 0,
+    'returns_qty' => 0,
+    'returns_amount' => 0,
+    'net_sales' => 0,
+    'cogs' => 0,
+    'avg_unit_cost' => 0,
+    'gross_profit' => 0,
+    'gross_margin_percent' => 0,
+   ];
+  }
+
+  $sumNetQtyCost = 0.0;
+  foreach ($productRows as $pr) {
+   $nq = max(0, (float) ($pr['sales_qty'] ?? 0) - (float) ($pr['returns_qty'] ?? 0));
+   $sumNetQtyCost += $nq;
+  }
+
+  $totals = [
+   'sales_qty' => round(array_sum(array_column($productRows, 'sales_qty')), 3),
+   'sales_amount' => round(array_sum(array_column($productRows, 'sales_amount')), 2),
+   'returns_qty' => round(array_sum(array_column($productRows, 'returns_qty')), 3),
+   'returns_amount' => round(array_sum(array_column($productRows, 'returns_amount')), 2),
+   'net_sales' => round(array_sum(array_column($productRows, 'net_sales')), 2),
+   'cogs' => round(array_sum(array_column($productRows, 'cogs')), 2),
+   'avg_unit_cost' => $sumNetQtyCost > 0.000001
+    ? round(array_sum(array_column($productRows, 'cogs')) / $sumNetQtyCost, 2)
+    : 0,
+   'gross_profit' => round(array_sum(array_column($productRows, 'gross_profit')), 2),
+   'gross_margin_percent' => 0,
+  ];
+  $totals['gross_margin_percent'] = $totals['net_sales'] != 0
+   ? round(($totals['gross_profit'] / $totals['net_sales']) * 100, 2)
+   : 0;
+
+  return $totals;
  }
 }

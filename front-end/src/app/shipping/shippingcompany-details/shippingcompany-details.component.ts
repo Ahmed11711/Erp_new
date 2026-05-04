@@ -10,6 +10,8 @@ import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/
 import { MatDialog } from '@angular/material/dialog';
 import { DialogNotificationNoteComponent } from '../dialog-notification-note/dialog-notification-note.component';
 import { UserService } from 'src/app/manage-system/services/user.service';
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 
 @Component({
   selector: 'app-shippingcompany-details',
@@ -20,6 +22,8 @@ export class ShippingcompanyDetailsComponent {
 
   data:any[]=[];
   banks :any = [];
+  safes: any[] = [];
+  serviceAccounts: any[] = [];
   tableData:any[]=[];
   collectDate!:string;
   shippingDate!:string;
@@ -40,7 +44,8 @@ export class ShippingcompanyDetailsComponent {
   pageSizeOptions = [15,50,100];
 
   constructor(private shippingService:ShippingCompanyService,private order: OrderService , private route:ActivatedRoute , private authService:AuthService,
-    private bankService:BanksService , public dialog: MatDialog , private userService:UserService
+    private bankService:BanksService , public dialog: MatDialog , private userService:UserService,
+    private safeService: SafeService, private serviceAccountsService: ServiceAccountsService
     ){
   }
 
@@ -49,8 +54,14 @@ export class ShippingcompanyDetailsComponent {
     this.param['id'] = this.route.snapshot.params['id'];
     this.user = this.authService.getUser();
     this.bankService.bankSelect().subscribe(res=>this.banks=res);
+    this.safeService.getAll().subscribe((res: any) => {
+      this.safes = res?.data ?? res ?? [];
+    });
+    this.serviceAccountsService.index().subscribe((res: any) => {
+      this.serviceAccounts = Array.isArray(res) ? res : (res?.data ?? []);
+    });
     if (this.user == 'Admin') {
-      this.reviewed = '0';
+      this.reviewed = 'all';
     }
     this.status = 'تم شحن';
     this.getUsers();
@@ -122,6 +133,172 @@ export class ShippingcompanyDetailsComponent {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
     this.search(arguments);
+  }
+
+  trackByDetailId(_index: number, row: { id?: number; order_id?: number }): number {
+    return row?.id ?? row?.order_id ?? _index;
+  }
+
+  /** نفس أدوار قائمة «تحصيل الطلب» في الجدول */
+  get canBulkCollectRole(): boolean {
+    const u = this.user;
+    return u === 'Admin' || u === 'Operation Management' || u === 'Finance and operations management'
+      || u === 'Operation Specialist' || u === 'Logistics Specialist';
+  }
+
+  /** صف صالح للتحصيل الجماعي: يطابق ما يظهر في الجدول + ما يتحقق منه السيرفر قدر الإمكان */
+  private isRowEligibleForBulkCollect(r: any): boolean {
+    const t = (v: unknown) => (v == null ? '' : String(v)).trim();
+    if (r?.order_id == null) {
+      return false;
+    }
+    if (t(r.status) !== 'تم شحن') {
+      return false;
+    }
+    const done = r.is_done === true || r.is_done === 1 || r.is_done === '1';
+    if (done) {
+      return false;
+    }
+    const orderSt = r?.order?.order_status;
+    if (orderSt === undefined || orderSt === null) {
+      return true;
+    }
+    return t(orderSt) === 'تم شحن';
+  }
+
+  /**
+   * تحصيل جماعي بنفس حقول الدفع والـ API الخلفي للتحصيل الفردي (قيود محاسبية موحدة).
+   */
+  openBulkCollect(): void {
+    const eligible = this.selectedOrders.filter((r: any) => this.isRowEligibleForBulkCollect(r));
+    const uniqueIds = [...new Set(eligible.map((r: any) => r.order_id))] as number[];
+    if (uniqueIds.length === 0) {
+      Swal.fire({ icon: 'warning', title: 'اختر صفوفاً بحالة «تم شحن»' });
+      return;
+    }
+    const hasReturnSwap = eligible.some(
+      (r: any) => r?.order?.order_type === 'طلب مرتجع' || r?.order?.order_type === 'طلب استبدال'
+    );
+    if (hasReturnSwap) {
+      Swal.fire({
+        icon: 'info',
+        title: 'طلبات مرتجع / استبدال',
+        text: 'احذفها من التحديد وتحصّلها من شاشة تحصيل الطلب (تأكيد استلام المنتج).',
+      });
+      return;
+    }
+
+    const bankOptions = (this.banks || []).map((b: any) => `<option value="${b.id}">${b.name}</option>`).join('');
+    const safeOptions = (this.safes || []).map((s: any) => `<option value="${s.id}">${s.name}</option>`).join('');
+    const svcOptions = (this.serviceAccounts || []).map((a: any) => `<option value="${a.id}">${a.name}</option>`).join('');
+
+    Swal.fire({
+      title: `تحصيل ${uniqueIds.length} طلباً`,
+      html: `
+      <div class="text-start" dir="rtl">
+        <label class="d-block mb-1 small">طريقة التحصيل</label>
+        <select id="bulk-pay-type" class="swal2-input mb-2">
+          <option value="bank">بنك</option>
+          <option value="safe">خزينة</option>
+          <option value="service_account">حساب خدمي</option>
+        </select>
+        <div id="bulk-bank-box">
+          <label class="d-block mb-1 small">البنك</label>
+          <select id="bulk-bank" class="swal2-input mb-2"><option value="">— اختر —</option>${bankOptions}</select>
+        </div>
+        <div id="bulk-safe-box" style="display:none">
+          <label class="d-block mb-1 small">الخزينة</label>
+          <select id="bulk-safe" class="swal2-input mb-2"><option value="">— اختر —</option>${safeOptions}</select>
+        </div>
+        <div id="bulk-svc-box" style="display:none">
+          <label class="d-block mb-1 small">حساب خدمي</label>
+          <select id="bulk-svc" class="swal2-input mb-2"><option value="">— اختر —</option>${svcOptions}</select>
+        </div>
+        <label class="d-block mb-1 small">ملاحظة (اختياري)</label>
+        <input id="bulk-note" class="swal2-input" placeholder="ملاحظة" />
+      </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'تحصيل',
+      cancelButtonText: 'إلغاء',
+      focusConfirm: false,
+      didOpen: () => {
+        const pt = document.getElementById('bulk-pay-type') as HTMLSelectElement | null;
+        const toggle = () => {
+          const v = pt?.value ?? 'bank';
+          const b = document.getElementById('bulk-bank-box') as HTMLElement | null;
+          const s = document.getElementById('bulk-safe-box') as HTMLElement | null;
+          const x = document.getElementById('bulk-svc-box') as HTMLElement | null;
+          if (b) { b.style.display = v === 'bank' ? 'block' : 'none'; }
+          if (s) { s.style.display = v === 'safe' ? 'block' : 'none'; }
+          if (x) { x.style.display = v === 'service_account' ? 'block' : 'none'; }
+        };
+        pt?.addEventListener('change', toggle);
+        toggle();
+      },
+      preConfirm: () => {
+        const payment_type = (document.getElementById('bulk-pay-type') as HTMLSelectElement)?.value || 'bank';
+        const note = (document.getElementById('bulk-note') as HTMLInputElement)?.value ?? '';
+        if (payment_type === 'bank') {
+          const bank_id = (document.getElementById('bulk-bank') as HTMLSelectElement)?.value;
+          if (!bank_id) {
+            Swal.showValidationMessage('اختر البنك');
+            return false as any;
+          }
+          return { payment_type, bank_id, note };
+        }
+        if (payment_type === 'safe') {
+          const safe_id = (document.getElementById('bulk-safe') as HTMLSelectElement)?.value;
+          if (!safe_id) {
+            Swal.showValidationMessage('اختر الخزينة');
+            return false as any;
+          }
+          return { payment_type, safe_id, note };
+        }
+        const service_account_id = (document.getElementById('bulk-svc') as HTMLSelectElement)?.value;
+        if (!service_account_id) {
+          Swal.showValidationMessage('اختر الحساب الخدمي');
+          return false as any;
+        }
+        return { payment_type, service_account_id, note };
+      },
+    }).then((result) => {
+      if (!result.isConfirmed || !result.value) {
+        return;
+      }
+      const v = result.value as { payment_type: string; bank_id?: string; safe_id?: string; service_account_id?: string; note: string };
+      const fd = new FormData();
+      uniqueIds.forEach((id) => fd.append('order_ids[]', String(id)));
+      fd.append('shipping_company_id', String(this.id));
+      fd.append('payment_type', v.payment_type);
+      if (v.payment_type === 'bank' && v.bank_id) {
+        fd.append('bank_id', v.bank_id);
+      } else if (v.payment_type === 'safe' && v.safe_id) {
+        fd.append('safe_id', v.safe_id);
+      } else if (v.payment_type === 'service_account' && v.service_account_id) {
+        fd.append('service_account_id', v.service_account_id);
+      }
+      if (v.note) {
+        fd.append('note', v.note);
+      }
+      this.order.bulkCollectOrders(fd).subscribe({
+        next: (res: any) => {
+          if (res?.message === 'success') {
+            Swal.fire({
+              icon: 'success',
+              title: `تم تحصيل ${res.processed ?? uniqueIds.length} طلباً`,
+              timer: 2000,
+              showConfirmButton: false,
+            });
+            this.selectedOrders = [];
+            this.search({ target: {} } as any);
+          }
+        },
+        error: (err) => {
+          const msg = err?.error?.message ?? err?.message ?? 'فشل التحصيل';
+          Swal.fire({ icon: 'error', title: String(msg) });
+        },
+      });
+    });
   }
 
 
@@ -289,15 +466,18 @@ export class ShippingcompanyDetailsComponent {
     }
 
     this.shippingService.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
-      console.log(res.orderDetails.data);
+      const od = res?.orderDetails;
+      const rows = Array.isArray(od?.data) ? od.data : [];
+      const total = Number(od?.total ?? 0);
+      const perPage = Number(od?.per_page ?? this.pageSize) || this.pageSize;
 
-      this.data = res.orderDetails.data;
-      this.length=res.orderDetails.total;
-      this.pageSize=res.orderDetails.per_page;
-      this.totalOrders=res.orderDetails.total;
-      this.totalPrice=res.totalNet;
-      this.name=res.name.name;
-      this.tableData = this.data;
+      this.data = rows;
+      this.tableData = rows;
+      this.length = total;
+      this.totalOrders = total;
+      this.pageSize = perPage;
+      this.totalPrice = res?.totalNet ?? 0;
+      this.name = res?.name?.name ?? '';
     })
   }
 

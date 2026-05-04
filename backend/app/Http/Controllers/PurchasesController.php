@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
 use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\LandedCostService;
 use App\Services\CategoryInventoryCostService;
+use App\Services\Inventory\InventoryMovementLedgerService;
+use App\Enums\InventoryMovementType;
+use App\Models\Category;
 use Validator;
 class PurchasesController extends Controller
 {
@@ -211,8 +214,20 @@ class PurchasesController extends Controller
                     throw new \Exception('تعذر ربط الصنف عند عكس التعديل: ' . $product->product_name);
                 }
 
-                DB::table('categories')->where('id', $revCatId)->increment('quantity', $qty * -1);
-                DB::table('categories')->where('id', $revCatId)->increment('total_price', $lineTotal * -1);
+                $ledger = app(InventoryMovementLedgerService::class);
+                $ledger->recordOutbound(
+                    Category::query()->findOrFail($revCatId),
+                    InventoryMovementType::PurchaseReceiptReversal,
+                    $qty,
+                    $effectiveUnit,
+                    $lineTotal,
+                    true,
+                    'purchase_invoice_edit_reversal',
+                    (int) $oldInvice->id,
+                    'عكس سطر مشتريات عند تعديل الفاتورة',
+                    null,
+                    auth()->user()->name ?? null
+                );
 
                 CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
 
@@ -302,6 +317,7 @@ class PurchasesController extends Controller
         $products = $request->products;
         $products = json_decode($products, true);
         $linesSum = 0;
+        $inventoryGlByAccount = [];
         foreach($products as $product){
             $qty = (float) $product['product_quantity'];
             $lineTotal = (float) $product['total'];
@@ -312,6 +328,11 @@ class PurchasesController extends Controller
             $newCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product['product_name']);
             if (! $newCatId) {
                 throw new \Exception('تعذر ربط الصنف بالمخزن (مخزن مواد خام): ' . $product['product_name']);
+            }
+
+            $invAcc = TreeAccount::resolveInventoryAccountForCategoryId((int) $newCatId);
+            if ($invAcc) {
+                $inventoryGlByAccount[$invAcc->id] = ($inventoryGlByAccount[$invAcc->id] ?? 0) + $lineTotal;
             }
 
             DB::table('invoice_categories')->insert([
@@ -325,8 +346,20 @@ class PurchasesController extends Controller
                 'price_edited' => $product['price_edited'],
             ]);
 
-            DB::table('categories')->where('id', $newCatId)->increment('quantity', $qty);
-            DB::table('categories')->where('id', $newCatId)->increment('total_price', $lineTotal);
+            $ledger = app(InventoryMovementLedgerService::class);
+            $ledger->recordInbound(
+                Category::query()->findOrFail($newCatId),
+                InventoryMovementType::PurchaseReceipt,
+                $qty,
+                $effectiveUnit,
+                $lineTotal,
+                true,
+                'purchase',
+                (int) $purchase->id,
+                'استلام مشتريات — فاتورة ' . $purchase->invoice_number,
+                null,
+                auth()->user()->name ?? null
+            );
 
             CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($newCatId);
             $avgUnit = CategoryInventoryCostService::resolveReferenceUnitCost($newCatId);
@@ -358,6 +391,13 @@ class PurchasesController extends Controller
                 'created_at' =>now()
             ]);
         }
+        if ($linesSum > 0.00001 && count($inventoryGlByAccount) === 0) {
+            $fallbackInv = TreeAccount::resolveInventoryAccount();
+            if ($fallbackInv) {
+                $inventoryGlByAccount[$fallbackInv->id] = $linesSum;
+            }
+        }
+
         $supplier = Supplier::find($purchase->supplier_id);
         $supplier->last_balance = $supplier->balance;
         $supplier->balance += $purchase->due_amount - $old_due_amount;
@@ -390,8 +430,15 @@ class PurchasesController extends Controller
             $oldShip = (float) ($oldInvice->shipping_total ?? $oldInvice->transport_cost);
             $oldProduct = (float) ($oldInvice->product_total ?? $oldLinesSum);
             if (($oldProduct + $oldShip) > 0.00001 && $oldSupplier) {
-                $glService->reversePurchaseReceiptSplit(
-                    $oldProduct,
+                $oldInvMap = CategoryInventoryCostService::aggregatePurchaseLineTotalsByInventoryTreeAccount($oldCategories);
+                if ($oldProduct > 0.00001 && count($oldInvMap) === 0) {
+                    $fb = TreeAccount::resolveInventoryAccount();
+                    if ($fb) {
+                        $oldInvMap[$fb->id] = $oldProduct;
+                    }
+                }
+                $glService->reversePurchaseReceiptSplitByAccounts(
+                    $oldInvMap,
                     $oldShip,
                     $oldSupplier,
                     'عكس استلام مخزون — تعديل فاتورة ' . $oldInvice->invoice_number,
@@ -408,8 +455,8 @@ class PurchasesController extends Controller
         }
 
         if ($newReceiptAmount > 0.00001) {
-            $glService->postPurchaseReceiptSplit(
-                $linesSum,
+            $glService->postPurchaseReceiptSplitByAccounts(
+                $inventoryGlByAccount,
                 $transport,
                 $supplier,
                 'استلام مشتريات — فاتورة ' . $purchase->invoice_number,
@@ -611,8 +658,20 @@ class PurchasesController extends Controller
                 throw new \Exception('تعذر ربط الصنف عند الحذف: ' . $product->product_name);
             }
 
-            DB::table('categories')->where('id', $delCatId)->increment('quantity', $qty * -1);
-            DB::table('categories')->where('id', $delCatId)->increment('total_price', $lineTotal * -1);
+            $ledger = app(InventoryMovementLedgerService::class);
+            $ledger->recordOutbound(
+                Category::query()->findOrFail($delCatId),
+                InventoryMovementType::PurchaseReceiptReversal,
+                $qty,
+                $effectiveUnit,
+                $lineTotal,
+                true,
+                'purchase_delete',
+                (int) $purchase->id,
+                'حذف فاتورة مشتريات',
+                null,
+                auth()->user()->name ?? null
+            );
 
             CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
 
@@ -672,8 +731,15 @@ class PurchasesController extends Controller
         $delProduct = (float) ($purchase->product_total ?? $linesSumDelete);
         $receiptDelete = $delProduct + $delShip;
         if ($receiptDelete > 0.00001 && $supplier) {
-            $glService->reversePurchaseReceiptSplit(
-                $delProduct,
+            $delInvMap = CategoryInventoryCostService::aggregatePurchaseLineTotalsByInventoryTreeAccount($oldCategories);
+            if ($delProduct > 0.00001 && count($delInvMap) === 0) {
+                $fb = TreeAccount::resolveInventoryAccount();
+                if ($fb) {
+                    $delInvMap[$fb->id] = $delProduct;
+                }
+            }
+            $glService->reversePurchaseReceiptSplitByAccounts(
+                $delInvMap,
                 $delShip,
                 $supplier,
                 'عكس استلام مخزون — حذف فاتورة ' . $purchase->invoice_number,

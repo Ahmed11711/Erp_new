@@ -4,6 +4,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { ManufacturingRoutingModule } from './manufacturing-routing.module';
 import { AddRecipeComponent } from './add-recipe/add-recipe.component';
 import { ManufacturingRecipesComponent } from './manufacturing-recipes/manufacturing-recipes.component';
+import { ManufacturingBomListComponent } from './manufacturing-bom-list/manufacturing-bom-list.component';
 import { SharedModule } from '../shared/shared.module';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { ManufacturingConfirmationComponent } from './manufacturing-confirmation/manufacturing-confirmation.component';
@@ -20,6 +21,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
   declarations: [
     AddRecipeComponent,
     ManufacturingRecipesComponent,
+    ManufacturingBomListComponent,
     ManufacturingConfirmationComponent,
     ManufacturingOrdersComponent,
     ManufacturingAdditionsComponent

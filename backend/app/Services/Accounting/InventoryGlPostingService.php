@@ -13,6 +13,7 @@ use App\Models\Supplier;
 use App\Models\TreeAccount;
 /**
  * قيود المخزون الدائم: استلام مشتريات، عكسها، رصيد افتتاحي، وإرجاع تكلفة عند مرتجع بيع.
+ * يُوزّع المبلغ على حسابات فرعية للمخزون حسب ربط المخزن (stocks.asset_id) مع شجرة الحسابات.
  */
 class InventoryGlPostingService
 {
@@ -115,12 +116,12 @@ class InventoryGlPostingService
     /**
      * رصيد افتتاحي لصنف: من حـ المخزون / إلى حـ موازنة افتتاحية (حقوق ملكية).
      */
-    public function postOpeningInventory(float $amount, string $description, ?int $userId = null): void
+    public function postOpeningInventory(float $amount, string $description, ?int $userId = null, ?TreeAccount $inventoryAccountOverride = null): void
     {
         if ($amount <= 0.00001) {
             return;
         }
-        $inventory = TreeAccount::resolveInventoryAccount();
+        $inventory = $inventoryAccountOverride ?? TreeAccount::resolveInventoryAccount();
         $offset = TreeAccount::resolveOpeningInventoryOffsetAccount();
         if (!$inventory || !$offset) {
             return;
@@ -143,6 +144,64 @@ class InventoryGlPostingService
     }
 
     /**
+     * جرد فعلي — نقص: مدين مصروف عجز / دائن مخزون.
+     */
+    public function postPhysicalCountLoss(float $amount, TreeAccount $inventoryAccount, string $description, ?int $userId = null): void
+    {
+        if ($amount <= 0.00001) {
+            return;
+        }
+        $loss = $this->resolveAdjustmentLossAccount();
+        if (! $loss) {
+            return;
+        }
+
+        $this->postTwoLineDailyEntry(
+            $description,
+            $loss->id,
+            $amount,
+            0,
+            $inventoryAccount->id,
+            0,
+            $amount,
+            'عجز جرد مخزون',
+            'تخفيض قيمة مخزون — جرد',
+            $userId
+        );
+        $this->accountingService->updateAccountHierarchyBalances($loss->id);
+        $this->accountingService->updateAccountHierarchyBalances($inventoryAccount->id);
+    }
+
+    /**
+     * جرد فعلي — زيادة: مدين مخزون / دائن إيراد فروقات جرد.
+     */
+    public function postPhysicalCountGain(float $amount, TreeAccount $inventoryAccount, string $description, ?int $userId = null): void
+    {
+        if ($amount <= 0.00001) {
+            return;
+        }
+        $gain = $this->resolveAdjustmentGainAccount();
+        if (! $gain) {
+            return;
+        }
+
+        $this->postTwoLineDailyEntry(
+            $description,
+            $inventoryAccount->id,
+            $amount,
+            0,
+            $gain->id,
+            0,
+            $amount,
+            'زيادة جرد مخزون',
+            'زيادة قيمة مخزون — جرد',
+            $userId
+        );
+        $this->accountingService->updateAccountHierarchyBalances($inventoryAccount->id);
+        $this->accountingService->updateAccountHierarchyBalances($gain->id);
+    }
+
+    /**
      * مرتجع بيع (إرجاع بضاعة للمخزون): من حـ المخزون / إلى حـ تكلفة المبيعات (عكس COGS).
      */
     public function postSalesReturnInventoryRestore(float $cogsAmount, string $description, ?int $userId = null): void
@@ -151,25 +210,171 @@ class InventoryGlPostingService
             return;
         }
         $inventory = TreeAccount::resolveInventoryAccount();
-        $cogs = TreeAccount::resolveCogsAccount();
-        if (!$inventory || !$cogs) {
+        if (! $inventory) {
             return;
         }
 
-        $this->postTwoLineDailyEntry(
+        $this->postSalesReturnInventoryRestoreByWarehouse(
+            [$inventory->id => $cogsAmount],
             $description,
-            $inventory->id,
-            $cogsAmount,
-            0,
-            $cogs->id,
-            0,
-            $cogsAmount,
-            'إرجاع مخزون — مرتجع مبيعات',
-            'عكس تكلفة البضاعة المباعة',
             $userId
         );
-        $this->accountingService->updateAccountHierarchyBalances($inventory->id);
-        $this->accountingService->updateAccountHierarchyBalances($cogs->id);
+    }
+
+    /**
+     * مرتجع بيع — مدين عدة حسابات مخزون / دائن تكلفة المبيعات (قيد واحد متوازن).
+     *
+     * @param  array<int, float>  $inventoryDebitAmountsByTreeAccountId
+     */
+    public function postSalesReturnInventoryRestoreByWarehouse(array $inventoryDebitAmountsByTreeAccountId, string $description, ?int $userId = null): void
+    {
+        $cogs = TreeAccount::resolveCogsAccount();
+        if (! $cogs) {
+            return;
+        }
+
+        $clean = [];
+        foreach ($inventoryDebitAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $sumDr = array_sum($clean);
+        if ($sumDr <= 0.00001) {
+            return;
+        }
+
+        $lines = [];
+        foreach ($clean as $accId => $amt) {
+            $lines[] = [
+                'id' => $accId,
+                'debit' => $amt,
+                'credit' => 0.0,
+                'note' => 'إرجاع مخزون — مرتجع مبيعات',
+            ];
+        }
+        $lines[] = [
+            'id' => $cogs->id,
+            'debit' => 0.0,
+            'credit' => $sumDr,
+            'note' => 'عكس تكلفة البضاعة المباعة',
+        ];
+
+        $this->postBalancedJournal($description, $lines, $userId);
+
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances($ln['id']);
+        }
+    }
+
+    /**
+     * شحن بضاعة: مدين تكلفة المبيعات / دائن حسابات مخزون حسب مخزن كل صنف (AccountEntry فقط — نفس مسار الشحن الحالي).
+     *
+     * @param  array<int, float>  $inventoryCreditAmountsByTreeAccountId
+     */
+    public function postCogsShipment(float $totalCogs, array $inventoryCreditAmountsByTreeAccountId, string $description): void
+    {
+        if ($totalCogs <= 0.00001) {
+            return;
+        }
+
+        $cogsAcc = TreeAccount::resolveCogsAccount();
+        if (! $cogsAcc) {
+            return;
+        }
+
+        $clean = [];
+        foreach ($inventoryCreditAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $sumCr = array_sum($clean);
+        if ($sumCr <= 0.00001) {
+            $fallback = TreeAccount::resolveInventoryAccount();
+            if (! $fallback) {
+                return;
+            }
+            $clean = [$fallback->id => $totalCogs];
+        } elseif (count($clean) > 0 && abs($sumCr - $totalCogs) > 0.00001) {
+            $k = array_key_first($clean);
+
+            $clean[$k] = ($clean[$k] ?? 0) + ($totalCogs - $sumCr);
+        }
+
+        AccountEntry::create([
+            'tree_account_id' => $cogsAcc->id,
+            'debit' => $totalCogs,
+            'credit' => 0,
+            'description' => $description,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        foreach ($clean as $accId => $amt) {
+            if ($amt <= 0.00001) {
+                continue;
+            }
+            AccountEntry::create([
+                'tree_account_id' => $accId,
+                'debit' => 0,
+                'credit' => $amt,
+                'description' => $description,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            try {
+                $this->accountingService->updateAccountHierarchyBalances((int) $accId);
+            } catch (\Throwable $e) {
+                // تجاهل — نفس سلوك ship_order السابق
+            }
+        }
+
+        try {
+            $this->accountingService->updateAccountHierarchyBalances($cogsAcc->id);
+        } catch (\Throwable $e) {
+            // تجاهل
+        }
+    }
+
+    /**
+     * حساب عجز الجرد المخصص، أو أول حساب مصروف تفصيلي كبديل حتى يظهر التأثير في الحسابات.
+     */
+    private function resolveAdjustmentLossAccount(): ?TreeAccount
+    {
+        $loss = TreeAccount::resolveInventoryAdjustmentLossAccount();
+        if ($loss) {
+            return $loss;
+        }
+
+        return TreeAccount::query()
+            ->where('type', 'expense')
+            ->whereDoesntHave('children')
+            ->orderBy('code')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * حساب زيادة الجرد المخصص، أو أول حساب إيراد تفصيلي كبديل.
+     */
+    private function resolveAdjustmentGainAccount(): ?TreeAccount
+    {
+        $gain = TreeAccount::resolveInventoryAdjustmentGainAccount();
+        if ($gain) {
+            return $gain;
+        }
+
+        return TreeAccount::query()
+            ->where('type', 'revenue')
+            ->whereDoesntHave('children')
+            ->orderBy('code')
+            ->orderBy('id')
+            ->first();
     }
 
     private function ensureSupplierTreeAccountId(Supplier $supplier): ?int
@@ -278,25 +483,62 @@ class InventoryGlPostingService
             return;
         }
 
-        $inventory = TreeAccount::resolveInventoryAccount();
-        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
-        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
-        if (!$inventory || !$supplierAccId) {
+        $byAcc = [];
+        if ($inventoryAmount > 0.00001) {
+            $inventory = TreeAccount::resolveInventoryAccount();
+            if (! $inventory) {
+                return;
+            }
+            $byAcc[$inventory->id] = $inventoryAmount;
+        }
+
+        $this->postPurchaseReceiptSplitByAccounts($byAcc, $freightInAmount, $supplier, $description, $userId);
+    }
+
+    /**
+     * استلام مشتريات — مدين عدة حسابات مخزون حسب المخازن / شحن منفصل / دائن مورد.
+     *
+     * @param  array<int, float>  $inventoryDebitAmountsByTreeAccountId
+     */
+    public function postPurchaseReceiptSplitByAccounts(
+        array $inventoryDebitAmountsByTreeAccountId,
+        float $freightInAmount,
+        Supplier $supplier,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $freightInAmount = max(0, $freightInAmount);
+        $clean = [];
+        foreach ($inventoryDebitAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $inventoryTotal = array_sum($clean);
+        if ($inventoryTotal <= 0.00001 && $freightInAmount <= 0.00001) {
             return;
         }
 
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (! $supplierAccId) {
+            return;
+        }
+
+        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
         if ($freightInAmount > 0.00001 && ! $freightIn) {
             $freightIn = TreeAccount::ensureFreightInExpenseAccount();
         }
 
         $lines = [];
-        if ($inventoryAmount > 0.00001) {
-            $lines[] = ['id' => $inventory->id, 'debit' => $inventoryAmount, 'credit' => 0.0, 'note' => 'استلام مخزون — تكلفة بضاعة فقط'];
+        foreach ($clean as $accId => $amt) {
+            $lines[] = ['id' => $accId, 'debit' => $amt, 'credit' => 0.0, 'note' => 'استلام مخزون — تكلفة بضاعة فقط'];
         }
-        if ($freightInAmount > 0.00001) {
+        if ($freightInAmount > 0.00001 && $freightIn) {
             $lines[] = ['id' => $freightIn->id, 'debit' => $freightInAmount, 'credit' => 0.0, 'note' => 'شحن مشتريات (منفصل عن المخزون)'];
         }
-        $total = $inventoryAmount + $freightInAmount;
+        $total = $inventoryTotal + $freightInAmount;
         $lines[] = ['id' => $supplierAccId, 'debit' => 0.0, 'credit' => $total, 'note' => 'ذمة مورد — إجمالي الفاتورة'];
 
         $this->postBalancedJournal($description, $lines, $userId);
@@ -319,21 +561,59 @@ class InventoryGlPostingService
             return;
         }
 
-        $inventory = TreeAccount::resolveInventoryAccount();
-        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
-        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
-        if (!$inventory || !$supplierAccId) {
+        $byAcc = [];
+        if ($inventoryAmount > 0.00001) {
+            $inventory = TreeAccount::resolveInventoryAccount();
+            if (! $inventory) {
+                return;
+            }
+            $byAcc[$inventory->id] = $inventoryAmount;
+        }
+
+        $this->reversePurchaseReceiptSplitByAccounts($byAcc, $freightInAmount, $supplier, $description, $userId);
+    }
+
+    /**
+     * عكس استلام مشتريات — دائن حسابات مخزون متعددة.
+     *
+     * @param  array<int, float>  $inventoryCreditAmountsByTreeAccountId
+     */
+    public function reversePurchaseReceiptSplitByAccounts(
+        array $inventoryCreditAmountsByTreeAccountId,
+        float $freightInAmount,
+        Supplier $supplier,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $freightInAmount = max(0, $freightInAmount);
+        $clean = [];
+        foreach ($inventoryCreditAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $inventoryTotal = array_sum($clean);
+        if ($inventoryTotal <= 0.00001 && $freightInAmount <= 0.00001) {
             return;
         }
 
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (! $supplierAccId) {
+            return;
+        }
+
+        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
+
         $lines = [];
-        if ($inventoryAmount > 0.00001) {
-            $lines[] = ['id' => $inventory->id, 'debit' => 0.0, 'credit' => $inventoryAmount, 'note' => 'عكس استلام مخزون'];
+        foreach ($clean as $accId => $amt) {
+            $lines[] = ['id' => $accId, 'debit' => 0.0, 'credit' => $amt, 'note' => 'عكس استلام مخزون'];
         }
         if ($freightInAmount > 0.00001 && $freightIn) {
             $lines[] = ['id' => $freightIn->id, 'debit' => 0.0, 'credit' => $freightInAmount, 'note' => 'عكس شحن مشتريات'];
         }
-        $total = $inventoryAmount + $freightInAmount;
+        $total = $inventoryTotal + $freightInAmount;
         $lines[] = ['id' => $supplierAccId, 'debit' => $total, 'credit' => 0.0, 'note' => 'تخفيض ذمة مورد'];
 
         $this->postBalancedJournal($description, $lines, $userId);

@@ -7,8 +7,8 @@
       <div><p class="title header w-50 m-auto">المصروفات
       </p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+    <div class="col-3 d-flex align-items-center justify-content-end gap-2">
+      <a routerLink="/dashboard/financial/addexpense" class="btn btn-add text-decoration-none text-black">إضافة مصروف</a>
     </div>
   </div>
 
@@ -33,25 +33,36 @@
     </form>
 
 
-    <table class="table w-75 m-auto text-center">
+    <div class="table-responsive">
+    <table class="table table-expenses w-100 m-auto text-center table-bordered align-middle">
       <thead class="bg-dark text-white">
         <th>رقم المصروف</th>
+        <th>التاريخ</th>
+        <th>مكان الدفع</th>
+        <th>مصدر الدفع</th>
         <th>نوع المصروف</th>
         <th>فئة المصروف</th>
+        <th>بيان المصروف</th>
         <th>المبلغ</th>
-        <th>الخزينة </th>
-        <th>التاريخ</th>
+        <th>حساب المصروف <span class="fw-normal text-white-50">(مدين)</span></th>
+        <th>حساب مصدر الدفع <span class="fw-normal text-white-50">(دائن)</span></th>
+        <th>ملاحظات</th>
         <th>-</th>
       </thead>
       <tbody>
         <ng-container *ngFor="let elm of data" >
           <tr *ngIf="elm?.status != 1" [class]="status(elm.status)">
             <td>{{elm.expense_number}}</td>
+            <td>{{elm.created_at}}</td>
+            <td>{{ paymentPlaceLabel(elm) }}</td>
+            <td>{{ paymentSourceName(elm) }}</td>
             <td>{{elm.expense_type}}</td>
             <td>{{elm?.kind?.expense_kind}}</td>
+            <td class="text-start">{{ elm.expens_statement }}</td>
             <td dir="ltr">{{elm.amount | customNumber}}</td>
-            <td>{{elm.bank.name}}</td>
-            <td>{{elm.created_at}}</td>
+            <td class="text-start small text-muted">{{ treeAccountLine(elm.debit_tree_account) }}</td>
+            <td class="text-start small text-muted">{{ treeAccountLine(creditTreeFromRow(elm)) }}</td>
+            <td class="text-start small">{{ truncateNote(elm.note) }}</td>
             <td>
               <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
                 <mat-icon>more_vert</mat-icon>
@@ -72,6 +83,7 @@
         </ng-container>
       </tbody>
     </table>
+    </div>
 
     <div class="container mt-4">
       <mat-paginator #paginator

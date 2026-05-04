@@ -1,9 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { EmployeeService } from '../services/employee.service';
 import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
+import { environment } from 'src/env/env';
 
 @Component({
   selector: 'app-payroll',
@@ -27,8 +29,15 @@ export class PayrollComponent implements OnInit{
   total_merit:number = 0;
   total_subtraction:number = 0;
   banks :any = [];
+  /** مصادر الصرف من وحدة الحسابات (خزائن، بنوك، حسابات خدمية) */
+  paymentSourcesBundle: { safes: any[]; banks: any[]; service_accounts: any[] } | null = null;
 
-  constructor(private empService:EmployeeService , private authService:AuthService , private bankService:BanksService){
+  constructor(
+    private empService: EmployeeService,
+    private authService: AuthService,
+    private bankService: BanksService,
+    private http: HttpClient,
+  ){
     this.user = this.authService.getUser();
     const today = new Date();
     // Get previous month as default
@@ -45,6 +54,10 @@ export class PayrollComponent implements OnInit{
 
   ngOnInit(): void {
     this.bankService.bankSelect().subscribe(res=>this.banks=res);
+    this.http.get<{ safes: any[]; banks: any[]; service_accounts: any[] }>(`${environment.Url}/accounting/payment-sources`).subscribe({
+      next: (res) => { this.paymentSourcesBundle = res; },
+      error: () => { this.paymentSourcesBundle = null; },
+    });
     this.search(arguments);
   }
 
@@ -96,107 +109,9 @@ export class PayrollComponent implements OnInit{
 
     this.empService.EmployeesPerMonth(this.pageSize,this.page+1,this.month ,this.year,this.param).subscribe((result:any)=>{
       this.data = [];
-      result.data.forEach(elm=>{
-        let obj = {};
-        if (elm.salary_paid.length == 1) {
-          obj['salary_paid'] = true;
-        } else {
-          obj['salary_paid'] = false;
-        }
-        obj['name'] = elm.name;
-        obj['id'] = elm.id;
-        obj['code'] = elm.code;
-        obj['level'] = elm.level;
-        //استحقاقات
-        obj['fixed_salary'] = elm.fixed_salary;
-        obj['calc_salary'] = elm.fixed_salary;
-        obj['incentives'] = 0;
-        obj['suits'] = 0;
-        obj['rewards'] = 0;
-        obj['changed_salary'] = 0;
-        //استقطاعات
-        obj['rival'] = 0;
-        obj['absence'] = 0;
-        obj['absence_sub'] = 0;
-        obj['advance_payment'] = 0;
-        if (elm.merits.length > 0) {
-          let incentives = 0;
-          let suits = 0;
-          let rewards = 0;
-          let changed_salary = 0;
-          elm.merits.forEach(item=>{
-            if (item.type == "حوافز") {
-              incentives+=item.amount;
-            }
-            if (item.type == "بدلات") {
-              suits+=item.amount;
-            }
-            if (item.type == "مكافئات") {
-              rewards+=item.amount;
-            }
-            if (item.type == "الراتب المتغير") {
-              changed_salary+=item.amount;
-              obj['calc_salary'] = obj['calc_salary']+=item.amount;
-            }
-
-          })
-          obj['incentives'] = incentives;
-          obj['suits'] = suits;
-          obj['rewards'] = rewards;
-          obj['changed_salary'] = changed_salary;
-        }
-        if (elm.subtraction.length > 0) {
-          let rival = 0;
-          let absence = 0;
-          let absence_sub = 0;
-          elm.subtraction.forEach(item=>{
-            if (item.type == "خصومات") {
-              rival+=item.amount;
-            }
-            if (item.type == "غياب") {
-              absence+=item.amount;
-              absence_sub += Number( ((obj['fixed_salary']/30)*item.amount).toFixed(2));
-            }
-          })
-          obj['rival'] = rival;
-          obj['absence'] = absence;
-          obj['absence_sub'] = absence_sub;
-        }
-
-        obj['extraHours'] = 0;
-        obj['noFingerPrints'] = false; // Flag to indicate no fingerprints in month
-        if (elm.finger_print.length > 0) {
-          let fingerSheet = this.fingerSheet(elm);
-          if (fingerSheet.calcSalary.differnceSalary <= 0) {
-            obj['absence_sub'] = Math.abs(fingerSheet.calcSalary.differnceSalary);
-          } else {
-            obj['extraHours'] = fingerSheet.calcSalary.differnceSalary;
-          }
-          obj['isReviewed'] = fingerSheet.reviewed;
-          obj['absenceDetails'] = fingerSheet.absenceDetails;
-          if (obj['absenceDetails'].absenceDaysCount) {
-            obj['absence'] = obj['absenceDetails'].absenceDaysCount;
-          }
-        } else {
-          obj['noFingerPrints'] = true; // No fingerprints for this month
-          obj['absenceDetails'] = {}; // Empty details
-        }
-
-        if (elm.advance_payment.length > 0) {
-          let advance_payment = 0;
-          elm.advance_payment.forEach(item=>{
-            if (item.type == "سلف") {
-              advance_payment+=item.amount;
-            }
-          })
-          obj['advance_payment'] = advance_payment;
-        }
-        obj['total_merit'] = obj['calc_salary']+ obj['incentives']+obj['suits'] +obj['rewards'] + obj['extraHours'];
-        obj['total_sub'] = Number((obj['rival']+ obj['absence_sub']+obj['advance_payment']).toFixed(2));
-        obj['net_total'] = Math.ceil((obj['total_merit'] - obj['total_sub']) / 5) * 5;
-        this.data.push(obj);
-
-      })
+      result.data.forEach((elm: any) => {
+        this.data.push(this.mapEmployeeMonthRow(elm));
+      });
       this.total_merit = this.data.reduce((acc, item) => acc + item.total_merit, 0);
       this.total_subtraction = this.data.reduce((acc, item) => acc + item.total_sub, 0);
       this.length=result.total;
@@ -212,6 +127,105 @@ export class PayrollComponent implements OnInit{
     this.month = month;
     this.year = +year;
     this.search(arguments);
+  }
+
+  /** تحويل سجل موظف من الـ API إلى صف الجدول (يُعاد استخدامه للصرف الجماعي) */
+  mapEmployeeMonthRow(elm: any): any {
+    const obj: any = {};
+    if (elm.salary_paid.length == 1) {
+      obj['salary_paid'] = true;
+    } else {
+      obj['salary_paid'] = false;
+    }
+    obj['name'] = elm.name;
+    obj['id'] = elm.id;
+    obj['code'] = elm.code;
+    obj['level'] = elm.level;
+    obj['fixed_salary'] = elm.fixed_salary;
+    obj['calc_salary'] = elm.fixed_salary;
+    obj['incentives'] = 0;
+    obj['suits'] = 0;
+    obj['rewards'] = 0;
+    obj['changed_salary'] = 0;
+    obj['rival'] = 0;
+    obj['absence'] = 0;
+    obj['absence_sub'] = 0;
+    obj['advance_payment'] = 0;
+    if (elm.merits.length > 0) {
+      let incentives = 0;
+      let suits = 0;
+      let rewards = 0;
+      let changed_salary = 0;
+      elm.merits.forEach((item: any) => {
+        if (item.type == "حوافز") {
+          incentives += item.amount;
+        }
+        if (item.type == "بدلات") {
+          suits += item.amount;
+        }
+        if (item.type == "مكافئات") {
+          rewards += item.amount;
+        }
+        if (item.type == "الراتب المتغير") {
+          changed_salary += item.amount;
+          obj['calc_salary'] = obj['calc_salary'] += item.amount;
+        }
+      });
+      obj['incentives'] = incentives;
+      obj['suits'] = suits;
+      obj['rewards'] = rewards;
+      obj['changed_salary'] = changed_salary;
+    }
+    if (elm.subtraction.length > 0) {
+      let rival = 0;
+      let absence = 0;
+      let absence_sub = 0;
+      elm.subtraction.forEach((item: any) => {
+        if (item.type == "خصومات") {
+          rival += item.amount;
+        }
+        if (item.type == "غياب") {
+          absence += item.amount;
+          absence_sub += Number(((obj['fixed_salary'] / 30) * item.amount).toFixed(2));
+        }
+      });
+      obj['rival'] = rival;
+      obj['absence'] = absence;
+      obj['absence_sub'] = absence_sub;
+    }
+
+    obj['extraHours'] = 0;
+    obj['noFingerPrints'] = false;
+    if (elm.finger_print.length > 0) {
+      const fingerSheet = this.fingerSheet(elm);
+      if (fingerSheet.calcSalary.differnceSalary <= 0) {
+        obj['absence_sub'] = Math.abs(fingerSheet.calcSalary.differnceSalary);
+      } else {
+        obj['extraHours'] = fingerSheet.calcSalary.differnceSalary;
+      }
+      obj['isReviewed'] = fingerSheet.reviewed;
+      obj['absenceDetails'] = fingerSheet.absenceDetails;
+      if (obj['absenceDetails'].absenceDaysCount) {
+        obj['absence'] = obj['absenceDetails'].absenceDaysCount;
+      }
+    } else {
+      obj['noFingerPrints'] = true;
+      obj['absenceDetails'] = {};
+    }
+
+    if (elm.advance_payment.length > 0) {
+      let advance_payment = 0;
+      elm.advance_payment.forEach((item: any) => {
+        if (item.type == "سلف") {
+          advance_payment += item.amount;
+        }
+      });
+      obj['advance_payment'] = advance_payment;
+    }
+    obj['total_merit'] = obj['calc_salary'] + obj['incentives'] + obj['suits'] + obj['rewards'] + obj['extraHours'];
+    obj['total_sub'] = Number((obj['rival'] + obj['absence_sub'] + obj['advance_payment']).toFixed(2));
+    obj['net_total'] = Math.ceil((obj['total_merit'] - obj['total_sub']) / 5) * 5;
+    return obj;
   }
 
 
@@ -388,78 +402,193 @@ export class PayrollComponent implements OnInit{
     }
   }
 
-  salaryCashing(e){
-    if (e.isReviewed == 0) {
-      Swal.fire({
-        icon:'error',
-        title: 'يرجي مراجعة كشف الحضور والانصراف',
-      })
+  private fillPaySourceIdSelect(typeSelect: HTMLSelectElement, idSelect: HTMLSelectElement): void {
+    const t = typeSelect.value;
+    const bundle = this.paymentSourcesBundle;
+    idSelect.innerHTML = '';
+    if (!bundle) {
       return;
     }
-    this.search(arguments);
-    const banks = this.banks;
-    let selectedBank;
-    const bankSelectOptions = banks.reduce((options, bank) => {
-      options[bank.id] = bank.name;
-      if (bank.name == 'خزينة المصنع') {
-        selectedBank = bank.id;
-      }
-      return options;
-    }, {});
+    const list = t === 'safe' ? bundle.safes : t === 'bank' ? bundle.banks : bundle.service_accounts;
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = '— اختر —';
+    idSelect.appendChild(opt0);
+    (list || []).forEach((row: any) => {
+      const o = document.createElement('option');
+      o.value = String(row.id);
+      const bal = row.balance != null ? Number(row.balance).toFixed(2) : '';
+      o.textContent = bal ? `${row.name} (رصيد: ${bal})` : row.name;
+      idSelect.appendChild(o);
+    });
+  }
 
-    Swal.fire({
-      title: `صرف مرتب ${e.name} عن شهر ${this.currentMonthValue}`,
-      input: 'select',
-      inputOptions: bankSelectOptions,
-      inputPlaceholder: 'اختر الخزينة',
-      inputValue: selectedBank,
+  private async promptPayrollDisbursementSource(title: string): Promise<{ source_type: string; source_id: number } | null> {
+    if (!this.paymentSourcesBundle) {
+      await Swal.fire({ icon: 'error', title: 'تعذر تحميل مصادر الصرف', text: 'تحقق من الاتصال ووحدة الحسابات (خزائن/بنوك/حسابات خدمية).' });
+      return null;
+    }
+    const html = `
+      <div class="text-end" style="direction:rtl;max-width:420px;margin:0 auto;">
+        <label class="d-block mb-1 small text-muted">نوع المصدر</label>
+        <select id="pay-src-type" class="swal2-input form-control mb-2">
+          <option value="safe">خزينة</option>
+          <option value="bank">بنك</option>
+          <option value="service_account">حساب خدمي</option>
+        </select>
+        <label class="d-block mb-1 small text-muted">المصدر (من شجرة الحسابات)</label>
+        <select id="pay-src-id" class="swal2-input form-control"></select>
+      </div>`;
+
+    const result = await Swal.fire({
+      title,
+      html,
       showCancelButton: true,
       confirmButtonText: 'تأكيد',
       cancelButtonText: 'إلغاء',
-      customClass: {
-        input: 'text-center'
-      }
-    }).then((bankResult) => {
-      if (bankResult.isConfirmed) {
-        let emp = this.data.find(elm => elm.id == e.id);
-        const selectedBankId = bankResult.value;
-        if (selectedBankId) {
-          let data = {
-            employee_id: e.id,
-            month: this.month,
-            year: this.year,
-            amount: emp.net_total,
-            bank_id: selectedBankId,
-          }
-          this.empService.addSalaryPayment(data).subscribe(result=>{
-            console.log(result);
-            if (result) {
-              Swal.fire({
-                icon : 'success',
-                timer:1500,
-                showConfirmButton:false,
-              }).then(result=>{
-                this.search(arguments);
-              });
-            }
-          },
-          (error)=>{
-            Swal.fire({
-              icon : 'error',
-              title: error.error.message,
-              timer:1500,
-              showConfirmButton:false,
-            })
-          });
-        } else{
-          Swal.fire({
-            icon:'error',
-            title: 'اختر الخزينة',
-          }).then(res=>{
-            this.salaryCashing(e);
-          })
+      didOpen: () => {
+        const ts = document.getElementById('pay-src-type') as HTMLSelectElement;
+        const ids = document.getElementById('pay-src-id') as HTMLSelectElement;
+        this.fillPaySourceIdSelect(ts, ids);
+        ts.addEventListener('change', () => this.fillPaySourceIdSelect(ts, ids));
+      },
+      preConfirm: () => {
+        const ts = document.getElementById('pay-src-type') as HTMLSelectElement;
+        const ids = document.getElementById('pay-src-id') as HTMLSelectElement;
+        if (!ids.value) {
+          Swal.showValidationMessage('اختر المصدر');
+          return false;
         }
-      }
+        return { source_type: ts.value, source_id: parseInt(ids.value, 10) };
+      },
+    });
+
+    if (result.isConfirmed && result.value) {
+      return result.value as { source_type: string; source_id: number };
+    }
+    return null;
+  }
+
+  async salaryCashing(e: any) {
+    if (e.isReviewed == 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'يرجي مراجعة كشف الحضور والانصراف',
+      });
+      return;
+    }
+    const emp = this.data.find((elm: any) => elm.id == e.id);
+    if (!emp) {
+      await Swal.fire({ icon: 'error', title: 'لم يُعثر على بيانات الموظف في الصفحة الحالية' });
+      return;
+    }
+
+    const src = await this.promptPayrollDisbursementSource(`صرف مرتب ${e.name} عن شهر ${this.currentMonthValue}`);
+    if (!src) {
+      return;
+    }
+
+    const data = {
+      employee_id: e.id,
+      month: this.month,
+      year: this.year,
+      amount: emp.net_total,
+      source_type: src.source_type,
+      source_id: src.source_id,
+    };
+
+    this.empService.addSalaryPayment(data).subscribe({
+      next: () => {
+        Swal.fire({
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false,
+        }).then(() => {
+          this.search(arguments);
+        });
+      },
+      error: (error) => {
+        Swal.fire({
+          icon: 'error',
+          title: error.error?.message || 'خطأ',
+          timer: 2500,
+          showConfirmButton: false,
+        });
+      },
+    });
+  }
+
+  async bulkSalaryDisbursement() {
+    if (!this.paymentSourcesBundle) {
+      await Swal.fire({ icon: 'error', title: 'تعذر تحميل مصادر الصرف من الحسابات' });
+      return;
+    }
+
+    this.empService.EmployeesPerMonth(5000, 1, this.month, this.year, this.param).subscribe({
+      next: async (result: any) => {
+        const rows = (result.data || []).map((elm: any) => this.mapEmployeeMonthRow(elm));
+        const eligible = rows.filter(
+          (r: any) => !r.salary_paid && r.isReviewed != 0 && r.net_total > 0,
+        );
+        if (eligible.length === 0) {
+          await Swal.fire({
+            icon: 'info',
+            title: 'لا يوجد موظفون للصرف',
+            text: 'تأكد من المراجعة وأن الراتب غير مسدد وأن المحصلة أكبر من صفر.',
+          });
+          return;
+        }
+
+        const sum = eligible.reduce((acc: number, r: any) => acc + r.net_total, 0);
+        const confirmBulk = await Swal.fire({
+          title: 'صرف جماعي',
+          html: `<div class="text-end" style="direction:rtl">سيتم صرف مرتبات <strong>${eligible.length}</strong> موظفاً بإجمالي <strong>${sum.toFixed(2)}</strong> عن شهر ${this.currentMonthValue}.</div>`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'متابعة اختيار المصدر',
+          cancelButtonText: 'إلغاء',
+        });
+        if (!confirmBulk.isConfirmed) {
+          return;
+        }
+
+        const src = await this.promptPayrollDisbursementSource(
+          `اختر مصدر الصرف — ${eligible.length} موظف — شهر ${this.currentMonthValue}`,
+        );
+        if (!src) {
+          return;
+        }
+
+        const payments = eligible.map((r: any) => ({ employee_id: r.id, amount: r.net_total }));
+        this.empService
+          .bulkSalaryPayment({
+            month: Number(this.month),
+            year: Number(this.year),
+            source_type: src.source_type,
+            source_id: src.source_id,
+            payments,
+          })
+          .subscribe({
+            next: (res: any) => {
+              Swal.fire({
+                icon: 'success',
+                title: `تم صرف ${res.count ?? eligible.length} مرتب`,
+                timer: 2000,
+                showConfirmButton: false,
+              }).then(() => this.search(arguments));
+            },
+            error: (error) => {
+              Swal.fire({
+                icon: 'error',
+                title: error.error?.message || 'فشل الصرف الجماعي',
+                showConfirmButton: true,
+              });
+            },
+          });
+      },
+      error: async () => {
+        await Swal.fire({ icon: 'error', title: 'تعذر تحميل قائمة الموظفين' });
+      },
     });
   }
 

@@ -131,29 +131,51 @@ export class AddCategoryComponent implements OnInit {
  }
  getProduction() {
   this.production.getProductions().subscribe((data: any) => {
-   // this.productionData = data;
-   this.productionData = data.filter((item) => {
-    if (item.warehouse == this.warehouse)
-     return item;
-   })
-   console.log(this.productionData)
+   this.productionData = data.filter((item) => item.warehouse == this.warehouse);
+   this.syncSelectModel('production', this.productionData, 'id');
   })
  }
 
  getUnits() {
   this.units.getUnits().subscribe((data: any) => {
-   this.unitsData = data.filter((item) => {
-    if (item.warehouse == this.warehouse)
-     return item;
-   })
+   this.unitsData = data.filter((item) => item.warehouse == this.warehouse);
+   this.syncSelectModel('unit', this.unitsData, 'id');
   })
  }
 
  onWarehouseChange(event: any) {
   this.warehouse = event.target.value;
+  this.unitsData = [];
+  this.productionData = [];
+  const form = this.addCat?.form;
+  if (form) {
+   form.controls['unit']?.setValue('');
+   form.controls['production']?.setValue('');
+  }
   this.getProduction();
   this.getUnits();
-  // console.log(event.target.value);
+ }
+
+ /**
+  * بعد تعبئة خيارات السيلكت من السيرفر، المتصفح قد يُظهر أول خيار بدون أن يُحدَّث ngModel،
+  * فيبقى required فاشل. نضبط القيمة صراحةً بعد رسم الخيارات.
+  */
+ private syncSelectModel(controlName: 'unit' | 'production', rows: any[] | undefined, idKey: string) {
+  setTimeout(() => {
+   const form = this.addCat?.form;
+   const ctrl = form?.controls[controlName];
+   if (!ctrl) return;
+   if (!rows?.length) {
+    ctrl.setValue('');
+    ctrl.updateValueAndValidity();
+    return;
+   }
+   const id = rows[0][idKey];
+   const value = id != null && id !== '' ? id : '';
+   ctrl.setValue(value);
+   ctrl.markAsDirty();
+   ctrl.updateValueAndValidity();
+  });
  }
 
 

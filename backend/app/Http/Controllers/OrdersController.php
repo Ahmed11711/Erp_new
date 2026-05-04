@@ -8,6 +8,7 @@ use App\Models\Note;
 use App\Models\User;
 use App\Models\Order;
 use App\Models\Category;
+use App\Models\Item;
 use App\Models\tracking;
 use App\Models\Notification;
 use App\Models\OrderDetails;
@@ -32,11 +33,32 @@ use App\Services\Accounting\AccountLinkingService;
 use App\Services\Accounting\LedgerJournalService;
 use App\Services\Accounting\ShippingCourierAccountingService;
 use App\Services\CategoryInventoryCostService;
+use App\Enums\InventoryMovementType;
+use App\Services\Inventory\InventoryMovementLedgerService;
+use App\Services\Shipping\ShippingReceivableSplitService;
 
 class OrdersController extends Controller
 {
     /** أنواع الطلبات التي تُنقص المخزون عبر category_procedure وتُثبت COGS/الإيراد كمسار «جديد». */
     private const ORDER_TYPES_INVENTORY_SHIP = ['جديد', 'طلب استبدال'];
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    private function rejectIfOrderContainsBlockedSemiFinished(array $rows): ?\Illuminate\Http\JsonResponse
+    {
+        foreach ($rows as $od) {
+            $lineItem = Item::query()->find((int) ($od['category_id'] ?? 0));
+            if ($lineItem && ! $lineItem->canSellOnSalesChannel()) {
+                return response()->json([
+                    'message' => 'لا يمكن بيع صنف تحت التشغيل (WIP) في قناة المبيعات ما لم يُفعّل خيار السماح بالبيع لهذا الصنف: '
+                        . $lineItem->category_name,
+                ], 422);
+            }
+        }
+
+        return null;
+    }
 
     public function index()
     {
@@ -204,6 +226,12 @@ class OrdersController extends Controller
 
             $order_products = $request->order_details;
             $order_products = json_decode($order_products, true);
+
+            if ($blocked = $this->rejectIfOrderContainsBlockedSemiFinished($order_products)) {
+                DB::rollBack();
+
+                return $blocked;
+            }
 
             $insertData = [];
             foreach ($order_products as $od) {
@@ -390,6 +418,13 @@ class OrdersController extends Controller
 
             $order_details = $request->order_details;
             $order_details = json_decode($order_details, true);
+
+            if ($blocked = $this->rejectIfOrderContainsBlockedSemiFinished($order_details)) {
+                DB::rollBack();
+
+                return $blocked;
+            }
+
             foreach ($order_details as $od) {
                 $newOrderProduct = OrderProduct::create(
                     [
@@ -431,11 +466,32 @@ class OrdersController extends Controller
             }
 
             if ($orderStatus == 'تم شحن') {
-                $shippingCompanyDetails = ShippingCompanyDetails::where('order_id', $orderID)->where('status', 'تم شحن')->where('is_done', 0)->first();
-                $shippingCompanyDetails->old_amount = $shippingCompanyDetails->amount;
-                $shippingCompanyDetails->amount = doubleval($request->net_total);
-                $shippingCompanyDetails->update();
-                ShippingCompany::find($shippingCompanyDetails->shipping_company_id)->increment('balance', -$shippingCompanyDetails->old_amount + $request->net_total);
+                $shippingRows = ShippingCompanyDetails::where('order_id', $orderID)->where('status', 'تم شحن')->where('is_done', 0)->get();
+                if ($shippingRows->isEmpty()) {
+                    throw new \RuntimeException('لا توجد بيانات شحن مفتوحة لهذا الطلب');
+                }
+                $sumOld = (float) $shippingRows->sum('amount');
+                $newTotal = (double) $request->net_total;
+                $allocated = 0.0;
+                $i = 0;
+                $count = $shippingRows->count();
+                foreach ($shippingRows as $row) {
+                    ++$i;
+                    $old = (float) $row->amount;
+                    $share = $count === 1
+                        ? $newTotal
+                        : ($sumOld > 0.0001
+                            ? round($newTotal * ($old / $sumOld), 3)
+                            : round($newTotal / $count, 3));
+                    if ($i === $count) {
+                        $share = round($newTotal - $allocated, 3);
+                    }
+                    $allocated = round($allocated + $share, 3);
+                    $row->old_amount = $old;
+                    $row->amount = $share;
+                    $row->update();
+                    ShippingCompany::find($row->shipping_company_id)->increment('balance', -$old + $share);
+                }
                 Order::where('id', $id)->update([
                     'collect_note' => $request->changed_collect_note
                 ]);
@@ -482,27 +538,32 @@ class OrdersController extends Controller
             }
 
             if ($order->order_status == 'تم شحن') {
+                $shippingRows = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->orderBy('id')->get();
+                if ($shippingRows->isEmpty()) {
+                    throw new \RuntimeException('لا توجد بيانات شحن للطلب');
+                }
+                foreach ($shippingRows as $orderdata) {
+                    $orderdata->is_done = 1;
+                    $orderdata->save();
+
+                    $shipping_company_id = (int) $orderdata->shipping_company_id;
+                    $order_id = $id;
+                    $shipping_date = $order_details->shipping_date;
+                    $status = 'رفض استلام';
+                    $amount = (float) -$orderdata->amount;
+                    DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                        $shipping_company_id,
+                        $order_id,
+                        $shipping_date,
+                        $status,
+                        $amount,
+                        auth()->user()->name,
+                        now()
+                    ]);
+                }
+
                 $shipping_company = ShippingCompany::find($order->order_details->shipping_company_id);
-                $orderdata = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->latest()->first();
-                $orderdata->is_done = 1;
-                $orderdata->save();
-
-                $shipping_company_id = (int)$shipping_company->id;
-                $order_id = $id;
-                $shipping_date = $order_details->shipping_date;
-                $status = 'رفض استلام';
-                $amount = (float)-$orderdata->amount;
-                DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
-                    $shipping_company_id,
-                    $order_id,
-                    $shipping_date,
-                    $status,
-                    $amount,
-                    auth()->user()->name,
-                    now()
-                ]);
-
-                if ($request->bank != 'الخزينة') {
+                if ($shipping_company && $request->bank != 'الخزينة') {
                     $amount = (float)$request->amount;
                     $details = ' تحصيل من شركة شحن ' . $shipping_company->name . ' لرفض استلام طلب ';
                     $ref = $order->id;
@@ -513,15 +574,27 @@ class OrdersController extends Controller
                 if ($request->getorder == 'true') {
                     $products = OrderProduct::where('order_id', $request->id)->get();
                     $totalCogsReturn = 0;
+                    $restoreByInv = [];
                     foreach ($products as $op) {
                         if ($op->quantity > 0 && (float) $op->shipped_quantity > 0) {
                             $avgCost = CategoryInventoryCostService::resolveReferenceUnitCost((int) $op->category_id);
-                            $totalCogsReturn += $avgCost * (float) $op->shipped_quantity;
+                            $lineRet = $avgCost * (float) $op->shipped_quantity;
+                            $totalCogsReturn += $lineRet;
+                            $invAcc = \App\Models\TreeAccount::resolveInventoryAccountForCategoryId((int) $op->category_id);
+                            if ($invAcc && $lineRet > 0.000001) {
+                                $restoreByInv[$invAcc->id] = ($restoreByInv[$invAcc->id] ?? 0) + $lineRet;
+                            }
                         }
                     }
                     if ($totalCogsReturn > 0.00001) {
-                        app(InventoryGlPostingService::class)->postSalesReturnInventoryRestore(
-                            $totalCogsReturn,
+                        if (count($restoreByInv) === 0) {
+                            $fb = \App\Models\TreeAccount::resolveInventoryAccount();
+                            if ($fb) {
+                                $restoreByInv[$fb->id] = $totalCogsReturn;
+                            }
+                        }
+                        app(InventoryGlPostingService::class)->postSalesReturnInventoryRestoreByWarehouse(
+                            $restoreByInv,
                             'رفض استلام — إرجاع تكلفة للمخزون — طلب ' . $id,
                             auth()->id()
                         );
@@ -1183,21 +1256,31 @@ class OrdersController extends Controller
         $request->validate([
             'date' => 'required',
             'company_id' => 'required|numeric|exists:shipping_companies,id',
+            'collection_company_id' => 'nullable|numeric|exists:shipping_companies,id',
             'productsToShip' => 'required',
+            'shipping_receivable_amount' => 'nullable|numeric|min:0',
+            'collection_receivable_amount' => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
         try {
             $user_id = auth()->user()->id;
+            $receivableSnapshot = null;
             if (in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
                 $total = 0;
                 $finshied = true;
                 $productsToShip = json_decode($request->productsToShip, true);
                 $totalCogs = 0;
+                $cogsByInvAcc = [];
                 foreach ($productsToShip as $product) {
                     $order_product = OrderProduct::find($product['id']);
                     $avgCost = CategoryInventoryCostService::averageCostForCategoryIssue((int) $order_product->category_id);
-                    $totalCogs += $avgCost * (float)$product['quantity'];
+                    $lineCogs = $avgCost * (float) $product['quantity'];
+                    $totalCogs += $lineCogs;
+                    $invAcc = \App\Models\TreeAccount::resolveInventoryAccountForCategoryId((int) $order_product->category_id);
+                    if ($invAcc && $lineCogs > 0.000001) {
+                        $cogsByInvAcc[$invAcc->id] = ($cogsByInvAcc[$invAcc->id] ?? 0) + $lineCogs;
+                    }
                     $order_product = OrderProduct::find($product['id']);
                     $order_product->shipped_quantity += (float)$product['quantity'];
                     $order_product->save();
@@ -1232,20 +1315,16 @@ class OrdersController extends Controller
 
                 if ($finshied) {
                     if ($order->customer_type == 'افراد') {
-                        $shipping_company_id = (float)$request->company_id;
-                        $order_id = $id;
-                        $shipping_date = $request->date;
-                        $status = 'تم شحن';
-                        $amount = (float)$order->net_total;
-                        DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
-                            $shipping_company_id,
-                            $order_id,
-                            $shipping_date,
-                            $status,
-                            $amount,
-                            auth()->user()->name,
-                            now()
-                        ]);
+                        $receivableSnapshot = $this->postShippedReceivableSegments(
+                            $order,
+                            (int) $request->company_id,
+                            $request->filled('collection_company_id') ? (int) $request->collection_company_id : null,
+                            $request->filled('shipping_receivable_amount') ? (float) $request->shipping_receivable_amount : null,
+                            $request->filled('collection_receivable_amount') ? (float) $request->collection_receivable_amount : null,
+                            (string) $request->date,
+                            (int) $id,
+                            null
+                        );
                     }
 
                     if ($order->customer_type == 'شركة') {
@@ -1368,42 +1447,17 @@ class OrdersController extends Controller
                     $order->save();
                 }
                 
-                if ($totalCogs > 0) {
-                    $cogsAcc = \App\Models\TreeAccount::resolveCogsAccount();
-                    $inventoryAcc = \App\Models\TreeAccount::resolveInventoryAccount();
-                    if ($cogsAcc && $inventoryAcc) {
-                        \App\Models\AccountEntry::create([
-                            'tree_account_id' => $cogsAcc->id,
-                            'debit' => $totalCogs,
-                            'credit' => 0,
-                            'description' => 'تكلفة البضاعة المباعة للطلب رقم ' . $order->id,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                        \App\Models\AccountEntry::create([
-                            'tree_account_id' => $inventoryAcc->id,
-                            'debit' => 0,
-                            'credit' => $totalCogs,
-                            'description' => 'إثبات تكلفة البضاعة المباعة للطلب رقم ' . $order->id,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                        try {
-                            $accService = app(\App\Services\Accounting\AccountingService::class);
-                            $accService->updateAccountHierarchyBalances($cogsAcc->id);
-                            $accService->updateAccountHierarchyBalances($inventoryAcc->id);
-                        } catch (\Exception $e) {
-                            Log::warning('COGS ship_order: updateAccountHierarchyBalances failed', [
-                                'order_id' => $order->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    } else {
-                        Log::warning('COGS ship_order: missing tree accounts', [
+                if ($totalCogs > 0.000001) {
+                    try {
+                        app(InventoryGlPostingService::class)->postCogsShipment(
+                            $totalCogs,
+                            $cogsByInvAcc,
+                            'تكلفة البضاعة المباعة للطلب رقم ' . $order->id
+                        );
+                    } catch (\Throwable $e) {
+                        Log::warning('COGS ship_order: postCogsShipment failed', [
                             'order_id' => $order->id,
-                            'totalCogs' => $totalCogs,
-                            'cogs_resolved' => (bool) $cogsAcc,
-                            'inventory_resolved' => (bool) $inventoryAcc,
+                            'error' => $e->getMessage(),
                         ]);
                     }
                 }
@@ -1421,15 +1475,56 @@ class OrdersController extends Controller
                 $img->move(public_path('images'), $img_name);
             }
 
-            OrderDetails::updateOrCreate(
-                ['order_id' => $id],
-                [
+            if ($order->customer_type != 'شركة' && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
+
+                $action = 'تم شحن الطلب';
+                $this->insertTracking($order->id, $action, $user_id, now());
+
+                $basisAmount = (float) $order->net_total;
+
+                $existFirstPay = ShippingCompanyDetails::where('order_id', $id)->get();
+
+                $basisOverride = null;
+                if ($order->order_type == 'طلب صيانة' && $existFirstPay->count() > 0) {
+                    $collect = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم التحصيل')->get();
+
+                    if ($collect->count() > 0) {
+                        $basisAmount = (float) $order->net_total;
+                    } else {
+                        $basisAmount = (float) ($order->net_total - $existFirstPay[0]->amount);
+                    }
+                    $basisOverride = $basisAmount;
+                }
+
+                $receivableSnapshot = $this->postShippedReceivableSegments(
+                    $order,
+                    (int) $request->company_id,
+                    $request->filled('collection_company_id') ? (int) $request->collection_company_id : null,
+                    $request->filled('shipping_receivable_amount') ? (float) $request->shipping_receivable_amount : null,
+                    $request->filled('collection_receivable_amount') ? (float) $request->collection_receivable_amount : null,
+                    (string) $request->date,
+                    (int) $id,
+                    $basisOverride
+                );
+            }
+
+            $odPayload = [
                     'status_date' => date('Y-m-d'),
                     'shipping_company_id' => $request->company_id,
                     'shippment_image' => $img_name,
                     'shipping_date' => $request->date,
                     'reviewed' => 0,
-                ]
+                ];
+            if ($request->filled('collection_company_id')) {
+                $odPayload['collection_company_id'] = (int) $request->collection_company_id;
+            }
+            if ($receivableSnapshot !== null) {
+                $odPayload['shipping_receivable_amount'] = $receivableSnapshot['shipping_amount'];
+                $odPayload['collection_receivable_amount'] = $receivableSnapshot['collection_amount'];
+            }
+            OrderDetails::updateOrCreate(
+                ['order_id' => $id],
+                $odPayload
             );
 
             if ($request->shippment_number) {
@@ -1437,41 +1532,6 @@ class OrdersController extends Controller
                     'order_id' => $id,
                     'shipment_number' => $request->shippment_number,
                     'user_id' => auth()->user()->id
-                ]);
-            }
-
-            if ($order->customer_type != 'شركة' && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
-
-                $action = 'تم شحن الطلب';
-                $this->insertTracking($order->id, $action, $user_id, now());
-
-                $amount = $order->net_total;
-
-                $existFirstPay = ShippingCompanyDetails::where('order_id', $id)->get();
-
-                if ($order->order_type == 'طلب صيانة' && $existFirstPay->count() > 0) {
-                    $collect = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم التحصيل')->get();
-
-                    if ($collect->count() > 0) {
-                        $amount = $order->net_total;
-                    } else {
-                        $amount = $order->net_total - $existFirstPay[0]->amount;
-                    }
-                }
-
-                $shipping_company_id = (float)$request->company_id;
-                $order_id = $id;
-                $shipping_date = $request->date;
-                $status = 'تم شحن';
-                $amount = (float)$amount;
-                DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
-                    $shipping_company_id,
-                    $order_id,
-                    $shipping_date,
-                    $status,
-                    $amount,
-                    auth()->user()->name,
-                    now()
                 ]);
             }
 
@@ -1498,11 +1558,24 @@ class OrdersController extends Controller
 
             if ($order->order_type != 'طلب صيانة' && ($order->customer_type != 'شركة' && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true))) {
                 $order_products = OrderProduct::where('order_id', $id)->get();
+                /** @var InventoryMovementLedgerService $ledger */
+                $ledger = app(InventoryMovementLedgerService::class);
                 foreach ($order_products as $op) {
                     if ($op->quantity > 0) {
-                        $cat =  Category::find($op->category_id);
-                        $cat->quantity = $cat->quantity - $op->quantity;
-                        $cat->save();
+                        $cat = Category::find($op->category_id);
+                        $ledger->recordOutbound(
+                            $cat,
+                            InventoryMovementType::SaleIssue,
+                            (float) $op->quantity,
+                            null,
+                            null,
+                            false,
+                            'order_ship',
+                            (int) $id,
+                            'شحن طلب',
+                            null,
+                            auth()->user()->name ?? null
+                        );
                         $op->shipped_quantity = $op->quantity;
                         $op->save();
                     }
@@ -1598,39 +1671,195 @@ class OrdersController extends Controller
 
         DB::beginTransaction();
         try {
-            $user_id = auth()->user()->id;
-            $order_details = $order->order_details;
-            $order_details->collection_date = date('Y-m-d');
-            $order_details->status_date = date('Y-m-d');
-            $order_details->reviewed = 0;
-            $order_details->save();
-            $order->order_status = 'تم التحصيل';
-            $order->save();
+            $request->merge(['id' => (int) $id]);
+            $this->executeOrderCollection($request, (int) $id, null);
 
-            $action = 'تم تحصيل الطلب';
-            $this->insertTracking($order->id, $action, $user_id, now());
+            DB::commit();
+            return response()->json(['message' => 'success'], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
 
-            if ($request->has('note') && $request->note != '') {
-                $note = $request->note;
-                $added_from = 'تحصيل الطلب';
-            $this->insertNote($order->id, $user_id, $note, $added_from, now());
+    /**
+     * تحصيل جماعي لطلبات «تم شحن» — نفس قيود التحصيل الفردي (خزينة/بنك/حساب خدمي + إجراءات الشحن).
+     *
+     * @param  ?string  $preSavedReferenceImage  اسم ملف مسبق الرفع للتحصيل الجماعي (مرة واحدة لكل الطلبات)
+     */
+    public function bulk_collect_orders(Request $request)
+    {
+        $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'integer|exists:orders,id',
+            'shipping_company_id' => 'nullable|integer|exists:shipping_companies,id',
+            'payment_type' => 'nullable|string|in:bank,safe,service_account',
+            'bank_id' => 'nullable|integer',
+            'safe_id' => 'nullable|integer',
+            'service_account_id' => 'nullable|integer',
+            'note' => 'nullable|string',
+        ]);
+
+        $orderIds = array_values(array_unique(array_map('intval', $request->order_ids)));
+
+        $preSavedReferenceImage = null;
+        if ($request->hasFile('reference_image')) {
+            $img = $request->file('reference_image');
+            $preSavedReferenceImage = 'bulk_' . uniqid('', true) . '.' . $img->getClientOriginalExtension();
+            $img->move(public_path('images'), $preSavedReferenceImage);
+        }
+
+        DB::beginTransaction();
+        try {
+            $done = 0;
+            foreach ($orderIds as $oid) {
+                $order = Order::with('order_details')->find($oid);
+                if (!$order) {
+                    throw new \InvalidArgumentException('طلب غير موجود: ' . $oid);
+                }
+                if (!($order->order_status == 'تم شحن' && ($order->order_type != 'طلب صيانة' || $order->order_details->maintenance_date))) {
+                    throw new \InvalidArgumentException(
+                        'الطلب رقم ' . $oid . ' ليس بحالة تم شحن الصالحة للتحصيل (الحالة: ' . $order->order_status . ')'
+                    );
+                }
+
+                if ($request->filled('shipping_company_id')) {
+                    $scid = (int) $request->shipping_company_id;
+                    $linked = shippingCompanyDetails::where('order_id', $oid)
+                        ->where('shipping_company_id', $scid)
+                        ->where('status', 'تم شحن')
+                        ->where('is_done', 0)
+                        ->exists();
+                    if (! $linked) {
+                        throw new \InvalidArgumentException(
+                            'الطلب ' . $oid . ' غير ظاهر كمستحق تحت شركة الشحن المحددة أو تم تحصيله.'
+                        );
+                    }
+                }
+
+                $this->executeOrderCollection($request, $oid, $preSavedReferenceImage);
+                $done++;
             }
 
-            $shippingDetails = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
-            $paymentType = $request->payment_type ?? 'bank';
-            if ($order->customer_type == 'شركة' && $order->order_status == 'تم التحصيل') {
-                $collectFromCompanies = 0;
-                foreach ($shippingDetails as $elm) {
-                    $collectFromCompanies += $elm->amount;
-                    // $orderdata = ShippingCompanyDetails::where('id',$elm->id)->first();
-                    $elm->is_done = 1;
+            DB::commit();
+
+            return response()->json([
+                'message' => 'success',
+                'processed' => $done,
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * منطق التحصيل الكامل لطلب واحد (محاسبة + رصيد شركات الشحن + مخزون إن وُجد).
+     *
+     * @param  ?string  $preSavedReferenceImage  عند التحصيل الجماعي يُمرَّر اسم ملف الإيصال المرفوع مرة واحدة
+     */
+    private function executeOrderCollection(Request $request, int $id, ?string $preSavedReferenceImage): void
+    {
+        $request->merge(['id' => $id]);
+
+        $user_id = auth()->user()->id;
+        $order = Order::with('order_details')->find($id);
+        if (!$order) {
+            throw new \RuntimeException('not found');
+        }
+
+        $order_details = $order->order_details;
+        $order_details->collection_date = date('Y-m-d');
+        $order_details->status_date = date('Y-m-d');
+        $order_details->reviewed = 0;
+        $order_details->save();
+        $order->order_status = 'تم التحصيل';
+        $order->save();
+
+        $action = 'تم تحصيل الطلب';
+        $this->insertTracking($order->id, $action, $user_id, now());
+
+        if ($request->has('note') && $request->note != '') {
+            $note = $request->note;
+            $added_from = 'تحصيل الطلب';
+            $this->insertNote($order->id, $user_id, $note, $added_from, now());
+        }
+
+        $shippingDetails = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
+        $paymentType = $request->payment_type ?? 'bank';
+        if ($order->customer_type == 'شركة' && $order->order_status == 'تم التحصيل') {
+            $collectFromCompanies = 0;
+            foreach ($shippingDetails as $elm) {
+                $collectFromCompanies += $elm->amount;
+                $elm->is_done = 1;
+                $elm->save();
+
+                $shipping_company_id = (float) $elm->shipping_company_id;
+                $order_id = $id;
+                $shipping_date = $order_details->shipping_date;
+                $status = 'تم التحصيل';
+                $amount = (float) -$elm->amount;
+                DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                    $shipping_company_id,
+                    $order_id,
+                    $shipping_date,
+                    $status,
+                    $amount,
+                    auth()->user()->name,
+                    now(),
+                ]);
+
+                $shipping_company = ShippingCompany::find($elm->shipping_company_id);
+
+                $amount = (float) $elm->amount;
+                $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
+                $ref = $order->id;
+                $type = 'الطلبات';
+
+                $this->applyOrderCollectionToPaymentSource($order, $request, $amount, $user_id, $details, $ref, $type, $paymentType);
+            }
+
+            $company = customerCompany::find($order->company_id);
+            if ($company && $company->id) {
+                $amount = (float) ($order->net_total - $collectFromCompanies);
+                $details = ' تحصيل من عميل شركة ' . $company->name;
+                $ref = $order->id;
+                $type = 'الطلبات';
+
+                $this->applyOrderCollectionToPaymentSource($order, $request, $amount, $user_id, $details, $ref, $type, $paymentType);
+
+                $company_id = $order->company_id;
+                $amount = number_format((float) -($order->net_total - $collectFromCompanies), 3, '.', '');
+                $ref = $order->id;
+                $details = ' تحصيل من طلب رقم ' . $order->id;
+                $type = 'الطلبات';
+
+                $bankIdForProc = ($paymentType === 'bank') ? $request->bank_id : null;
+
+                DB::statement('CALL update_customer_company_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
+                    $company_id,
+                    $amount,
+                    $bankIdForProc,
+                    $ref,
+                    $details,
+                    $type,
+                    $user_id,
+                    now(),
+                ]);
+            }
+        } else {
+            if ($order->order_type == 'طلب صيانة') {
+                $orders = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
+                $paymentType = $request->payment_type ?? 'bank';
+                foreach ($orders as $elm) {
+                    $elm->is_done = true;
                     $elm->save();
 
-                    $shipping_company_id = (float)$elm->shipping_company_id;
-                    $order_id = $id;
+                    $shipping_company_id = (float) $elm->shipping_company_id;
+                    $order_id = $request->id;
                     $shipping_date = $order_details->shipping_date;
                     $status = 'تم التحصيل';
-                    $amount = (float)-$elm->amount;
+                    $amount = (float) -$elm->amount;
                     DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
                         $shipping_company_id,
                         $order_id,
@@ -1638,158 +1867,19 @@ class OrdersController extends Controller
                         $status,
                         $amount,
                         auth()->user()->name,
-                        now()
+                        now(),
                     ]);
 
                     $shipping_company = ShippingCompany::find($elm->shipping_company_id);
 
-                    $amount = (float)$elm->amount;
-                    $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
-                    $ref = $order->id;
-                    $type = 'الطلبات';
-
-                    $this->applyOrderCollectionToPaymentSource($order, $request, $amount, $user_id, $details, $ref, $type, $paymentType);
-                }
-
-                $company = CustomerCompany::find($order->company_id);
-                if ($company->id) {
-                    $amount = (float)($order->net_total - $collectFromCompanies);
-                    $details = ' تحصيل من عميل شركة ' . $company->name;
-                    $ref = $order->id;
-                    $type = 'الطلبات';
-
-                    $this->applyOrderCollectionToPaymentSource($order, $request, $amount, $user_id, $details, $ref, $type, $paymentType);
-
-
-
-
-                    $company_id = $order->company_id;
-                    // net_total already includes shipping; do NOT add shipping_cost again
-                    $amount = number_format((float) -($order->net_total - $collectFromCompanies), 3, '.', '');
-                    $ref = $order->id;
-                    $details = ' تحصيل من طلب رقم ' . $order->id;
-                    $type = 'الطلبات';
-                    
-                    $bankIdForProc = ($paymentType === 'bank') ? $request->bank_id : null;
-
-                    DB::statement('CALL update_customer_company_balance(?, ?, ?, ?, ?, ?, ?, ?)', [
-                        $company_id,
-                        $amount,
-                        $bankIdForProc,
-                        $ref,
-                        $details,
-                        $type,
-                        $user_id,
-                        now()
-                    ]);
-                }
-            } else {
-
-                $collectFromShippingCompany = 0;
-                foreach ($shippingDetails as $elm) {
-                    $collectFromShippingCompany += $elm->amount;
-                }
-
-
-                if ($order->order_type == 'طلب صيانة') {
-                    $orders = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم شحن')->where('is_done', 0)->get();
-                    $paymentType = $request->payment_type ?? 'bank';
-                    foreach ($orders as $elm) {
-                        $elm->is_done = true;
-                        $elm->save();
-
-                        $shipping_company_id = (float)$elm->shipping_company_id;
-                        $order_id = $request->id;
-                        $shipping_date = $order_details->shipping_date;
-                        $status = 'تم التحصيل';
-                        $amount = (float)-$elm->amount;
-                        DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
-                            $shipping_company_id,
-                            $order_id,
-                            $shipping_date,
-                            $status,
-                            $amount,
-                            auth()->user()->name,
-                            now()
-                        ]);
-
-                        $shipping_company = ShippingCompany::find($elm->shipping_company_id);
-
-                        $amount = (float)($elm->amount);
-                        $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
-                        $ref = $request->id;
-                        $type = 'الطلبات';
-                        $this->applyOrderCollectionToPaymentSource(
-                            $order,
-                            $request,
-                            $amount,
-                            $user_id,
-                            $details,
-                            $ref,
-                            $type,
-                            $paymentType
-                        );
-                    }
-                } else {
-                    $shipping_company = ShippingCompany::find($order->order_details->shipping_company_id);
-                    $latestShippingDetail = ShippingCompanyDetails::where('order_id', $id)->latest()->first();
-                    if (!$latestShippingDetail) {
-                        throw new \RuntimeException('لا توجد بيانات شحن للطلب');
-                    }
-                    $latestShippingDetail->is_done = true;
-                    $latestShippingDetail->save();
-
-                    $shipping_company_id = (float)$latestShippingDetail->shipping_company_id;
-                    $order_id = $request->id;
-                    $shipping_date = $order_details->shipping_date;
-                    $status = 'تم التحصيل';
-                    $amount = (float)-$latestShippingDetail->amount;
-                    DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
-                        $shipping_company_id,
-                        $order_id,
-                        $shipping_date,
-                        $status,
-                        $amount,
-                        auth()->user()->name,
-                        now()
-                    ]);
-
-                    $shippingCompanyDetails = ShippingCompanyDetails::where('order_id', $id)->where('status', 'تم التحصيل')->first();
-                    if ($latestShippingDetail->old_amount && $shippingCompanyDetails) {
-                        $shippingCompanyDetails->old_amount = (float)-$latestShippingDetail->old_amount;
-                        $shippingCompanyDetails->update();
-                    }
-
-                    $collectAmount = (float)$latestShippingDetail->amount;
+                    $amount = (float) ($elm->amount);
                     $details = ' تحصيل من شركة شحن ' . $shipping_company->name;
                     $ref = $request->id;
                     $type = 'الطلبات';
-                    $paymentType = $request->payment_type ?? 'bank';
-
-                    if ($request->has('reference_number') || $request->hasFile('reference_image')) {
-                        if ($shippingCompanyDetails) {
-                            $shippingCompanyDetails->old_amount = (float)-$latestShippingDetail->amount;
-                            $shippingCompanyDetails->amount = 0;
-                            $shippingCompanyDetails->update();
-                        }
-
-                        $img_name = '';
-                        if ($request->hasFile('reference_image')) {
-                            $img = $request->file('reference_image');
-                            $img_name = time() . '.' . $img->extension();
-                            $img->move(public_path('images'), $img_name);
-                        }
-
-                        Order::where('id', $id)->update([
-                            'reference_image' => $img_name,
-                            'reference_number' => $request->reference_number
-                        ]);
-                    }
-
                     $this->applyOrderCollectionToPaymentSource(
                         $order,
                         $request,
-                        $collectAmount,
+                        $amount,
                         $user_id,
                         $details,
                         $ref,
@@ -1797,58 +1887,138 @@ class OrdersController extends Controller
                         $paymentType
                     );
                 }
+            } else {
+                if ($shippingDetails->isEmpty()) {
+                    throw new \RuntimeException('لا توجد بيانات شحن للطلب');
+                }
+                $paymentType = $request->payment_type ?? 'bank';
+                foreach ($shippingDetails as $elm) {
+                    $elm->is_done = true;
+                    $elm->save();
 
-                if ($request->receivedOrder) {
-                    $products = OrderProduct::where('order_id', $request->id)->get();
-                    foreach ($products as $product) {
-                        if ($product->quantity < 0) {
-                            $cat = Category::where('id', $product->category_id)->first();
-                            $cat->quantity = $cat->quantity - $product->quantity;
-                            $cat->save();
-                        }
-                    }
-                } else {
-                    if ($request->has('reason') && $request->reason != '') {
-                        $admin  = User::where('department', 'admin')->first();
-                        if (auth()->id() !== $admin->id) {
-                            Notification::create([
-                                'send_from' =>  auth()->id(),
-                                'send_to' => $admin->id,
-                                'type' => 'مرتجع',
-                                'ref' => $request->id,
-                                'order_id' => $request->id,
-                                'note' => $request->reason,
-                            ]);
-                        }
+                    $shipping_company_id = (float) $elm->shipping_company_id;
+                    $shipping_date = $order_details->shipping_date;
+                    $status = 'تم التحصيل';
+                    $amount = (float) -$elm->amount;
+                    DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                        $shipping_company_id,
+                        (int) $request->id,
+                        $shipping_date,
+                        $status,
+                        $amount,
+                        auth()->user()->name,
+                        now(),
+                    ]);
 
-                        Note::create([
-                            'order_id' => $id,
-                            'user_id' => auth()->user()->id,
-                            'note' => $request->reason,
-                            'added_from' => 'تحصيل الطلب',
-                            'is_problem' => true
-                        ]);
+                    $shipping_company = ShippingCompany::find($elm->shipping_company_id);
+                    $collectAmount = (float) $elm->amount;
+                    $details = ' تحصيل من شركة شحن ' . ($shipping_company->name ?? '');
+
+                    $this->applyOrderCollectionToPaymentSource(
+                        $order,
+                        $request,
+                        $collectAmount,
+                        $user_id,
+                        $details,
+                        $request->id,
+                        'الطلبات',
+                        $paymentType
+                    );
+                }
+
+                if ($preSavedReferenceImage !== null) {
+                    Order::where('id', $id)->update([
+                        'reference_image' => $preSavedReferenceImage,
+                        'reference_number' => $request->reference_number,
+                    ]);
+                } elseif ($request->has('reference_number') || $request->hasFile('reference_image')) {
+                    $img_name = '';
+                    if ($request->hasFile('reference_image')) {
+                        $img = $request->file('reference_image');
+                        $img_name = time() . '.' . $img->extension();
+                        $img->move(public_path('images'), $img_name);
                     }
+
+                    Order::where('id', $id)->update([
+                        'reference_image' => $img_name,
+                        'reference_number' => $request->reference_number,
+                    ]);
                 }
             }
 
-
-            if ($order->order_type != 'طلب صيانة') {
-                $products = OrderProduct::where('order_id', $order->id)->get();
+            if ($request->receivedOrder) {
+                $products = OrderProduct::where('order_id', $request->id)->get();
+                /** @var InventoryMovementLedgerService $ledger */
+                $ledger = app(InventoryMovementLedgerService::class);
                 foreach ($products as $product) {
                     if ($product->quantity < 0) {
                         $cat = Category::where('id', $product->category_id)->first();
-                        $cat->quantity = $cat->quantity - $product->quantity;
-                        $cat->save();
+                        $q = abs((float) $product->quantity);
+                        $avg = CategoryInventoryCostService::averageCostForCategoryIssue((int) $cat->id);
+                        $ledger->recordInbound(
+                            $cat,
+                            InventoryMovementType::SaleIssue,
+                            $q,
+                            $avg,
+                            $q * $avg,
+                            false,
+                            'order_collect',
+                            (int) $request->id,
+                            'تحصيل طلب — استلام',
+                            null,
+                            auth()->user()->name ?? null
+                        );
                     }
                 }
-            }
+            } else {
+                if ($request->has('reason') && $request->reason != '') {
+                    $admin = User::where('department', 'admin')->first();
+                    if (auth()->id() !== $admin->id) {
+                        Notification::create([
+                            'send_from' => auth()->id(),
+                            'send_to' => $admin->id,
+                            'type' => 'مرتجع',
+                            'ref' => $request->id,
+                            'order_id' => $request->id,
+                            'note' => $request->reason,
+                        ]);
+                    }
 
-            DB::commit();
-            return response()->json(['message' => 'success'], 200);
-        } catch (\Exception $e) {
-            DB::rollback();
-            return response()->json(['message' => $e->getMessage()], 500);
+                    Note::create([
+                        'order_id' => $id,
+                        'user_id' => auth()->user()->id,
+                        'note' => $request->reason,
+                        'added_from' => 'تحصيل الطلب',
+                        'is_problem' => true,
+                    ]);
+                }
+            }
+        }
+
+        if ($order->order_type != 'طلب صيانة') {
+            $products = OrderProduct::where('order_id', $order->id)->get();
+            /** @var InventoryMovementLedgerService $ledger */
+            $ledger = app(InventoryMovementLedgerService::class);
+            foreach ($products as $product) {
+                if ($product->quantity < 0) {
+                    $cat = Category::where('id', $product->category_id)->first();
+                    $q = abs((float) $product->quantity);
+                    $avg = CategoryInventoryCostService::averageCostForCategoryIssue((int) $cat->id);
+                    $ledger->recordInbound(
+                        $cat,
+                        InventoryMovementType::SaleIssue,
+                        $q,
+                        $avg,
+                        $q * $avg,
+                        false,
+                        'order_collect',
+                        (int) $order->id,
+                        'تحصيل طلب',
+                        null,
+                        auth()->user()->name ?? null
+                    );
+                }
+            }
         }
     }
 
@@ -2604,6 +2774,66 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
     /**
      * تحديث رصيد البنك/الخزينة/الحساب الخدمي + قيود ذمم العملاء (أفراد أو شركات).
      */
+    /**
+     * تسجيل رصيد شركة الشحن و/أو شركة التحصيل عند «تم شحن» (shipping_company_procedure لكل جزء).
+     *
+     * @return array{shipping_amount: float, collection_amount: float}
+     */
+    private function postShippedReceivableSegments(
+        Order $order,
+        int $courierCompanyId,
+        ?int $requestCollectionCompanyId,
+        ?float $manualShippingAmount,
+        ?float $manualCollectionAmount,
+        string $shippingDate,
+        int $orderId,
+        ?float $basisNetTotal,
+    ): array {
+        /** @var ShippingReceivableSplitService $splitSvc */
+        $splitSvc = app(ShippingReceivableSplitService::class);
+
+        $suppressAutoCollection = $basisNetTotal !== null
+            && abs((float) $basisNetTotal - (float) $order->net_total) > 0.02;
+
+        $collectionIdForSplit = $requestCollectionCompanyId;
+        if ($suppressAutoCollection && $manualShippingAmount === null && $manualCollectionAmount === null) {
+            $collectionIdForSplit = null;
+        }
+
+        $split = $splitSvc->resolveForShip(
+            $order,
+            $courierCompanyId,
+            $collectionIdForSplit,
+            $manualShippingAmount,
+            $manualCollectionAmount,
+            $basisNetTotal,
+        );
+
+        $segments = $splitSvc->segmentsForProcedureCalls(
+            $courierCompanyId,
+            $split['collection_company_id'],
+            $split['shipping_amount'],
+            $split['collection_amount'],
+        );
+
+        foreach ($segments as $seg) {
+            DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                $seg['company_id'],
+                $orderId,
+                $shippingDate,
+                'تم شحن',
+                $seg['amount'],
+                auth()->user()->name,
+                now(),
+            ]);
+        }
+
+        return [
+            'shipping_amount' => $split['shipping_amount'],
+            'collection_amount' => $split['collection_amount'],
+        ];
+    }
+
     private function applyOrderCollectionToPaymentSource(
         Order $order,
         Request $request,

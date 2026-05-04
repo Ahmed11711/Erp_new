@@ -3,8 +3,16 @@
     <div class="col-md-4">
       <app-time></app-time>
     </div>
-    <div class="col-md-5 d-flex ml-3">
-      <h1 class="header">الجرد الشهري   ({{warehouse}})</h1>
+    <div class="col-md-8">
+      <h1 class="header">الجرد الشهري ({{warehouse}})</h1>
+      <div class="alert alert-info small mt-2 mb-0 text-right" role="alert">
+        <strong>ملاحظة:</strong> الجدول يعرض <strong>السجلات المحفوظة سابقاً</strong> للشهر المحدد. إن ظهر فارغاً فلم يُسجَّل جرد لهذا الشهر بعد.
+        <div class="mt-2">
+          <a class="btn btn-sm btn-primary ml-1" routerLink="/dashboard/warehouse/cat" [queryParams]="{warehouse: warehouse}">أصناف المخزن — تعديل كميات / تسجيل لقطة جرد</a>
+          <button type="button" class="btn btn-sm btn-success ml-1" (click)="recordMonthlySnapshot()">حفظ لقطة جرد للشهر المختار</button>
+          <a class="btn btn-sm btn-outline-secondary ml-1" routerLink="/dashboard/warehouse/inventory-import">جرد وتسوية من Excel</a>
+        </div>
+      </div>
     </div>
   </div>
 </div>

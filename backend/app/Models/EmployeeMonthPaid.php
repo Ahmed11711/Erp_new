@@ -10,9 +10,12 @@ class EmployeeMonthPaid extends Model
     use HasFactory;
 
     protected $fillable=[
-        "amount",
-        "bank_id",
-        "details",
+        'amount',
+        'bank_id',
+        'safe_id',
+        'service_account_id',
+        'payment_source',
+        'details',
         'month',
         'year',
         'employee_id',

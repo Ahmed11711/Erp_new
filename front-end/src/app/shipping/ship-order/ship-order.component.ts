@@ -23,9 +23,13 @@ paymentTypeActive:boolean = false;
 
 completedShip:boolean=false;
 
-ngOnInit(){
+  /** لعرض صافي الطلب والدفعة المقدمة عند تقسيم الذمة بين الشحن والتحصيل */
+  orderSnap: any;
+
+  ngOnInit(){
   const  id  = this.route.snapshot.params['id'];
   this.order.getOrderById(id).subscribe((res:any)=>{
+    this.orderSnap = res;
     this.customer_type = res?.customer_type;
     if (res?.customer_type == 'شركة') {
       this.paymentTypeActive = true;
@@ -117,6 +121,15 @@ imgselect = false;
 shipOrder(form:any){
   const formData = new FormData();
   formData.append('company_id', form.value.company);
+  if (form.value.collection_company) {
+    formData.append('collection_company_id', form.value.collection_company);
+  }
+  if (form.value.shipping_receivable_amount != null && form.value.shipping_receivable_amount !== '') {
+    formData.append('shipping_receivable_amount', String(form.value.shipping_receivable_amount));
+  }
+  if (form.value.collection_receivable_amount != null && form.value.collection_receivable_amount !== '') {
+    formData.append('collection_receivable_amount', String(form.value.collection_receivable_amount));
+  }
   // formData.append('shipping_line_id', form.value.line);
 
 

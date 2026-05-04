@@ -82,16 +82,30 @@
         <th>-</th>
       </thead>
       <tbody>
-        <tr *ngFor="let elm of tableData">
-          <td>{{elm.date}}</td>
-          <td>-</td>
-          <td>{{elm.status}}</td>
-          <td>{{elm.product.category_name}}</td>
-          <td>{{elm.quantity}}</td>
-          <td>{{elm.total}}</td>
-          <td>{{elm.user.name}}</td>
-          <td *ngIf="elm.status === 'في التصنيع'"><button (click)="finish(elm.id)" class="btn btn-outline-dark">تم الانتهاء</button></td>
+        <tr *ngIf="listPending">
+          <td colspan="8">جاري التحميل…</td>
         </tr>
+        <tr *ngIf="!listPending && listError">
+          <td colspan="8" class="text-danger">{{ listError }}</td>
+        </tr>
+        <tr *ngIf="!listPending && !listError && tableData.length === 0">
+          <td colspan="8">لا توجد أوامر تصنيع مسجّلة.</td>
+        </tr>
+        <ng-container *ngIf="!listPending && !listError">
+          <tr *ngFor="let elm of tableData">
+            <td>{{ elm.date }}</td>
+            <td>-</td>
+            <td>{{ elm.status }}</td>
+            <td>{{ elm.product?.category_name }}</td>
+            <td>{{ elm.quantity }}</td>
+            <td>{{ elm.total }}</td>
+            <td>{{ elm.user?.name }}</td>
+            <td *ngIf="elm.status === 'في التصنيع'">
+              <button type="button" (click)="finish(elm.id)" class="btn btn-outline-dark">تم الانتهاء</button>
+            </td>
+            <td *ngIf="elm.status !== 'في التصنيع'">-</td>
+          </tr>
+        </ng-container>
       </tbody>
     </table>
   </div>

@@ -15,6 +15,9 @@ class OrderDetails extends Model
         'status_date',
         'collection_date',
         'shipping_company_id',
+        'collection_company_id',
+        'shipping_receivable_amount',
+        'collection_receivable_amount',
         'shipping_line_id',
         'edits',
         'postponed',
@@ -33,6 +36,12 @@ class OrderDetails extends Model
     public function shipping_company()
     {
         return $this->belongsTo(ShippingCompany::class);
+    }
+
+    /** شركة التحصيل الإلكتروني (Paymob وغيرها) — اختياري */
+    public function collection_company()
+    {
+        return $this->belongsTo(ShippingCompany::class, 'collection_company_id');
     }
     public function shipping_line(){
         return $this->belongsTo(shippingline::class);

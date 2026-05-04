@@ -14,11 +14,19 @@ use Illuminate\Http\Request;
 use App\Observers\OrderObserver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
+
 class ExpenseController extends Controller
 {
     public function index()
     {
-        $data = Expense::with('kind', 'bank', 'safe', 'serviceAccount')->get();
+        $data = Expense::with([
+            'kind.treeAccount',
+            'bank.asset',
+            'safe.account',
+            'serviceAccount.account',
+        ])->get();
+        $this->hydrateExpenseLedgerContext($data);
         return response()->json($data);
     }
 
@@ -125,8 +133,12 @@ class ExpenseController extends Controller
                 }
             }
 
-            // القيد المحاسبي: مدين حساب المصروف، دائن مصدر الدفع (خزينة/بنك/حساب خدمي)
-            $this->createExpenseAccountingEntry($expense->expense_type, $amount, $creditTreeId, $sourceName, $expense->expense_number);
+            // القيد المحاسبي: مدين حساب مصروف حسب فئة المصروف (إن وُجد ربط)، دائن مصدر الدفع
+            $debitTree = TreeAccount::resolveExpenseDebitForKind($expenseKind, $expense->expense_type);
+            if (! $debitTree) {
+                throw new \Exception('لم يُعثر على حساب مصروف في شجرة الحسابات لنوع: ' . $expense->expense_type);
+            }
+            $this->createExpenseAccountingEntry($debitTree, $amount, $creditTreeId, $sourceName, $expense->expense_number);
 
             DB::commit();
             return response()->json($expense, 201);
@@ -140,22 +152,17 @@ class ExpenseController extends Controller
     /**
      * إنشاء القيد المحاسبي للمصروف وتحديث شجرة الحسابات
      */
-    protected function createExpenseAccountingEntry($expenseType, $amount, $creditTreeId, $sourceName, $ref)
+    protected function createExpenseAccountingEntry(TreeAccount $treeExpense, $amount, $creditTreeId, $sourceName, $ref)
     {
-        $treeExpense = TreeAccount::where('name', $expenseType)->where('level', 4)->first();
-        if (!$treeExpense) {
-            Log::error("Expense accounting: tree account not found for expense_type={$expenseType}");
-            return;
-        }
-        if (!$creditTreeId) {
+        if (! $creditTreeId) {
             Log::error("Expense accounting: creditTreeId is null for ref={$ref}");
-            return;
+            throw new \Exception('مصدر الدفع غير مرتبط بحساب في شجرة الحسابات (مثلاً ربط البنك بحساب أصول أو اختيار خزينة مرتبطة).');
         }
 
         $batchCode = 'EXP-' . now()->format('YmdHis');
         $accountingService = app(\App\Services\Accounting\AccountingService::class);
 
-        // مدين: حساب المصروف
+        // مدين: حساب المصروف (حسب فئة المصروف أو الاحتياطي)
         AccountEntry::create([
             'tree_account_id' => $treeExpense->id,
             'debit' => $amount,
@@ -175,8 +182,8 @@ class ExpenseController extends Controller
             'entry_batch_code' => $batchCode,
         ]);
 
-        $accountingService->updateAccountHierarchyBalances($treeExpense->id);
-        $accountingService->updateAccountHierarchyBalances($creditTreeId);
+        $accountingService->updateAccountHierarchyBalances((int) $treeExpense->id);
+        $accountingService->updateAccountHierarchyBalances((int) $creditTreeId);
     }
 
     public function editExpense($id, Request $request)
@@ -256,8 +263,12 @@ class ExpenseController extends Controller
                 }
             }
 
+            $debitTree = TreeAccount::resolveExpenseDebitForKind($expenseKind, $expense->expense_type);
+            if (! $debitTree) {
+                throw new \Exception('لم يُعثر على حساب مصروف في شجرة الحسابات لنوع: ' . $expense->expense_type);
+            }
             $this->createExpenseAccountingEntry(
-                $expense->expense_type,
+                $debitTree,
                 (double) $request->amount,
                 $creditTreeId,
                 $sourceName,
@@ -363,22 +374,60 @@ class ExpenseController extends Controller
             ]);
         }
 
-        $search = $search->with('kind', 'bank', 'safe', 'serviceAccount')
+        $paginator = $search->with([
+            'kind.treeAccount',
+            'bank.asset',
+            'safe.account',
+            'serviceAccount.account',
+        ])
             ->orderBy('id', 'desc')
             ->paginate($itemsPerPage);
 
-        return response()->json($search, 200);
+        $this->hydrateExpenseLedgerContext($paginator->getCollection());
+
+        return response()->json($paginator, 200);
     }
 
     public function show($id)
     {
-        $expense = Expense::with('kind', 'bank', 'safe', 'serviceAccount')->find($id);
+        $expense = Expense::with([
+            'kind.treeAccount',
+            'bank.asset',
+            'safe.account',
+            'serviceAccount.account',
+        ])->find($id);
 
         if (!$expense) {
             return response()->json(['message' => 'not found'], 404);
         }
 
+        $this->hydrateExpenseLedgerContext(collect([$expense]));
+
         return response()->json($expense, 200);
+    }
+
+    /**
+     * يربط كل مصروف بحساب المصروف في الشجرة (المدين في القيد) حسب نوع المصروف.
+     */
+    protected function hydrateExpenseLedgerContext(Collection $expenses): void
+    {
+        if ($expenses->isEmpty()) {
+            return;
+        }
+
+        $cache = [];
+        foreach ($expenses as $expense) {
+            $kid = (int) $expense->kind_id;
+            $cacheKey = $kid > 0 ? (string) $kid : 'row-' . $expense->id;
+            if (! array_key_exists($cacheKey, $cache)) {
+                $kind = $expense->relationLoaded('kind') ? $expense->kind : null;
+                $cache[$cacheKey] = TreeAccount::resolveExpenseDebitForKind(
+                    $kind instanceof ExpenseKind ? $kind : null,
+                    (string) ($expense->expense_type ?? '')
+                );
+            }
+            $expense->setRelation('debit_tree_account', $cache[$cacheKey]);
+        }
     }
 
 

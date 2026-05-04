@@ -43,7 +43,14 @@ export class BanksComponent implements OnInit {
   }
 
   private getEmptyBank() {
-    return { name: '', type: 'main', balance: 0, usage: '', asset_id: null };
+    return {
+      name: '',
+      type: 'main',
+      balance: 0,
+      usage: '',
+      parent_account_id: null,
+      counter_account_id: null
+    };
   }
 
   private getEmptyTransfer() {
@@ -79,7 +86,8 @@ export class BanksComponent implements OnInit {
     this.loading = true;
     this.bankService.getAll().subscribe({
       next: (res) => {
-        this.banks = res.data || (Array.isArray(res) ? res : []);
+        const raw = res.data ?? res;
+        this.banks = Array.isArray(raw) ? raw : (raw?.data ?? []);
         this.filteredBanks = [...this.banks];
         this.loading = false;
       },
@@ -109,7 +117,7 @@ export class BanksComponent implements OnInit {
   }
 
   openEditDialog(bank: any): void {
-    this.selectedBank = { ...bank, asset_id: bank.asset_id || bank.asset?.id };
+    this.selectedBank = { ...bank };
     this.showEditDialog = true;
   }
 
@@ -129,7 +137,11 @@ export class BanksComponent implements OnInit {
   }
 
   canSaveNew(): boolean {
-    return !!this.newBank.name?.trim() && !!this.newBank.asset_id;
+    if (!this.newBank.name?.trim()) return false;
+    if (!this.newBank.parent_account_id) return false;
+    const bal = Number(this.newBank.balance) || 0;
+    if (bal > 0 && !this.newBank.counter_account_id) return false;
+    return true;
   }
 
   saveBank(): void {
@@ -154,7 +166,7 @@ export class BanksComponent implements OnInit {
   }
 
   canSaveEdit(): boolean {
-    return !!this.selectedBank?.name?.trim() && !!this.selectedBank?.asset_id;
+    return !!this.selectedBank?.name?.trim();
   }
 
   updateBank(): void {
@@ -164,7 +176,11 @@ export class BanksComponent implements OnInit {
     }
 
     this.saving = true;
-    this.bankService.update(this.selectedBank.id, this.selectedBank).subscribe({
+    this.bankService.update(this.selectedBank.id, {
+      name: this.selectedBank.name,
+      usage: this.selectedBank.usage,
+      type: this.selectedBank.type
+    }).subscribe({
       next: () => {
         this.toast.success('تم تحديث بيانات البنك بنجاح');
         this.getAllBanks();

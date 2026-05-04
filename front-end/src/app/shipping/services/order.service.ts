@@ -94,6 +94,11 @@ export class OrderService {
     return this.http.post(`${environment.Url}/collectorder/${id}`,formData);
   }
 
+  /** تحصيل عدة طلبات دفعة واحدة (نفس القيود المحاسبية للتحصيل الفردي) */
+  bulkCollectOrders(formData: FormData) {
+    return this.http.post(`${environment.Url}/collectorder-bulk`, formData);
+  }
+
   reviewOrder(formData:any){
     return this.http.post(`${environment.Url}/revieworder`,formData);
   }

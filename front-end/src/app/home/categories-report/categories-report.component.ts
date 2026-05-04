@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from 'src/app/auth/auth.service';
 import { CategoryService } from 'src/app/categories/services/category.service';
@@ -20,7 +20,7 @@ type SortField =
   templateUrl: './categories-report.component.html',
   styleUrls: ['../../shared/styles/report-page-shell.css', './categories-report.component.css']
 })
-export class CategoriesReportComponent {
+export class CategoriesReportComponent implements OnInit, OnDestroy {
   user!: string;
   productionData: any[] = [];
   url!: string;
@@ -49,6 +49,8 @@ export class CategoriesReportComponent {
   dateFrom = '';
   dateTo = '';
   loading = false;
+  searchText = '';
+  private searchDebounce?: ReturnType<typeof setTimeout>;
 
   constructor(
     private categoryService: CategoryService,
@@ -190,5 +192,23 @@ export class CategoriesReportComponent {
 
   trackByIndex(index: number): number {
     return index;
+  }
+
+  onSearchChange(value: string): void {
+    clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => {
+      const q = (value ?? '').trim();
+      if (q) {
+        this.param['search'] = q;
+      } else {
+        delete this.param['search'];
+      }
+      this.page = 0;
+      this.categoriesSellReports();
+    }, 400);
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.searchDebounce);
   }
 }

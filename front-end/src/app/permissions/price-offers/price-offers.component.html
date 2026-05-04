@@ -20,6 +20,7 @@
         <th>المرجع</th>
         <th>عرض</th>
         <th> اسم العميل</th>
+        <th>أضيف بواسطة</th>
         <th>التاريخ</th>
         <!-- <th>متاح حتي</th> -->
         <th>السعر</th>
@@ -33,6 +34,7 @@
           <td>{{elm?.id}}</td>
           <td>{{elm?.offer==='offer1' ? 'عرض 1':'عرض 2'}}</td>
           <td>{{elm?.quote}}</td>
+          <td>{{ elm?.creator?.name || '—' }}</td>
           <td>{{elm?.dateFrom}}</td>
           <!-- <td>{{elm?.dateTo}}</td> -->
           <td>{{elm?.subtotal|customNumber}}</td>

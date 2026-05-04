@@ -34,11 +34,28 @@ class EmployeePaymentAccountingService
         $bank = Bank::find($bankId);
         if (!$bank || !$bank->asset_id) {
             Log::warning('EmployeePayment: bank missing or no asset_id', ['bank_id' => $bankId]);
+
             return false;
         }
+
+        return $this->postPaymentToCreditAccount($description, $amount, (int) $bank->asset_id, 'صرف من البنك', $date);
+    }
+
+    /**
+     * قيد يومية: مدين مصروف رواتب، دائن حساب المصدر النقدي (بنك/خزينة/حساب خدمي مرتبط بشجرة الحسابات).
+     */
+    public function postPaymentToCreditAccount(string $description, float $amount, int $creditTreeAccountId, string $creditSideNotes = 'صرف', ?string $date = null): bool
+    {
         $expenseAccountId = $this->getSalaryExpenseAccountId();
         if (!$expenseAccountId) {
             Log::warning('EmployeePayment: salary expense account not found');
+
+            return false;
+        }
+
+        if (!TreeAccount::find($creditTreeAccountId)) {
+            Log::warning('EmployeePayment: credit tree account missing', ['account_id' => $creditTreeAccountId]);
+
             return false;
         }
 
@@ -64,10 +81,10 @@ class EmployeePaymentAccountingService
             ]);
             DailyEntryItem::create([
                 'daily_entry_id' => $dailyEntry->id,
-                'account_id' => $bank->asset_id,
+                'account_id' => $creditTreeAccountId,
                 'debit' => 0,
                 'credit' => $amount,
-                'notes' => 'صرف من البنك',
+                'notes' => $creditSideNotes,
             ]);
 
             AccountEntry::create([
@@ -78,7 +95,7 @@ class EmployeePaymentAccountingService
                 'daily_entry_id' => $dailyEntry->id,
             ]);
             AccountEntry::create([
-                'tree_account_id' => $bank->asset_id,
+                'tree_account_id' => $creditTreeAccountId,
                 'debit' => 0,
                 'credit' => $amount,
                 'description' => $description,
@@ -86,13 +103,15 @@ class EmployeePaymentAccountingService
             ]);
 
             $this->accountingService->updateAccountHierarchyBalances($expenseAccountId);
-            $this->accountingService->updateAccountHierarchyBalances($bank->asset_id);
+            $this->accountingService->updateAccountHierarchyBalances($creditTreeAccountId);
 
             DB::commit();
+
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('EmployeePayment posting failed: ' . $e->getMessage());
+            Log::error('EmployeePayment posting failed: '.$e->getMessage());
+
             return false;
         }
     }

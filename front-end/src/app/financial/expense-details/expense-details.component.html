@@ -7,51 +7,65 @@
       <div><p class="title header w-50 m-auto">تفاصيل المصروف</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-  <div class="container-fluid mt-5">
-      <div class="row">
+  <div class="container-fluid mt-5" *ngIf="data">
+      <div class="row g-4">
+        <div class="col-md-4">
+          <h3>رقم المصروف</h3>
+          <p>{{ data.expense_number }}</p>
+        </div>
+        <div class="col-md-4">
+          <h3>التاريخ</h3>
+          <p>{{ data.created_at }}</p>
+        </div>
+        <div class="col-md-4">
+          <h3>مكان الدفع</h3>
+          <p>{{ paymentPlaceLabel(data) }}</p>
+        </div>
+        <div class="col-md-4">
+          <h3>مصدر الدفع</h3>
+          <p>{{ paymentSourceName(data) }}</p>
+        </div>
         <div class="col-md-4">
           <h3>نوع المصروف</h3>
-          <p>{{data?.expense_type}}</p>
+          <p>{{ data.expense_type }}</p>
         </div>
         <div class="col-md-4">
-            <h3 >فئة المصروف</h3>
-            <p>{{data?.kind?.expense_kind}}</p>
+            <h3>فئة المصروف</h3>
+            <p>{{ data?.kind?.expense_kind }}</p>
         </div>
         <div class="col-md-4">
-            <h3 >الخزينة</h3>
-            <p>{{data?.bank?.name}}</p>
-        </div>
-        <div class="col-md-4">
-          <h3>بيان المصرف</h3>
-          <p>{{data?.expens_statement}}</p>
+          <h3>بيان المصروف</h3>
+          <p>{{ data?.expens_statement }}</p>
         </div>
         <div class="col-md-4">
           <h3>المبلغ</h3>
-          <p>{{data?.amount | customNumber}}</p>
+          <p>{{ data?.amount | customNumber }}</p>
         </div>
         <div class="col-md-4">
           <h3>ملاحظات</h3>
-          <p>{{data?.note}}</p>
+          <p>{{ data?.note }}</p>
         </div>
         <div class="col-md-4">
           <h3>الوصف</h3>
-          <p>{{data?.address}}</p>
+          <p>{{ data?.address }}</p>
+        </div>
+        <div class="col-md-6">
+          <h3>حساب المصروف في الشجرة <span class="text-muted fs-6">(مدين في القيد)</span></h3>
+          <p class="text-muted">{{ treeAccountLine(data.debit_tree_account) }}</p>
+        </div>
+        <div class="col-md-6">
+          <h3>حساب مصدر الدفع في الشجرة <span class="text-muted fs-6">(دائن في القيد)</span></h3>
+          <p class="text-muted">{{ treeAccountLine(creditTreeFromRow(data)) }}</p>
         </div>
       </div>
-      <td><img class="img-fluid" style="width: 100px;" [src]="imgUrl+data.expense_image" alt="expense image"></td>
-
-
-
+      <div class="row mt-3" *ngIf="data.expense_image">
+        <div class="col-12">
+          <h3>صورة</h3>
+          <img class="img-fluid" style="max-width: 280px;" [src]="imgUrl+data.expense_image" alt="صورة المصروف">
+        </div>
+      </div>
   </div>
-
-
-
-
-
-
-
 </div>

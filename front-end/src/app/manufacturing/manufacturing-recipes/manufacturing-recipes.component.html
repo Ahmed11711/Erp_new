@@ -15,32 +15,15 @@
     </div>
   </div>
 
-  <!-- Filters (BOM view) -->
   <div class="container mt-3">
     <div class="row">
-      <div class="col-md-3">
-        <select id="inputState" class="form-control" (change)="productType($event)">
-          <option selected disabled>نوع المنتج</option>
-          <option value="مخزن منتج تحت التشغيل">تحت التشغيل</option>
-          <option value="مخزن منتج تام">منتج تام</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <ng-autocomplete
-          [data]="products"
-          [searchKeyword]="catword"
-          placeholder="اسم المنتج"
-          (selected)="productChange($event)"
-          (inputCleared)="resetProductFilter()"
-          [itemTemplate]="itemTemplates"
-          [notFoundTemplate]="notFoundTemplate">
-        </ng-autocomplete>
-        <ng-template #itemTemplates let-item>
-          <a [innerHTML]="item.category_name"></a>
-        </ng-template>
-        <ng-template #notFoundTemplate let-notFound>
-          <div [innerHTML]="notFound"></div>
-        </ng-template>
+      <div class="col-md-6 col-lg-4">
+        <label class="form-label small text-muted mb-1">بحث في الوصفات</label>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="recipeSearchQuery"
+          placeholder="اسم الوصفة أو الوصف…" />
       </div>
     </div>
   </div>
@@ -49,16 +32,20 @@
   <!-- Recipes list with detail expand                         -->
   <!-- ════════════════════════════════════════════════════════ -->
   <div class="container-fluid mt-4">
-    <h3 class="section-title">جميع الوصفات ({{ recipes.length }})</h3>
+    <h3 class="section-title">جميع الوصفات ({{ filteredRecipes.length }})</h3>
 
     <p *ngIf="recipes.length === 0" class="text-muted text-center py-4">لا توجد وصفات مسجلة.</p>
+    <p *ngIf="recipes.length > 0 && filteredRecipes.length === 0" class="text-muted text-center py-4">
+      لا توجد وصفات مطابقة للبحث.
+    </p>
 
-    <table class="table table-bordered recipes-master-table" *ngIf="recipes.length > 0">
+    <table class="table table-bordered recipes-master-table" *ngIf="filteredRecipes.length > 0">
       <thead>
         <tr>
           <th class="text-center" style="width:40px;">
-            <input type="checkbox" [checked]="selectedIds.size === recipes.length && recipes.length > 0"
-              (change)="toggleSelectAll()" title="تحديد الكل" />
+            <input type="checkbox"
+              [checked]="isAllFilteredSelected"
+              (change)="toggleSelectAll()" title="تحديد الكل (الظاهر)" />
           </th>
           <th>#</th>
           <th>اسم الوصفة</th>
@@ -68,7 +55,7 @@
         </tr>
       </thead>
       <tbody>
-        <ng-container *ngFor="let r of recipes; let i = index">
+        <ng-container *ngFor="let r of filteredRecipes; let i = index">
           <!-- Master row -->
           <tr [class.table-active]="expandedRecipeId === r.id">
             <td class="text-center">
@@ -184,43 +171,6 @@
       </tbody>
     </table>
   </div>
-
-  <!-- ════════════════════════════════════════════════════════ -->
-  <!-- BOM Table (legacy view)                                 -->
-  <!-- ════════════════════════════════════════════════════════ -->
-  <div class="container-fluid text-center mt-4" *ngIf="tableData.length > 0">
-    <h3 class="section-title">قائمة المواد (BOM)</h3>
-    <table class="table w-75 m-auto">
-      <thead class="bg-dark text-white">
-        <th>المنتج</th>
-        <th>كود الصنف</th>
-        <th>اللون</th>
-        <th>النوع</th>
-        <th>الرصيد</th>
-        <th>الكمية المطلوبة</th>
-        <th>اجمالى التكلفه</th>
-      </thead>
-      <tbody>
-        <tr *ngFor="let elm of tableData">
-          <td>{{ elm.product.category_name }}</td>
-          <td dir="ltr">{{ elm.product.item_code || '—' }}</td>
-          <td>
-            <span *ngIf="elm.product.color" class="d-inline-flex align-items-center" style="gap: 6px;">
-              <span class="mfg-recipe-color-swatch" [style.backgroundColor]="elm.product.color"
-                [attr.title]="elm.product.color"></span>
-              <span>{{ elm.product.color }}</span>
-            </span>
-            <span *ngIf="!elm.product.color">—</span>
-          </td>
-          <td>{{ elm.product.warehouse }}</td>
-          <td>{{ elm.product.initial_balance }}</td>
-          <td>{{ elm.product.minimum_quantity }}</td>
-          <td>{{ elm.total }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <hr>
 
   <!-- Delete confirmation dialog -->
   <div class="delete-overlay" *ngIf="confirmDeleteId != null" (click)="cancelDelete()"></div>

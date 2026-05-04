@@ -295,6 +295,130 @@ class TreeAccount extends Model
             ?? static::where('type', 'expense')->where('level', 2)->orderBy('id')->first();
     }
 
+    /**
+     * حساب مصروف تشغيلي عام للقيد عندما لا تُحدَّد فئة بحساب شجرة — يتجنّب ربط كل شيء بـ«رواتب موظفين»
+     * (أول فرع تحت مصروفات تشغيلية في الـ seeder الافتراضي).
+     */
+    public static function resolveOperatingExpenseFallbackLedgerAccount(): ?self
+    {
+        $parent = static::resolveDefaultOperatingExpenseParent();
+        if (! $parent) {
+            return null;
+        }
+
+        $existing = static::where('type', 'expense')
+            ->where('parent_id', $parent->id)
+            ->where('detail_type', 'general_operating_expense')
+            ->whereDoesntHave('children')
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = static::nextNumericAccountCodeUnderParent($parent);
+
+        return static::create([
+            'name' => 'مصروفات تشغيلية عامة',
+            'name_en' => 'General operating expenses',
+            'code' => (string) $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'general_operating_expense',
+        ]);
+    }
+
+    /**
+     * حساب الشجرة المدين في قيد المصروف حسب نوع المصروف (مصروف تشغيل / تسويق / ادارى).
+     * يدعم شجرة الـ seeder التي لا تُنشئ حسابات بأسماء مطابقة لنوع المصروف ومستوى 4.
+     */
+    public static function resolveExpenseTypeLedgerAccount(string $expenseType): ?self
+    {
+        $trimmed = trim($expenseType);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $byName = static::where('type', 'expense')
+            ->where('name', $trimmed)
+            ->whereDoesntHave('children')
+            ->orderByDesc('level')
+            ->first();
+        if ($byName) {
+            return $byName;
+        }
+
+        if ($trimmed === 'مصروف تشغيل') {
+            $general = static::resolveOperatingExpenseFallbackLedgerAccount();
+            if ($general) {
+                return $general;
+            }
+
+            $p = static::resolveDefaultOperatingExpenseParent();
+
+            return $p ? static::firstLeafUnderAccount($p) : null;
+        }
+
+        if ($trimmed === 'مصروف ادارى') {
+            $p = static::where('type', 'expense')
+                ->where(function ($q) {
+                    $q->where('name', 'مصروفات إدارية')
+                        ->orWhere('name', 'مصروفات ادارية')
+                        ->orWhere('name', 'like', '%مصروفات إدارية%')
+                        ->orWhere('name', 'like', '%مصروفات ادارية%');
+                })
+                ->orderBy('level')
+                ->first();
+            if ($p) {
+                return static::firstLeafUnderAccount($p);
+            }
+
+            return static::resolveExpenseTypeLedgerAccount('مصروف تشغيل');
+        }
+
+        if ($trimmed === 'مصروف تسويق') {
+            $p = static::where('type', 'expense')
+                ->where(function ($q) {
+                    $q->where('name', 'like', '%تسويق%')
+                        ->orWhere('name_en', 'like', '%market%');
+                })
+                ->where('level', '<=', 3)
+                ->orderBy('level')
+                ->orderBy('id')
+                ->first();
+            if ($p) {
+                return static::firstLeafUnderAccount($p);
+            }
+
+            return static::resolveExpenseTypeLedgerAccount('مصروف تشغيل');
+        }
+
+        return null;
+    }
+
+    /**
+     * حساب المدين في قيد المصروف: يفضّل الحساب المربوط بفئة المصروف (expense_kinds.tree_account_id)،
+     * ثم الاحتياطي حسب نوع المصروف الرئيسي.
+     */
+    public static function resolveExpenseDebitForKind(?ExpenseKind $kind, string $expenseType): ?self
+    {
+        if ($kind && $kind->tree_account_id) {
+            $acc = static::query()
+                ->whereKey((int) $kind->tree_account_id)
+                ->where('type', 'expense')
+                ->first();
+            if ($acc) {
+                return $acc;
+            }
+        }
+
+        return static::resolveExpenseTypeLedgerAccount($expenseType);
+    }
+
     private static function firstLeafUnderAccount(self $account): self
     {
         $current = $account;
@@ -525,6 +649,78 @@ class TreeAccount extends Model
     }
 
     /**
+     * حساب مخزون الجرد المرتبط بصف مخزن (جدول stocks عبر asset_id).
+     */
+    public static function resolveInventoryAccountForStock(?Stock $stock): ?self
+    {
+        if ($stock && $stock->asset_id) {
+            $acc = static::query()->whereKey((int) $stock->asset_id)->first();
+            if ($acc && $acc->type === 'asset') {
+                return $acc;
+            }
+        }
+
+        if ($stock) {
+            $wt = trim((string) ($stock->warehouse_type ?? ''));
+            $name = trim((string) ($stock->name ?? ''));
+            if ($wt === 'wip' || $name === 'مخزن منتج تحت التشغيل') {
+                return static::resolveInventoryWipAccount();
+            }
+            if ($wt === 'raw_materials' || $name === 'مخزن مواد خام') {
+                return static::resolveInventoryRawAccount();
+            }
+            if ($wt === 'finished_goods' || $name === 'مخزن منتج تام') {
+                return static::resolveInventoryFinishedAccount();
+            }
+        }
+
+        return static::resolveInventoryAccount();
+    }
+
+    /**
+     * حساب مخزون الصنف من categories (يفضّل stock_id ثم مطابقة اسم المخزن مع stocks.name).
+     */
+    public static function resolveInventoryAccountForCategoryRow(?object $categoryRow): ?self
+    {
+        if (! $categoryRow) {
+            return static::resolveInventoryAccount();
+        }
+
+        $stock = null;
+        if (! empty($categoryRow->stock_id)) {
+            $stock = Stock::query()->find((int) $categoryRow->stock_id);
+        }
+        if (! $stock && ! empty($categoryRow->warehouse)) {
+            $stock = Stock::query()->where('name', trim((string) $categoryRow->warehouse))->first();
+        }
+
+        $resolved = static::resolveInventoryAccountForStock($stock);
+        if ($resolved) {
+            return $resolved;
+        }
+
+        $w = trim((string) ($categoryRow->warehouse ?? ''));
+        if ($w === 'مخزن منتج تحت التشغيل') {
+            return static::resolveInventoryWipAccount();
+        }
+        if ($w === 'مخزن مواد خام') {
+            return static::resolveInventoryRawAccount();
+        }
+        if ($w === 'مخزن منتج تام') {
+            return static::resolveInventoryFinishedAccount();
+        }
+
+        return static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryAccountForCategoryId(int $categoryId): ?self
+    {
+        $row = DB::table('categories')->where('id', $categoryId)->first();
+
+        return static::resolveInventoryAccountForCategoryRow($row);
+    }
+
+    /**
      * حساب موازنة لرصيد مخزون افتتاحي (دائن) — حقوق ملكية أو جاري.
      */
     public static function resolveOpeningInventoryOffsetAccount(): ?self
@@ -544,5 +740,33 @@ class TreeAccount extends Model
             ->orderBy('id')
             ->first()
             ?? static::where('type', 'equity')->whereDoesntHave('children')->orderBy('id')->first();
+    }
+
+    public static function resolveInventoryRawAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_raw')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryWipAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_wip')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryFinishedAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_finished')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryAdjustmentLossAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_adjustment_loss')->whereDoesntHave('children')->first();
+    }
+
+    public static function resolveInventoryAdjustmentGainAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_adjustment_gain')->whereDoesntHave('children')->first();
     }
 }

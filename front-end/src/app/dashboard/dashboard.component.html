@@ -81,6 +81,9 @@
                         <a mat-list-item routerLink="/dashboard/warehouse/listwarhouse" routerLinkActive="active">
                             <span>الجرد الشهري</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/warehouse/inventory-import" routerLinkActive="active">
+                            <span>استيراد Excel والجرد</span>
+                        </a>
                     </mat-nav-list>
                 </mat-expansion-panel>
 
@@ -159,6 +162,9 @@
                         </a>
                         <a mat-list-item routerLink="/dashboard/manufacturing/recipes" routerLinkActive="active">
                             <span>وصفات التصنيع</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/manufacturing/bom" routerLinkActive="active">
+                            <span>قائمة المواد (BOM)</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/manufacturing/confirmation" routerLinkActive="active">
                             <span>تأكيد أمر التصنيع</span>
@@ -505,7 +511,7 @@
 
                 <!-- ══════ الإيصالات والأذونات ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Shipping Management' || user == 'Customer Service'">
+                    *ngIf="showReceiptsAndPermissionsMenu">
                     <mat-expansion-panel-header>
                         <mat-icon>description</mat-icon>
                         الإيصالات والأذونات

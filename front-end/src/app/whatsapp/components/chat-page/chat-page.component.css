@@ -223,6 +223,30 @@
   flex-shrink: 0;
 }
 
+/* فلاتر الرسائل داخل الرأس: صف واحد بجانب الهوية (RTL: الهوية يمين، الفلاتر يسار) */
+.wa-header-filters {
+  max-width: 100%;
+}
+
+.wa-header-filters-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem;
+  justify-content: flex-end;
+}
+
+.wa-filter-dates--compact input[type='date'] {
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+  max-width: 132px;
+}
+
+.wa-filter-messages--header {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
 .wa-messages-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -448,29 +472,8 @@
   scroll-behavior: smooth;
 }
 
-/* ───────── Filters bar (داخل منطقة الشات) ───────── */
-.wa-filters {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  gap: 0.45rem;
-  padding: 0.5rem 0.75rem;
-  background: #f6f6f6;
-}
-
-.wa-filters-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.6rem;
-}
-
-.wa-filters-messages {
-  padding-top: 0.1rem;
-}
-
+/* ───────── حقول التصفية (مستخدمة داخل رأس الشات) ───────── */
 .wa-filter-messages {
-  flex: 1 1 100%;
   min-width: 0;
 }
 

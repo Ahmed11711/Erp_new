@@ -2,10 +2,12 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\BanksController;
 use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\SupplierController;
-use App\Http\Controllers\CategoriesController;
+use App\Http\Controllers\Inventory\InventoryExcelImportController;
+use App\Http\Controllers\Manufacturing\ProductionOrderController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\MeasurementController;
 use App\Http\Controllers\OrderSourceController;
@@ -163,6 +165,10 @@ Route::middleware('auth')->group(function () {
         Route::get('suppliers/supplier_names', [SupplierController::class, 'supplier_names']);
         Route::apiResource('suppliers', App\Http\Controllers\SupplierController::class);
 
+        Route::post('inventory/import/items', [InventoryExcelImportController::class, 'importItems']);
+        Route::post('inventory/import/opening-balances', [InventoryExcelImportController::class, 'importOpeningBalances']);
+        Route::post('inventory/import/adjustments', [InventoryExcelImportController::class, 'importAdjustments']);
+
         Route::get('purchases/search', [App\Http\Controllers\PurchasesController::class, 'search']);
         Route::get('purchases/{id}', [App\Http\Controllers\PurchasesController::class, 'show']);
         Route::apiResource('purchases', App\Http\Controllers\PurchasesController::class);
@@ -265,6 +271,13 @@ Route::middleware('auth')->group(function () {
         Route::get('manufacture/confirmed', [App\Http\Controllers\ManufactureController::class, 'confirmed']);
         Route::get('manufacture/done/{id}', [App\Http\Controllers\ManufactureController::class, 'done']);
 
+        Route::get('manufacturing/production-orders', [ProductionOrderController::class, 'index']);
+        Route::post('manufacturing/production-orders', [ProductionOrderController::class, 'store']);
+        Route::get('manufacturing/production-orders/{id}', [ProductionOrderController::class, 'show'])->whereNumber('id');
+        Route::post('manufacturing/production-orders/{id}/start', [ProductionOrderController::class, 'start'])->whereNumber('id');
+        Route::post('manufacturing/production-orders/{id}/complete', [ProductionOrderController::class, 'complete'])->whereNumber('id');
+        Route::post('manufacturing/production-orders/{id}/cancel', [ProductionOrderController::class, 'cancel'])->whereNumber('id');
+
         Route::get('pendingBanks', [PendingBankBalanceController::class, 'pendingBanks']);
         Route::post('pendingBanks', [PendingBankBalanceController::class, 'pendingBanksStatus']);
 
@@ -305,7 +318,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Logistics Specialist'])->group(function () {
         Route::post('shiporder/{id}', [OrdersController::class, 'ship_order']);
-        Route::post('collectorder/{id}', [OrdersController::class, 'collect_order']); // all 
+        Route::post('collectorder/{id}', [OrdersController::class, 'collect_order']); // all
+        Route::post('collectorder-bulk', [OrdersController::class, 'bulk_collect_orders']); 
         Route::get('order/received/{id}', [OrdersController::class, 'received']);
     });
 
@@ -334,6 +348,7 @@ Route::middleware('auth')->group(function () {
         Route::apiResource('employeemerit', App\Http\Controllers\EmployeeMeritsController::class);
         Route::apiResource('employeesubtraction', App\Http\Controllers\EmployeeSubtractionController::class);
         Route::apiResource('employeeadvancepayment', App\Http\Controllers\EmployeeAdvancePaymentController::class);
+        Route::post('employeemonthpaid/bulk', [App\Http\Controllers\EmployeeMonthPaidController::class, 'bulkStore']);
         Route::apiResource('employeemonthpaid', App\Http\Controllers\EmployeeMonthPaidController::class);
 
         Route::post('partcollectorder/{id}', [OrdersController::class, 'partCollect_order']); // part
@@ -412,8 +427,11 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(['department.access:Admin,Data Entry,Shipping Management,Customer Service'])->group(function () {
         Route::get('vip/{id}', [OrdersController::class, 'vip']);
-        Route::apiResource('offer', App\Http\Controllers\OffersController::class);
         Route::get('shortage/{id}', [OrdersController::class, 'shortage']);
+    });
+
+    Route::middleware(['department.access:Admin,Data Entry,Shipping Management,Customer Service,Corparates'])->group(function () {
+        Route::apiResource('offer', App\Http\Controllers\OffersController::class);
     });
 
     Route::middleware(['department.access:Admin,Data Entry,Review Management'])->group(function () {

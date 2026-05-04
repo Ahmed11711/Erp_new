@@ -5,6 +5,7 @@ import { CatComponent } from './cat/cat.component';
 import { ListWarehouseComponent } from './list-warehouse/list-warehouse.component';
 import { WarehouseDetailsComponent } from './warehouse-details/warehouse-details.component';
 import { MonthlyInventoryComponent } from './monthly-inventory/monthly-inventory.component';
+import { InventoryImportComponent } from './inventory-import/inventory-import.component';
 import { departmentGuard } from '../guards/department.guard';
 
 const routes: Routes = [
@@ -14,6 +15,7 @@ const routes: Routes = [
   {path: 'listwarhouse',component:ListWarehouseComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
+  { path: 'listwarehouse', redirectTo: 'listwarhouse', pathMatch: 'full' },
   {path:'cat',component:CatComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
@@ -24,6 +26,9 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
   {path:'monthlyinventory',component:MonthlyInventoryComponent,
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
+  },
+  {path:'inventory-import',component:InventoryImportComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
   },
 ];
