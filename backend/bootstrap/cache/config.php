@@ -760,13 +760,14 @@
     ),
     'shopify' => 
     array (
-      'shop_domain' => '',
-      'admin_access_token' => '',
+      'shop_domain' => 'https://magalis-egypt.myshopify.com/',
+      'admin_access_token' => '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',
       'api_version' => '2024-10',
       'http_timeout' => 120,
-      'webhook_secret' => '',
+      'webhook_secret' => '50e39e5e6366d95b1780e902be156246e47e1d9765bfe13f92444e39f2c12205',
       'allowed_shop_domains' => 
       array (
+        0 => 'magalis-egypt.myshopify.com',
       ),
       'accepted_topics' => 
       array (
@@ -776,16 +777,16 @@
         3 => 'products/update',
         4 => 'inventory_levels/update',
       ),
-      'default_order_source_id' => 0,
-      'default_shipping_method_id' => 0,
-      'fallback_category_id' => 0,
-      'default_governorate' => '',
+      'default_order_source_id' => 4,
+      'default_shipping_method_id' => 1,
+      'fallback_category_id' => 1,
+      'default_governorate' => 'غير محدد',
       'default_address' => '-',
       'default_customer_type' => 'فرد',
       'default_customer_name' => 'عميل Shopify',
       'order_type' => 'جديد',
       'placeholder_phone' => '0000000000',
-      'tracking_user_id' => NULL,
+      'tracking_user_id' => 1,
     ),
     'shipping_partner' => 
     array (

@@ -297,6 +297,79 @@ class InventoryMovementLedgerService
         });
     }
 
+    /**
+     * تعديل متوسط تكلفة الوحدة دون تغيير الكمية: تحديث total_price وunit_price وتسجيل حركة تقييم (كمية 0).
+     *
+     * @return array{value_delta: float, category: Category}
+     */
+    public function applyPureCostRevaluation(
+        Category $category,
+        float $newAverageUnitCost,
+        ?string $referenceType = 'manual_average_cost',
+        ?int $referenceId = null,
+        ?string $reason = null,
+        ?string $performedBy = null,
+    ): array {
+        $newAverageUnitCost = max(0.0, (float) $newAverageUnitCost);
+
+        $cat = Category::query()->lockForUpdate()->findOrFail($category->id);
+        $qty = (float) ($cat->quantity ?? 0);
+        $oldTp = (float) ($cat->total_price ?? 0);
+
+        if ($qty < 0.0000001) {
+            $cat->total_price = 0;
+            $cat->unit_price = $newAverageUnitCost;
+            $cat->save();
+            $this->refreshMirrorBalances((int) $cat->id);
+
+            return [
+                'value_delta' => 0.0,
+                'category' => $cat->fresh(),
+            ];
+        }
+
+        $newTp = round($qty * $newAverageUnitCost, 4);
+        $delta = round($newTp - $oldTp, 4);
+
+        $cat->total_price = max(0.0, $newTp);
+        if (($cat->warehouse ?? '') !== 'مخزن منتج تام') {
+            $cat->save();
+            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $cat->id);
+            $cat->refresh();
+        } else {
+            $cat->unit_price = $qty > 0.0000001 ? round(((float) $cat->total_price) / $qty, 6) : $newAverageUnitCost;
+            $cat->save();
+        }
+
+        if (abs($delta) > 0.00001) {
+            $stock = $cat->stock_id ? Stock::query()->find($cat->stock_id) : null;
+            $direction = $delta >= 0 ? 'in' : 'out';
+            $movementType = $delta >= 0 ? InventoryMovementType::AdjustmentGain : InventoryMovementType::AdjustmentLoss;
+
+            InventoryMovement::query()->create([
+                'category_id' => $cat->id,
+                'stock_id' => $stock?->id,
+                'warehouse_name' => $stock?->name ?? (string) $cat->warehouse,
+                'direction' => $direction,
+                'movement_type' => $movementType->value,
+                'quantity' => 0,
+                'unit_cost' => round(abs($delta) / $qty, 4),
+                'total_cost' => round(abs($delta), 4),
+                'reference_type' => $referenceType,
+                'reference_id' => $referenceId ?? $cat->id,
+                'reason' => $reason ?? 'تعديل متوسط تكلفة الوحدة (بدون تغيير كمية)',
+                'performed_by' => $performedBy ?? $this->defaultActor(),
+            ]);
+        }
+
+        $this->refreshMirrorBalances((int) $cat->id);
+
+        return [
+            'value_delta' => $delta,
+            'category' => $cat->fresh(),
+        ];
+    }
+
     private function normalizeQty(float|string $quantity): string
     {
         return sprintf('%.6F', (float) $quantity);

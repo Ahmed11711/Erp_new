@@ -9,13 +9,13 @@ const routes: Routes = [
         path: '',
         component: ListCapitalsComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
     },
     {
         path: 'create',
         component: AddCapitalComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
     }
 ];
 

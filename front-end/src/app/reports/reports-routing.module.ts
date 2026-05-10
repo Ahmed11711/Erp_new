@@ -20,7 +20,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:"financialstatement" , component:FinancialStatementComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Account Management', 'Financial Accounts']}
   },
   {path:"procurement" , component:ProcurementReportComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
@@ -29,7 +29,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:"product-performance" , component:ProductPerformanceComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Account Management', 'Financial Accounts']}
   },
   {path:"storage" , component:StorageComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}

@@ -624,9 +624,107 @@ class InventoryGlPostingService
     }
 
     /**
+     * قيد واحد لمطابقة أرصدة حسابات المخزون الفرعية مع مجموع تكلفة الأصناف (categories.total_price).
+     *
+     * @param  array<int, float>  $adjustmentsByAccountId  فرق لكل حساب: القيمة الفعلية من الأصناف − رصيد الحساب من القيود (مدين مخزون عند الزيادة).
+     * @return array{daily_entry_id: int, entry_number: mixed, lines: array<int, array<string, mixed>>}
+     */
+    public function postInventoryAccountsTrueUpJournal(array $adjustmentsByAccountId, ?int $userId): array
+    {
+        $lines = [];
+        foreach ($adjustmentsByAccountId as $accId => $delta) {
+            $delta = round((float) $delta, 2);
+            if (abs($delta) < 0.02) {
+                continue;
+            }
+            $accId = (int) $accId;
+            if ($delta > 0) {
+                $lines[] = [
+                    'id' => $accId,
+                    'debit' => $delta,
+                    'credit' => 0.0,
+                    'note' => 'مطابقة مخزون — تكلفة أصناف مقابل رصيد الحساب',
+                ];
+            } else {
+                $lines[] = [
+                    'id' => $accId,
+                    'debit' => 0.0,
+                    'credit' => abs($delta),
+                    'note' => 'مطابقة مخزون — تكلفة أصناف مقابل رصيد الحساب',
+                ];
+            }
+        }
+
+        if (count($lines) === 0) {
+            throw new \InvalidArgumentException('لا توجد بنود للقيد.');
+        }
+
+        $net = 0.0;
+        foreach ($lines as $ln) {
+            $net += $ln['debit'] - $ln['credit'];
+        }
+        $net = round($net, 2);
+
+        if (abs($net) >= 0.02) {
+            if ($net > 0) {
+                $gain = TreeAccount::resolveInventoryAdjustmentGainAccount()
+                    ?? TreeAccount::resolveOpeningInventoryOffsetAccount();
+                if (! $gain) {
+                    throw new \RuntimeException('تعذر تحديد حساب طرف مقابل لتسوية المخزون (إيراد فروقات جرد).');
+                }
+                $lines[] = [
+                    'id' => $gain->id,
+                    'debit' => 0.0,
+                    'credit' => $net,
+                    'note' => 'طرف مقابل تسوية مخزون — صافي زيادة',
+                ];
+            } else {
+                $loss = TreeAccount::resolveInventoryAdjustmentLossAccount()
+                    ?? TreeAccount::resolveOpeningInventoryOffsetAccount();
+                if (! $loss) {
+                    throw new \RuntimeException('تعذر تحديد حساب طرف مقابل لتسوية المخزون (مصروف عجز جرد).');
+                }
+                $lines[] = [
+                    'id' => $loss->id,
+                    'debit' => abs($net),
+                    'credit' => 0.0,
+                    'note' => 'طرف مقابل تسوية مخزون — صافي نقصان',
+                ];
+            }
+        }
+
+        $desc = 'تسوية مخزون — مطابقة الحسابات مع التكلفة الفعلية للأصناف (' . now()->format('Y-m-d H:i') . ')';
+        $dailyEntryId = $this->postBalancedJournal($desc, $lines, $userId);
+        $entry = DailyEntry::query()->find($dailyEntryId);
+
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances((int) $ln['id']);
+        }
+
+        $outLines = [];
+        foreach ($lines as $ln) {
+            $acc = TreeAccount::query()->find((int) $ln['id']);
+            $outLines[] = [
+                'account_id' => (int) $ln['id'],
+                'account_code' => $acc->code ?? null,
+                'account_name' => $acc->name ?? null,
+                'debit' => $ln['debit'],
+                'credit' => $ln['credit'],
+                'note' => $ln['note'],
+            ];
+        }
+
+        return [
+            'daily_entry_id' => $dailyEntryId,
+            'entry_number' => $entry->entry_number ?? null,
+            'lines' => $outLines,
+        ];
+    }
+
+    /**
      * @param array<int, array{id:int, debit:float, credit:float, note:string}> $lines
      */
-    private function postBalancedJournal(string $description, array $lines, ?int $userId): void
+    private function postBalancedJournal(string $description, array $lines, ?int $userId): int
     {
         $sumDr = 0.0;
         $sumCr = 0.0;
@@ -665,5 +763,7 @@ class InventoryGlPostingService
                 'updated_at' => now(),
             ]);
         }
+
+        return (int) $dailyEntry->id;
     }
 }

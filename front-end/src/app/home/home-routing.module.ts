@@ -8,7 +8,7 @@ const routes: Routes = [
   {path:'' , component:HomeComponent},
   {path:'categoriesreports' , component:CategoriesReportComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Data Entry', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Data Entry', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
 
 ];

@@ -43,7 +43,7 @@
         </thead>
         <tbody>
           <tr *ngFor="let elm of categories" [ngClass]="font">
-            <td>{{elm?.category_name}}</td>
+            <td class="quotation-desc-ar">{{elm?.category_name}}</td>
             <td>{{elm?.category_quantity | customNumber}}</td>
             <td  *ngIf="showOldPrice">{{elm?.old_category_price | customNumber}}</td>
             <td>{{elm?.new_category_price | customNumber}}</td>
@@ -84,7 +84,7 @@
 
     <div *ngIf="offer?.note" class="col-md-12 mb-5 note-section" dir="ltr" style="text-align: start; border: solid 0.5px #ccc;">
       <h3 class="note-title" style="font-size: 16px;">Note : </h3>
-      <p class="note-text" style="font-size: 14px;">{{offer?.note}}</p>
+      <p class="note-text quotation-note-text" dir="auto" style="font-size: 14px;">{{offer?.note}}</p>
     </div>
 
     <div class="col-md-12 mt-3 bank bg-main py-5 text-white" style="padding: 0 10rem;">

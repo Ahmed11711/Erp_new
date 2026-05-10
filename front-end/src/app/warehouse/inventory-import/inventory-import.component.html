@@ -1,82 +1,343 @@
-<div class="container-fluid py-4">
+<div class="container-fluid py-4" dir="rtl">
+
+  <!-- Header -->
   <div class="row mb-3">
     <div class="col">
-      <h1 class="header">استيراد Excel والجرد</h1>
-      <p class="text-muted mb-0">
-        الأصناف والأرصدة الافتتاحية وتسوية الجرد الفعلي تتم من هنا عبر ملفات ‎.xlsx / .xls‎ أو ‎.csv‎ (نفس الأعمدة).
-        صلاحيات API تطابق مسار المشتريات (إداري، محاسبة، لوجستيات).
-      </p>
-      <p class="small text-secondary mb-0 mt-2">
-        النماذج محفوظة بـ <strong>Unicode UTF-16</strong> و<strong>فاصل TAB بين الأعمدة</strong> حتى يعرض Excel كل عمود منفصلاً (وليس كل البيانات في خلية واحدة). يمكن أيضاً استخدام فاصلة منقوطة أو فاصلة؛ الخادم يكتشف الفاصل تلقائياً.
-      </p>
+      <h1 class="page-title">استيراد Excel والجرد</h1>
+      <p class="text-muted mb-0">رفع ملفات الجرد الفعلي وتسوية الأرصدة تلقائياً مع النظام</p>
     </div>
   </div>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h2 class="h5">1) إضافة / تحديث الأصناف (بدون كميات مخزون)</h2>
-      <p class="small text-muted mb-2">
-        إلزامي: <strong>اسم الصنف</strong>، <strong>سعر التكلفة</strong>.
-        يُفضّل تحديد: <strong>المخزن</strong> (الافتراضي مخزن مواد خام)، <strong>رقم الوحدة</strong> (أو يُستخدم 1)، <strong>رقم الانتاج</strong> أو <strong>فرع الانتاج</strong> (اسم خط الإنتاج كما في النظام).
-        اختياري إضافي: <strong>كود الصنف</strong>، <strong>اللون</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="activeTab === 'stock-count'" (click)="setTab('stock-count')">
+        <i class="fa-solid fa-clipboard-check me-1"></i> تسوية الجرد الفعلي
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="activeTab === 'items'" (click)="setTab('items')">
+        <i class="fa-solid fa-boxes-stacked me-1"></i> استيراد الأصناف
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="activeTab === 'opening'" (click)="setTab('opening')">
+        <i class="fa-solid fa-scale-balanced me-1"></i> أرصدة افتتاحية
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="activeTab === 'adjustment'" (click)="setTab('adjustment')">
+        <i class="fa-solid fa-sliders me-1"></i> تسوية يدوية
+      </a>
+    </li>
+  </ul>
+
+  <!-- ═══════════════════ TAB: Stock Count ═══════════════════ -->
+  <div *ngIf="activeTab === 'stock-count'">
+
+    <!-- Step 1: Upload -->
+    <div *ngIf="step === 'upload'" class="card shadow-sm">
+      <div class="card-body">
+        <div class="upload-section">
+          <div class="upload-icon">
+            <i class="fa-solid fa-file-excel"></i>
+          </div>
+          <h2 class="h5 mb-2">تسوية الجرد الفعلي (الكمية الفعلية مقابل النظام)</h2>
+          <p class="text-muted mb-3">
+            ارفع ملف Excel الخاص بالجرد الفعلي. النظام سيقوم بتحليل الملف ومطابقة الأصناف تلقائياً مع مراعاة:
+          </p>
+          <ul class="feature-list">
+            <li><i class="fa-solid fa-check text-success"></i> مطابقة ذكية للأسماء العربية</li>
+            <li><i class="fa-solid fa-check text-success"></i> اكتشاف الأصناف الجديدة وتصنيفها تلقائياً</li>
+            <li><i class="fa-solid fa-check text-success"></i> حساب فروقات الكميات</li>
+            <li><i class="fa-solid fa-check text-success"></i> قيود محاسبية متوازنة</li>
+            <li><i class="fa-solid fa-check text-success"></i> دعم ملفات متعددة الأوراق (كل ورقة = مخزن)</li>
+          </ul>
+
+          <div class="upload-area mt-3">
+            <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onStockCountFile($event)" class="form-control" id="stockCountFile" />
+          </div>
+
+          <button type="button" class="btn btn-primary btn-lg mt-3"
+            [disabled]="!stockCountFile || loadingPreview"
+            (click)="uploadStockCount()">
+            <span *ngIf="loadingPreview" class="spinner-border spinner-border-sm me-1"></span>
+            {{ loadingPreview ? 'جاري التحليل...' : 'تحليل ومعاينة' }}
+          </button>
+
+          <p *ngIf="stockCountError" class="text-danger mt-3 mb-0">
+            <i class="fa-solid fa-circle-exclamation me-1"></i> {{ stockCountError }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div *ngIf="step === 'preview' && previewData">
+
+      <!-- Summary Cards -->
+      <div class="summary-row mb-4">
+        <div class="summary-card card-total">
+          <div class="sc-icon"><i class="fa-solid fa-table-list"></i></div>
+          <div class="sc-value">{{ previewData.summary.total_rows }}</div>
+          <div class="sc-label">إجمالي الأصناف</div>
+        </div>
+        <div class="summary-card card-matched">
+          <div class="sc-icon"><i class="fa-solid fa-link"></i></div>
+          <div class="sc-value">{{ previewData.summary.matched }}</div>
+          <div class="sc-label">تم مطابقتها</div>
+        </div>
+        <div class="summary-card card-new">
+          <div class="sc-icon"><i class="fa-solid fa-plus-circle"></i></div>
+          <div class="sc-value">{{ previewData.summary.new_items }}</div>
+          <div class="sc-label">أصناف جديدة</div>
+        </div>
+        <div class="summary-card card-adjust">
+          <div class="sc-icon"><i class="fa-solid fa-arrows-up-down"></i></div>
+          <div class="sc-value">{{ previewData.summary.with_adjustment }}</div>
+          <div class="sc-label">تحتاج تعديل</div>
+        </div>
+        <div class="summary-card card-gain">
+          <div class="sc-icon"><i class="fa-solid fa-arrow-up"></i></div>
+          <div class="sc-value">{{ previewData.summary.with_gain }}</div>
+          <div class="sc-label">زيادة</div>
+        </div>
+        <div class="summary-card card-loss">
+          <div class="sc-icon"><i class="fa-solid fa-arrow-down"></i></div>
+          <div class="sc-value">{{ previewData.summary.with_loss }}</div>
+          <div class="sc-label">عجز</div>
+        </div>
+      </div>
+
+      <!-- Warnings -->
+      <div *ngIf="previewData.summary.low_confidence_matches > 0" class="alert alert-warning d-flex align-items-center mb-3">
+        <i class="fa-solid fa-triangle-exclamation me-2 fs-5"></i>
+        <div>
+          <strong>{{ previewData.summary.low_confidence_matches }}</strong> صنف بمطابقة ضبابية منخفضة الثقة.
+          راجع الأصناف المظللة بالأصفر قبل التأكيد.
+        </div>
+      </div>
+
+      <div *ngIf="previewData.summary.duplicates_merged > 0" class="alert alert-info d-flex align-items-center mb-3">
+        <i class="fa-solid fa-layer-group me-2 fs-5"></i>
+        <div>
+          تم دمج <strong>{{ previewData.summary.duplicates_merged }}</strong> سطر مكرر تلقائياً (جمع الكميات).
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="filter-bar mb-3">
+        <div class="btn-group btn-group-sm">
+          <button class="btn" [class.btn-primary]="filterType === 'all'" [class.btn-outline-primary]="filterType !== 'all'" (click)="filterType = 'all'">
+            الكل ({{ previewData.summary.total_rows }})
+          </button>
+          <button class="btn" [class.btn-success]="filterType === 'matched'" [class.btn-outline-success]="filterType !== 'matched'" (click)="filterType = 'matched'">
+            مطابق ({{ previewData.summary.matched }})
+          </button>
+          <button class="btn" [class.btn-danger]="filterType === 'new'" [class.btn-outline-danger]="filterType !== 'new'" (click)="filterType = 'new'">
+            جديد ({{ previewData.summary.new_items }})
+          </button>
+          <button class="btn" [class.btn-warning]="filterType === 'adjusted'" [class.btn-outline-warning]="filterType !== 'adjusted'" (click)="filterType = 'adjusted'">
+            فروقات ({{ previewData.summary.with_adjustment }})
+          </button>
+          <button class="btn" [class.btn-info]="filterType === 'warnings'" [class.btn-outline-info]="filterType !== 'warnings'" (click)="filterType = 'warnings'">
+            تحذيرات
+          </button>
+        </div>
+        <input type="search" class="form-control form-control-sm search-input" placeholder="بحث بالاسم..." [(ngModel)]="searchTerm" />
+      </div>
+
+      <!-- Preview Table -->
+      <div class="table-responsive">
+        <table class="table table-hover table-sm preview-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>اسم الصنف (Excel)</th>
+              <th>المطابقة</th>
+              <th>اسم النظام</th>
+              <th>المخزن</th>
+              <th class="text-center">كمية Excel</th>
+              <th class="text-center">كمية النظام</th>
+              <th class="text-center">الفرق</th>
+              <th>الحالة</th>
+              <th>تحذيرات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of filteredRows; trackBy: trackByRowId"
+                [class.row-new]="row.is_new_product"
+                [class.row-warning]="row.match_type === 'fuzzy' && (row.match_confidence || 0) < 85"
+                [class.row-gain]="row.adjustment_direction === 'in'"
+                [class.row-loss]="row.adjustment_direction === 'out'">
+              <td>{{ row.row_number }}</td>
+              <td class="product-name">{{ row.product_name }}</td>
+              <td>
+                <span class="badge" [ngClass]="getMatchBadgeClass(row.match_type)">
+                  {{ getMatchLabel(row.match_type) }}
+                </span>
+                <small *ngIf="row.match_confidence && row.match_type === 'fuzzy'" class="d-block text-muted">
+                  {{ row.match_confidence }}%
+                </small>
+              </td>
+              <td>{{ row.matched_name || '—' }}</td>
+              <td><small>{{ row.assigned_warehouse || '—' }}</small></td>
+              <td class="text-center fw-bold">{{ row.excel_quantity }}</td>
+              <td class="text-center">{{ row.system_quantity !== null ? row.system_quantity : '—' }}</td>
+              <td class="text-center" [ngClass]="getDirectionClass(row.adjustment_direction)">
+                <span *ngIf="row.quantity_difference !== null && row.quantity_difference !== 0">
+                  {{ row.quantity_difference > 0 ? '+' : '' }}{{ row.quantity_difference }}
+                </span>
+                <span *ngIf="row.quantity_difference === 0 || row.quantity_difference === null">—</span>
+              </td>
+              <td>
+                <span [ngClass]="getDirectionClass(row.adjustment_direction)">
+                  {{ getDirectionLabel(row.adjustment_direction) }}
+                </span>
+              </td>
+              <td>
+                <div *ngFor="let w of row.warnings" class="warning-tag">
+                  <i class="fa-solid fa-exclamation-triangle text-warning"></i>
+                  <small>{{ w }}</small>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div *ngIf="filteredRows.length === 0" class="text-center text-muted py-4">
+        لا توجد أصناف تطابق الفلتر المحدد.
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-bar mt-4">
+        <button class="btn btn-success btn-lg" [disabled]="loadingConfirm" (click)="confirmImport()">
+          <span *ngIf="loadingConfirm" class="spinner-border spinner-border-sm me-1"></span>
+          <i *ngIf="!loadingConfirm" class="fa-solid fa-check me-1"></i>
+          {{ loadingConfirm ? 'جاري التطبيق...' : 'تأكيد وتطبيق الجرد' }}
+        </button>
+        <button class="btn btn-outline-danger btn-lg" [disabled]="loadingConfirm" (click)="cancelImport()">
+          <i class="fa-solid fa-times me-1"></i> إلغاء
+        </button>
+      </div>
+
+      <p *ngIf="stockCountError" class="text-danger mt-3">
+        <i class="fa-solid fa-circle-exclamation me-1"></i> {{ stockCountError }}
       </p>
-      <p class="small mb-2">
-        <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/items-sample.csv" download="نموذج-أصناف.csv">تحميل نموذج CSV (أصناف)</a>
-      </p>
-      <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('items', $event)" class="form-control mb-2" />
-      <button type="button" class="btn btn-primary" [disabled]="!itemsFile || loadingItems" (click)="uploadItems()">
-        {{ loadingItems ? 'جاري الرفع...' : 'رفع ملف الأصناف' }}
-      </button>
-      <p *ngIf="messageItems" class="text-success mt-2 mb-0">{{ messageItems }}</p>
-      <p *ngIf="errorItems" class="text-danger mt-2 mb-0">{{ errorItems }}</p>
+    </div>
+
+    <!-- Step 3: Confirmed -->
+    <div *ngIf="step === 'confirmed' && confirmResult">
+      <div class="card shadow-sm border-success">
+        <div class="card-body text-center py-5">
+          <div class="success-icon mb-3">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+          <h2 class="h4 text-success mb-3">تم تطبيق الجرد بنجاح</h2>
+          <p class="text-muted mb-4">{{ confirmResult.message }}</p>
+
+          <div class="result-stats">
+            <div class="stat-pill" *ngIf="confirmResult.summary?.applied">
+              <strong>{{ confirmResult.summary.applied }}</strong> تسوية مطبقة
+            </div>
+            <div class="stat-pill" *ngIf="confirmResult.summary?.created">
+              <strong>{{ confirmResult.summary.created }}</strong> صنف جديد
+            </div>
+            <div class="stat-pill text-danger" *ngIf="confirmResult.summary?.errors > 0">
+              <strong>{{ confirmResult.summary.errors }}</strong> خطأ
+            </div>
+          </div>
+
+          <div *ngIf="confirmResult.summary?.error_details?.length > 0" class="alert alert-danger mt-3 text-start">
+            <strong>تفاصيل الأخطاء:</strong>
+            <ul class="mb-0 mt-1">
+              <li *ngFor="let err of confirmResult.summary.error_details">{{ err }}</li>
+            </ul>
+          </div>
+
+          <button class="btn btn-primary mt-4" (click)="resetStockCount()">
+            <i class="fa-solid fa-redo me-1"></i> جرد جديد
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h2 class="h5">2) الأرصدة الافتتاحية (حركات مخزون + قيد محاسبي)</h2>
-      <p class="small text-muted mb-2">
-        إلزامي: <strong>اسم الصنف</strong> (أو مطابقة بـ <strong>الكود</strong>)، <strong>الكمية</strong>، <strong>تكلفة الوحدة</strong>؛ واختياري <strong>المخزن</strong>.
-        أعمدة بيانات الصنف (كلها اختيارية): <strong>الكود</strong>، <strong>اللون</strong>، <strong>فرع الانتاج</strong>، <strong>رقم الوحدة</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
-      </p>
-      <p class="small mb-2">
-        <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/opening-sample.csv" download="نموذج-أرصدة-افتتاحية.csv">تحميل نموذج CSV (أرصدة افتتاحية)</a>
-      </p>
-      <label class="d-flex align-items-center gap-2 mb-2">
-        <input type="checkbox" [(ngModel)]="createMissingItems" />
-        <span>إنشاء صنف جديد إذا لم يُعثر عليه</span>
-      </label>
-      <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('opening', $event)" class="form-control mb-2" />
-      <button type="button" class="btn btn-primary" [disabled]="!openingFile || loadingOpening" (click)="uploadOpening()">
-        {{ loadingOpening ? 'جاري الرفع...' : 'رفع الأرصدة الافتتاحية' }}
-      </button>
-      <p *ngIf="messageOpening" class="text-success mt-2 mb-0">{{ messageOpening }}</p>
-      <p *ngIf="errorOpening" class="text-danger mt-2 mb-0">{{ errorOpening }}</p>
+  <!-- ═══════════════════ TAB: Items Import ═══════════════════ -->
+  <div *ngIf="activeTab === 'items'">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">استيراد / تحديث الأصناف (بدون كميات مخزون)</h2>
+        <p class="small text-muted mb-2">
+          إلزامي: <strong>اسم الصنف</strong>، <strong>سعر التكلفة</strong>.
+          اختياري: <strong>المخزن</strong>، <strong>رقم الوحدة</strong>، <strong>فرع الانتاج</strong>، <strong>كود الصنف</strong>، <strong>اللون</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
+        </p>
+        <p class="small mb-2">
+          <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/items-sample.csv" download="نموذج-أصناف.csv">
+            <i class="fa-solid fa-download me-1"></i> تحميل نموذج CSV
+          </a>
+        </p>
+        <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('items', $event)" class="form-control mb-2" />
+        <button type="button" class="btn btn-primary" [disabled]="!itemsFile || loadingItems" (click)="uploadItems()">
+          {{ loadingItems ? 'جاري الرفع...' : 'رفع ملف الأصناف' }}
+        </button>
+        <p *ngIf="messageItems" class="text-success mt-2 mb-0">{{ messageItems }}</p>
+        <p *ngIf="errorItems" class="text-danger mt-2 mb-0">{{ errorItems }}</p>
+      </div>
     </div>
   </div>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h2 class="h5">3) جرد وتسوية (الكمية الفعلية مقابل النظام)</h2>
-      <p class="small text-muted mb-2">
-        إلزامي: <strong>اسم الصنف</strong> أو <strong>الكود</strong>، <strong>الكمية الفعلية</strong>؛ واختياري <strong>المخزن</strong>.
-        للتحديث الاختياري لبيانات الصنف: <strong>الكود</strong>، <strong>اللون</strong>، <strong>فرع الانتاج</strong>، <strong>رقم الوحدة</strong>، <strong>المرجع</strong>.
-      </p>
-      <p class="small mb-2">
-        <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/adjustment-sample.csv" download="نموذج-جرد-وتسوية.csv">تحميل نموذج CSV (جرد وتسوية)</a>
-      </p>
-      <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('adjustment', $event)" class="form-control mb-2" />
-      <button type="button" class="btn btn-primary" [disabled]="!adjustmentFile || loadingAdjustment" (click)="uploadAdjustment()">
-        {{ loadingAdjustment ? 'جاري الرفع...' : 'رفع ملف الجرد' }}
-      </button>
-      <p *ngIf="messageAdjustment" class="text-success mt-2 mb-0">{{ messageAdjustment }}</p>
-      <p *ngIf="errorAdjustment" class="text-danger mt-2 mb-0">{{ errorAdjustment }}</p>
+  <!-- ═══════════════════ TAB: Opening Balances ═══════════════════ -->
+  <div *ngIf="activeTab === 'opening'">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">الأرصدة الافتتاحية (حركات مخزون + قيد محاسبي)</h2>
+        <p class="small text-muted mb-2">
+          إلزامي: <strong>اسم الصنف</strong>، <strong>الكمية</strong>، <strong>تكلفة الوحدة</strong>.
+          اختياري: <strong>المخزن</strong>، <strong>الكود</strong>، <strong>فرع الانتاج</strong>.
+        </p>
+        <p class="small mb-2">
+          <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/opening-sample.csv" download="نموذج-أرصدة-افتتاحية.csv">
+            <i class="fa-solid fa-download me-1"></i> تحميل نموذج CSV
+          </a>
+        </p>
+        <label class="d-flex align-items-center gap-2 mb-2">
+          <input type="checkbox" [(ngModel)]="createMissingItems" />
+          <span>إنشاء صنف جديد إذا لم يُعثر عليه</span>
+        </label>
+        <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('opening', $event)" class="form-control mb-2" />
+        <button type="button" class="btn btn-primary" [disabled]="!openingFile || loadingOpening" (click)="uploadOpening()">
+          {{ loadingOpening ? 'جاري الرفع...' : 'رفع الأرصدة الافتتاحية' }}
+        </button>
+        <p *ngIf="messageOpening" class="text-success mt-2 mb-0">{{ messageOpening }}</p>
+        <p *ngIf="errorOpening" class="text-danger mt-2 mb-0">{{ errorOpening }}</p>
+      </div>
     </div>
   </div>
 
-  <div class="alert alert-info">
-    <strong>الجرد الشهري (الواجهة القديمة):</strong>
-    من القائمة <strong>المخازن → الجرد الشهري</strong> أو من صفحة أصناف المخزن زر
-    <strong>تسجيل الجرد الشهري</strong> — مسار مختلف عن تسوية Excel أعلاه.
+  <!-- ═══════════════════ TAB: Adjustment ═══════════════════ -->
+  <div *ngIf="activeTab === 'adjustment'">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">تسوية يدوية (الكمية الفعلية مقابل النظام)</h2>
+        <p class="small text-muted mb-2">
+          إلزامي: <strong>اسم الصنف</strong> أو <strong>الكود</strong>، <strong>الكمية الفعلية</strong>.
+          اختياري: <strong>المخزن</strong>، <strong>الكود</strong>، <strong>فرع الانتاج</strong>.
+        </p>
+        <p class="small mb-2">
+          <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/adjustment-sample.csv" download="نموذج-جرد-وتسوية.csv">
+            <i class="fa-solid fa-download me-1"></i> تحميل نموذج CSV
+          </a>
+        </p>
+        <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('adjustment', $event)" class="form-control mb-2" />
+        <button type="button" class="btn btn-primary" [disabled]="!adjustmentFile || loadingAdjustment" (click)="uploadAdjustment()">
+          {{ loadingAdjustment ? 'جاري الرفع...' : 'رفع ملف الجرد' }}
+        </button>
+        <p *ngIf="messageAdjustment" class="text-success mt-2 mb-0">{{ messageAdjustment }}</p>
+        <p *ngIf="errorAdjustment" class="text-danger mt-2 mb-0">{{ errorAdjustment }}</p>
+      </div>
+    </div>
   </div>
+
 </div>

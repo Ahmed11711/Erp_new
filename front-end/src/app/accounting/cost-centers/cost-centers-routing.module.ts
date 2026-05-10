@@ -8,19 +8,19 @@ const routes: Routes = [
     path: '',
     component: CostCentersComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'], viewMode: 'list' }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'], viewMode: 'list' }
   },
   {
     path: 'tree',
     component: CostCentersComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'], viewMode: 'tree' }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'], viewMode: 'tree' }
   },
   {
     path: 'create',
     component: CostCentersComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'], action: 'create' }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'], action: 'create' }
   }
 ];
 

@@ -83,6 +83,16 @@ export class CategoryService {
   return this.http.get(`${url}`);
  }
 
+ /** معاينة فروقات مطابقة المخزون مع الحسابات (بدون ترحيل). */
+ previewInventoryGlSync() {
+  return this.http.get(`${environment.Url}/categories/inventory-gl-sync-preview`);
+ }
+
+ /** ترحيل قيد يومية لمطابقة أرصدة المخزون مع تكلفة الأصناف. */
+ postInventoryGlSync() {
+  return this.http.post(`${environment.Url}/categories/inventory-gl-sync`, {});
+ }
+
  changeCategoryQuantity(id, status, quantity) {
   return this.http.get(`${environment.Url}/categoryquantity?id=${id}&status=${status}&quantity=${quantity}`);
  }
@@ -94,6 +104,13 @@ export class CategoryService {
  // ✅ الدالة الجديدة لتحديث الرصيد مباشرة
  updateQuantity(id: number, quantity: number) {
   return this.http.patch(`${environment.Url}/categories/${id}/quantity`, { quantity });
+ }
+
+ /** تعيين متوسط تكلفة الوحدة دون تغيير الكمية (مع تأثير محاسبي على حساب المخزون المرتبط بالصنف). */
+ updateAverageUnitCost(id: number, averageUnitCost: number) {
+  return this.http.patch(`${environment.Url}/categories/${id}/average-unit-cost`, {
+   average_unit_cost: averageUnitCost,
+  });
  }
 
 }

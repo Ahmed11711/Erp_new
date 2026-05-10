@@ -27,7 +27,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry']}
   },
   {path:'listorders' , component:ListOrdersComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Review Management','Shipping Management','Operation Management', 'Finance and operations management','Operation Specialist','Logistics Specialist','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Review Management','Financial Accounts','Shipping Management','Operation Management', 'Finance and operations management','Operation Specialist','Logistics Specialist','Customer Service']}
   },
   {path:'ordersource' , component:OrderSourceComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
@@ -39,7 +39,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
   },
   {path:'companies' , component:CompaniesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management', 'Finance and operations management','Account Management','Logistics Specialist']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management', 'Finance and operations management','Account Management','Logistics Specialist','Financial Accounts']}
   },
   {path:'shippingcompany' , component:ShippingCompanyComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management', 'Finance and operations management','Operation Specialist','Account Management','Logistics Specialist']}
@@ -48,7 +48,7 @@ const routes: Routes = [
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management', 'Finance and operations management','Shipping Management','Customer Service']}
   },
   {path:'orderdetails/:id' , component:OrderDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Review Management','Shipping Management','Operation Management', 'Finance and operations management','Operation Specialist','Logistics Specialist','Customer Service']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Review Management','Financial Accounts','Shipping Management','Operation Management', 'Finance and operations management','Operation Specialist','Logistics Specialist','Customer Service']}
   },
   {path:'shipOrder/:id',component:ShipOrderComponent,
     canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management', 'Finance and operations management','Operation Specialist','Logistics Specialist']}

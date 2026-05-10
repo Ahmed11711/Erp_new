@@ -9,13 +9,13 @@ const routes: Routes = [
     path: '',
     component: SafesComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'deposit-withdraw',
     component: SafeDepositWithdrawComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   }
 ];
 

@@ -13,7 +13,7 @@ const routes: Routes = [
         path: 'pay-to-supplier',
         component: PayToSupplierComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
     }
 ];
 

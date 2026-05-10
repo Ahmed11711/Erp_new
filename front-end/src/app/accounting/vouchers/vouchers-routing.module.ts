@@ -9,7 +9,7 @@ const routes: Routes = [
     component: VouchersComponent,
     canActivate: [departmentGuard],
     data: {
-      allowedDepartments: ['Admin', 'Account Management'],
+      allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'],
       voucherType: 'client'
     }
   },
@@ -18,7 +18,7 @@ const routes: Routes = [
     component: VouchersComponent,
     canActivate: [departmentGuard],
     data: {
-      allowedDepartments: ['Admin', 'Account Management'],
+      allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'],
       voucherType: 'supplier'
     }
   },

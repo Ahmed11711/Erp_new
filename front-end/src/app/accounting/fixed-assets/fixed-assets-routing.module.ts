@@ -10,19 +10,19 @@ const routes: Routes = [
     path: '',
     component: FixedAssetsComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
   },
   {
     path: 'create',
     component: CreateFixedAssetComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
   },
   {
     path: 'depreciation',
     component: DepreciationFixedAssetComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
   }
 ];
 

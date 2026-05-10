@@ -17,6 +17,7 @@ use App\Http\Resources\V2\Category\CategoryResource;
 use App\Http\Requests\V2\Category\GetCategoryByStock;
 use App\Models\Item;
 use App\Services\Accounting\InventoryGlPostingService;
+use App\Services\Accounting\InventoryAccountsTrueUpService;
 use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
 use App\Services\Items\ItemCodeService;
@@ -500,9 +501,123 @@ public function changeCategoryQuantityss(Request $request)
  }
 }
 
+ /**
+  * تعيين متوسط تكلفة الوحدة يدوياً (بدون تغيير الكمية): تحديث قيمة المخزون بالتكلفة + قيد على حساب المخزن + حركة تقييم.
+  */
+ public function changeCategoryAverageUnitCost(Request $request)
+ {
+  $id = (int) $request->route('id');
+  $request->validate([
+   'average_unit_cost' => 'required|numeric|min:0',
+  ]);
+
+  $category = Category::find($id);
+  if (! $category) {
+   return response()->json(['success' => false, 'message' => 'الصنف غير موجود'], 404);
+  }
+
+  /** @var InventoryMovementLedgerService $ledger */
+  $ledger = app(InventoryMovementLedgerService::class);
+  $avgInput = (float) $request->input('average_unit_cost');
+
+  DB::beginTransaction();
+  try {
+   $balanceBefore = (float) ($category->quantity ?? 0);
+
+   $result = $ledger->applyPureCostRevaluation(
+    $category,
+    $avgInput,
+    'manual_average_cost',
+    $id,
+    'تعديل متوسط تكلفة الوحدة',
+    auth()->check() ? auth()->user()->name : null
+   );
+
+   $delta = (float) $result['value_delta'];
+   /** @var Category $fresh */
+   $fresh = $result['category'];
+
+   if (abs($delta) > 0.00001 && $balanceBefore > 0.0000001) {
+    DB::table('categories_balance')->insert([
+     'invoice_number' => 'AVGC',
+     'category_id' => $id,
+     'type' => 'تعديل متوسط التكلفة',
+     'quantity' => 0,
+     'balance_before' => $balanceBefore,
+     'balance_after' => (float) ($fresh->quantity ?? 0),
+     'price' => $avgInput,
+     'total_price' => $delta,
+     'unit_cost' => $avgInput,
+     'cost_total' => $delta,
+     'by' => auth()->check() ? auth()->user()->name : 'system',
+     'created_at' => now(),
+    ]);
+   }
+
+   $glAmount = abs($delta);
+   if ($glAmount > 0.00001) {
+    $invAcc = TreeAccount::resolveInventoryAccountForCategoryId($id);
+    if ($invAcc) {
+     $gl = app(InventoryGlPostingService::class);
+     $glLabel = 'تعديل متوسط تكلفة — ' . ($fresh->category_name ?? ('صنف #' . $id));
+     if ($delta > 0) {
+      $gl->postPhysicalCountGain($glAmount, $invAcc, $glLabel, auth()->id());
+     } else {
+      $gl->postPhysicalCountLoss($glAmount, $invAcc, $glLabel, auth()->id());
+     }
+    }
+   }
+
+   DB::commit();
+
+   return response()->json([
+    'success' => true,
+    'quantity' => $fresh->quantity,
+    'total_price' => $fresh->total_price,
+    'sell_total_price' => $fresh->sell_total_price,
+    'unit_price' => $fresh->unit_price,
+    'value_delta' => $delta,
+   ]);
+  } catch (\Throwable $e) {
+   DB::rollBack();
+
+   return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+  }
+ }
 
 
-public function changeCategoryQuantity(Request $request)
+ /**
+  * معاينة فروقات تسوية المخزون في الحسابات (بدون ترحيل).
+  */
+ public function previewInventoryGlSyncFromCategories()
+ {
+  /** @var InventoryAccountsTrueUpService $svc */
+  $svc = app(InventoryAccountsTrueUpService::class);
+
+  return response()->json($svc->preview(), 200);
+ }
+
+ /**
+  * ترحيل قيد يومية لمطابقة أرصدة حسابات المخزون مع مجموع تكلفة الأصناف في المخازن.
+  */
+ public function syncInventoryAccountsFromActualCosts()
+ {
+  /** @var InventoryAccountsTrueUpService $svc */
+  $svc = app(InventoryAccountsTrueUpService::class);
+
+  try {
+   return response()->json($svc->execute(auth()->id()), 200);
+  } catch (\Throwable $e) {
+   return response()->json([
+    'success' => false,
+    'posted' => false,
+    'message' => $e->getMessage(),
+   ], 422);
+  }
+ }
+
+
+ public function changeCategoryQuantity(Request $request)
 {
  $quantity = $request->quantity;
  $category = Category::find($request->id);
@@ -793,7 +908,6 @@ public function changeCategoryQuantity(Request $request)
 
  public function warehouse_balance()
  {
-  Log::info("message", ['sss']);
   $warehouseMappings = [
    'مخزن مواد خام' => 'Raw',
    'مخزن منتج تحت التشغيل' => 'In_Process',
@@ -802,21 +916,25 @@ public function changeCategoryQuantity(Request $request)
    'مخزن تالف' => 'Defective',
   ];
 
-  $warehouses = array_keys($warehouseMappings);
-
   $warehouseBalances = [];
+  $quantityTotals = [];
 
-  foreach ($warehouses as $warehouse) {
+  foreach (array_keys($warehouseMappings) as $warehouse) {
    if ($warehouse == 'مخزن منتج تام') {
     $totalPrice = Category::where('warehouse', $warehouse)->sum('sell_total_price');
    } else {
     $totalPrice = Category::where('warehouse', $warehouse)->sum('total_price');
    }
+   $qtySum = (float) Category::where('warehouse', $warehouse)->sum('quantity');
    $englishWarehouseName = $warehouseMappings[$warehouse];
    $warehouseBalances[$englishWarehouseName] = $totalPrice;
+   $quantityTotals[$englishWarehouseName] = $qtySum;
   }
 
-  return response()->json($warehouseBalances, 200);
+  return response()->json([
+   ...$warehouseBalances,
+   'quantity_totals' => $quantityTotals,
+  ], 200);
  }
 
  public function categories_for_orders()

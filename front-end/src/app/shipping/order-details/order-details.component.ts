@@ -15,6 +15,9 @@ export class OrderDetailsComponent implements OnInit{
   // @Output() dataEvent = new EventEmitter<{quantity:number,id:number , shippstatus:any}>();
   @Output() dataEvent = new EventEmitter<{shipProducts:any , shippstatus:any , orderType:string }>();
   user!:string;
+  get isFinancialAccountsReadonly(): boolean {
+    return this.user === 'Financial Accounts';
+  }
   id!:number;
   order!:any
   notes:any[]=[];

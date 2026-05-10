@@ -5,12 +5,14 @@ import { inject } from '@angular/core';
 export const departmentGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
-  const allowedDepartments: string[] = route.data['allowedDepartments'];
-  const user = authService.getUser();
+  const allowedDepartments: string[] = route.data['allowedDepartments'] ?? [];
+  const userRaw = authService.getUser();
+  const user = typeof userRaw === 'string' ? userRaw.trim() : '';
 
-  console.log('DepartmentGuard Check:', { user, allowedDepartments });
-
-  if (allowedDepartments.includes(user) || allowedDepartments.some(d => d.trim() === user?.toString().trim())) {
+  if (
+    user !== '' &&
+    allowedDepartments.some((d) => (typeof d === 'string' ? d.trim() : '') === user)
+  ) {
     return true;
   }
   router.navigate(['/dashboard']);

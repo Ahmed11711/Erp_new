@@ -37,41 +37,41 @@ const routes: Routes = [
     path: 'cash-in',
     component: CashFlowHubComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'], hub: 'in' }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'], hub: 'in' }
   },
   {
     path: 'cash-out',
     component: CashFlowHubComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'], hub: 'out' }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'], hub: 'out' }
   },
   {
     path: 'banks', component: ListBanksComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'addexpense', component: AddExpenseComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'editexpense/:id', component: EditexpenseComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'expenses', component: ExpensesComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'expenseskind', component: ExpensesKindComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'banks-movements', component: BanksMovementsComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'income-list', component: IncomeListComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'addincome', component: AddIncomeComponent,
@@ -123,31 +123,31 @@ const routes: Routes = [
   },
   {
     path: 'expense_details/:id', component: ExpenseDetailsComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'bank_details/:id', component: BankDetailsComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'customer-accounts', component: CustomerAccountsComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'report-order-new', component: ReportNewOrdersComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'report-order-new-details', component: ReportNewOrdersComponentDetails,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'customer-accounts/customer-account-details', component: CustomerAccountDetailsComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'supplier-accounts', component: SupplierAccountsComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'pendingBanks', component: PendingComponent,
@@ -167,7 +167,7 @@ const routes: Routes = [
   },
   {
     path: 'service-accounts', component: ServiceAccountsListComponent,
-    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management'] }
+    canActivate: [departmentGuard], data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
   }
 ];
 

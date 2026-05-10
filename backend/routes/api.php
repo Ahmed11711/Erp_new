@@ -7,6 +7,7 @@ use App\Http\Controllers\BanksController;
 use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\Inventory\InventoryExcelImportController;
+use App\Http\Controllers\Inventory\StockCountImportController;
 use App\Http\Controllers\Manufacturing\ProductionOrderController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\MeasurementController;
@@ -75,6 +76,7 @@ Route::get('/meta/webhook-health', function () {
     ]);
 });
 
+Route::get('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'ping']);
 Route::post('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'handle']);
 Route::post('/webhooks/shipping/update', [\App\Http\Controllers\ShippingPartnerWebhookController::class, 'update']);
 
@@ -144,9 +146,11 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/categoriesSellReports', [App\Http\Controllers\CategoriesController::class, 'categoriesSellReports']);
     Route::get('reports/shipping-companies', [ShippingCompanyController::class, 'shippingCompaniesReport']);
 
-    Route::middleware(['department.access:Admin,Account Management,Logistics Specialist'])->group(function () {
+    Route::middleware(['department.access:Admin,Account Management,Logistics Specialist,Financial Accounts'])->group(function () {
         Route::get('transactions/by-supplier-order/search', [SupplierController::class, 'supplierAccountsAggregated']);
         Route::get('categories/warehouse_balance', [CategoriesController::class, 'warehouse_balance']);
+        Route::get('categories/inventory-gl-sync-preview', [CategoriesController::class, 'previewInventoryGlSyncFromCategories']);
+        Route::post('categories/inventory-gl-sync', [CategoriesController::class, 'syncInventoryAccountsFromActualCosts']);
         Route::get('categories/categories_details/{id}', [CategoriesController::class, 'categories_details']);
         Route::get('categories/warehousedetails', [CategoriesController::class, 'warehouseDetails']);
         Route::get('categories/categoryDetailsByWherehouse', [CategoriesController::class, 'categoryDetailsByWherehouse']);
@@ -168,6 +172,12 @@ Route::middleware('auth')->group(function () {
         Route::post('inventory/import/items', [InventoryExcelImportController::class, 'importItems']);
         Route::post('inventory/import/opening-balances', [InventoryExcelImportController::class, 'importOpeningBalances']);
         Route::post('inventory/import/adjustments', [InventoryExcelImportController::class, 'importAdjustments']);
+
+        Route::post('inventory/stock-count/preview', [StockCountImportController::class, 'preview']);
+        Route::post('inventory/stock-count/confirm', [StockCountImportController::class, 'confirm']);
+        Route::post('inventory/stock-count/cancel', [StockCountImportController::class, 'cancel']);
+        Route::get('inventory/stock-count/history', [StockCountImportController::class, 'history']);
+        Route::get('inventory/stock-count/{id}', [StockCountImportController::class, 'show']);
 
         Route::get('purchases/search', [App\Http\Controllers\PurchasesController::class, 'search']);
         Route::get('purchases/{id}', [App\Http\Controllers\PurchasesController::class, 'show']);
@@ -205,6 +215,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['department.access:Admin,Data Entry,Account Management,Logistics Specialist,Customer Service'])->group(function () {
         Route::get('categories/search', [CategoriesController::class, 'search']);
         Route::patch('/categories/{id}/quantity', [CategoriesController::class, 'changeCategoryQuantityss']);
+        Route::patch('/categories/{id}/average-unit-cost', [CategoriesController::class, 'changeCategoryAverageUnitCost']);
 
         Route::get('productions/{production}', [ProductionController::class, 'show']);
         Route::get('measurements', [MeasurementController::class, 'index']);
@@ -324,6 +335,11 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware(['department.access:Admin,Operation Management'])->group(function () {
+        Route::post('partcollectorder/{id}', [OrdersController::class, 'partCollect_order']); // part
+        Route::get('addshippmentnumber/{id}', [OrdersController::class, 'addShippmentNumber']);
+    });
+
+    Route::middleware(['department.access:Admin,Operation Management,Financial Accounts,Account Management,Logistics Specialist'])->group(function () {
         Route::get('employees/search', [App\Http\Controllers\EmployeeController::class, 'search']);
         Route::get('employeepermonth/{id}', [App\Http\Controllers\EmployeeController::class, 'employeePerMonth']);
         Route::get('employeespermonth', [App\Http\Controllers\EmployeeController::class, 'employeesPerMonth']);
@@ -350,9 +366,6 @@ Route::middleware('auth')->group(function () {
         Route::apiResource('employeeadvancepayment', App\Http\Controllers\EmployeeAdvancePaymentController::class);
         Route::post('employeemonthpaid/bulk', [App\Http\Controllers\EmployeeMonthPaidController::class, 'bulkStore']);
         Route::apiResource('employeemonthpaid', App\Http\Controllers\EmployeeMonthPaidController::class);
-
-        Route::post('partcollectorder/{id}', [OrdersController::class, 'partCollect_order']); // part
-        Route::get('addshippmentnumber/{id}', [OrdersController::class, 'addShippmentNumber']);
     });
 
     // new role Corparates
@@ -385,14 +398,14 @@ Route::middleware('auth')->group(function () {
         Route::post('shipping_methods', [ShippingMethodsController::class, 'store']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Account Management,Logistics Specialist,Data Entry'])->group(function () {
+    Route::middleware(['department.access:Admin,Operation Management,Account Management,Logistics Specialist,Financial Accounts,Data Entry'])->group(function () {
         Route::post('companies', [CustomerCompanyController::class, 'store']);
         Route::get('companies', [CustomerCompanyController::class, 'index']);
         Route::get('getOrdersNumbers', [OrdersController::class, 'getOrdersNumbers']);
         Route::apiResource('ShippingLineStatement', App\Http\Controllers\ShippingLineStatementController::class);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Account Management,Logistics Specialist'])->group(function () {
+    Route::middleware(['department.access:Admin,Operation Management,Account Management,Logistics Specialist,Financial Accounts'])->group(function () {
         Route::get('companies/search', [CustomerCompanyController::class, 'search']);
         Route::get('companies/{id}', [CustomerCompanyController::class, 'customerCompanyBalance']);
         Route::post('companies/companycollect/{id}', [CustomerCompanyController::class, 'companyCollect']);

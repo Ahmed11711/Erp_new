@@ -38,7 +38,7 @@
               <td class="w-50" style="border: solid 1px black !important;"></td>
             </tr>
             <tr style="text-align: center;" *ngFor="let elm of offer?.category">
-              <td style="border: solid 1px black !important;">
+              <td class="quotation-desc-ar" style="border: solid 1px black !important;">
                 <p>{{elm.category_name}}</p>
               </td>
               <td style="border: solid 1px black !important;" *ngIf="showOldPrice">
@@ -47,7 +47,7 @@
               <td style="border: solid 1px black !important;">
                 <p>{{elm.new_category_price|customNumber}}</p>
               </td>
-              <td style="border: solid 1px black !important; text-align: start; width: 30%;">
+              <td class="quotation-desc-ar" style="border: solid 1px black !important; text-align: start; width: 30%;">
                 <p [innerHTML]="elm.description"></p>
               </td>
               <td style="height: 360px !important; border: solid 1px black !important;">
@@ -69,7 +69,7 @@
             <td style="border: solid 1px black !important;">Total Price</td>
           </tr>
           <tr style="text-align: center;" *ngFor="let elm of offer?.category">
-            <td style="border: solid 1px black !important;">{{elm.category_name}}</td>
+            <td class="quotation-desc-ar" style="border: solid 1px black !important;">{{elm.category_name}}</td>
             <td style="border: solid 1px black !important;">{{elm.new_category_price|customNumber}}</td>
             <td style="border: solid 1px black !important;">{{elm.category_quantity|customNumber}}</td>
             <td style="border: solid 1px black !important;">{{elm.total_price|customNumber}}</td>
@@ -95,7 +95,7 @@
 
       <div *ngIf="offer?.note" class="col-md-12 mb-2 note-section" dir="ltr" style="text-align: start; border: solid 1px black;">
         <h3 class="note-title" style="font-size: 16px;">Note : </h3>
-        <p class="note-text" style="font-size: 14px;">{{offer?.note}}</p>
+        <p class="note-text quotation-note-text" dir="auto" style="font-size: 14px;">{{offer?.note}}</p>
       </div>
 
       <div class="w-75 m-auto">

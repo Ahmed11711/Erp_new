@@ -19,8 +19,6 @@ export class WorkingHoursComponent implements OnInit {
   selectedFile: any;
   employees: any[] = [];
   days: any[] = [];
-  monthDays: any[] = [];
-
   btnShowForm = false;
 
   currentMonthValue!: string;
@@ -141,13 +139,6 @@ export class WorkingHoursComponent implements OnInit {
       });
 
       this.days = [...new Set(this.sheetData.map(d => d.date))].sort();
-
-      const [y, m] = this.days[0].split('-').map(Number);
-      const daysInMonth = new Date(y, m, 0).getDate();
-      this.monthDays = [];
-      for (let d = 1; d <= daysInMonth; d++) {
-        this.monthDays.push(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
-      }
     };
 
     reader.readAsArrayBuffer(this.selectedFile);
@@ -176,16 +167,51 @@ export class WorkingHoursComponent implements OnInit {
   }
 
   /* ======================================================
-     SUBMIT (UNCHANGED LOGIC – SAFE)
+     SUBMIT — شهر الواجهة + رسائل للأخطاء الصامتة سابقاً
   ====================================================== */
-  async submitform() {
-    this.data = [];
-    this.sheetData = this.sheetData.filter(r => this.monthDays.includes(r.date));
+  submitform() {
+    if (!this.selectedFile) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'لم يتم اختيار ملف',
+        text: 'اختر ملف البصمة ثم انتظر انتهاء قراءته قبل الضغط على حفظ.'
+      });
+      return;
+    }
+    if (!this.sheetData?.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'لا توجد بيانات في الشيت',
+        text: 'تأكد من الملف (أعمدة AC-No. و Time) أو جرّب اختيار الملف مرة أخرى.'
+      });
+      return;
+    }
 
-    this.days.forEach(day => {
+    const [selYear, selMonth] = this.currentMonthValue.split('-').map(Number);
+    const daysInMonth = new Date(selYear, selMonth, 0).getDate();
+    const allowedDates = new Set<string>();
+    for (let d = 1; d <= daysInMonth; d++) {
+      allowedDates.add(`${selYear}-${String(selMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+    }
+
+    const sheetRows = this.sheetData.filter(r => allowedDates.has(r.date));
+    const daysToProcess = [...new Set(sheetRows.map(row => row.date))].sort();
+
+    if (!daysToProcess.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'الشهر المختار لا يطابق تواريخ الشيت',
+        html: `الشهر الحالي في الصفحة: <b>${this.currentMonthValue}</b>. غيّر اختيار الشهر أعلاه ليطابق تواريخ الملف، أو تحقق من عمود التاريخ في الإكسل.`
+      });
+      return;
+    }
+
+    this.data = [];
+
+    daysToProcess.forEach(day => {
       this.employees.forEach(emp => {
-        const punches = this.sheetData
-          .filter(p => p.acc_no == emp.acc_no && p.date == day)
+        const punches = sheetRows
+          .filter(p => String(p.acc_no).trim() === String(emp.acc_no).trim() && p.date === day)
           .sort((a, b) => new Date(a.iso_date).getTime() - new Date(b.iso_date).getTime());
 
         if (!punches.length) return;
@@ -210,11 +236,36 @@ export class WorkingHoursComponent implements OnInit {
       });
     });
 
-    if (!this.data.length) return;
+    if (!this.data.length) {
+      Swal.fire({
+        icon: 'info',
+        title: 'لا توجد سجلات للحفظ',
+        text: 'لم يُطابق أي سطر بين الملف وجدول الموظفين لهذا الشهر. راجع أرقام البصمة (AC-No.) وأنك تعرض شهر الموظفين نفسه في الجدول.'
+      });
+      return;
+    }
 
-    this.employeeService.saveExcelData({ data: this.data }, '').subscribe(() => {
-      Swal.fire({ icon: 'success', timer: 1500, showConfirmButton: false });
-      this.getEmpDataPerMonth();
+    Swal.fire({
+      title: 'جاري الحفظ…',
+      didOpen: () => { Swal.showLoading(); },
+      allowOutsideClick: false
+    });
+
+    this.employeeService.saveExcelData({ data: this.data }, '').subscribe({
+      next: () => {
+        Swal.close();
+        Swal.fire({ icon: 'success', timer: 1500, showConfirmButton: false });
+        this.getEmpDataPerMonth();
+      },
+      error: (err) => {
+        Swal.close();
+        const msg =
+          err?.error?.message ||
+          (typeof err?.error === 'string' ? err.error : null) ||
+          err?.message ||
+          'تعذّر الاتصال بالخادم أو رفض الطلب.';
+        Swal.fire({ icon: 'error', title: 'فشل الحفظ', text: msg });
+      }
     });
   }
 

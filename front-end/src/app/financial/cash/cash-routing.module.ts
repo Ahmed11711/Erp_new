@@ -12,19 +12,19 @@ const routes: Routes = [
         path: 'previous/clients',
         component: ClientCashPaymentsComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
     },
     {
         path: 'previous/suppliers',
         component: SupplierCashPaymentsComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
     },
     {
         path: 'receive',
         component: ReceivePaymentComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
     },
     {
         path: 'receive-from-client',
@@ -36,7 +36,7 @@ const routes: Routes = [
         component: ReceivePaymentComponent,
         canActivate: [departmentGuard],
         data: {
-            allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'],
+            allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'],
             defaultParty: 'supplier'
         }
     },
@@ -44,13 +44,13 @@ const routes: Routes = [
         path: 'give-to-client',
         component: CashGiveToClientComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
     },
     {
         path: 'pay-to-supplier',
         component: CashPayToSupplierComponent,
         canActivate: [departmentGuard],
-        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+        data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
     }
 ];
 

@@ -147,6 +147,17 @@ export class Offer1DetailsComponent implements OnInit {
             word-break: break-word !important;
             white-space: normal !important;
           }
+          .quotation-desc-ar {
+            direction: rtl !important;
+            unicode-bidi: isolate !important;
+            text-align: right !important;
+            font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+            font-synthesis: none !important;
+          }
+          .quotation-note-text {
+            font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+            font-synthesis: none !important;
+          }
           @page { size: A4; margin: 0; }
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }

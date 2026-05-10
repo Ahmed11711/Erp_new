@@ -18,34 +18,34 @@ import { departmentGuard } from '../guards/department.guard';
 
 const routes: Routes = [
   {path:'addemployee', component:AddEmployeeComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
   {path:'employee', component:EmployeeComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
   // {path:'salarycashing', component:SalaryCashingComponent},
   {path:'payroll', component:PayrollComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
   // {path:'addmerit', component:AddMeritComponent},
   // {path:'addsubtraction', component:AddSubtractionComponent},
   // {path:'advancepayment', component:AdvancePaymentComponent},
   // {path:'accountstatment', component:AccountStatementComponent},
   {path:'reviewabsencess', component:ReviewAbsencesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Account Management','Logistics Specialist']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Account Management','Logistics Specialist','Financial Accounts']}
   },
   {path:'employee/edit/:id', component:EditEmployeeComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
   {path:'employee/details/:id', component:EmployeeDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
   // {path:'extrahours', component:ExtraHoursComponent},
   {path:'workinghours', component:WorkingHoursComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
   {path:'workinghoursdetails/:id', component:WorkingHoursDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management']}
+    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Operation Management','Financial Accounts']}
   },
 
 

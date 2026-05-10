@@ -11,31 +11,31 @@ const routes: Routes = [
     path: '',
     component: BanksComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'transfer',
     component: BankTransferComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'transfer-to-safe',
     component: BankSafeTransferComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'transfer-from-safe',
     component: BankSafeTransferComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   },
   {
     path: 'deposit-withdraw',
     component: BankDepositWithdrawComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
   }
 ];
 

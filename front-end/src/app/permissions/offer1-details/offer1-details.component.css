@@ -66,8 +66,22 @@ h3{
   width: 213mm;
   min-height: 296mm;
   box-sizing: border-box;
-  font-family:'Montserrat SemiBold' !important;
+  font-family:'Montserrat SemiBold', 'Cairo', sans-serif !important;
   font-weight:normal;
+}
+
+/* Arabic line items inside LTR quotation: shaping + RTL order */
+#capture .quotation-desc-ar {
+  direction: rtl;
+  unicode-bidi: isolate;
+  text-align: right;
+  font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+  font-synthesis: none;
+}
+
+#capture .quotation-note-text {
+  font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+  font-synthesis: none;
 }
 
 h3{

@@ -17,8 +17,13 @@
   </div>
 
   <div class="col-5">
-   <div class="d-flex align-items-center" style="gap: 10px;">
+   <div class="d-flex align-items-center flex-wrap" style="gap: 10px;">
     <p class="header"> الاصناف</p>
+    <button type="button" class="btn btn-outline-secondary btn-sm"
+     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'"
+     (click)="openInventoryGlSync()" [disabled]="syncingInventoryGl">
+     {{ syncingInventoryGl ? 'جاري…' : 'تسوية المخزون في الحسابات' }}
+    </button>
     <span (click)="exportTableToExcel()" class="bg-main p-1" style="cursor: pointer; border-radius: 5px;">
      <!-- SVG هنا -->
     </span>
@@ -133,6 +138,9 @@
     <ng-template matMenuContent let-item="item">
      <button mat-menu-item type="button" [routerLink]="['/dashboard/categories/edit_category', item.id]">
       <span>تعديل</span>
+     </button>
+     <button mat-menu-item type="button" (click)="promptAdjustAverageUnitCost(item)">
+      <span>تعديل متوسط التكلفة</span>
      </button>
      <button mat-menu-item type="button" (click)="deleteCategory(item.id)">
       <span>حذف</span>

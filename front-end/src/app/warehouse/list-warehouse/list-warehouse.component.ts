@@ -16,8 +16,8 @@ import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-r
 export class ListWarehouseComponent implements OnInit {
 
   /**
-   * الرصيد المعروض: مجموع تقييم الأصناف لكل مخزن من ‎warehouse_balance‎ (مجموع total_price أو sell_total_price في categories).
-   * لا نستخدم ‎stocks.balance‎ للعرض لأنه غالباً يبقى 0 ولا يُحدَّث مع حركات المخزون/القيود، فيظهر رصيد صفر رغم وجود تقييم في الأصناف وفي شجرة الحسابات.
+   * الرصيد القيمي: مجموع total_price أو sell_total_price حسب المخزن (من warehouse_balance).
+   * إجمالي الكمية: مجموع categories.quantity لكل مخزن (quantity_totals) — يعكس الجرد حتى عند تكلفة 0.
    */
   data: any[] = [];
   url = '';
@@ -50,19 +50,28 @@ export class ListWarehouseComponent implements OnInit {
       next: ({ balances, stocks }) => {
         const stockList = this.stockService.parseListResponse(stocks);
         const byName = new Map<string, any>(stockList.map((s: any) => [s.name, s]));
+        const qtyTotals =
+          balances != null && typeof balances === 'object' && balances['quantity_totals']
+            ? (balances['quantity_totals'] as Record<string, number>)
+            : {};
         this.data = WAREHOUSE_STOCK_ROWS.map(({ nameAr, keyEn }) => {
           const s = byName.get(nameAr);
-          const raw = balances != null ? (balances as any)[keyEn] : undefined;
-          const categorySum = raw !== undefined && raw !== null ? Number(raw) : 0;
+          const rawVal = balances != null ? (balances as any)[keyEn] : undefined;
+          const categorySum =
+            rawVal !== undefined && rawVal !== null ? Number(rawVal) : 0;
+          const quantityTotal =
+            qtyTotals[keyEn] !== undefined && qtyTotals[keyEn] !== null
+              ? Number(qtyTotals[keyEn])
+              : 0;
           const hasStockRow = s != null;
           const stockBal =
             hasStockRow && s.balance !== undefined && s.balance !== null
               ? Number(s.balance)
               : null;
-          const balance = categorySum;
           return {
             name: nameAr,
-            balance,
+            balance: categorySum,
+            quantityTotal,
             categorySum,
             stockBalance: stockBal,
             id: s?.id,

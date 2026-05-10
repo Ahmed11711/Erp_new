@@ -8,7 +8,7 @@ const routes: Routes = [
     path: '',
     component: DailyLedgerReportComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management'] }
+    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
   }
 ];
 

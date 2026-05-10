@@ -1,4 +1,5 @@
-import { Component, ElementRef, HostListener, Inject, Renderer2 } from '@angular/core';
+import { Component, ElementRef, HostListener, Inject, OnDestroy, Renderer2 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { OrderService } from '../services/order.service';
 import {MatDialog, MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import { NavigationEnd, Router } from '@angular/router';
@@ -18,14 +19,20 @@ import { DialogWhatsAppMessageComponent } from 'src/app/whatsapp/components/dial
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { AuthService } from 'src/app/auth/auth.service';
 import { WhatsAppService } from 'src/app/whatsapp/services/whatsapp.service';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-list-orders',
   templateUrl: './list-orders.component.html',
-  styleUrls: ['./list-orders.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './list-orders.component.css']
 })
-export class ListOrdersComponent {
+export class ListOrdersComponent implements OnDestroy {
   user!:string;
+  /** قسم الحسابات المالية: عرض فقط (طلبات مشحونة/محصّلة) دون إجراءات. */
+  get isFinancialAccountsReadonly(): boolean {
+    return this.user === 'Financial Accounts';
+  }
   /** True if the current user is assigned to at least one WhatsApp number */
   hasWhatsAppAccess = false;
 
@@ -51,12 +58,19 @@ export class ListOrdersComponent {
   page = 0;
   pageSizeOptions = [100,15,50];
 
+  /** عرض البطاقات بدل الجدول تحت عرض ~768px */
+  isMobileView = false;
+  /** تفاصيل مفتوحة لبطاقات الموبايل */
+  mobileExpandedIds = new Set<number>();
+  private readonly destroy$ = new Subject<void>();
+
   constructor(private orderSource:OrderSourceService ,private shippingWay: ShippingWayService , private datePipe:DatePipe,
     private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
     private filterService:FilterOrderService , private shippingLine:ShippingLinesService,
     private userService:UserService ,private renderer: Renderer2 ,private el: ElementRef, private bankService:BanksService,
     private authService:AuthService, private router: Router,
-    private whatsappService: WhatsAppService
+    private whatsappService: WhatsAppService,
+    private breakpointObserver: BreakpointObserver
     ) {
       document.addEventListener('scroll', (event) => {
         this.onListenerTriggered(event);
@@ -98,6 +112,35 @@ export class ListOrdersComponent {
     this.orderSource.data().subscribe(reuslt=>this.orderSources = reuslt);
     this.shippingWay.data().subscribe(result=>this.shippingWays = result);
     this.shippingLine.dataLines().subscribe(result=>this.shippingLines = result);
+
+    this.breakpointObserver
+      .observe(['(max-width: 767.98px)'])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        this.isMobileView = state.matches;
+        if (!state.matches) {
+          this.mobileExpandedIds = new Set();
+        }
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  toggleMobileOrderCard(id: number): void {
+    const next = new Set(this.mobileExpandedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.mobileExpandedIds = next;
+  }
+
+  isMobileOrderExpanded(id: number): boolean {
+    return this.mobileExpandedIds.has(id);
   }
 
   onListenerTriggered(event: Event): void {

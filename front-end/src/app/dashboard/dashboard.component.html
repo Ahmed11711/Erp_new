@@ -54,6 +54,7 @@
                 <span class="d-flex"><mat-icon class="mx-2">dashboard</mat-icon>الصفحة الرئيسية</span>
             </mat-list-item>
 
+
             <!-- واتساب -->
             <mat-list-item routerLink="/dashboard/whatsapp/chat" routerLinkActive="active"
                 *ngIf="hasWhatsAppAccess || user == 'Admin'">
@@ -180,7 +181,7 @@
 
                 <!-- ══════ الحسابات ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                     <mat-expansion-panel-header>
                         <mat-icon>account_balance</mat-icon>
                         الحسابات
@@ -190,7 +191,7 @@
 
                         <!-- ── شجرة الحسابات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management'">
+                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                             <mat-expansion-panel-header>
                                 <mat-icon>account_tree</mat-icon> شجرة الحسابات
                             </mat-expansion-panel-header>
@@ -227,7 +228,7 @@
                                     <span>تحويل من خزينة إلى بنك</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/service-accounts" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management'">
+                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                                     <span>حسابات الخدمات</span>
                                 </a>
                                 <!-- <a mat-list-item routerLink="/dashboard/financial/banks" routerLinkActive="active">
@@ -271,7 +272,7 @@
 
                         <!-- ── السندات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management'">
+                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                             <mat-expansion-panel-header>
                                 <mat-icon>receipt_long</mat-icon> السندات
                             </mat-expansion-panel-header>
@@ -304,7 +305,8 @@
                         </mat-expansion-panel>
 
                         <!-- ── رأس المال والإيرادات ── -->
-                        <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                        <mat-expansion-panel [class.mat-elevation-z0]="true"
+                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                             <mat-expansion-panel-header>
                                 <mat-icon>trending_up</mat-icon> رأس المال والإيرادات
                             </mat-expansion-panel-header>
@@ -315,22 +317,28 @@
                                 <a mat-list-item routerLink="/dashboard/financial/capitals" routerLinkActive="active">
                                     <span>مبالغ رأس المال</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/addincome" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/financial/addincome" routerLinkActive="active"
+                                    *ngIf="user == 'Admin'">
                                     <span>إضافة إيراد</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/otherincome" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/financial/otherincome" routerLinkActive="active"
+                                    *ngIf="user == 'Admin'">
                                     <span>الإيرادات الأخرى</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/discounts" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/financial/discounts" routerLinkActive="active"
+                                    *ngIf="user == 'Admin'">
                                     <span>الخصومات والالتزامات</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/addcimmitment" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/financial/addcimmitment" routerLinkActive="active"
+                                    *ngIf="user == 'Admin'">
                                     <span>إضافة التزام</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/covenant" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/financial/covenant" routerLinkActive="active"
+                                    *ngIf="user == 'Admin'">
                                     <span>العهد</span>
                                 </a>
-                                <a mat-list-item routerLink="/dashboard/financial/addcovenant" routerLinkActive="active">
+                                <a mat-list-item routerLink="/dashboard/financial/addcovenant" routerLinkActive="active"
+                                    *ngIf="user == 'Admin'">
                                     <span>صرف العهد</span>
                                 </a>
                             </mat-nav-list>
@@ -338,7 +346,7 @@
 
                         <!-- ── الأصول الثابتة ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management'">
+                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                             <mat-expansion-panel-header>
                                 <mat-icon>business</mat-icon> الأصول الثابتة
                             </mat-expansion-panel-header>
@@ -357,7 +365,7 @@
 
                         <!-- ── القيود اليومية ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management'">
+                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                             <mat-expansion-panel-header>
                                 <mat-icon>menu_book</mat-icon> القيود اليومية
                             </mat-expansion-panel-header>
@@ -373,25 +381,25 @@
 
                         <!-- ── تقارير الحسابات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                             <mat-expansion-panel-header>
                                 <mat-icon>assessment</mat-icon> تقارير الحسابات
                             </mat-expansion-panel-header>
                             <mat-nav-list>
                                 <a mat-list-item routerLink="/dashboard/accounting/trial-balance" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                                     <span>ميزان المراجعة</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/reports/financialstatement" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management'">
+                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                                     <span>كشف حساب تفصيلي</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/income-list" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                                     <span>قائمة الدخل</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/reports/product-performance" routerLinkActive="active"
-                                *ngIf="user == 'Admin' || user == 'Account Management'">
+                                *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
                                 <span>تقرير أداء المنتجات</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/reports/procurement" routerLinkActive="active"
@@ -403,7 +411,7 @@
                                 <span>تقرير مبيعات المنتجات</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/categoriesreports" routerLinkActive="active"
-                                *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                                *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                                 <span>تقارير الأصناف</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
@@ -426,7 +434,7 @@
 
                 <!-- ══════ إدارة الشحن ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management' || user == 'Shipping Management' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Customer Service' || user == 'Account Management' || user == 'Logistics Specialist'">
+                    *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management' || user == 'Financial Accounts' || user == 'Shipping Management' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Customer Service' || user == 'Account Management' || user == 'Logistics Specialist'">
                     <mat-expansion-panel-header>
                         <mat-icon>local_shipping</mat-icon>
                         إدارة الشحن
@@ -468,30 +476,30 @@
 
                 <!-- ══════ الموارد البشرية ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Operation Specialist'">
+                    *ngIf="user == 'Admin' || user == 'Operation Management'  || user == 'Financial Accounts'|| user == 'Account Management' || user == 'Logistics Specialist' || user == 'Operation Specialist'">
                     <mat-expansion-panel-header>
                         <mat-icon>badge</mat-icon>
                         HR
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/hr/addemployee" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management'">
+                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
                             <span>إضافة موظف</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/employee" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management'">
+                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
                             <span>الموظفين</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/payroll" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management'">
+                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
                             <span>كشف المرتبات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/reviewabsencess" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Account Management'">
+                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
                             <span>مراجعة الغيابات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/workinghours" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management'">
+                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
                             <span>كشف الحضور والغياب</span>
                         </a>
                     </mat-nav-list>

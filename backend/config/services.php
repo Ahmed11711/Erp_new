@@ -43,6 +43,8 @@ return [
     /*
     | Shopify: Webhook secret من تطبيق Shopify (Admin → Apps → your app → API credentials).
     | سجّل Webhook: Topic = orders/create → URL = {APP_URL}/api/shopify/webhook
+    | مثال: APP_URL=http://test.mag-opt.com/backend/public → POST …/api/shopify/webhook
+    | GET …/api/shopify/webhook يعيد JSON للتحقق من أن الرابط شغال.
     | Admin API: نطاق المتجر my-store.myshopify.com + Admin API access token (صلاحيات read_products على الأقل للمزامنة).
     */
     'shopify' => [

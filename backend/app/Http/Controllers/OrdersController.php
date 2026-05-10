@@ -42,6 +42,9 @@ class OrdersController extends Controller
     /** أنواع الطلبات التي تُنقص المخزون عبر category_procedure وتُثبت COGS/الإيراد كمسار «جديد». */
     private const ORDER_TYPES_INVENTORY_SHIP = ['جديد', 'طلب استبدال'];
 
+    /** قسم الحسابات المالية: طلبات تم شحنها أو تحصيلها فقط (لا جديد / مؤجل / ملغي). */
+    private const FINANCIAL_ACCOUNTS_ORDER_STATUSES = ['تم شحن', 'شحن جزئي', 'تم التحصيل', 'تم الاستلام'];
+
     /**
      * @param  array<int, array<string, mixed>>  $rows
      */
@@ -136,6 +139,15 @@ class OrdersController extends Controller
                 $query->with('receiver', 'sender');
             },
         ])->find($id);
+
+        if (!$order) {
+            return response()->json(['message' => 'غير موجود'], 404);
+        }
+
+        $dept = auth()->user()->department;
+        if ($dept === 'Financial Accounts' && ! in_array($order->order_status, self::FINANCIAL_ACCOUNTS_ORDER_STATUSES, true)) {
+            return response()->json(['message' => 'غير مصرح بعرض هذا الطلب'], 403);
+        }
 
         $order->tempReviewNotification = $order->notifications()
             ->where('type', 'مراجعة مؤقتة')
@@ -2426,6 +2438,7 @@ class OrdersController extends Controller
             'Logistics Specialist' => ["طلب مؤكد","شحن جزئي","تم شحن","تم الاستلام","مؤجل","تم الصيانة", "رفض استلام"],
             'Shipping Management' => ["طلب جديد", "طلب مؤكد","شحن جزئي","تم شحن","تم الاستلام", "تم التحصيل","مؤجل","تم الصيانة", "رفض استلام","ملغي"],
             'Review Management' => ["تم شحن","تم التحصيل","مؤجل","ملغي", "رفض استلام"],
+            'Financial Accounts' => ['تم شحن', 'شحن جزئي', 'تم التحصيل', 'تم الاستلام'],
         ];
 
         $privateOrder = $userDepartment == 'Admin' ? 1 : null;
@@ -2455,12 +2468,16 @@ class OrdersController extends Controller
         }
 
         if (!empty($orderStatusArray)) {
-            $order->where(function ($query) use ($orderStatusArray, $userId) {
-                $query->whereIn('order_status', $orderStatusArray)
+            if ($userDepartment === 'Financial Accounts') {
+                $order->whereIn('order_status', $orderStatusArray);
+            } else {
+                $order->where(function ($query) use ($orderStatusArray, $userId) {
+                    $query->whereIn('order_status', $orderStatusArray)
                         ->orWhereHas('notifications', function ($notificationQuery) use ($userId) {
-                    $notificationQuery->where('send_to', $userId);
+                            $notificationQuery->where('send_to', $userId);
+                        });
                 });
-            });
+            }
         }
 
         if ($request->has('prepaidAmount') && $request->prepaidAmount != '') {

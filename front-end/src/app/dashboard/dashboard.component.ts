@@ -63,9 +63,11 @@ export class DashboardComponent implements OnDestroy {
     }
 
 
-    this.user = this.loginService.getUser();
+    this.applyUserDepartmentFromCookie();
+    this.loginService.syncSessionDepartmentFromServer().subscribe(() => {
+      this.applyUserDepartmentFromCookie();
+    });
     this.userName = this.loginService.userName();
-    this.showShopifyQuickTabs = this.user === 'Admin' || this.user === 'Logistics Specialist';
     this.dashboardNavUrl = this.route.url;
     this.navUrlSub = this.route.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
@@ -120,6 +122,12 @@ export class DashboardComponent implements OnDestroy {
       }
     });
 
+  }
+
+  private applyUserDepartmentFromCookie(): void {
+    const raw = this.loginService.getUser();
+    this.user = typeof raw === 'string' ? raw : '';
+    this.showShopifyQuickTabs = this.user === 'Admin' || this.user === 'Logistics Specialist';
   }
 
   ngOnDestroy(): void {

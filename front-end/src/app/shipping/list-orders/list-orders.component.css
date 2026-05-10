@@ -2,6 +2,13 @@ form{
     padding: 20px;
 }
 
+/* يطغى على خلفية report-page-shell (#f3f5f9) لمطابقة صفحة شركات الشحن */
+:host {
+  display: block;
+  background: #ffffff;
+  min-height: 100%;
+}
+
 .new{
     color: white;
     background-color: #82225e;
@@ -51,9 +58,6 @@ background-color: #ff9800;
 .archived{
   background-color: #2196f3;
 }
-/* .new,.refuse, .confirmed, .shipped, .received, .postponed, .canceled,.collected,.fixed,.archived,.partshipped{
-  color: white;
-} */
 
 ::ng-deep .mat-mdc-paginator-container{
   justify-content: center !important;
@@ -103,10 +107,444 @@ label>.fa-check{
 }
 
 tbody td {
-  font-size: 1rem;
+  font-size: 0.86rem;
 }
 
 sup{
   color: #82225e;
   border-radius: 50%;
+}
+
+/* ——— نفس أسلوب صفحة شركات الشحن (ويب + موبايل) ——— */
+
+.list-orders-shipping-theme.list-orders-page.report-page {
+  max-width: 100%;
+  padding-left: 8px;
+  padding-right: 8px;
+  background: #ffffff;
+}
+
+.list-orders-shipping-head-wrap {
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.list-orders-title-shell {
+  width: 100%;
+}
+
+.list-orders-shipping-title.title.header {
+  font-size: clamp(1rem, 3.5vw, 1.75rem);
+  line-height: 1.25;
+  padding: 0.35rem 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .list-orders-shipping-title.title.header {
+    width: 50%;
+    font-size: 1.65rem;
+  }
+}
+
+/* أزرار بنمط «اضافة» — حدود بنفسجية (شركات الشحن) */
+.list-orders-btn-outline.mat-mdc-outlined-button,
+a.list-orders-btn-outline.mat-mdc-outlined-button {
+  border: 2px solid #82225e !important;
+  color: #82225e !important;
+  border-radius: 2rem !important;
+  font-weight: 600 !important;
+  background: #fff !important;
+  min-height: 40px !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.list-orders-btn-outline.mat-mdc-outlined-button mat-icon {
+  color: #82225e !important;
+}
+
+.list-orders-icon-outline {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #82225e;
+  background: #fff;
+  color: #82225e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.list-orders-icon-outline:hover {
+  background: #fdf2f8;
+  box-shadow: 0 1px 4px rgba(130, 34, 94, 0.12);
+}
+
+.list-orders-icon-outline mat-icon {
+  margin: 0;
+  font-size: 22px;
+  width: 22px;
+  height: 22px;
+}
+
+.orders-filters-panel {
+  margin-bottom: 12px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+}
+
+.orders-filters-panel .form-control,
+.orders-filters-panel .form-control:focus {
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-size: 0.88rem;
+}
+
+.orders-filters-panel .input-group .form-control {
+  border-radius: 10px;
+}
+
+/* موبايل: أعمدة الفلاتر عمود واحد بمسافات موحّدة */
+@media (max-width: 767.98px) {
+  .orders-filters-panel .d-md-flex {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .orders-filters-panel .col {
+    width: 100%;
+    max-width: 100%;
+    flex: 0 0 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+.orders-filters-panel mat-form-field {
+  width: 100%;
+}
+
+::ng-deep .orders-filters-panel .mat-mdc-form-field {
+  font-size: 0.88rem;
+}
+
+::ng-deep .orders-filters-panel .mat-mdc-text-field-wrapper {
+  border-radius: 10px !important;
+  background: #fff;
+}
+
+::ng-deep .orders-filters-panel .mdc-notched-outline .mdc-notched-outline__leading,
+::ng-deep .orders-filters-panel .mdc-notched-outline .mdc-notched-outline__notch,
+::ng-deep .orders-filters-panel .mdc-notched-outline .mdc-notched-outline__trailing {
+  border-color: #e5e7eb !important;
+}
+
+.orders-toolbar {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.list-orders-toolbar-shipping.orders-toolbar {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.orders-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.orders-count i {
+  color: #64748b;
+}
+
+.orders-clear-btn {
+  border: none;
+  background: #4f46e5;
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+  white-space: nowrap;
+}
+
+.orders-clear-btn:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.orders-clear-btn.list-orders-btn-outline {
+  background: #fff;
+  color: #82225e;
+  border: 2px solid #82225e;
+  border-radius: 2rem;
+}
+
+.orders-clear-btn.list-orders-btn-outline:hover {
+  background: #fdf2f8;
+  transform: none;
+}
+
+/* جد الويب: رأس تركواز + صفوف متناوبة (مثل لقطة شركات الشحن) */
+.list-orders-table-shell {
+  margin-bottom: 0;
+}
+
+.list-orders-table-responsive {
+  margin: 0 auto;
+  max-width: 100%;
+}
+
+.list-orders-shipping-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  overflow: hidden;
+  text-align: center;
+}
+
+.list-orders-shipping-table .list-orders-thead th {
+  background: linear-gradient(180deg, #0d9488 0%, #115e59 100%);
+  color: #f8fafc !important;
+  font-weight: 600;
+  font-size: clamp(0.7rem, 1.05vw, 0.92rem);
+  border: 1px solid #0f766e;
+  padding: 10px 5px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.list-orders-shipping-table tbody td {
+  border: 1px solid #e2e8f0;
+  font-size: clamp(0.75rem, 1.05vw, 0.88rem);
+  font-weight: 500;
+  padding: 8px 5px;
+}
+
+.list-orders-shipping-table.orders-data-table tbody tr:nth-child(even) {
+  background: #f1f5f9;
+}
+
+.list-orders-shipping-table.orders-data-table tbody td.confirmed,
+.orders-data-table tbody td.new,
+.orders-data-table tbody td.shipped,
+.orders-data-table tbody td.received,
+.orders-data-table tbody td.postponed,
+.orders-data-table tbody td.canceled,
+.orders-data-table tbody td.refuse,
+.orders-data-table tbody td.collected,
+.orders-data-table tbody td.fixed,
+.orders-data-table tbody td.archived,
+.orders-data-table tbody td.partshipped {
+  font-weight: 600;
+}
+
+.list-orders-page .paginator-wrap {
+  margin-top: 12px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.vertical-text {
+  display: inline-block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .orders-toolbar {
+    padding: 8px 10px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .orders-count {
+    font-size: 0.82rem;
+    justify-content: center;
+  }
+
+  .orders-clear-btn {
+    width: 100%;
+  }
+}
+
+/* ——— بطاقات الموبايل — نفس ألوان الشحن + تقرير المشتريات ——— */
+
+.list-orders-mobile-summary.summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.list-orders-shipping-theme .list-orders-mobile-summary .summary-card.orders .summary-icon {
+  background: #ccfbf1;
+  color: #115e59;
+}
+
+.list-orders-shipping-theme .list-orders-mobile-summary .summary-card.neutral .summary-icon {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.list-orders-mobile-cards .item-card.list-orders-item-card {
+  margin-bottom: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  border-top: 4px solid #115e59;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.list-orders-item-card .item-head {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.item-title-group {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  text-align: right;
+}
+
+.item-title-group .item-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  text-decoration: none;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.item-title-group .item-title:hover {
+  color: #115e59;
+  text-decoration: underline;
+}
+
+.list-orders-status-pill {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-orders-status-pill.new { background: #82225e; color: #fff; }
+.list-orders-status-pill.confirmed { background: #ca8a04; color: #1c1917; }
+.list-orders-status-pill.partshipped { background: #92832d; color: #fff; }
+.list-orders-status-pill.shipped { background: #16a34a; color: #fff; }
+.list-orders-status-pill.received { background: #3f51b5; color: #fff; }
+.list-orders-status-pill.postponed { background: #ea580c; color: #fff; }
+.list-orders-status-pill.canceled,
+.list-orders-status-pill.refuse { background: #dc2626; color: #fff; }
+.list-orders-status-pill.collected { background: #64748b; color: #fff; }
+.list-orders-status-pill.fixed { background: #15803d; color: #fff; }
+.list-orders-status-pill.archived { background: #2563eb; color: #fff; }
+
+.item-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.item-tool-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid #82225e;
+  background: #fff;
+  color: #82225e;
+  cursor: pointer;
+}
+
+.item-tool-trigger:hover {
+  background: #fdf2f8;
+}
+
+.item-tool-trigger mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.list-orders-item-stats.item-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.list-orders-item-stats .stat-value.stat-text {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+  max-height: 2.5em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.list-orders-item-details.item-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.list-orders-item-details .detail-value {
+  white-space: pre-line;
+  font-size: 0.82rem;
+}
+
+.list-orders-subtle-link {
+  color: #82225e !important;
+  font-size: 0.8rem !important;
+  text-decoration: none !important;
+}
+
+.list-orders-inline-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #334155;
+  margin: 0;
+}
+
+.list-orders-item-details .notification_number {
+  position: static;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 400px) {
+  .list-orders-item-stats.item-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
