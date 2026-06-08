@@ -37,7 +37,9 @@ export class ManufacturingRecipesComponent implements OnInit {
     return this.recipes.filter(
       (r) =>
         (r.recipe_name || '').toLowerCase().includes(q) ||
-        (r.description || '').toLowerCase().includes(q)
+        (r.description || '').toLowerCase().includes(q) ||
+        (r.output_item?.category_name || '').toLowerCase().includes(q) ||
+        (r.output_item?.color || '').toLowerCase().includes(q),
     );
   }
 

@@ -9,6 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { BankTransferComponent } from './bank-transfer.component';
 import { BankSafeTransferComponent } from './bank-safe-transfer.component';
 import { BankDepositWithdrawComponent } from './bank-deposit-withdraw.component';
@@ -30,7 +31,8 @@ import { BankDepositWithdrawComponent } from './bank-deposit-withdraw.component'
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatAutocompleteModule
   ]
 })
 export class BanksModule {}

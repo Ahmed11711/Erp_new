@@ -12,6 +12,8 @@ import { OrderService } from 'src/app/shipping/services/order.service';
 import { AssetService } from 'src/app/financial/services/asset.service';
 import { StockService } from 'src/app/warehouse/services/stock.service';
 import { warehouseOptionsFromStocks } from 'src/app/shared/constants/warehouse-stock-rows';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { canSelectCategoryWarehouse } from 'src/app/shared/utils/category-warehouse-access';
 
 @Component({
  selector: 'app-add-category',
@@ -30,11 +32,14 @@ export class AddCategoryComponent implements OnInit {
 
  @ViewChild('addCat', { static: false }) addCat!: NgForm;
  constructor(private _snackBar: MatSnackBar, private production: ProductionService, private units: UnitsService, private StockService: StockService,
-  private category: CategoryService, private authService: AuthService, private orderService: OrderService) { }
+  private category: CategoryService, private authService: AuthService, private orderService: OrderService, private rbac: RbacService) { }
 
  ngOnInit() {
   this.user = this.authService.getUser();
-  this.category.allCategories().subscribe((result: any) => this.products = result);
+  this.category.allCategories().subscribe({
+   next: (result: any) => { this.products = Array.isArray(result) ? result : []; },
+   error: () => { this.products = []; },
+  });
   this.getStockData();
   this.category.listRecipes().subscribe({
    next: (rows) => { this.recipesData = Array.isArray(rows) ? rows : []; },
@@ -103,6 +108,12 @@ export class AddCategoryComponent implements OnInit {
    formData.append('recipe_id', String(recipeId));
   }
 
+  const productType = (data.value.product_type ?? '').toString().trim();
+  if (productType) {
+   formData.append('product_type', productType);
+  }
+  formData.append('allow_wip_sale', data.value.allow_wip_sale ? '1' : '0');
+
   // Append the image file to FormData
   if (this.selectedFile) {
    formData.append('category_image', this.selectedFile, this.selectedFile.name);
@@ -130,17 +141,21 @@ export class AddCategoryComponent implements OnInit {
   snackBarRef.instance.message = 'تم اضافة الصنف بنجاح  ';
  }
  getProduction() {
-  this.production.getProductions().subscribe((data: any) => {
-   this.productionData = data.filter((item) => item.warehouse == this.warehouse);
+  this.production.getProductions().pipe(catchError(() => of([]))).subscribe((data: any) => {
+   this.productionData = (Array.isArray(data) ? data : []).filter((item) => item.warehouse == this.warehouse);
    this.syncSelectModel('production', this.productionData, 'id');
   })
  }
 
  getUnits() {
-  this.units.getUnits().subscribe((data: any) => {
-   this.unitsData = data.filter((item) => item.warehouse == this.warehouse);
+  this.units.getUnits().pipe(catchError(() => of([]))).subscribe((data: any) => {
+   this.unitsData = (Array.isArray(data) ? data : []).filter((item) => item.warehouse == this.warehouse);
    this.syncSelectModel('unit', this.unitsData, 'id');
   })
+ }
+
+ canSelectWarehouse(warehouseName: string): boolean {
+  return canSelectCategoryWarehouse(warehouseName, this.user, this.rbac);
  }
 
  onWarehouseChange(event: any) {

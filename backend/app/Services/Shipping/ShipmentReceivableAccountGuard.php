@@ -1,0 +1,147 @@
+<?php
+
+namespace App\Services\Shipping;
+
+use App\Enums\CollectionProviderType;
+use App\Models\Order;
+use App\Models\ShippingCompany;
+use App\Support\CollectionProviderMorph;
+
+/**
+ * يضمن قبل تأكيد شحن طلب (أفراد) أن جهات التحصيل/الشحن التي ستحمل مديونية
+ * العميل مرتبطة بحساب ذمم في شجرة الحسابات.
+ *
+ * عند تأكيد التسليم تنتقل ذمة العميل إلى شركة الشحن/المندوب (جزء COD)
+ * وإلى شركة التحصيل (الجزء المدفوع مقدماً) عبر
+ * {@see \App\Services\Accounting\DeliveryConfirmationAccountingService}.
+ * إذا لم تكن الجهة مرتبطة بحساب فلن ينتقل القيد وتبقى المديونية على العميل
+ * بشكل خاطئ. لذلك نُلزم بربط الحساب أولاً (الجهة نفسها أو شركة الشحن المرتبطة بها).
+ */
+class ShipmentReceivableAccountGuard
+{
+    public function __construct(
+        private CollectionReceivableAccountResolver $resolver,
+    ) {
+    }
+
+    /**
+     * يتحقق من ربط الحسابات قبل الشحن. يرمي
+     * {@see UnlinkedReceivableAccountException} برسالة عربية واضحة عند وجود جهة غير مرتبطة.
+     */
+    public function assertLinkedForShip(
+        Order $order,
+        int $shippingCompanyId,
+        ?string $collectionProviderType,
+        ?int $collectionProviderId,
+        ?int $legacyCollectionCompanyId,
+        ?float $manualShippingAmount,
+        ?float $manualCollectionAmount,
+        ?float $basisNetTotal = null,
+    ): void {
+        $net = round(max(0, $basisNetTotal ?? (float) $order->net_total), 2);
+        if ($net <= 0.009) {
+            return;
+        }
+
+        $prepaid = round(max(0, (float) ($order->prepaid_amount ?? 0)), 2);
+
+        $prepaidPart = round(min($prepaid, $net), 2);
+        $codPart = round(max(0, $net - $prepaidPart), 2);
+
+        if ($manualShippingAmount !== null || $manualCollectionAmount !== null) {
+            $codPart = round((float) ($manualShippingAmount ?? 0), 2);
+            $prepaidPart = round((float) ($manualCollectionAmount ?? 0), 2);
+        }
+
+        [$provType, $provId] = $this->resolveCollectionProvider(
+            $shippingCompanyId,
+            $collectionProviderType,
+            $collectionProviderId,
+            $legacyCollectionCompanyId,
+            $net,
+            $prepaid,
+        );
+
+        $missing = [];
+
+        // جزء الدفع عند الاستلام (COD) ينتقل إلى شركة الشحن/المندوب.
+        if ($codPart > 0.009) {
+            $sc = ShippingCompany::find($shippingCompanyId);
+            if (! $sc || ! $sc->receivable_tree_account_id) {
+                $name = $sc?->name ?? ('#' . $shippingCompanyId);
+                $missing[] = 'شركة الشحن «' . $name . '» غير مرتبطة بحساب ذمم في شجرة الحسابات.';
+            }
+        }
+
+        // الجزء المدفوع مقدماً ينتقل إلى جهة التحصيل (إن اختلفت عن شركة الشحن).
+        $collectionIsShippingCompany = in_array($provType, [
+            CollectionProviderType::ShippingCompany->value,
+            CollectionProviderType::Courier->value,
+        ], true) && (int) $provId === $shippingCompanyId;
+
+        $checkableCollectionTypes = [
+            CollectionProviderType::ShippingCompany->value,
+            CollectionProviderType::Courier->value,
+            CollectionProviderType::CollectionCompany->value,
+        ];
+
+        if (
+            $prepaidPart > 0.009
+            && $provType
+            && $provId
+            && in_array($provType, $checkableCollectionTypes, true)
+            && ! $collectionIsShippingCompany
+        ) {
+            $accId = $this->resolver->receivableAccountIdForProvider($provType, (int) $provId);
+            if (! $accId) {
+                $name = CollectionProviderMorph::resolveName($provType, (int) $provId) ?? ('#' . $provId);
+                $label = $provType === CollectionProviderType::CollectionCompany->value
+                    ? 'شركة التحصيل'
+                    : 'جهة التحصيل';
+                $missing[] = $label . ' «' . $name
+                    . '» غير مرتبطة بحساب ذمم في شجرة الحسابات (اربطها هي أو شركة الشحن المرتبطة بها).';
+            }
+        }
+
+        if (! empty($missing)) {
+            throw new UnlinkedReceivableAccountException(
+                'لا يمكن إتمام الشحن قبل ربط الحسابات حتى تُسجَّل المديونيات بشكل صحيح. '
+                . implode(' ', $missing)
+            );
+        }
+    }
+
+    /**
+     * يحدد جهة التحصيل الفعلية بنفس منطق
+     * {@see OrderFinancialStateService::inferCollectionProviderOnShip}.
+     *
+     * @return array{0: ?string, 1: ?int}
+     */
+    private function resolveCollectionProvider(
+        int $shippingCompanyId,
+        ?string $explicitType,
+        ?int $explicitId,
+        ?int $legacyCollectionCompanyId,
+        float $net,
+        float $prepaid,
+    ): array {
+        if ($explicitType && $explicitId) {
+            return [$explicitType, $explicitId];
+        }
+
+        if ($legacyCollectionCompanyId) {
+            return [CollectionProviderType::ShippingCompany->value, $legacyCollectionCompanyId];
+        }
+
+        if ($prepaid >= $net - 0.02) {
+            return [CollectionProviderType::None->value, null];
+        }
+
+        $sc = ShippingCompany::find($shippingCompanyId);
+        $type = ($sc && $sc->type === 'مندوب')
+            ? CollectionProviderType::Courier->value
+            : CollectionProviderType::ShippingCompany->value;
+
+        return [$type, $shippingCompanyId];
+    }
+}

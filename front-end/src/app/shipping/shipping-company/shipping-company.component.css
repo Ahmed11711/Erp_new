@@ -31,6 +31,31 @@ i{
   cursor: pointer;
 }
 
+.receivable-account-field {
+  width: 100%;
+}
+
 td{
   font-size: 1.4rem;
+}
+
+/* لوحة الإضافة/التعديل فوق الجدول حتى لا يُرسَم السيلكت أو قائمة الحساب خلف الصفوف */
+.shipping-company-page #shipping-company-form-panel {
+  position: relative;
+  z-index: 40;
+}
+
+.shipping-company-page .shipping-company-type-field select.form-control {
+  position: relative;
+  z-index: 41;
+}
+
+.shipping-company-page .receivable-account-field {
+  position: relative;
+  z-index: 42;
+}
+
+.shipping-company-page .shipping-company-table-wrap {
+  position: relative;
+  z-index: 0;
 }

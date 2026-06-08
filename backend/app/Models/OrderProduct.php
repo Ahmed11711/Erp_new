@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Shopify\ShopifyOrderImportService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -11,6 +12,13 @@ class OrderProduct extends Model
     protected $primaryKey = 'id';
     protected $guarded=[];
 
+    protected $appends = ['is_shopify_unmatched'];
+
+    /** معرف صنف الـ placeholder لمنتجات Shopify غير المطابقة (يُحلّ مرة واحدة لكل طلب HTTP). */
+    private static ?int $shopifyUnmatchedCategoryId = null;
+
+    private static bool $shopifyUnmatchedResolved = false;
+
     public function order()
     {
         return $this->belongsTo(Order::class);
@@ -18,5 +26,22 @@ class OrderProduct extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * true عندما يكون هذا البند مربوطاً بصنف Shopify غير المطابق (يحتاج ربط يدوي بصنف ERP صحيح).
+     */
+    public function getIsShopifyUnmatchedAttribute(): bool
+    {
+        if (! self::$shopifyUnmatchedResolved) {
+            self::$shopifyUnmatchedResolved = true;
+            $id = Category::query()
+                ->where('item_code', ShopifyOrderImportService::UNMATCHED_PLACEHOLDER_ITEM_CODE)
+                ->value('id');
+            self::$shopifyUnmatchedCategoryId = $id !== null ? (int) $id : null;
+        }
+
+        return self::$shopifyUnmatchedCategoryId !== null
+            && (int) $this->category_id === self::$shopifyUnmatchedCategoryId;
     }
 }

@@ -77,13 +77,16 @@ export class ShippingcompanyDetailsComponent {
 
   selectOrder(e: any, item: any) {
     if (e.target.checked) {
+      if (!this.canCollectFromRow(item)) {
+        e.target.checked = false;
+        return;
+      }
       if (!this.selectedOrders.includes(item)) {
         this.selectedOrders.push(item);
       }
-    } else{
-      this.selectedOrders = this.selectedOrders.filter(elm=> elm !== item);
+    } else {
+      this.selectedOrders = this.selectedOrders.filter(elm => elm !== item);
     }
-
   }
 
   sendOneOrder:boolean = false;
@@ -113,30 +116,94 @@ export class ShippingcompanyDetailsComponent {
   }
 
   reviewFn(){
-    this.selectedOrders = this.selectedOrders.map(elm=> {
-      return {'id': elm.order_id}
-    });
+    const orders = this.selectedOrders
+      .map((elm) => ({ id: elm.order_id ?? elm.id }))
+      .filter((o) => o.id != null);
 
-    this.order.reviewOrder({orders:this.selectedOrders}).subscribe(res=>{
+    if (orders.length === 0) {
+      return;
+    }
+
+    this.order.reviewOrder({ orders }).subscribe(res => {
       if (res) {
-      Swal.fire({
-        icon : 'success',
-        timer:1500,
-        showConfirmButton:false,
-      }).then(res=> this.search(arguments));
+        Swal.fire({
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false,
+        }).then(() => {
+          this.selectedOrders = [];
+          this.search(arguments);
+        });
       }
     });
-
   }
 
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
+    this.selectedOrders = [];
     this.search(arguments);
   }
 
   trackByDetailId(_index: number, row: { id?: number; order_id?: number }): number {
     return row?.id ?? row?.order_id ?? _index;
+  }
+
+  private normStatus(v: unknown): string {
+    return v == null ? '' : String(v).trim();
+  }
+
+  /** ملخّص يظهر في عمود التعديلات: عداد التعديلات + تأكيد التسليم + آخر أحداث التتبع */
+  modificationsSummary(elm: any): {
+    hasAny: boolean;
+    editsCount: number;
+    deliveryDate: string | null;
+    deliveryBatch: string | null;
+    recentTracking: { line: string; title: string }[];
+  } {
+    const od = elm?.order?.order_details;
+    const editsCount = Math.max(0, Number(od?.edits ?? 0));
+    const deliveryDate = od?.delivery_date != null && od.delivery_date !== '' ? String(od.delivery_date) : null;
+    const deliveryBatch =
+      od?.delivery_batch_code != null && String(od.delivery_batch_code).trim() !== ''
+        ? String(od.delivery_batch_code).trim()
+        : null;
+    const raw = elm?.order?.traking;
+    const list = Array.isArray(raw) ? raw : [];
+    const recentTracking = list.slice(0, 5).map((tr: any) => {
+      const action = tr?.action != null ? String(tr.action) : '';
+      const date = tr?.date != null ? String(tr.date) : tr?.created_at != null ? String(tr.created_at).slice(0, 16) : '';
+      const user = tr?.user?.name != null ? String(tr.user.name) : '';
+      const line = user ? `${action} — ${date} — ${user}` : `${action} — ${date}`;
+      return { line: line.replace(/ — $/, '').trim(), title: line };
+    });
+    const hasAny = editsCount > 0 || !!deliveryDate || recentTracking.length > 0;
+    return { hasAny, editsCount, deliveryDate, deliveryBatch, recentTracking };
+  }
+
+  /** قائمة الإجراءات (تحصيل / إشعار) مفعّلة لطلبات «تم شحن» أو «تم التسليم» المتطابقة مع حالة الطلب */
+  menuVisibleForRow(elm: any): boolean {
+    const st = this.normStatus(elm?.status);
+    const os = this.normStatus(elm?.order?.order_status);
+    return (
+      (st === 'تم شحن' && os === 'تم شحن') ||
+      (st === 'تم التسليم' && os === 'تم التسليم')
+    );
+  }
+
+  canCollectFromRow(elm: any): boolean {
+    if (!this.menuVisibleForRow(elm)) {
+      return false;
+    }
+    const done = elm.is_done === true || elm.is_done === 1 || elm.is_done === '1';
+    if (done) {
+      return false;
+    }
+    const os = this.normStatus(elm?.order?.order_status);
+    if (os === 'تم التحصيل') {
+      return false;
+    }
+    return true;
   }
 
   /** نفس أدوار قائمة «تحصيل الطلب» في الجدول */
@@ -146,34 +213,17 @@ export class ShippingcompanyDetailsComponent {
       || u === 'Operation Specialist' || u === 'Logistics Specialist';
   }
 
-  /** صف صالح للتحصيل الجماعي: يطابق ما يظهر في الجدول + ما يتحقق منه السيرفر قدر الإمكان */
-  private isRowEligibleForBulkCollect(r: any): boolean {
-    const t = (v: unknown) => (v == null ? '' : String(v)).trim();
-    if (r?.order_id == null) {
-      return false;
-    }
-    if (t(r.status) !== 'تم شحن') {
-      return false;
-    }
-    const done = r.is_done === true || r.is_done === 1 || r.is_done === '1';
-    if (done) {
-      return false;
-    }
-    const orderSt = r?.order?.order_status;
-    if (orderSt === undefined || orderSt === null) {
-      return true;
-    }
-    return t(orderSt) === 'تم شحن';
-  }
-
   /**
    * تحصيل جماعي بنفس حقول الدفع والـ API الخلفي للتحصيل الفردي (قيود محاسبية موحدة).
    */
   openBulkCollect(): void {
-    const eligible = this.selectedOrders.filter((r: any) => this.isRowEligibleForBulkCollect(r));
+    const eligible = this.selectedOrders.filter((r: any) => this.canCollectFromRow(r));
     const uniqueIds = [...new Set(eligible.map((r: any) => r.order_id))] as number[];
     if (uniqueIds.length === 0) {
-      Swal.fire({ icon: 'warning', title: 'اختر صفوفاً بحالة «تم شحن»' });
+      const msg = this.selectedOrders.length === 0
+        ? 'لم يُحدَّد أي صف'
+        : 'الصفوف المحددة غير صالحة للتحصيل (مُحصَّلة مسبقاً، أو حالة الطلب لا تطابق حالة السطر)';
+      Swal.fire({ icon: 'warning', title: msg });
       return;
     }
     const hasReturnSwap = eligible.some(

@@ -42,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
     {
         
         Schema::defaultStringLength(191);
+        require_once app_path('Support/rbac_helpers.php');
          if (class_exists(\Doctrine\DBAL\Types\Type::class)) {
         $platform = Schema::getConnection()->getDoctrineSchemaManager()->getDatabasePlatform();
         if (! $platform->hasDoctrineTypeMappingFor('enum')) {

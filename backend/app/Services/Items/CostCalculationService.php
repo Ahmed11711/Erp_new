@@ -2,6 +2,7 @@
 
 namespace App\Services\Items;
 
+use App\Models\Item;
 use App\Models\Recipe;
 use App\Models\RecipeExtraCost;
 use App\Models\RecipeIngredient;
@@ -155,19 +156,57 @@ class CostCalculationService
         $result = $this->calculateFinalCost($recipe->ingredients, $recipe->extraCosts);
 
         if ($sellingPrice === null) {
-            $finishedGood = $recipe->itemsUsingRecipe()
-                ->where('warehouse', 'مخزن منتج تام')
-                ->first();
-
-            $sellingPrice = $finishedGood
-                ? (string) ($finishedGood->sell_total_price ?: $finishedGood->category_price ?: '0')
-                : '0';
+            $sellingPrice = $this->defaultSellingPriceForRecipe($recipe);
         }
 
         $result['selling_price']  = $sellingPrice;
         $result['margin_percent'] = $this->marginPercent($sellingPrice, $result['final_cost']);
 
         return $result;
+    }
+
+    /**
+     * Resolved selling/list price for margin (finished: sell_total_price; WIP/raw often category_price).
+     */
+    private function defaultSellingPriceForRecipe(Recipe $recipe): string
+    {
+        if ($recipe->output_item_id) {
+            $item = Item::query()->find((int) $recipe->output_item_id);
+            if ($item) {
+                return $this->sellingPriceFromItem($item);
+            }
+        }
+
+        $finishedGood = $recipe->itemsUsingRecipe()
+            ->where('warehouse', 'مخزن منتج تام')
+            ->first();
+
+        return $finishedGood ? $this->sellingPriceFromItem($finishedGood) : '0';
+    }
+
+    /**
+     * Prefer explicit sell, then catalog/cost price fields (WIP may only set category_price).
+     */
+    private function sellingPriceFromItem(Item $item): string
+    {
+        foreach (['sell_total_price', 'category_price', 'unit_price'] as $field) {
+            $v = $item->{$field};
+            if ($v === null || $v === '' || ! is_numeric($v)) {
+                continue;
+            }
+            if (bccomp((string) $v, '0', self::SCALE) !== 0) {
+                return (string) $v;
+            }
+        }
+
+        foreach (['sell_total_price', 'category_price', 'unit_price'] as $field) {
+            $v = $item->{$field};
+            if ($v !== null && $v !== '' && is_numeric($v)) {
+                return (string) $v;
+            }
+        }
+
+        return '0';
     }
 
     // ------------------------------------------------------------------

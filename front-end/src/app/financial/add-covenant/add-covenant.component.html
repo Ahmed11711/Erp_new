@@ -52,9 +52,9 @@
         <div class="col-md-3">
           <label class="form-label small text-muted">مصدر الصرف</label>
           <select formControlName="payment_type" class="form-control type" (change)="onPaymentTypeChange()">
-            <option ngValue="safe">خزينة نقدية</option>
-            <option ngValue="bank">حساب بنكي</option>
-            <option ngValue="service_account">محفظة إلكترونية (فودافون كاش وغيرها)</option>
+            <option ngValue="safe">خزينة</option>
+            <option ngValue="bank">بنك</option>
+            <option ngValue="service_account">حساب خدمي</option>
           </select>
         </div>
       </div>
@@ -75,9 +75,9 @@
           </select>
         </div>
         <div class="col-md-4" *ngIf="paymentType === 'service_account'">
-          <label class="form-label small text-muted">المحفظة / الوسيط</label>
+          <label class="form-label small text-muted">الحساب الخدمي</label>
           <select formControlName="service_account_id" class="form-control type">
-            <option [ngValue]="null" disabled>— اختر المحفظة —</option>
+            <option [ngValue]="null" disabled>— اختر الحساب الخدمي —</option>
             <option *ngFor="let elm of serviceAccountsData" [ngValue]="elm.id">{{ elm.name }}</option>
           </select>
         </div>

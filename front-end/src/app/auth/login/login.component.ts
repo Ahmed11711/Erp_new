@@ -45,6 +45,15 @@ public constructor(private login:AuthService,private router:Router) { }
         setTimeout(() => {
           this.Display = false;
       }, 3000)
+      } else if (err.status === 422 && err.error?.message) {
+        const m = err.error.message;
+        this.errorMessage = typeof m === 'string' ? m : (Object.values(m).flat()[0] as string) || 'تحقق من البيانات المدخلة';
+        this.Display = true;
+        setTimeout(() => { this.Display = false; }, 4000);
+      } else if (err.status === 0) {
+        this.errorMessage = 'تعذر الاتصال بالخادم (شبكة أو عنوان API أو CORS).';
+        this.Display = true;
+        setTimeout(() => { this.Display = false; }, 4000);
       }
     }
 

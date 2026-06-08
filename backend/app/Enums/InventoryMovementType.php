@@ -24,4 +24,25 @@ enum InventoryMovementType: string
 
     /** Receipt of output from a manufacturing production order (WIP or finished). */
     case ProductionOrderOutput = 'production_order_output';
+
+    /** Formal stock documents module — outbound voucher (صرف مخزون). */
+    case StockDocumentOut = 'stock_document_out';
+
+    /** Formal stock documents module — sales return (مرتجع مبيعات وارد للمخزون). */
+    case StockDocumentSalesReturn = 'stock_document_sales_return';
+
+    /** Formal stock documents module — purchase return (مرتجع مشتريات صادر من المخزون). */
+    case StockDocumentPurchaseReturn = 'stock_document_purchase_return';
+
+    /** Formal stock documents module — custody / amanat outbound. */
+    case StockDocumentAmanatOut = 'stock_document_amanat_out';
+
+    /** Formal stock documents module — custody / amanat return inbound. */
+    case StockDocumentAmanatReturn = 'stock_document_amanat_return';
+
+    /** Transfer leg — outbound warehouse line (paired with StockDocumentTransferIn). */
+    case StockDocumentTransferOut = 'stock_document_transfer_out';
+
+    /** Transfer leg — inbound warehouse line (paired with StockDocumentTransferOut). */
+    case StockDocumentTransferIn = 'stock_document_transfer_in';
 }

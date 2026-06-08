@@ -236,7 +236,7 @@
         <button *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' " mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التاجيل','postponed')">
           <span>تاجيل الطلب</span>
         </button>
-         <button mat-menu-item *ngIf="item.order_status=='ملغي' || item.order_status=='ارشيف' || item.order_status=='مؤجل' || item.order_status=='رفض استلام'" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew')">
+         <button mat-menu-item *ngIf="item.order_status=='ملغي' || item.order_status=='ارشيف' || item.order_status=='مؤجل' || item.order_status=='رفض استلام'" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew', item)">
           <span>تجديد الطلب</span>
         </button>
          <button mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">

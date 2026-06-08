@@ -20,6 +20,16 @@ import { MatCardModule } from '@angular/material/card';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatListModule } from '@angular/material/list';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { RolesManagementComponent } from './roles-management/roles-management.component';
 
 
 @NgModule({
@@ -28,7 +38,8 @@ import { MatExpansionModule } from '@angular/material/expansion';
     UsersComponent,
     PowersComponent,
     FollowUsersComponent,
-    SettingsComponent
+    SettingsComponent,
+    RolesManagementComponent,
   ],
   imports: [
     CommonModule,
@@ -47,6 +58,15 @@ import { MatExpansionModule } from '@angular/material/expansion';
     MatSelectModule,
     MatButtonModule,
     MatExpansionModule,
+    MatDividerModule,
+    MatCheckboxModule,
+    MatTooltipModule,
+    MatListModule,
+    MatProgressSpinnerModule,
+    MatTabsModule,
+    MatChipsModule,
+    MatButtonToggleModule,
+    MatSlideToggleModule,
   ],
   providers: [
     DatePipe

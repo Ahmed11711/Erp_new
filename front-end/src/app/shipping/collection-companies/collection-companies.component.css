@@ -1,0 +1,154 @@
+.cc-page {
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+.cc-page .header {
+  background: #333;
+  color: #fff;
+  font-size: 1.25rem;
+  border-radius: 6px;
+  padding: 0.4rem 1rem;
+}
+
+.cc-hint {
+  font-size: 0.9rem;
+  margin-inline: 0.25rem;
+}
+
+.cc-panel {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.cc-panel-title {
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.cc-page .form-label {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: #555;
+}
+
+.cc-page .form-control {
+  font-size: 0.95rem;
+  height: 42px;
+  border-radius: 8px;
+  border-color: #ced4da;
+}
+
+.cc-page .form-control:focus {
+  border-color: #82225e;
+  box-shadow: 0 0 0 0.15rem rgba(130, 34, 94, 0.15);
+}
+
+/* قائمة منسدلة موحّدة مع حقول الإدخال */
+.cc-select-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.cc-select {
+  display: block;
+  width: 100%;
+  height: 42px;
+  padding: 0.45rem 0.85rem 0.45rem 2.35rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: #333;
+  background-color: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 0.7rem center;
+  background-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cc-select:hover {
+  border-color: #adb5bd;
+}
+
+.cc-select:focus {
+  outline: none;
+  border-color: #82225e;
+  box-shadow: 0 0 0 0.15rem rgba(130, 34, 94, 0.15);
+}
+
+.cc-select:disabled {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.cc-select option {
+  padding: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.cc-mat-field ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 42px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.cc-mat-field ::ng-deep .mat-mdc-text-field-wrapper {
+  height: 42px;
+}
+
+.cc-mat-field ::ng-deep .mdc-notched-outline__leading,
+.cc-mat-field ::ng-deep .mdc-notched-outline__notch,
+.cc-mat-field ::ng-deep .mdc-notched-outline__trailing {
+  border-color: #ced4da !important;
+}
+
+.cc-mat-field.mat-focused ::ng-deep .mdc-notched-outline__leading,
+.cc-mat-field.mat-focused ::ng-deep .mdc-notched-outline__notch,
+.cc-mat-field.mat-focused ::ng-deep .mdc-notched-outline__trailing {
+  border-color: #82225e !important;
+}
+
+.cc-mat-field ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
+
+.cc-table thead th {
+  background: #f8f9fa;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #555;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.cc-table tbody td {
+  font-size: 0.95rem;
+  vertical-align: middle;
+}
+
+.cc-page .btn-primary {
+  background-color: #82225e;
+  border-color: #82225e;
+}
+
+.cc-page .btn-primary:hover {
+  background-color: #6b1b4d;
+  border-color: #6b1b4d;
+}
+
+@media (max-width: 768px) {
+  .cc-panel {
+    padding: 0.75rem;
+  }
+}

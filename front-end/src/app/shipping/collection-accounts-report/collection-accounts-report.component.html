@@ -1,0 +1,176 @@
+<div class="container-fluid py-3">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-4"><app-time></app-time></div>
+    <div class="col-md-4 text-center">
+      <p class="title header mb-0">ذمم شركات التحصيل والدفع</p>
+    </div>
+    <div class="col-md-4 text-end">
+      <button class="btn btn-outline-secondary btn-sm" *ngIf="activeTab === 'statement'" (click)="back()">← الملخص</button>
+    </div>
+  </div>
+
+  <div class="report-panel p-3 mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">من تاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="dateFrom" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">إلى تاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="dateTo" />
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" (click)="applyFilters()">بحث</button>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="activeTab === 'summary'">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <div class="card text-center p-3 border-danger">
+          <div class="text-muted small">إجمالي المطلوب تحصيله</div>
+          <div class="h4 mb-0 text-danger">{{ summary.total_pending_to_collect | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center p-3 border-success">
+          <div class="text-muted small">إجمالي المحصل</div>
+          <div class="h4 mb-0 text-success">{{ summary.total_collected | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center p-3">
+          <div class="text-muted small">طلبات معلقة</div>
+          <div class="h4 mb-0">{{ summary.total_orders_pending }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive" *ngIf="!loading">
+      <table class="table table-bordered table-hover text-center">
+        <thead class="table-dark">
+          <tr>
+            <th>#</th>
+            <th>شركة التحصيل</th>
+            <th>حساب الشجرة</th>
+            <th>مطلوب تحصيله</th>
+            <th>طلبات معلقة</th>
+            <th>محصل سابقاً</th>
+            <th>قبض</th>
+            <th>كشف</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of companies; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td class="text-start">
+              {{ c.name }}
+              <small class="text-muted d-block" *ngIf="c.linked_shipping_company_name">ربط: {{ c.linked_shipping_company_name }}</small>
+            </td>
+            <td class="text-start small">
+              <span *ngIf="c.receivable_tree_account">{{ c.receivable_tree_account.code }} — {{ c.receivable_tree_account.name }}</span>
+              <span *ngIf="!c.receivable_tree_account" class="text-danger">غير مربوط</span>
+            </td>
+            <td dir="ltr" class="fw-bold text-danger">{{ c.pending_to_collect | number:'1.2-2' }}</td>
+            <td>{{ c.pending_orders_count }}</td>
+            <td dir="ltr">{{ c.total_collected | number:'1.2-2' }}</td>
+            <td>
+              <a
+                class="btn btn-sm btn-success text-white"
+                *ngIf="c.linked_shipping_company_id && pendingAmount(c) > 0"
+                [routerLink]="['/dashboard/financial/cash/receive']"
+                [queryParams]="cashReceiptQuery(c)"
+              >قبض</a>
+              <span class="text-muted small" *ngIf="!c.linked_shipping_company_id">اربط شركة شحن للسند</span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" (click)="openStatement(c)">كشف</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-center py-4" *ngIf="loading">جاري التحميل...</p>
+    <p class="text-center text-muted py-4" *ngIf="!loading && !companies.length">لا توجد شركات تحصيل — أضفها من إدارة الشحن</p>
+  </div>
+
+  <div *ngIf="activeTab === 'statement' && selected">
+    <h5 class="mb-2">كشف: {{ selected.name }}</h5>
+    <p class="text-muted small" *ngIf="statementSource === 'ledger'">مصدر البيانات: كشف تشغيلي (شركة شحن مرتبطة)</p>
+    <p class="text-muted small" *ngIf="statementSource === 'orders'">مصدر البيانات: طلبات مرتبطة بشركة التحصيل</p>
+
+    <div class="row g-2 mb-3" *ngIf="aggregates">
+      <div class="col-md-3">
+        <div class="card p-2 text-center border-danger">
+          <div class="small text-muted">المطلوب تحصيله</div>
+          <div class="h5 text-danger mb-0">{{ aggregates.outstanding | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3" *ngIf="aggregates.shipped_pending != null">
+        <div class="card p-2 text-center">
+          <div class="small text-muted">مشحون معلق</div>
+          <div class="h5 mb-0">{{ aggregates.shipped_pending | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3" *ngIf="aggregates.delivered_pending != null">
+        <div class="card p-2 text-center">
+          <div class="small text-muted">مُسلّم معلق</div>
+          <div class="h5 mb-0">{{ aggregates.delivered_pending | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3" *ngIf="aggregates.settled != null">
+        <div class="card p-2 text-center border-success">
+          <div class="small text-muted">تم التسوية</div>
+          <div class="h5 text-success mb-0">{{ aggregates.settled | number:'1.2-2' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive" *ngIf="details?.data?.length && statementSource === 'ledger'">
+      <table class="table table-sm table-bordered text-center">
+        <thead>
+          <tr>
+            <th>طلب</th>
+            <th>عميل</th>
+            <th>مبلغ</th>
+            <th>حالة</th>
+            <th>تاريخ شحن</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of details.data">
+            <td><a [routerLink]="orderLink(d.order_id)">{{ d.order_id }}</a></td>
+            <td>{{ d.order?.customer_name }}</td>
+            <td dir="ltr">{{ d.amount | number:'1.2-2' }}</td>
+            <td>{{ d.status }}</td>
+            <td>{{ d.shipping_date }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-responsive" *ngIf="details?.data?.length && statementSource === 'orders'">
+      <table class="table table-sm table-bordered text-center">
+        <thead>
+          <tr>
+            <th>طلب</th>
+            <th>عميل</th>
+            <th>صافي</th>
+            <th>مبلغ التحصيل</th>
+            <th>حالة الطلب</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of details.data">
+            <td><a [routerLink]="orderLink(d.id)">{{ d.id }}</a></td>
+            <td>{{ d.customer_name }}</td>
+            <td dir="ltr">{{ d.net_total | number:'1.2-2' }}</td>
+            <td dir="ltr" class="fw-bold">{{ d.collection_receivable_amount | number:'1.2-2' }}</td>
+            <td>{{ d.order_status }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

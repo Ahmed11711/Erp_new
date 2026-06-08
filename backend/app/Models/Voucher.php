@@ -17,6 +17,7 @@ class Voucher extends Model
         'client_or_supplier_name',
         'client_id',
         'supplier_id',
+        'shipping_company_id',
         'amount',
         'notes',
         'reference_number',
@@ -41,6 +42,11 @@ class Voucher extends Model
     public function supplier()
     {
         return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function shippingCompany()
+    {
+        return $this->belongsTo(ShippingCompany::class, 'shipping_company_id');
     }
 
     public function user()

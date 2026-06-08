@@ -46,14 +46,23 @@
             <div class="col-md-6 mb-3">
                 <label>طريقة الدفع</label>
                 <select class="form-control" formControlName="payment_method">
-                    <option value="cash">نقدي (الصندوق)</option>
+                    <option value="cash">نقدي (خزينة)</option>
                     <option value="bank">بنكي</option>
+                    <option value="service_account">حساب خدمي</option>
                 </select>
             </div>
 
-            <!-- Account (Safe/Bank) -->
+            <!-- Account (treasury linked tree account) -->
             <div class="col-md-6 mb-3">
-                <label>الحساب ({{ form.get('payment_method')?.value === 'cash' ? 'الصندوق' : 'البنك' }})</label>
+                <label>
+                    {{
+                        form.get('payment_method')?.value === 'cash'
+                            ? 'الحساب (الخزينة)'
+                            : form.get('payment_method')?.value === 'bank'
+                              ? 'الحساب (البنك)'
+                              : 'الحساب (خدمي)'
+                    }}
+                </label>
                 <select class="form-control" formControlName="account_id">
                     <option [ngValue]="null">اختر الحساب...</option>
                     <option *ngFor="let account of filteredAccounts" [ngValue]="account.id">

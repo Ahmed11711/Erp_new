@@ -3,18 +3,20 @@ import { RouterModule, Routes } from '@angular/router';
 import { HomeComponent } from './home.component';
 import { CategoriesReportComponent } from './categories-report/categories-report.component';
 import { departmentGuard } from '../guards/department.guard';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
 
 const routes: Routes = [
-  {path:'' , component:HomeComponent},
-  {path:'categoriesreports' , component:CategoriesReportComponent,
+  { path: '', component: HomeComponent },
+  {
+    path: 'categoriesreports',
+    component: CategoriesReportComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Data Entry', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
+    data: { rbacPermissions: [...RBAC_ROUTE.categoriesReportsHome] },
   },
-
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class HomeRoutingModule { }
+export class HomeRoutingModule {}

@@ -20,7 +20,7 @@
    <div class="d-flex align-items-center flex-wrap" style="gap: 10px;">
     <p class="header"> الاصناف</p>
     <button type="button" class="btn btn-outline-secondary btn-sm"
-     *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'"
+     *ngIf="user == 'Admin'"
      (click)="openInventoryGlSync()" [disabled]="syncingInventoryGl">
      {{ syncingInventoryGl ? 'جاري…' : 'تسوية المخزون في الحسابات' }}
     </button>
@@ -142,6 +142,9 @@
      <button mat-menu-item type="button" (click)="promptAdjustAverageUnitCost(item)">
       <span>تعديل متوسط التكلفة</span>
      </button>
+     <!-- <button mat-menu-item type="button" *ngIf="item.warehouse === 'مخزن منتج تحت التشغيل'" (click)="promoteToFinished(item)">
+      <span>ترقية لمنتج تام</span>
+     </button> -->
      <button mat-menu-item type="button" (click)="deleteCategory(item.id)">
       <span>حذف</span>
      </button>

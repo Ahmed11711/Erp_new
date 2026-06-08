@@ -158,10 +158,31 @@
       </div>
       <div class="form-group">
         <label class="form-label">الحساب الأب (شجرة الحسابات) <span class="text-danger">*</span></label>
-        <select class="form-control" [(ngModel)]="newBank.parent_account_id">
-          <option [ngValue]="null" disabled>اختر الحساب الأب</option>
-          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
-        </select>
+        <mat-form-field appearance="outline" class="w-100 banks-account-field" dir="rtl">
+          <input
+            matInput
+            [formControl]="parentAccountCtrl"
+            [matAutocomplete]="parentAccAuto"
+            (focus)="onParentAccountFocus()"
+            (blur)="onParentAccountBlur()"
+            placeholder="ابحث بالاسم أو رمز الحساب"
+            autocomplete="off"
+          />
+          <mat-autocomplete
+            #parentAccAuto="matAutocomplete"
+            panelClass="banks-account-autocomplete-panel"
+            [displayWith]="displayAccountOption"
+            (optionSelected)="onParentAccountSelected($event)"
+            [autoActiveFirstOption]="true"
+          >
+            <mat-option *ngFor="let acc of filteredParentAccounts" [value]="acc">
+              {{ acc.label }}
+            </mat-option>
+          </mat-autocomplete>
+          <mat-hint *ngIf="accountOptions.length > accountAutocompleteCap">
+            أول {{ accountAutocompleteCap }} حساب؛ اكتب في الحقل لتضييق النتائج
+          </mat-hint>
+        </mat-form-field>
         <small class="form-text text-muted">
           <i class="fas fa-info-circle"></i>
           سيتم إنشاء حساب فرعي تلقائياً تحت هذا الحساب (مثل الخزن) وربط البنك به
@@ -170,10 +191,28 @@
 
       <div class="form-group" *ngIf="newBank.balance > 0">
         <label class="form-label">الحساب المقابل للرصيد الافتتاحي <span class="text-danger">*</span></label>
-        <select class="form-control" [(ngModel)]="newBank.counter_account_id">
-          <option [ngValue]="null" disabled>اختر الحساب المقابل</option>
-          <option *ngFor="let acc of treeAccounts" [ngValue]="acc.id">{{ acc.name }} — {{ acc.code }}</option>
-        </select>
+        <mat-form-field appearance="outline" class="w-100 banks-account-field" dir="rtl">
+          <input
+            matInput
+            [formControl]="counterAccountCtrl"
+            [matAutocomplete]="counterAccAuto"
+            (focus)="onCounterAccountFocus()"
+            (blur)="onCounterAccountBlur()"
+            placeholder="ابحث بالاسم أو رمز الحساب"
+            autocomplete="off"
+          />
+          <mat-autocomplete
+            #counterAccAuto="matAutocomplete"
+            panelClass="banks-account-autocomplete-panel"
+            [displayWith]="displayAccountOption"
+            (optionSelected)="onCounterAccountSelected($event)"
+            [autoActiveFirstOption]="true"
+          >
+            <mat-option *ngFor="let acc of filteredCounterAccounts" [value]="acc">
+              {{ acc.label }}
+            </mat-option>
+          </mat-autocomplete>
+        </mat-form-field>
         <small class="form-text text-muted">
           <i class="fas fa-info-circle"></i>
           قيد: مدين حساب البنك، دائن هذا الحساب

@@ -24,6 +24,18 @@ export class ShippingCompanyService {
     return this.http.get<any>(`${environment.Url}/shippingcompanies`)
   }
 
+  unlinkedSummary() {
+    return this.http.get<any>(`${environment.Url}/shippingcompanies/unlinked-summary`);
+  }
+
+  linkUnlinked() {
+    return this.http.post<any>(`${environment.Url}/shippingcompanies/link-unlinked`, {});
+  }
+
+  linkAccount(id: number) {
+    return this.http.post<any>(`${environment.Url}/shippingcompanies/${id}/link-account`, {});
+  }
+
   shippingCompanySelect(){
     return this.http.get<any>(`${environment.Url}/shippingcompanySelect`)
   }

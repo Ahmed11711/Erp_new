@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ServiceAccount;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Services\Accounting\AccountingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -19,21 +20,30 @@ class ServiceAccountsController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $balance = (float) $request->input('balance', 0);
+
+        $rules = [
             'name' => 'required|string|max:255',
             'account_number' => 'nullable|string|max:255',
             'description' => 'nullable|string',
             'other_info' => 'nullable|string',
             'img' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'account_id' => 'required|exists:tree_accounts,id',
-            'balance' => 'numeric',
-        ]);
+            'balance' => 'nullable|numeric|min:0',
+            'counter_account_id' => 'nullable|exists:tree_accounts,id',
+        ];
+
+        if ($balance > 0.000001) {
+            $rules['counter_account_id'] = 'required|exists:tree_accounts,id';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $data = $request->except('img');
+        $data = $request->except(['img', 'counter_account_id']);
 
         if ($request->hasFile('img')) {
             $imageName = time() . '.' . $request->img->extension();
@@ -41,8 +51,50 @@ class ServiceAccountsController extends Controller
             $data['img'] = 'images/service_accounts/' . $imageName;
         }
 
-        $account = ServiceAccount::create($data);
-        return response()->json($account, 201);
+        DB::beginTransaction();
+        try {
+            $serviceAccount = ServiceAccount::create($data);
+
+            if ($balance > 0.000001) {
+                $serviceAccountId = (int) $request->account_id;
+                $counterId = (int) $request->counter_account_id;
+
+                if ($serviceAccountId === $counterId) {
+                    throw new \InvalidArgumentException('الحساب المقابل يجب أن يكون مختلفاً عن الحساب المرتبط');
+                }
+
+                $now = now();
+                $desc = 'رصيد افتتاحي حساب خدمي - ' . $serviceAccount->name;
+
+                AccountEntry::create([
+                    'tree_account_id' => $serviceAccountId,
+                    'debit' => $balance,
+                    'credit' => 0,
+                    'description' => $desc,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                AccountEntry::create([
+                    'tree_account_id' => $counterId,
+                    'debit' => 0,
+                    'credit' => $balance,
+                    'description' => $desc,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+                app(AccountingService::class)->updateAccountHierarchyBalances($serviceAccountId);
+                app(AccountingService::class)->updateAccountHierarchyBalances($counterId);
+            }
+
+            DB::commit();
+
+            return response()->json($serviceAccount->load('account'), 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
     }
 
     public function update(Request $request, $id)
@@ -56,14 +108,13 @@ class ServiceAccountsController extends Controller
             'other_info' => 'nullable|string',
             'img' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'account_id' => 'required|exists:tree_accounts,id',
-            'balance' => 'numeric',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $data = $request->except('img');
+        $data = $request->except(['img', 'balance', 'counter_account_id']);
 
         if ($request->hasFile('img')) {
             // Delete old image if needed
@@ -79,6 +130,34 @@ class ServiceAccountsController extends Controller
         return response()->json($account);
     }
 
+    public function destroy($id)
+    {
+        $account = ServiceAccount::find($id);
+        if (!$account) {
+            return response()->json(['message' => 'الحساب الخدمي غير موجود'], 404);
+        }
+
+        if (abs((float) $account->balance) > 0.000001) {
+            return response()->json(['message' => 'لا يمكن حذف حساب خدمي له رصيد. صفِّر الرصيد أولاً عبر تحويل أو عملية مالية.'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            if ($account->img && file_exists(public_path($account->img))) {
+                unlink(public_path($account->img));
+            }
+
+            $account->delete();
+
+            DB::commit();
+
+            return response()->json(['message' => 'تم حذف الحساب الخدمي بنجاح'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
+    }
 
     public function transfer(Request $request)
     {

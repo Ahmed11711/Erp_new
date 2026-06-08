@@ -6,19 +6,27 @@ use App\Http\Controllers\Controller;
 use App\Models\Voucher;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Models\DailyEntry;
+use App\Models\DailyEntryItem;
+use App\Models\ShippingCompany;
+use App\Models\Order;
+use App\Models\shippingCompanyDetails;
 use App\Services\Accounting\BudgetReviewService;
+use App\Services\Accounting\PaymentSourceOperationalLedgerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class VoucherController extends Controller
 {
+    private const SHIPPING_DETAIL_OPEN_COLLECTION_STATUSES = ['تم شحن', 'تم التسليم'];
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
-        $query = Voucher::with(['account', 'client', 'supplier', 'user']);
+        $query = Voucher::with(['account', 'client', 'supplier', 'shippingCompany', 'user']);
 
         if ($request->has('voucher_type')) {
             $query->where('voucher_type', $request->voucher_type);
@@ -49,6 +57,10 @@ class VoucherController extends Controller
 
     // ... helper method to handle legacy operational balances ...
     private function updateOperationalBalance($voucher, $reverse = false) {
+        if ($voucher->voucher_type === 'shipping_company') {
+            return;
+        }
+
         $user_id = auth()->id();
         $isClient = $voucher->voucher_type === 'client';
         $amount = $voucher->amount;
@@ -152,6 +164,23 @@ class VoucherController extends Controller
         }
     }
 
+    /**
+     * مزامنة الرصيد التشغيلي لمصدر النقد (خزينة / بنك / حساب خدمي) مع السند.
+     */
+    private function syncPaymentSourceOperationalBalance(Voucher $voucher, bool $reverse): void
+    {
+        app(PaymentSourceOperationalLedgerService::class)->syncFromVoucher(
+            (int) $voucher->account_id,
+            $voucher->type,
+            (float) $voucher->amount,
+            (int) $voucher->id,
+            $voucher->notes,
+            $voucher->date instanceof \DateTimeInterface
+                ? $voucher->date->format('Y-m-d')
+                : (is_string($voucher->date) ? substr($voucher->date, 0, 10) : date('Y-m-d')),
+            $reverse
+        );
+    }
 
     /**
      * Store a newly created resource in storage.
@@ -167,16 +196,29 @@ class VoucherController extends Controller
              if (!$request->supplier_id || !\App\Models\Supplier::where('id', $request->supplier_id)->exists()) {
                  return response()->json(['message' => 'المورد المختار غير صحيح'], 422);
              }
+        } elseif ($request->voucher_type === 'shipping_company') {
+            if (!$request->shipping_company_id || ! ShippingCompany::where('id', $request->shipping_company_id)->exists()) {
+                return response()->json(['message' => 'شركة الشحن أو المندوب المختار غير صحيح'], 422);
+            }
+            $shipCheck = ShippingCompany::find($request->shipping_company_id);
+            if (!$shipCheck?->receivable_tree_account_id) {
+                return response()->json([
+                    'message' => 'لا يوجد حساب ذمم تحصيل مرتبط بهذه الجهة. اربط «حساب الذمم» من بيانات شركة الشحن / المندوب أولاً.',
+                ], 422);
+            }
         }
 
         $validator = Validator::make($request->all(), [
             'date' => 'required|date',
             'type' => 'required|in:receipt,payment',
-            'voucher_type' => 'required|in:client,supplier',
+            'voucher_type' => 'required|in:client,supplier,shipping_company',
             'account_id' => 'required|exists:tree_accounts,id',
+            'shipping_company_id' => 'nullable|required_if:voucher_type,shipping_company|exists:shipping_companies,id',
             'amount' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
             'reference_number' => 'nullable|string',
+            'settled_order_ids' => 'nullable|array',
+            'settled_order_ids.*' => 'integer|exists:orders,id',
         ]);
 
         if ($validator->fails()) {
@@ -185,6 +227,11 @@ class VoucherController extends Controller
 
         DB::beginTransaction();
         try {
+            $partyLabel = $request->input('client_or_supplier_name');
+            if ($request->voucher_type === 'shipping_company') {
+                $partyLabel = $partyLabel ?: ShippingCompany::find($request->shipping_company_id)?->name;
+            }
+
             $voucher = Voucher::create([
                 'date' => $request->date,
                 'type' => $request->type,
@@ -192,7 +239,8 @@ class VoucherController extends Controller
                 'account_id' => $request->account_id,
                 'client_id' => $request->voucher_type === 'client' ? $request->client_id : null,
                 'supplier_id' => $request->voucher_type === 'supplier' ? $request->supplier_id : null,
-                'client_or_supplier_name' => $request->client_or_supplier_name,
+                'shipping_company_id' => $request->voucher_type === 'shipping_company' ? $request->shipping_company_id : null,
+                'client_or_supplier_name' => $partyLabel,
                 'amount' => $request->amount,
                 'notes' => $request->notes,
                 'reference_number' => $request->reference_number,
@@ -209,10 +257,18 @@ class VoucherController extends Controller
                 $account = $accountLinkingService->ensureCustomerCompanyAccount($client);
                 $partnerTreeAccountId = $account?->id;
 
-            } else {
+            } elseif ($request->voucher_type === 'supplier') {
                 $supplier = \App\Models\Supplier::find($request->supplier_id);
                 $account = $accountLinkingService->ensureSupplierAccount($supplier);
                 $partnerTreeAccountId = $account?->id;
+            } else {
+                $partnerTreeAccountId = ShippingCompany::find($request->shipping_company_id)?->receivable_tree_account_id;
+            }
+
+            if (!$partnerTreeAccountId) {
+                DB::rollBack();
+
+                return response()->json(['message' => 'تعذر تحديد حساب الطرف المحاسبي للسند'], 422);
             }
 
             // 2. Identify Debit and Credit Accounts
@@ -243,27 +299,14 @@ class VoucherController extends Controller
                 ], 422);
             }
 
-            // 3. Create Debit Entry
-            AccountEntry::create([
-                'tree_account_id' => $debitAccountId,
-                'debit' => $request->amount,
-                'credit' => 0,
-                'description' => "سند {$request->type} - {$voucher->client_or_supplier_name} - {$voucher->notes}",
-                'voucher_id' => $voucher->id,
-                'created_at' => $request->date,
-                'updated_at' => $request->date
-            ]);
-
-            // 4. Create Credit Entry
-            AccountEntry::create([
-                'tree_account_id' => $creditAccountId,
-                'debit' => 0,
-                'credit' => $request->amount,
-                'description' => "سند {$request->type} - {$voucher->client_or_supplier_name} - {$voucher->notes}",
-                'voucher_id' => $voucher->id,
-                'created_at' => $request->date,
-                'updated_at' => $request->date
-            ]);
+            // 3–4. قيد يومي + account_entries
+            $this->createVoucherJournalEntries(
+                $voucher,
+                (int) $debitAccountId,
+                (int) $creditAccountId,
+                (float) $request->amount,
+                $request->date
+            );
 
             // تحديث الطرفين وجميع الحسابات الأب من مجموع القيود فقط (مصدر واحد للحقيقة)
             $accountingService = app(\App\Services\Accounting\AccountingService::class);
@@ -274,11 +317,14 @@ class VoucherController extends Controller
             // UPDATE OPERATIONAL BALANCES (Legacy System)
             // ------------------------------------------------------------------
             $this->updateOperationalBalance($voucher, false); // Add Effect
+            $this->syncPaymentSourceOperationalBalance($voucher, false);
+
+            $this->applyShippingCompanyReceiptSettlement($voucher, $request);
 
             DB::commit();
             return response()->json([
                 'message' => 'تم إنشاء السند بنجاح',
-                'data' => $voucher->load(['account', 'client', 'supplier', 'user'])
+                'data' => $voucher->load(['account', 'client', 'supplier', 'shippingCompany', 'user'])
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -291,7 +337,7 @@ class VoucherController extends Controller
      */
     public function show($id)
     {
-        $voucher = Voucher::with(['account', 'client', 'supplier', 'user'])->find($id);
+        $voucher = Voucher::with(['account', 'client', 'supplier', 'shippingCompany', 'user'])->find($id);
         
         if (!$voucher) {
             return response()->json(['message' => 'السند غير موجود'], 404);
@@ -329,13 +375,10 @@ class VoucherController extends Controller
             // REVERSE OLD OPERATIONAL BALANCE
             // ------------------------------------------------------------------
             $this->updateOperationalBalance($voucher, true); // Reverse Old Effect
-
-            // حذف القيود القديمة ثم إعادة حساب الشجرة من القيود المتبقية (بدون تعديل تراكمي يدوي يُخالف الأب)
+            $this->syncPaymentSourceOperationalBalance($voucher, true);
             $oldEntries = AccountEntry::where('voucher_id', $voucher->id)->get();
             $oldAffectedIds = $oldEntries->pluck('tree_account_id')->unique()->filter()->map(fn ($id) => (int) $id)->all();
-            foreach ($oldEntries as $entry) {
-                $entry->delete();
-            }
+            $this->deleteVoucherJournalEntries($voucher);
             $accountingService = app(\App\Services\Accounting\AccountingService::class);
             foreach ($oldAffectedIds as $aid) {
                 $accountingService->updateAccountHierarchyBalances($aid);
@@ -353,10 +396,14 @@ class VoucherController extends Controller
                 $client = \App\Models\customerCompany::find($voucher->client_id);
                 $partnerTreeAccountId = $client ? $client->tree_account_id : null;
                 if (!$partnerTreeAccountId) throw new \Exception("العميل ليس لديه حساب شجري مرتبط.");
-            } else {
+            } elseif ($voucher->voucher_type === 'supplier') {
                 $supplier = \App\Models\Supplier::find($voucher->supplier_id);
                 $partnerTreeAccountId = $supplier ? $supplier->tree_account_id : null;
                  if (!$partnerTreeAccountId) throw new \Exception("المورد ليس لديه حساب شجري مرتبط.");
+            } else {
+                $ship = ShippingCompany::find($voucher->shipping_company_id);
+                $partnerTreeAccountId = $ship?->receivable_tree_account_id;
+                if (!$partnerTreeAccountId) throw new \Exception('شركة الشحن / المندوب ليست لها حساب ذمم تحصيل مرتبط.');
             }
 
             $debitAccountId = null;
@@ -370,27 +417,16 @@ class VoucherController extends Controller
                 $creditAccountId = $voucher->account_id;
             }
 
-            // Create Debit Entry
-            AccountEntry::create([
-                'tree_account_id' => $debitAccountId,
-                'debit' => $voucher->amount,
-                'credit' => 0,
-                'description' => "سند {$voucher->type} - {$voucher->client_or_supplier_name} - {$voucher->notes}",
-                'voucher_id' => $voucher->id,
-                'created_at' => $voucher->date,
-                'updated_at' => $voucher->date
-            ]);
-
-            // Create Credit Entry
-            AccountEntry::create([
-                'tree_account_id' => $creditAccountId,
-                'debit' => 0,
-                'credit' => $voucher->amount,
-                'description' => "سند {$voucher->type} - {$voucher->client_or_supplier_name} - {$voucher->notes}",
-                'voucher_id' => $voucher->id,
-                'created_at' => $voucher->date,
-                'updated_at' => $voucher->date
-            ]);
+            // Create journal entries
+            $this->createVoucherJournalEntries(
+                $voucher,
+                (int) $debitAccountId,
+                (int) $creditAccountId,
+                (float) $voucher->amount,
+                $voucher->date instanceof \DateTimeInterface
+                    ? $voucher->date->format('Y-m-d')
+                    : (is_string($voucher->date) ? substr($voucher->date, 0, 10) : date('Y-m-d'))
+            );
 
             // تحديث الحساب والحسابات الأب في الشجرة من القيود
             foreach ([$debitAccountId, $creditAccountId] as $tid) {
@@ -401,15 +437,240 @@ class VoucherController extends Controller
             // APPLY NEW OPERATIONAL BALANCE
             // ------------------------------------------------------------------
             $this->updateOperationalBalance($voucher, false); // Add New Effect
+            $this->syncPaymentSourceOperationalBalance($voucher->fresh(), false);
 
             DB::commit();
             return response()->json([
                 'message' => 'تم تحديث السند بنجاح',
-                'data' => $voucher->load(['account', 'client', 'supplier', 'user'])
+                'data' => $voucher->load(['account', 'client', 'supplier', 'shippingCompany', 'user'])
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
+    }
+
+    private function shippingCompanyOpenDetailsQuery(int $companyId, array $orderIds): \Illuminate\Database\Eloquent\Builder
+    {
+        $q = shippingCompanyDetails::query()
+            ->where('shipping_company_id', $companyId)
+            ->where('is_done', 0)
+            ->whereIn('status', self::SHIPPING_DETAIL_OPEN_COLLECTION_STATUSES);
+
+        if ($orderIds !== []) {
+            $q->whereIn('order_id', $orderIds);
+        }
+
+        return $q;
+    }
+
+    /**
+     * قبض شركة شحن: إغلاق سطور الطلبات فقط عند تطابق المبلغ مع مجموع السطور المفتوحة
+     * (المحددة أو الكل). وإلا يُسجَّل قبض عام دون إغلاق مستحقات الطلبات.
+     */
+    private function applyShippingCompanyReceiptSettlement(Voucher $voucher, Request $request): void
+    {
+        if ($voucher->voucher_type !== 'shipping_company' || $voucher->type !== 'receipt') {
+            return;
+        }
+
+        $companyId = (int) $voucher->shipping_company_id;
+        if ($companyId <= 0) {
+            return;
+        }
+
+        $orderIds = $request->input('settled_order_ids', []);
+        $filteredIds = is_array($orderIds)
+            ? array_values(array_unique(array_filter(array_map('intval', $orderIds))))
+            : [];
+
+        $rows = $this->shippingCompanyOpenDetailsQuery($companyId, $filteredIds)->get();
+        $sum = round((float) $rows->sum(static fn ($r) => (float) $r->amount), 2);
+        $vAmt = round((float) $voucher->amount, 2);
+
+        if ($rows->isNotEmpty() && abs($sum - $vAmt) <= 0.05) {
+            $this->closeShippingCompanyDetailLines($voucher, $rows);
+
+            return;
+        }
+
+        $this->recordUnlinkedShippingCompanyReceipt($voucher);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, shippingCompanyDetails>  $rows
+     */
+    private function closeShippingCompanyDetailLines(Voucher $voucher, $rows): void
+    {
+        $userName = auth()->user()?->name ?? 'system';
+
+        foreach ($rows as $elm) {
+            $order = Order::with('order_details')->find($elm->order_id);
+            if (! $order || ! $order->order_details) {
+                continue;
+            }
+
+            $elm->is_done = 1;
+            $elm->status = 'تم التحصيل';
+            $elm->collect_date = $voucher->date;
+            $elm->save();
+
+            $amount = (float) -$elm->amount;
+            DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                (float) $elm->shipping_company_id,
+                (int) $elm->order_id,
+                $order->order_details->shipping_date,
+                'تم التحصيل',
+                $amount,
+                $userName,
+                now(),
+            ]);
+        }
+
+        foreach ($rows->pluck('order_id')->unique() as $oid) {
+            $this->finalizeOrderIfAllShippingLinesSettled((int) $oid);
+        }
+    }
+
+    /** قبض عام على ذمة الشركة دون إغلاق سطور طلبات مفتوحة (GL يُسجَّل منفصلاً). */
+    private function recordUnlinkedShippingCompanyReceipt(Voucher $voucher): void
+    {
+        $companyId = (int) $voucher->shipping_company_id;
+        $amount = round((float) $voucher->amount, 2);
+        if ($companyId <= 0 || $amount <= 0) {
+            return;
+        }
+
+        $userName = auth()->user()?->name ?? 'system';
+        $company = ShippingCompany::query()->lockForUpdate()->find($companyId);
+        if (! $company) {
+            return;
+        }
+
+        $company->balance = round((float) $company->balance - $amount, 3);
+        $company->save();
+
+        shippingCompanyDetails::create([
+            'order_id' => null,
+            'voucher_id' => $voucher->id,
+            'shipping_date' => $voucher->date,
+            'collect_date' => $voucher->date,
+            'status' => 'سند قبض',
+            'amount' => -$amount,
+            'shipping_company_id' => $companyId,
+            'ref' => 'V'.$voucher->id,
+            'by' => $userName,
+            'is_done' => 1,
+        ]);
+    }
+
+    private function reverseShippingCompanyReceiptSettlement(Voucher $voucher): void
+    {
+        if ($voucher->voucher_type !== 'shipping_company' || $voucher->type !== 'receipt') {
+            return;
+        }
+
+        $details = shippingCompanyDetails::query()
+            ->where('voucher_id', $voucher->id)
+            ->where('status', 'سند قبض')
+            ->get();
+
+        if ($details->isEmpty()) {
+            return;
+        }
+
+        $companyId = (int) $voucher->shipping_company_id;
+        $company = ShippingCompany::query()->lockForUpdate()->find($companyId);
+        if (! $company) {
+            return;
+        }
+
+        $total = round((float) $details->sum(static fn ($d) => abs((float) $d->amount)), 2);
+        $company->balance = round((float) $company->balance + $total, 3);
+        $company->save();
+
+        shippingCompanyDetails::query()->whereIn('id', $details->pluck('id'))->delete();
+    }
+
+    private function finalizeOrderIfAllShippingLinesSettled(int $orderId): void
+    {
+        Order::reconcileCollectionStatusIfAllShippingLinesClosed($orderId);
+    }
+
+    private function voucherJournalDescription(Voucher $voucher): string
+    {
+        $typeLabel = $voucher->type === 'receipt' ? 'قبض' : 'صرف';
+
+        return "سند {$typeLabel} - {$voucher->client_or_supplier_name}"
+            . ($voucher->notes ? " - {$voucher->notes}" : '');
+    }
+
+    private function createVoucherJournalEntries(
+        Voucher $voucher,
+        int $debitAccountId,
+        int $creditAccountId,
+        float $amount,
+        string $date
+    ): void {
+        $description = $this->voucherJournalDescription($voucher);
+        $entryNumber = DailyEntry::getNextEntryNumber();
+
+        $dailyEntry = DailyEntry::create([
+            'date' => $date,
+            'entry_number' => $entryNumber,
+            'description' => $description,
+            'user_id' => auth()->id(),
+        ]);
+
+        DailyEntryItem::create([
+            'daily_entry_id' => $dailyEntry->id,
+            'account_id' => $debitAccountId,
+            'debit' => $amount,
+            'credit' => 0,
+            'notes' => $description,
+        ]);
+
+        DailyEntryItem::create([
+            'daily_entry_id' => $dailyEntry->id,
+            'account_id' => $creditAccountId,
+            'debit' => 0,
+            'credit' => $amount,
+            'notes' => $description,
+        ]);
+
+        AccountEntry::create([
+            'tree_account_id' => $debitAccountId,
+            'debit' => $amount,
+            'credit' => 0,
+            'description' => $description,
+            'voucher_id' => $voucher->id,
+            'daily_entry_id' => $dailyEntry->id,
+            'created_at' => $date,
+            'updated_at' => $date,
+        ]);
+
+        AccountEntry::create([
+            'tree_account_id' => $creditAccountId,
+            'debit' => 0,
+            'credit' => $amount,
+            'description' => $description,
+            'voucher_id' => $voucher->id,
+            'daily_entry_id' => $dailyEntry->id,
+            'created_at' => $date,
+            'updated_at' => $date,
+        ]);
+    }
+
+    private function deleteVoucherJournalEntries(Voucher $voucher): void
+    {
+        $entries = AccountEntry::query()->where('voucher_id', $voucher->id)->get();
+        $dailyEntryIds = $entries->pluck('daily_entry_id')->filter()->unique()->values();
+
+        AccountEntry::query()->where('voucher_id', $voucher->id)->delete();
+
+        foreach ($dailyEntryIds as $dailyEntryId) {
+            DailyEntryItem::query()->where('daily_entry_id', $dailyEntryId)->delete();
+            DailyEntry::query()->where('id', $dailyEntryId)->delete();
         }
     }
 
@@ -430,14 +691,12 @@ class VoucherController extends Controller
             // REVERSE OPERATIONAL BALANCE
             // ------------------------------------------------------------------
             $this->updateOperationalBalance($voucher, true); // Reverse Effect
+            $this->syncPaymentSourceOperationalBalance($voucher, true);
+            $this->reverseShippingCompanyReceiptSettlement($voucher);
 
-            // Reverse accounting entries
-            // Reverse accounting entries
-             $oldEntries = AccountEntry::where('voucher_id', $voucher->id)->get();
+            $oldEntries = AccountEntry::where('voucher_id', $voucher->id)->get();
             $affectedAccountIds = $oldEntries->pluck('tree_account_id')->unique()->values()->all();
-            foreach ($oldEntries as $entry) {
-                $entry->delete();
-            }
+            $this->deleteVoucherJournalEntries($voucher);
 
             // إعادة حساب أرصدة الحسابات المتأثرة والحسابات الأب بعد حذف القيود
             $accountingService = app(\App\Services\Accounting\AccountingService::class);

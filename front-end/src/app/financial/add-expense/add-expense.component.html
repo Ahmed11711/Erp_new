@@ -1,125 +1,183 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="expense-form-page container-fluid px-3 px-md-4">
+  <div class="exp-page-head">
+    <h1 class="exp-title">اضافة مصروف</h1>
+    <div class="d-flex align-items-center">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto"> اضافة مصروف</p></div>
-    </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-    </div>
   </div>
 
-  <div class="container-fluid">
-    <form class="text-start w-100 mt-2" [formGroup]="form" (ngSubmit)="submitform()">
+  <form class="exp-form" [formGroup]="form" (ngSubmit)="submitform()">
 
-      <div class="row">
-        <div class="col-md-2">
-          <input formControlName="created_at" class="form-control" type="date" [min]="minDate" [max]="maxDate">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small text-muted">مكان الدفع</label>
-          <select formControlName="payment_type" (change)="onPaymentTypeChange()" class="form-control type">
-            <option value="safe">خزنة</option>
-            <option value="bank">بنك</option>
-            <option value="service_account">حساب خدمي</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small text-muted">الخزينة</label>
-          <select formControlName="safe_id" *ngIf="paymentType === 'safe'" class="form-control type">
-            <option [ngValue]="null" disabled>-- اختر الخزينة --</option>
-            <option *ngFor="let elm of safesData" [value]="elm.id">{{ elm.name }}</option>
-          </select>
-          <select formControlName="bank_id" *ngIf="paymentType === 'bank'" class="form-control type">
-            <option [ngValue]="null" disabled>-- اختر البنك --</option>
-            <option *ngFor="let elm of banksData" [value]="elm.id">{{ elm.name }}</option>
-          </select>
-          <select formControlName="service_account_id" *ngIf="paymentType === 'service_account'" class="form-control type">
-            <option [ngValue]="null" disabled>-- اختر الحساب الخدمي --</option>
-            <option *ngFor="let elm of serviceAccountsData" [value]="elm.id">{{ elm.name }}</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small text-muted">نوع المصروف</label>
-          <select formControlName="expense_type" (change)="onExpenseTypeChange()" class="form-control type">
-            <option [ngValue]="null" disabled>— اختر النوع —</option>
-            <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
-            <option ngValue="مصروف تسويق">مصروف تسويق</option>
-            <option ngValue="مصروف ادارى">مصروف ادارى</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small text-muted">فئة المصروف</label>
-          <select formControlName="kind_id" class="form-control type">
-            <option [ngValue]="null" disabled>— اختر الفئة —</option>
-            <option *ngFor="let elm of filteredExpenseKinds" [ngValue]="elm.id">{{ elm.expense_kind }}</option>
-          </select>
-          <small class="text-muted" *ngIf="form.get('expense_type')?.value && filteredExpenseKinds.length === 0">
-            لا توجد فئات مسجّلة لهذا النوع. أضفها من القائمة: العمليات المالية ← فئات المصروف.
-          </small>
-        </div>
-      </div>
-
-      <div class="row mt-3">
-        <div class="col-md-6">
-          <div class="mb-3">
-            <input class="form-control"    placeholder="بيان المصروف"
-            [class.is-valid]="form.get('expens_statement')?.errors ==null && form.get('expens_statement')?.touched"
-            formControlName='expens_statement' type="text" class="form-control">
-            <p *ngIf="form.get('expens_statement')?.errors !=null && form.get('expens_statement')?.touched"
-              class="error mb-0 text-danger">مطلوب</p>
+    <!-- البيانات الأساسية -->
+    <div class="exp-card">
+      <div class="exp-card-header">البيانات الأساسية</div>
+      <div class="exp-card-body">
+        <div class="row g-3">
+          <div class="col-md-3 col-lg-2">
+            <label class="exp-label" for="expense-date">التاريخ</label>
+            <input id="expense-date" formControlName="created_at" class="form-control" type="date"
+              [min]="minDate" [max]="maxDate">
           </div>
-        </div>
-        <div class="col-md-6">
-          <div class="mb-3">
-            <input class="form-control"    placeholder="المبلغ"
-            [class.is-valid]="form.get('amount')?.errors ==null && form.get('amount')?.touched"
-            formControlName='amount' type="number" min="0" class="form-control">
-            <p *ngIf="form.get('amount')?.errors !=null && form.get('amount')?.touched"
-              class="error mb-0 text-danger">رقم غير صحيح</p>
+          <div class="col-md-3 col-lg-2">
+            <label class="exp-label" for="payment-type">مكان الدفع</label>
+            <select id="payment-type" formControlName="payment_type" (change)="onPaymentTypeChange()"
+              class="form-control exp-select">
+              <option value="safe">خزنة</option>
+              <option value="bank">بنك</option>
+              <option value="service_account">حساب خدمي</option>
+            </select>
           </div>
-        </div>
-        <div class="col-md-12">
-          <textarea placeholder="ملاحظات" name="" id="" formControlName='note'
-          [class.is-valid]="form.get('note')?.errors ==null && form.get('note')?.touched"
-          ></textarea>
-          <p *ngIf="form.get('note')?.errors !=null && form.get('note')?.touched"
-              class="error mb-0 text-danger">مطلوب</p>
-        </div>
-      </div>
-
-
-      <div class="row text-center mt-3">
-        <div class="col-md-2">
-          <div class="form-group">
-            <div class="element">
-                <i (click)="openFileInput()" class="fa fa-camera"></i><span class="name"> {{imgtext}} </span>
-                <input type="file" (change)="onFileChanged($event)" name="uploadFile"
-                accept="image/*" id="fileInput"  class="img" formControlName='expense_image'>
-                <p *ngIf="form.get('expense_image')?.errors !=null && form.get('expense_image')?.touched"
-                class="error mb-0 text-danger">من فضلك اختر صورة</p>
-              </div>
+          <div class="col-md-6 col-lg-4">
+            <label class="exp-label">مصدر الدفع (دائن)</label>
+            <select formControlName="safe_id" *ngIf="paymentType === 'safe'" class="form-control exp-select">
+              <option [ngValue]="null" disabled>— اختر الخزينة —</option>
+              <option *ngFor="let elm of safesData" [value]="elm.id">{{ elm.name }}</option>
+            </select>
+            <select formControlName="bank_id" *ngIf="paymentType === 'bank'" class="form-control exp-select">
+              <option [ngValue]="null" disabled>— اختر البنك —</option>
+              <option *ngFor="let elm of banksData" [value]="elm.id">{{ elm.name }}</option>
+            </select>
+            <select formControlName="service_account_id" *ngIf="paymentType === 'service_account'"
+              class="form-control exp-select">
+              <option [ngValue]="null" disabled>— اختر الحساب الخدمي —</option>
+              <option *ngFor="let elm of serviceAccountsData" [value]="elm.id">{{ elm.name }}</option>
+            </select>
+          </div>
+          <div class="col-md-12 col-lg-4">
+            <label class="exp-label" for="expense-statement">بيان المصروف</label>
+            <input id="expense-statement" class="form-control" placeholder="بيان المصروف"
+              [class.is-valid]="form.get('expens_statement')?.errors == null && form.get('expens_statement')?.touched"
+              formControlName="expens_statement" type="text">
+            <p *ngIf="form.get('expens_statement')?.errors != null && form.get('expens_statement')?.touched"
+              class="exp-error">مطلوب</p>
           </div>
         </div>
       </div>
-      <div class="alert alert-danger text-center w-25 m-auto" *ngIf="errormessage">
-        please check fields
+    </div>
+
+    <!-- المبلغ الإجمالي -->
+    <div class="exp-card">
+      <div class="exp-card-header">المبلغ الإجمالي</div>
+      <div class="exp-card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4 col-lg-3">
+            <label class="exp-label" for="total-amount">المبلغ (يُصرف من المصدر)</label>
+            <input id="total-amount" class="form-control exp-amount-input" placeholder="0.00"
+              [class.is-valid]="form.get('amount')?.errors == null && form.get('amount')?.touched"
+              formControlName="amount" type="number" min="0.01" step="0.01">
+            <p *ngIf="form.get('amount')?.errors != null && form.get('amount')?.touched"
+              class="exp-error">مطلوب</p>
+          </div>
+          <div class="col-md-8 col-lg-9">
+            <div class="exp-lines-total" [class.exp-lines-total--error]="amountMismatch"
+              [class.exp-lines-total--ok]="!amountMismatch && linesTotal > 0">
+              <span class="exp-lines-total-label">مجموع البنود</span>
+              <span class="exp-lines-total-value">{{ linesTotal | number:'1.2-2' }}</span>
+              <span class="exp-lines-total-hint" *ngIf="amountMismatch">يجب أن يساوي المبلغ الإجمالي</span>
+              <span class="exp-lines-total-hint exp-lines-total-hint--ok" *ngIf="!amountMismatch && linesTotal > 0">
+                <i class="fa fa-check-circle"></i> متطابق
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="text-center mt-2">
-        <button
-          [disabled]="!isSourceSelected || form.invalid"
-          type="submit" class="btn submit text-white">صرف</button>
+    </div>
+
+    <!-- تقسيم المصروف -->
+    <div class="exp-card exp-card-table">
+      <div class="exp-card-header exp-card-header--flex">
+        <span>تقسيم المصروف (مدين — عدة حسابات)</span>
+        <button type="button" class="btn exp-btn-add-line" (click)="addSplitLine()">
+          <i class="fa fa-plus"></i> إضافة بند
+        </button>
       </div>
+      <div class="exp-card-body exp-card-body--table">
+        <div class="table-responsive">
+          <table class="table exp-table align-middle">
+            <thead>
+              <tr>
+                <th>نوع المصروف</th>
+                <th>فئة المصروف</th>
+                <th class="exp-col-amount">المبلغ</th>
+                <th class="exp-col-action"></th>
+              </tr>
+            </thead>
+            <tbody formArrayName="lines">
+              <tr *ngFor="let line of splitLines.controls; let i = index" [formGroupName]="i">
+                <td>
+                  <select formControlName="expense_type" (change)="onLineExpenseTypeChange(i)"
+                    class="form-control exp-select exp-select--sm">
+                    <option [ngValue]="null" disabled>— النوع —</option>
+                    <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
+                    <option ngValue="مصروف تسويق">مصروف تسويق</option>
+                    <option ngValue="مصروف ادارى">مصروف ادارى</option>
+                  </select>
+                </td>
+                <td>
+                  <select formControlName="kind_id" class="form-control exp-select exp-select--sm">
+                    <option [ngValue]="null" disabled>— الفئة —</option>
+                    <option *ngFor="let elm of kindsForType(line.get('expense_type')?.value)" [ngValue]="elm.id">
+                      {{ elm.expense_kind }}
+                    </option>
+                  </select>
+                  <small class="exp-hint"
+                    *ngIf="line.get('expense_type')?.value && kindsForType(line.get('expense_type')?.value).length === 0">
+                    لا توجد فئات لهذا النوع
+                  </small>
+                </td>
+                <td>
+                  <input formControlName="amount" type="number" min="0.01" step="0.01"
+                    class="form-control exp-amount-cell" placeholder="0">
+                </td>
+                <td class="text-center">
+                  <button type="button" class="btn exp-btn-remove" *ngIf="splitLines.length > 1"
+                    (click)="removeSplitLine(i)" title="حذف البند">
+                    <i class="fa fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-    </form>
-  </div>
+    <!-- ملاحظات والمرفقات -->
+    <div class="exp-card">
+      <div class="exp-card-header">ملاحظات والمرفقات</div>
+      <div class="exp-card-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="exp-label" for="expense-note">ملاحظات</label>
+            <textarea id="expense-note" class="form-control exp-textarea" placeholder="ملاحظات"
+              formControlName="note"
+              [class.is-valid]="form.get('note')?.errors == null && form.get('note')?.touched"></textarea>
+            <p *ngIf="form.get('note')?.errors != null && form.get('note')?.touched"
+              class="exp-error">مطلوب</p>
+          </div>
+          <div class="col-12">
+            <div class="exp-file-row">
+              <label class="exp-file-label" (click)="openFileInput()">
+                <i class="fa fa-camera"></i>
+                <span>{{ imgtext }}</span>
+              </label>
+              <input type="file" (change)="onFileChanged($event)" name="uploadFile"
+                accept="image/*" id="fileInput" class="exp-file-input" formControlName="expense_image">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
+    <div class="alert alert-danger exp-alert" *ngIf="errormessage && !canSubmit">
+      تحقق من الحقول ومن تطابق مجموع البنود مع المبلغ الإجمالي
+    </div>
 
+    <div class="exp-actions">
+      <button [disabled]="!canSubmit" type="submit" class="btn exp-btn-submit">
+        <i class="fa fa-check"></i> صرف
+      </button>
+    </div>
 
-
-
-
-
+  </form>
 </div>

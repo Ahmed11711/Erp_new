@@ -11,42 +11,52 @@ import { ShippincompanyReportsComponent } from './shippincompany-reports/shippin
 import { ProductPerformanceComponent } from './product-performance/product-performance.component';
 import { LeadActivityReportComponent } from './lead-activity-report/lead-activity-report.component';
 import { departmentGuard } from '../guards/department.guard';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
+
+const repFin = [...RBAC_ROUTE.reportsFinance];
+const repCorp = [...RBAC_ROUTE.reportsCorporate];
+const repAccounting = [...RBAC_ROUTE.reportsAccountingWide];
+const repWarehouse = [...RBAC_ROUTE.reportsWarehouse];
+const repProcurement = [...RBAC_ROUTE.reportsProcurement];
+const repProductSales = [...RBAC_ROUTE.reportsProductSales];
+const repCategoryProfit = [...RBAC_ROUTE.reportsCategoryProfit];
+const repShippingCompanies = [...RBAC_ROUTE.reportsShippingCompanies];
 
 const routes: Routes = [
-  {path:"incomelist" , component:IncomeListComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  { path: 'incomelist', component: IncomeListComponent, canActivate: [departmentGuard], data: { rbacPermissions: repAccounting } },
+  { path: 'trialbalance', component: TrialBalanceComponent, canActivate: [departmentGuard], data: { rbacPermissions: repAccounting } },
+  {
+    path: 'financialstatement',
+    component: FinancialStatementComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: repFin },
   },
-  {path:"trialbalance" , component:TrialBalanceComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  { path: 'procurement', component: ProcurementReportComponent, canActivate: [departmentGuard], data: { rbacPermissions: repProcurement } },
+  { path: 'productsales', component: ProductSalesComponent, canActivate: [departmentGuard], data: { rbacPermissions: repProductSales } },
+  {
+    path: 'product-performance',
+    component: ProductPerformanceComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: repFin },
   },
-  {path:"financialstatement" , component:FinancialStatementComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Account Management', 'Financial Accounts']}
+  { path: 'storage', component: StorageComponent, canActivate: [departmentGuard], data: { rbacPermissions: repWarehouse } },
+  { path: 'category', component: CategoryComponent, canActivate: [departmentGuard], data: { rbacPermissions: repCategoryProfit } },
+  {
+    path: 'shippingcompany',
+    component: ShippincompanyReportsComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: repShippingCompanies },
   },
-  {path:"procurement" , component:ProcurementReportComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:"productsales" , component:ProductSalesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:"product-performance" , component:ProductPerformanceComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Account Management', 'Financial Accounts']}
-  },
-  {path:"storage" , component:StorageComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:"category" , component:CategoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:"shippingcompany" , component:ShippincompanyReportsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:"lead-activity" , component:LeadActivityReportComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin', 'Shipping Management', 'Corparates']}
+  {
+    path: 'lead-activity',
+    component: LeadActivityReportComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: repCorp },
   },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class ReportsRoutingModule { }
+export class ReportsRoutingModule {}

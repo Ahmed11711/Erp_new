@@ -8,37 +8,18 @@ use Illuminate\Database\Eloquent\Model;
 class Purchase extends Model
 {
     use HasFactory;
-/**
- * Enables us to hook into model event's
- *
- * @return void
- */
-// public static function boot()
-// {
-//     parent::boot();
 
-//     static::created(function($invoice) {
-//         $invoice->invoice_number .= 'PO' . $invoice->id;
-//         $invoice->save();
-//     });
-// }
-    public static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($invoice) {
-            $lastInvoice = self::latest()->first();
-            if ($lastInvoice && preg_match('/PO(\d+)/', $lastInvoice->invoice_number, $matches)) {
-                $number = intval($matches[1]) + 1;
-            } else {
-                $number = 1;
-            }
-            $invoice->invoice_number = 'PO' . $number;
-        });
-    }
+    /**
+     * Document numbers are assigned in PurchasesController using DocumentNumberService (PUR-xxxx).
+     * Legacy PO auto-numbering was removed so sequences stay duplicate-safe under concurrency.
+     */
 
     protected $fillable = [
         'invoice_number',
+        'invoice_no',
+        'external_invoice_no',
+        'printable_status',
+        'notes',
         'supplier_id',
         'supplierpay_id',
         'invoice_type',
@@ -87,5 +68,12 @@ class Purchase extends Model
     public function serviceAccount()
     {
         return $this->belongsTo(ServiceAccount::class, 'service_account_id');
+    }
+
+    /** Formal stock document linked to this purchase revision (reference_type = purchase). */
+    public function stockDocument()
+    {
+        return $this->hasOne(StockTransaction::class, 'reference_id')
+            ->where('reference_type', 'purchase');
     }
 }

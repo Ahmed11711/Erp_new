@@ -108,6 +108,7 @@ class RecipeImportController extends Controller
                         'unit' => $i['unit'],
                         'unit_cost' => $i['unit_cost'],
                         'line_cost' => $i['line_cost'] ?? null,
+                        'color' => $i['color'] ?? null,
                         'item_exists' => $i['item_exists'],
                         'existing_item_id' => $i['existing_item_id'] ?? null,
                         'existing_item_name' => $i['existing_item_name'] ?? null,

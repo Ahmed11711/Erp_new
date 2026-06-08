@@ -211,3 +211,134 @@ textarea::placeholder{
 li{
   font-size: 20px;
 }
+
+.shopify-review-page-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 1.35rem !important;
+}
+
+.shopify-badge {
+  background: #95bf47;
+  color: #1a3d0a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.shopify-review-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #fff8e6;
+  border: 1px solid #f0d78c;
+}
+
+.shopify-review-bar--top {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.shopify-review-page {
+  padding-bottom: 1.5rem;
+}
+
+.shopify-review-save-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 1.25rem;
+  padding: 1rem 0 0.5rem;
+}
+
+.shopify-review-save-main {
+  min-width: 220px;
+  padding: 0.65rem 2rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(25, 135, 84, 0.35);
+}
+
+.shopify-review-save-main:disabled {
+  box-shadow: none;
+}
+
+.shopify-review-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  background: #fff;
+  border-top: 2px solid #82225e;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+  padding: 0.75rem 1rem;
+}
+
+.shopify-review-footer__inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.shopify-review-footer__hint {
+  font-size: 0.95rem;
+  color: #444;
+  font-weight: 500;
+}
+
+.shopify-review-save-btn {
+  min-width: 200px;
+  font-weight: 600;
+}
+
+.shopify-review-perm-hint {
+  width: 100%;
+  text-align: left;
+}
+
+.shopify-review-bar.is-reviewed,
+.shopify-review-bar__status.is-reviewed {
+  background: #ecfdf3;
+  border-color: #86efac;
+}
+
+.shopify-review-bar__status.is-reviewed {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.shopify-review-bar__pay {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.shopify-review-bar__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.shopify-review-add-product {
+  background: #f8f9fa;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  padding: 0.75rem;
+}

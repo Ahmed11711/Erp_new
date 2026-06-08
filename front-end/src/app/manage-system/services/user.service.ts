@@ -20,6 +20,11 @@ export class UserService {
     return this.http.get<any>(`${environment.Url}/users`)
   }
 
+  /** للتتبع ومراجع قصيرة — لا يتطلب قسم Admin (system.rbac أو Admin قديماً) */
+  compactDirectory(){
+    return this.http.get<any>(`${environment.Url}/users/compact-directory`)
+  }
+
   usersForNotifi(){
     return this.http.get<any>(`${environment.Url}/usersnotification`)
   }

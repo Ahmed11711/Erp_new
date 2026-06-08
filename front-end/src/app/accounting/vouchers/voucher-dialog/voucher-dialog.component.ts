@@ -1,7 +1,9 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { forkJoin } from 'rxjs';
 import { VoucherService } from '../../services/voucher.service';
+import { PaymentSourcesService, PaymentSourceItem } from '../../services/payment-sources.service';
 
 @Component({
     selector: 'app-voucher-dialog',
@@ -17,20 +19,27 @@ export class VoucherDialogComponent implements OnInit {
     voucherType: 'client' | 'supplier' = 'client';
 
     allAccounts: any[] = [];
-    filteredAccounts: any[] = [];
+    /** Tree account options for the active payment channel (safe / bank / service). */
+    filteredAccounts: { id: number; name: string }[] = [];
+
+    safes: PaymentSourceItem[] = [];
+    banks: PaymentSourceItem[] = [];
+    serviceAccounts: PaymentSourceItem[] = [];
 
     constructor(
         private fb: FormBuilder,
         private dialogRef: MatDialogRef<VoucherDialogComponent>,
         @Inject(MAT_DIALOG_DATA) public data: any,
-        private voucherService: VoucherService
+        private voucherService: VoucherService,
+        private paymentSourcesService: PaymentSourcesService
     ) {
         this.voucherType = data.voucherType || 'client';
         this.form = this.fb.group({
             date: [new Date().toISOString().split('T')[0], Validators.required],
             type: ['receipt', Validators.required],
             voucher_type: [this.voucherType, Validators.required],
-            payment_method: ['cash', Validators.required], // 'cash' or 'bank'
+            // UI only — matches استلام نقدي: خزينة / بنك / حساب خدمي (الخادم يعتمد على account_id فقط)
+            payment_method: ['cash', Validators.required], // 'cash' | 'bank' | 'service_account'
             account_id: [null, Validators.required],
             client_id: [null],
             supplier_id: [null],
@@ -82,29 +91,31 @@ export class VoucherDialogComponent implements OnInit {
     }
 
     loadData() {
-        this.voucherService.getAccounts().subscribe(res => {
-            this.allAccounts = Array.isArray(res) ? res : (res.data || []);
+        forkJoin({
+            accounts: this.voucherService.getAccounts(),
+            sources: this.paymentSourcesService.getPaymentSources()
+        }).subscribe({
+            next: ({ accounts, sources }) => {
+                this.allAccounts = accounts;
+                this.safes = sources.safes || [];
+                this.banks = sources.banks || [];
+                this.serviceAccounts = sources.service_accounts || [];
 
-            // If editing, try to set the account and payment method correctly
-            if (this.data.voucher) {
-                const v = this.data.voucher;
-                const acc = this.allAccounts.find((a: any) => a.id == v.account_id);
-                if (acc) {
-                    // Guess payment method
-                    let method = 'cash';
-                    if (acc.name.includes('بنك') || acc.name.includes('مصرف') || acc.detail_type === 'bank') {
-                        method = 'bank';
-                    }
-                    this.form.patchValue({ payment_method: method });
+                if (this.data.voucher) {
+                    const v = this.data.voucher;
+                    const method = this.inferPaymentMethodFromAccountId(v.account_id);
+                    this.form.patchValue({ payment_method: method }, { emitEvent: false });
                     this.filterAccounts(method);
                     this.form.patchValue({ account_id: v.account_id });
                 } else {
-                    // Just set it anyway
-                    this.filterAccounts('');
-                    this.form.patchValue({ account_id: v.account_id });
+                    this.filterAccounts(this.form.get('payment_method')?.value);
                 }
-            } else {
-                this.filterAccounts(this.form.get('payment_method')?.value);
+            },
+            error: () => {
+                this.voucherService.getAccounts().subscribe((rows) => {
+                    this.allAccounts = rows;
+                    this.filterAccounts(this.form.get('payment_method')?.value || '');
+                });
             }
         });
 
@@ -119,30 +130,83 @@ export class VoucherDialogComponent implements OnInit {
         }
     }
 
+    /**
+     * قوائم الحسابات من مصادر الدفع الفعلية (مرتبطة بخزينة/بنك/حساب خدمي) لتطابق القيد مع باقي الشاشات (استلام نقدي، مشتريات، …).
+     */
     filterAccounts(method: string) {
+        const mapSources = (items: PaymentSourceItem[]): { id: number; name: string }[] =>
+            items
+                .filter((x) => x.account_id != null)
+                .map((x) => ({ id: x.account_id as number, name: x.name }));
+
         if (!method) {
-            this.filteredAccounts = this.allAccounts;
+            this.filteredAccounts = this.allAccounts.map((a: any) => ({ id: a.id, name: a.name }));
             return;
         }
-        this.filteredAccounts = this.allAccounts.filter(acc => {
-            if (acc.detail_type) return acc.detail_type === method;
-            const name = acc.name.toLowerCase();
-            if (method === 'cash') return name.includes('صندوق') || name.includes('cash') || name.includes('خزينة');
-            else if (method === 'bank') return name.includes('بنك') || name.includes('bank') || name.includes('مصرف');
-            return true;
-        });
+
+        if (method === 'cash') {
+            this.filteredAccounts = mapSources(this.safes);
+            if (this.filteredAccounts.length === 0 && this.allAccounts.length) {
+                this.filteredAccounts = this.allAccounts
+                    .filter((acc: any) => {
+                        if (acc.detail_type === 'cash') return true;
+                        const name = String(acc.name || '').toLowerCase();
+                        return name.includes('صندوق') || name.includes('cash') || name.includes('خزينة');
+                    })
+                    .map((a: any) => ({ id: a.id, name: a.name }));
+            }
+        } else if (method === 'bank') {
+            this.filteredAccounts = mapSources(this.banks);
+            if (this.filteredAccounts.length === 0 && this.allAccounts.length) {
+                this.filteredAccounts = this.allAccounts
+                    .filter((acc: any) => {
+                        if (acc.detail_type === 'bank') return true;
+                        const name = String(acc.name || '').toLowerCase();
+                        return name.includes('بنك') || name.includes('bank') || name.includes('مصرف');
+                    })
+                    .map((a: any) => ({ id: a.id, name: a.name }));
+            }
+        } else if (method === 'service_account') {
+            this.filteredAccounts = mapSources(this.serviceAccounts);
+            if (this.filteredAccounts.length === 0 && this.allAccounts.length) {
+                this.filteredAccounts = this.allAccounts
+                    .filter((acc: any) => acc.detail_type === 'service_account' || String(acc.name || '').includes('خدم'))
+                    .map((a: any) => ({ id: a.id, name: a.name }));
+            }
+        } else {
+            this.filteredAccounts = this.allAccounts
+                .filter((acc: any) => {
+                    if (acc.detail_type) return acc.detail_type === method;
+                    const name = String(acc.name || '').toLowerCase();
+                    if (method === 'cash') return name.includes('صندوق') || name.includes('cash') || name.includes('خزينة');
+                    if (method === 'bank') return name.includes('بنك') || name.includes('bank') || name.includes('مصرف');
+                    return true;
+                })
+                .map((a: any) => ({ id: a.id, name: a.name }));
+        }
 
         const currentAccountId = this.form.get('account_id')?.value;
-        if (currentAccountId && !this.filteredAccounts.find(a => a.id === currentAccountId)) {
-            // If editing, we might want to keep it even if filter assumes otherwise? 
-            // Better to add it to filtered list if it matches ID?
+        if (currentAccountId && !this.filteredAccounts.find((a) => a.id === currentAccountId)) {
             if (this.data.voucher && this.data.voucher.account_id == currentAccountId) {
-                const acc = this.allAccounts.find(a => a.id == currentAccountId);
-                if (acc) this.filteredAccounts.push(acc);
+                const acc = this.allAccounts.find((a: any) => a.id == currentAccountId);
+                if (acc) this.filteredAccounts.push({ id: acc.id, name: acc.name });
             } else {
                 this.form.patchValue({ account_id: null });
             }
         }
+    }
+
+    private inferPaymentMethodFromAccountId(accountId: number | null | undefined): string {
+        if (!accountId) return 'cash';
+        if (this.safes.some((s) => s.account_id === accountId)) return 'cash';
+        if (this.banks.some((b) => b.account_id === accountId)) return 'bank';
+        if (this.serviceAccounts.some((s) => s.account_id === accountId)) return 'service_account';
+        const acc = this.allAccounts.find((a: any) => a.id == accountId);
+        if (acc?.detail_type === 'bank') return 'bank';
+        const name = String(acc?.name || '').toLowerCase();
+        if (name.includes('بنك') || name.includes('مصرف') || name.includes('bank')) return 'bank';
+        if (name.includes('خدم') || acc?.detail_type === 'service_account') return 'service_account';
+        return 'cash';
     }
 
     save() {
@@ -151,7 +215,8 @@ export class VoucherDialogComponent implements OnInit {
             return;
         }
         this.loading = true;
-        const voucher = this.form.value;
+        const raw = this.form.value;
+        const { payment_method: _pm, ...voucher } = raw;
 
         if (this.voucherType === 'client' && voucher.client_id) {
             const client = this.clients.find(c => c.id == voucher.client_id);

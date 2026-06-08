@@ -19,8 +19,13 @@ import { DialogWhatsAppMessageComponent } from 'src/app/whatsapp/components/dial
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { AuthService } from 'src/app/auth/auth.service';
 import { WhatsAppService } from 'src/app/whatsapp/services/whatsapp.service';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
+import { Subject, firstValueFrom, takeUntil } from 'rxjs';
+import {
+  collectRenewPrepaidParams,
+  promptReturnPrepaidAmount,
+} from '../utils/order-renew-prepaid.flow';
 
 @Component({
   selector: 'app-list-orders',
@@ -39,6 +44,103 @@ export class ListOrdersComponent implements OnDestroy {
   trackById(index: number, item: any): number {
     return item?.id;
   }
+
+  isShopifyOrder(item: any): boolean {
+    return item?.shopify_order_id != null && item?.shopify_order_id !== '';
+  }
+
+  isShopifyReviewed(item: any): boolean {
+    return !!item?.shopify_reviewed_at;
+  }
+
+  canShopifyReview(): boolean {
+    return this.rbac.canAny([...RBAC_ROUTE.shopifyOrderReview]);
+  }
+
+  /** تأجيل الطلب: أقسام التشغيل/الشحن أو صلاحية orders.change_status */
+  canPostponeOrder(): boolean {
+    const allowed = new Set([
+      'admin',
+      'shipping management',
+      'operation management',
+      'operation specialist',
+      'logistics specialist',
+    ]);
+    const dept = String(this.user || '').trim().toLowerCase();
+    if (allowed.has(dept)) {
+      return true;
+    }
+    return this.rbac.can('orders.change_status');
+  }
+
+  /** تعديل الطلب: صلاحية orders.edit + حالة/نوع الطلب المسموح */
+  canEditOrder(item: any): boolean {
+    if (!this.rbac.can('orders.edit')) {
+      return false;
+    }
+    if (item?.order_status === 'تم شحن') {
+      return false;
+    }
+    const editableTypes = ['جديد', 'طلب استبدال', 'طلب مرتجع'];
+    const editableStatuses = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'];
+    return editableTypes.includes(item?.order_type) && editableStatuses.includes(item?.order_status);
+  }
+
+  /** تحصيل متغير للطلبات المشحونة */
+  canEditShippedOrder(item: any): boolean {
+    return this.rbac.can('orders.edit') && item?.order_status === 'تم شحن';
+  }
+
+  shopifyReviewTooltip(item: any): string {
+    if (!this.isShopifyOrder(item)) return '';
+    if (this.isShopifyReviewed(item)) {
+      const name = item?.shopify_reviewer?.name || '—';
+      return `تمت المراجعة بواسطة ${name}`;
+    }
+    return 'طلب Shopify — بانتظار المراجعة';
+  }
+
+  openShopifyReview(item: any): void {
+    if (!item?.id) return;
+    this.router.navigate(['/dashboard/shipping/orderdetails', item.id], {
+      queryParams: { shopifyReview: '1' },
+    });
+  }
+
+  /** Shopify وغيره: «فرد» / «افراد» / individual */
+  isIndividualCustomer(item: any): boolean {
+    const t = String(item?.customer_type ?? '').trim().toLowerCase();
+    return t === 'افراد' || t === 'فرد' || t === 'individual' || t === 'أفراد';
+  }
+
+  isCompanyCustomer(item: any): boolean {
+    return String(item?.customer_type ?? '').trim() === 'شركة';
+  }
+
+  canShipOrder(item: any): boolean {
+    if (!item) return false;
+    const status = item.order_status;
+    if (this.isCompanyCustomer(item)) {
+      return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'مؤجل'].includes(status);
+    }
+    if (this.isIndividualCustomer(item)) {
+      return ['طلب مؤكد', 'مؤجل', 'طلب جديد'].includes(status);
+    }
+    return false;
+  }
+
+  canShipOrderMenu(): boolean {
+    const roles = new Set([
+      'Admin',
+      'Operation Management',
+      'Finance and operations management',
+      'Operation Specialist',
+      'Logistics Specialist',
+      'Shipping Management',
+    ]);
+    return roles.has(this.user);
+  }
+
   /** قائمة الإجراءات بجانب رقم الطلب — Spatie: assign to whatsapp number، أو مستخدم معيّن لرقم واتساب (hasWhatsAppAccess) */
   canAssignWhatsAppNumbers = false;
   orders :any = [];
@@ -70,6 +172,7 @@ export class ListOrdersComponent implements OnDestroy {
     private userService:UserService ,private renderer: Renderer2 ,private el: ElementRef, private bankService:BanksService,
     private authService:AuthService, private router: Router,
     private whatsappService: WhatsAppService,
+    private rbac: RbacService,
     private breakpointObserver: BreakpointObserver
     ) {
       document.addEventListener('scroll', (event) => {
@@ -122,6 +225,8 @@ export class ListOrdersComponent implements OnDestroy {
           this.mobileExpandedIds = new Set();
         }
       });
+
+    this.filter(null);
   }
 
   ngOnDestroy(): void {
@@ -157,15 +262,20 @@ export class ListOrdersComponent implements OnDestroy {
   }
 
   catword = 'category_name';
-  productChange(event) {
+
+  productChange(event: { id?: number } | null): void {
+    if (!event?.id) {
+      return;
+    }
     this.filterService.category_id = event.id;
-    this.filter(arguments);
+    this.page = 0;
+    this.filter(null);
   }
 
-  resetInp(){
+  resetProductFilter(): void {
     this.filterService.category_id = null;
-    this.filter(arguments);
-
+    this.page = 0;
+    this.filter(null);
   }
 
   userdata:any[]=[];
@@ -418,6 +528,8 @@ export class ListOrdersComponent implements OnDestroy {
         return 'canceled';
         case 'تم التحصيل':
           return 'collected';
+          case 'تم التسليم':
+          return 'delivered';
           case 'تم الصيانة':
           return 'fixed';
           case 'أرشيف' :
@@ -425,6 +537,34 @@ export class ListOrdersComponent implements OnDestroy {
       default:
         return '';
     }
+  }
+
+  confirmDelivery(orderId: number) {
+    Swal.fire({
+      title: 'تأكيد التسليم',
+      text: 'هل تم تسليم الطلب للعميل؟ ستنتقل المديونية من العميل إلى شركة الشحن/المندوب.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'نعم، تم التسليم',
+      cancelButtonText: 'إلغاء',
+      input: 'text',
+      inputPlaceholder: 'ملاحظة (اختياري)',
+      inputValidator: () => undefined
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.order.deliverOrder(orderId, { note: result.value || '' }).subscribe(
+          (res: any) => {
+            if (res.message === 'success') {
+              Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
+              location.reload();
+            }
+          },
+          (err) => {
+            Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
+          }
+        );
+      }
+    });
   }
 
   reviewFn(){
@@ -441,6 +581,196 @@ export class ListOrdersComponent implements OnDestroy {
       }
     });
 
+  }
+
+  /**
+   * أدمن: إعادة بناء قيود الفاتورة (ORD-*) من بيانات الطلب الحالية لنطاق «تاريخ الطلب»،
+   * ثم إعادة حساب أرصدة شجرة الحسابات. لا تُعدّ قيود التحصيل الفعلية.
+   */
+  async openOrdersAccountingReconcileWizard(): Promise<void> {
+    if (this.user !== 'Admin') {
+      return;
+    }
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const defaultTo = `${yyyy}-${mm}-${dd}`;
+    const firstOfMonth = `${yyyy}-${mm}-01`;
+
+    const step1 = await Swal.fire({
+      title: 'تسوية قيود المحاسبة للطلبات',
+      html: `
+        <p class="text-right small text-muted mb-2" style="max-width:100%;">
+          يُعاد إنشاء قيود الفاتورة (ORD-*) من إجمالي الطلب والخصم وإيراد الشحن وربط ذمم شركة الشحن/التحصيل الحالي.
+          <strong>الطلبات الملغية والمؤرشفة تُستبعد تلقائياً.</strong>
+          قيود التحصيل والدفعات الإضافية المسجّلة لاحقاً لا تُلغى. بعد الانتهاء تُحدَّث أرصدة الشجرة بالكامل.
+        </p>
+        <label class="d-block text-right fw-bold">من تاريخ الطلب</label>
+        <input id="swal-ord-acc-from" type="date" class="swal2-input" style="width:100%;box-sizing:border-box;" value="${firstOfMonth}">
+        <label class="d-block text-right fw-bold mt-2">إلى تاريخ الطلب</label>
+        <input id="swal-ord-acc-to" type="date" class="swal2-input" style="width:100%;box-sizing:border-box;" value="${defaultTo}">
+        <label class="d-flex align-items-start mt-3 text-right gap-2" style="cursor:pointer;">
+          <input type="checkbox" id="swal-ord-acc-prepaid" class="mt-1">
+          <span class="small">إعادة بناء قيود الدفعة المقدمة عند إنشاء الطلب (ORD-PREPAID) — للاستخدام النادر فقط؛ إن وُجدت تحصيلات جزئية لاحقة قد لا تطابق السجل التاريخي.</span>
+        </label>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'معاينة العدد',
+      cancelButtonText: 'إلغاء',
+      preConfirm: () => {
+        const fromEl = document.getElementById('swal-ord-acc-from') as HTMLInputElement | null;
+        const toEl = document.getElementById('swal-ord-acc-to') as HTMLInputElement | null;
+        const prepaidEl = document.getElementById('swal-ord-acc-prepaid') as HTMLInputElement | null;
+        const dateFrom = fromEl?.value ?? '';
+        const dateTo = toEl?.value ?? '';
+        if (!dateFrom || !dateTo) {
+          Swal.showValidationMessage('حدد تاريخ البداية والنهاية');
+          return false;
+        }
+        if (dateFrom > dateTo) {
+          Swal.showValidationMessage('"من" يجب أن يكون قبل أو مساوياً لـ "إلى"');
+          return false;
+        }
+        const maxDays = 731;
+        const diffMs = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays > maxDays) {
+          Swal.showValidationMessage(`نطاق التاريخ (${diffDays} يوم) يتجاوز الحد المسموح (${maxDays} يوم)`);
+          return false;
+        }
+        return {
+          date_from: dateFrom,
+          date_to: dateTo,
+          rebuild_prepaid: !!prepaidEl?.checked,
+        };
+      },
+    });
+
+    const payload = step1.value as { date_from: string; date_to: string; rebuild_prepaid: boolean } | undefined;
+    if (!step1.isConfirmed || !payload) {
+      return;
+    }
+
+    try {
+      Swal.fire({
+        title: 'جاري تحميل المعاينة...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const preview: any = await firstValueFrom(
+        this.order.previewOrdersAccountingReconcile({
+          date_from: payload.date_from,
+          date_to: payload.date_to,
+        })
+      );
+
+      Swal.close();
+
+      if (preview?.would_exceed_limit) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'تجاوز الحد',
+          html: `عدد الطلبات النشطة (${preview.orders_count}) يتجاوز الحد المسموح لكل تشغيل (${preview.max_orders_per_run}). قلّل نطاق التاريخ.`,
+        });
+        return;
+      }
+
+      if ((preview?.orders_count ?? 0) === 0) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'لا توجد طلبات',
+          text: `لا توجد طلبات نشطة في الفترة من ${payload.date_from} إلى ${payload.date_to}.`,
+        });
+        return;
+      }
+
+      let statusBreakdown = '';
+      const byStatus = preview?.by_status;
+      if (byStatus && Object.keys(byStatus).length > 0) {
+        const rows = Object.entries(byStatus)
+          .map(([status, count]) => `<tr><td class="text-right px-2">${status}</td><td class="text-center px-2"><b>${count}</b></td></tr>`)
+          .join('');
+        statusBreakdown = `
+          <table class="table table-sm table-bordered mt-2 mb-0" style="font-size:0.85rem;">
+            <thead><tr><th class="text-right">الحالة</th><th class="text-center">العدد</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+
+      const excludedNote = (preview?.excluded_count ?? 0) > 0
+        ? `<p class="text-right small text-warning mt-2 mb-0">سيتم تجاوز <b>${preview.excluded_count}</b> طلب ملغي/مؤرشف تلقائياً.</p>`
+        : '';
+
+      const runConfirm = await Swal.fire({
+        icon: 'question',
+        title: 'تأكيد التسوية',
+        html: `
+          <p class="text-right">سيُعاد ترحيل قيود الفاتورة لـ <b>${preview?.orders_count ?? 0}</b> طلب نشط بين
+          <b>${payload.date_from}</b> و <b>${payload.date_to}</b>.
+          ${payload.rebuild_prepaid ? '<br><strong class="text-danger">تضمين إعادة بناء الدفعات المقدمة مفعّل.</strong>' : ''}
+          </p>
+          ${statusBreakdown}
+          ${excludedNote}
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'تنفيذ التسوية',
+        cancelButtonText: 'رجوع',
+        confirmButtonColor: '#d33',
+      });
+
+      if (!runConfirm.isConfirmed) {
+        return;
+      }
+
+      Swal.fire({
+        title: 'جاري التسوية...',
+        html: '<p class="small text-muted">قد يستغرق ذلك بضع دقائق حسب عدد الطلبات. لا تغلق الصفحة.</p>',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      const result: any = await firstValueFrom(
+        this.order.runOrdersAccountingReconcile({
+          date_from: payload.date_from,
+          date_to: payload.date_to,
+          rebuild_prepaid: payload.rebuild_prepaid,
+        })
+      );
+
+      Swal.close();
+
+      let failHtml = '';
+      const fails = Array.isArray(result?.failures) ? result.failures.slice(0, 15) : [];
+      if (fails.length) {
+        failHtml =
+          '<p class="text-right small mt-2">أول الطلبات الفاشلة:</p><ul class="text-right small" style="max-height:140px;overflow:auto;">' +
+          fails.map((f: any) => `<li>#${f.order_id}: ${(f.error || '').toString().slice(0, 120)}</li>`).join('') +
+          '</ul>';
+      }
+
+      const skippedHtml = (result?.orders_skipped_cancelled ?? 0) > 0
+        ? `<p class="text-right small text-muted">تم تجاوز: <b>${result.orders_skipped_cancelled}</b> طلب ملغي/مؤرشف</p>`
+        : '';
+
+      await Swal.fire({
+        icon: result?.success ? 'success' : 'error',
+        title: result?.message || 'انتهى',
+        html:
+          `<p class="text-right">المعالجة بنجاح: <b>${result?.orders_processed ?? 0}</b> — فشل: <b>${result?.orders_failed ?? 0}</b></p>` +
+          skippedHtml +
+          failHtml,
+      });
+    } catch (err: any) {
+      Swal.close();
+      const msg = err?.error?.message || err?.message || 'حدث خطأ';
+      Swal.fire({ icon: 'error', title: 'لم يكتمل الطلب', text: msg });
+    }
   }
 
   sendOrder(item:any){
@@ -738,26 +1068,11 @@ export class ListOrdersComponent implements OnDestroy {
             }
 
             if (action=='renew') {
-              const result = await Swal.fire({
-                title: 'هل يوجد مبلغ تحت الحساب؟',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'نعم',
-                cancelButtonText: 'لا',
-              });
-
-              if (result.dismiss === Swal.DismissReason.backdrop) {
-                return;
+              const renewParams = await collectRenewPrepaidParams(order, this.banks);
+              if (renewParams === null) {
+                return undefined;
               }
-
-              if (result.isConfirmed) {
-                let prepaidAmountData = await this.renewPrepaidAmount();
-                if (Object.keys(prepaidAmountData).length === 0) {
-                  return undefined;
-                }
-                param['renewAmount'] = prepaidAmountData['renewAmount'];
-                param['renewBankId'] = prepaidAmountData['renewBankId'];
-              }
+              Object.assign(param, renewParams);
             }
 
             this.order.chngeStatus(id,action,value,0,0,0,param).subscribe(res=>{
@@ -782,83 +1097,8 @@ export class ListOrdersComponent implements OnDestroy {
     }
   }
 
-  async returnPrepaidAmount(order){
-    const banks = this.banks;
-    const bankSelectOptions = banks.reduce((options, bank) => {
-      options[bank.id] = bank.name;
-      return options;
-    }, {});
-
-    let data={}
-    await Swal.fire({
-      title: ' إرجاع مبلغ تحت الحساب '+ order.prepaid_amount,
-      input: 'select',
-      inputOptions: bankSelectOptions,
-      inputPlaceholder: 'اختر الخزينة',
-      inputValue:order.bank_id,
-      showCancelButton: true,
-      confirmButtonText: 'تأكيد',
-      cancelButtonText: 'قيد الانتظار',
-      customClass: {
-        input: 'text-center',
-      },
-    }).then((result:any) => {
-      const selectedBankId = result.value;
-      if (result.isConfirmed) {
-        data['returnedStatus'] = 'approved';
-        data['returnedBank'] = selectedBankId;
-      } else if (result.dismiss == "cancel"){
-        data['returnedStatus'] = 'pending';
-      }
-    });
-    return data
-  }
-
-  async renewPrepaidAmount() {
-    let options;
-    this.banks.forEach(elm =>{
-      let selected = '';
-      options += `<option ${selected} value="${elm.id}">${elm.name}</option>`;
-    })
-
-    let data = {};
-    const { value: formValues } = await Swal.fire({
-      title: ' ادخال مبلغ تحت الحساب ' ,
-      html: `
-      <div class="row w-100 m-auto">
-        <div class="col-md-12">
-          <div class="form-group">
-            <input id="swal-input-renewAmount" class="form-control text-center" placeholder="المبلغ" type="number" min="0">
-          </div>
-        </div>
-        <div class="col-md-12">
-          <div class="form-group">
-            <select id="swal-input-bank" class="form-control  text-center bg-main">
-              <option value="اختر الخزينة" disabled selected>اختر الخزينة</option>
-              ${options}
-            </select>
-          </div>
-        </div>
-      </div>
-    `,
-      showCancelButton: true,
-      confirmButtonText: 'تأكيد',
-      cancelButtonText: 'الغاء',
-      preConfirm: () => {
-        let renewAmount:any = document.getElementById('swal-input-renewAmount');
-        let selectedBankId:any = document.getElementById('swal-input-bank');
-        return {
-          renewAmount: renewAmount.value,
-          selectedBankId: selectedBankId.value
-        }
-      }
-    });
-
-    if (formValues) {
-      data['renewAmount'] = formValues.renewAmount;
-      data['renewBankId'] = formValues.selectedBankId;
-    }
-    return data;
+  async returnPrepaidAmount(order: { prepaid_amount?: number; bank_id?: number }) {
+    return promptReturnPrepaidAmount(order, this.banks);
   }
 
 
@@ -868,15 +1108,15 @@ export class ListOrdersComponent implements OnDestroy {
 
 
   filter(event: any):void{
-    if (event.target?.id ==="customer_type") {
+    if (event?.target?.id ==="customer_type") {
       this.filterService.customer_type = event.target.value;
     }
 
-    if (event.target?.id ==="order_type") {
+    if (event?.target?.id ==="order_type") {
       this.filterService.order_type = event.target.value;
     }
 
-    if (event.target?.id ==="private_order") {
+    if (event?.target?.id ==="private_order") {
       if (event.target.value == 1) {
         this.filterService.private_order = '1';
       } else {
@@ -884,15 +1124,15 @@ export class ListOrdersComponent implements OnDestroy {
       }
     }
 
-    if (event.target?.id ==="order_status") {
+    if (event?.target?.id ==="order_status") {
       this.filterService.order_status = event.target.value;
     }
 
-    if (event.target?.id ==="collectType") {
+    if (event?.target?.id ==="collectType") {
       this.filterService.collectType = event.target.value;
     }
 
-    if (event.target?.id ==="shipping_company_id") {
+    if (event?.target?.id ==="shipping_company_id") {
       this.filterService.shipping_company_id = event.target.value;
     }
 
@@ -912,7 +1152,7 @@ export class ListOrdersComponent implements OnDestroy {
       this.filterService.delivery_date = this.delivery_date;
     }
 
-    if (event.target?.id ==="vip") {
+    if (event?.target?.id ==="vip") {
       if (event.target.checked) {
         this.filterService.vip = '1';
       } else {
@@ -921,7 +1161,7 @@ export class ListOrdersComponent implements OnDestroy {
       // this.filterService.vip = event.target.checked;
     }
 
-    if (event.target?.id ==="shortage") {
+    if (event?.target?.id ==="shortage") {
       if (event.target.checked) {
         this.filterService.shortage = '1';
       } else {
@@ -929,7 +1169,7 @@ export class ListOrdersComponent implements OnDestroy {
       }
     }
 
-    if (event.target?.id ==="paid") {
+    if (event?.target?.id ==="paid") {
       if (event.target.checked) {
         this.filterService.paid = '1';
       } else {
@@ -937,7 +1177,7 @@ export class ListOrdersComponent implements OnDestroy {
       }
     }
 
-    if (event.target?.id ==="prepaidAmount") {
+    if (event?.target?.id ==="prepaidAmount") {
       if (event.target.checked) {
         this.filterService.prepaidAmount = '1';
       } else {
@@ -945,19 +1185,19 @@ export class ListOrdersComponent implements OnDestroy {
       }
     }
 
-    if (event.target?.id ==="governorate") {
+    if (event?.target?.id ==="governorate") {
       this.filterService.governorate = event.target.value;
     }
 
-    if (event.target?.id ==="city") {
+    if (event?.target?.id ==="city") {
       this.filterService.city = event.target.value;
     }
 
-    if (event.target?.id ==="customer_name") {
+    if (event?.target?.id ==="customer_name") {
       this.filterService.customer_name = event.target.value;
     }
 
-    if (event.target?.id ==="customer_phone") {
+    if (event?.target?.id ==="customer_phone") {
       let number = event.target.value;
       if (number.startsWith('+2') || number.startsWith('2')) {
         number = number.substring(2);
@@ -965,29 +1205,34 @@ export class ListOrdersComponent implements OnDestroy {
       this.filterService.customer_phone = number;
     }
 
-    if (event.target?.id ==="order_number") {
+    if (event?.target?.id ==="order_number") {
       this.filterService.order_number = event.target.value;
     }
 
-    if (event.target?.id ==="shippment_number") {
+    if (event?.target?.id ==="shippment_number") {
       console.log(event.target.value);
       this.filterService.shippment_number = event.target.value;
     }
 
-    if (event.target?.id ==="order_source_id") {
+    if (event?.target?.id ==="order_source_id") {
       this.filterService.order_source_id = event.target.value;
     }
 
-    if (event.target?.id ==="shipping_method_id") {
+    if (event?.target?.id ==="shipping_method_id") {
       this.filterService.shipping_method_id = event.target.value;
     }
 
-    if (event.target?.id ==="shipping_line_id") {
+    if (event?.target?.id ==="shipping_line_id") {
       this.filterService.shipping_line_id = event.target.value;
     }
 
-    if (event.target?.id ==="reviewfilter") {
+    if (event?.target?.id ==="reviewfilter") {
       this.filterService.reviewed = event.target.value;
+    }
+
+    if (event?.target?.id === 'shopifyfilter') {
+      const val = event.target.value;
+      this.filterService.shopify = val === 'all' ? '' : val;
     }
 
     this.filterService.filter(this.pageSize,this.page+1).subscribe(result=>{

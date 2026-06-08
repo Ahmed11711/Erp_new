@@ -1,4 +1,4 @@
-<div class="container-fluid mb-5">
+<div class="container-fluid mb-5 shipping-company-page">
   <div class="row py-3">
     <div class="col-4 d-flex align-items-center">
       <app-time></app-time>
@@ -13,9 +13,26 @@
 
 
   <div class="container">
-    <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
+    <div class="d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
+      <button *ngIf="openbtn && canManageCompanies()" class="btn btn-add" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
+      <button
+        *ngIf="openbtn && canManageCompanies()"
+        class="btn btn-outline-warning"
+        (click)="linkAllUnlinked()"
+        [disabled]="linkingAll || unlinkedCount < 1">
+        ربط غير المربوطين ({{ unlinkedCount }})
+      </button>
+      <button
+        *ngIf="openbtn && canManageCompanies()"
+        class="btn"
+        [class.btn-outline-secondary]="!showUnlinkedOnly"
+        [class.btn-secondary]="showUnlinkedOnly"
+        (click)="toggleUnlinkedOnly()">
+        {{ showUnlinkedOnly ? 'عرض الكل' : 'عرض غير المربوطين فقط' }}
+      </button>
+    </div>
 
-    <div *ngIf="formdiv" class="w-50 m-auto mt-5">
+    <div *ngIf="formdiv" id="shipping-company-form-panel" class="w-50 m-auto mt-5">
       <div *ngIf="errorform" class="alert alert-danger">
         {{errorMessage}}
       </div>
@@ -27,11 +44,42 @@
           <p *ngIf="form.get('name')?.errors !=null && form.get('name')?.touched"
             class="error mb-0 text-danger">مطلوب</p>
         </div>
-        <div class="form-group">
+        <div class="form-group shipping-company-type-field">
           <select name="" id="" class="form-control" formControlName='type'>
             <option value="مندوب">مندوب</option>
             <option value="شركة">شركة</option>
           </select>
+        </div>
+        <div class="form-group">
+          <mat-form-field appearance="outline" class="w-100 receivable-account-field" dir="rtl">
+            <mat-label>حساب الذمم (بحث — اختياري)</mat-label>
+            <input
+              matInput
+              [formControl]="receivableAccountCtrl"
+              [matAutocomplete]="recvAccAuto"
+              (focus)="onReceivableAccountFocus()"
+              (blur)="onReceivableAccountBlur()"
+              placeholder="ابحث بالاسم أو رمز الحساب"
+              autocomplete="off"
+            />
+            <mat-autocomplete
+              #recvAccAuto="matAutocomplete"
+              panelClass="shipping-company-receivable-panel"
+              [displayWith]="displayReceivableAccount"
+              (optionSelected)="onReceivableAccountSelected($event)"
+              [autoActiveFirstOption]="true"
+            >
+              <mat-option *ngFor="let acc of filteredReceivableAccounts" [value]="acc">
+                {{ acc.label }}
+              </mat-option>
+            </mat-autocomplete>
+            <mat-hint *ngIf="receivableAccountOptions.length > receivableAutocompleteCap">
+              أول {{ receivableAutocompleteCap }} حساب؛ اكتب في الحقل لتضييق النتائج
+            </mat-hint>
+          </mat-form-field>
+          <p class="text-muted small mb-0 mt-1">
+            اختياري: اربط بحساب موجود، أو اتركه فارغاً ليُنشأ حساب تلقائياً تحت «شركات الشحن والمناديب» في شجرة الحسابات.
+          </p>
         </div>
         <div class="text-center my-3">
           <button *ngIf="addbtn" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
@@ -42,11 +90,12 @@
     </div>
   </div>
 
-  <div class="container-fluid text-center">
+  <div class="container-fluid text-center shipping-company-table-wrap">
     <table class="table w-75 m-auto table-hover">
       <thead class="bg-dark text-white">
         <th>الاسم</th>
         <th>النوع</th>
+        <th>حساب الذمم</th>
         <th>الرصيد</th>
         <th>عدد الطلبات تحت التحصيل</th>
         <th>نسبة رفض الاستلام</th>
@@ -56,31 +105,67 @@
         <tr *ngFor="let elm of data">
           <td>{{elm.name}}</td>
           <td>{{elm.type}}</td>
+          <td>
+            <span *ngIf="elm.receivable_tree_account" class="text-success">
+              {{ elm.receivable_tree_account.code }} — {{ elm.receivable_tree_account.name }}
+            </span>
+            <span *ngIf="!elm.receivable_tree_account" class="text-danger">غير مربوط</span>
+          </td>
           <td dir="ltr">{{elm.balance | customNumber}}</td>
           <td>{{elm.orders_count}}</td>
           <td>{{elm.refused_orders_percentage}}</td>
           <td>
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
+            <button
+              type="button"
+              mat-icon-button
+              [matMenuTriggerFor]="shippingCompanyActionsMenu"
+              [matMenuTriggerData]="{ company: elm }"
+              aria-label="إجراءات"
+            >
               <mat-icon>more_vert</mat-icon>
-            </span>
-            <mat-menu #menu="matMenu">
-              <button mat-menu-item [routerLink]="['/dashboard/shipping/shippingcompanydetails', elm?.id]">
-                <span>كشف حساب</span>
-              </button>
-              <!-- <button mat-menu-item [routerLink]="['/dashboard/shipping/shippingcompanylines', elm?.id]">
-                <span>تفاصيل خطوط التوزيع</span>
-              </button> -->
-              <button mat-menu-item *ngIf="user == 'Admin'">
-                <span>تعديل</span>
-              </button>
-              <button mat-menu-item *ngIf="user == 'Admin'">
-                <span>حذف</span>
-              </button>
-          </mat-menu>
-        </td>
+            </button>
+          </td>
         </tr>
       </tbody>
     </table>
+
+    <!-- قائمة واحدة خارج الصفوف لتفادي تعارض المراجع داخل *ngFor (التعديل/الحذف لا يعملان) -->
+    <mat-menu #shippingCompanyActionsMenu="matMenu">
+      <ng-template matMenuContent let-company="company">
+        <a
+          mat-menu-item
+          *ngIf="canViewCompanyStatement()"
+          [routerLink]="['/dashboard/shipping/shippingcompanydetails', company.id]"
+        >
+          <span>كشف حساب</span>
+        </a>
+        <button
+          type="button"
+          mat-menu-item
+          *ngIf="canManageCompanies() && !isLinked(company)"
+          (click)="linkOne(company)"
+          [disabled]="linkingId === company.id"
+        >
+          <span>ربط بحساب الشجرة</span>
+        </button>
+        <button
+          type="button"
+          mat-menu-item
+          *ngIf="canManageCompanies()"
+          (click)="editData(company.id, company.name, company.type, company.receivable_tree_account_id)"
+        >
+          <span>تعديل</span>
+        </button>
+        <button
+          type="button"
+          mat-menu-item
+          *ngIf="canManageCompanies()"
+          (click)="deleteData(company.id)"
+        >
+          <span>حذف</span>
+        </button>
+      </ng-template>
+    </mat-menu>
   </div>
 
 

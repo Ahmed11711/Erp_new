@@ -65,5 +65,9 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'admin' => \App\Http\Middleware\CheckAdminDepartment::class,
         'department.access' => \App\Http\Middleware\DepartmentAccess::class,
+        'order.profile' => \App\Http\Middleware\OrderProfileRbacAccess::class,
+        'permission' => \App\Http\Middleware\EnsurePermissionSlug::class,
+        'settings.user_mgmt' => \App\Http\Middleware\SettingsUserManagementApiAccess::class,
+        'system.admin_tools' => \App\Http\Middleware\SystemAdminToolsApiAccess::class,
     ];
 }

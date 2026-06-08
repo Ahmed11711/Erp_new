@@ -141,8 +141,7 @@ export class AddCapitalComponent implements OnInit {
       // We need filtering by type or parent. 
       // For now get all and maybe filter on frontend or just show all for selection.
       // Usually Equity is liability-like/credit balance.
-      this.voucherService.getAccounts().subscribe(res => {
-         const all = Array.isArray(res) ? res : (res.data || []);
+      this.voucherService.getAccounts().subscribe((all) => {
          // Filter assuming there is a type property or just show all
          this.equityAccounts = all.filter((a: any) => a.type === 'equity' || a.account_type === 'equity' || a.type === 'liabilities');
          // If filtering yields nothing, show all as fallback

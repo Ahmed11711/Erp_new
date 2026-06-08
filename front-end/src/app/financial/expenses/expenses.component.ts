@@ -197,6 +197,31 @@ export class ExpensesComponent implements OnInit {
     return row?.service_account?.account ?? null;
   }
 
+  isSplitExpense(row: any): boolean {
+    return Array.isArray(row?.lines) && row.lines.length > 1;
+  }
+
+  expenseKindLabel(row: any): string {
+    if (this.isSplitExpense(row)) {
+      return 'تقسيم (' + row.lines.length + ' بنود)';
+    }
+    return row?.kind?.expense_kind ?? '—';
+  }
+
+  expenseTypeLabel(row: any): string {
+    if (this.isSplitExpense(row)) {
+      return 'متعدد';
+    }
+    return row?.expense_type ?? '—';
+  }
+
+  debitAccountLabel(row: any): string {
+    if (row?.debit_tree_accounts_split || this.isSplitExpense(row)) {
+      return 'عدة حسابات (مدين)';
+    }
+    return this.treeAccountLine(row.debit_tree_account);
+  }
+
   truncateNote(text: string | null | undefined, maxLen = 40): string {
     if (text == null || text === '') {
       return '—';

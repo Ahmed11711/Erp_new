@@ -6,27 +6,20 @@ import { UnitsComponent } from './units/units.component';
 import { ListCategoriesComponent } from './list-categories/list-categories.component';
 import { EditCategoryComponent } from './edit-category/edit-category.component';
 import { departmentGuard } from '../guards/department.guard';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
+
+const cat = [...RBAC_ROUTE.categoriesAll];
 
 const routes: Routes = [
-  {path:'units',component:UnitsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Account Management','Logistics Specialist']}
-  },
-  {path:"production",component:ProductionComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Account Management','Logistics Specialist']}
-  },
-  {path:'add_category',component:AddCategoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Account Management','Logistics Specialist']}
-  },
-  {path:'edit_category/:id',component:EditCategoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Account Management','Logistics Specialist']}
-  },
-  {path:'all_categories',component:ListCategoriesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Data Entry','Account Management','Logistics Specialist']}
-  }
+  { path: 'units', component: UnitsComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
+  { path: 'production', component: ProductionComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
+  { path: 'add_category', component: AddCategoryComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
+  { path: 'edit_category/:id', component: EditCategoryComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
+  { path: 'all_categories', component: ListCategoriesComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class CategoriesRoutingModule { }
+export class CategoriesRoutingModule {}

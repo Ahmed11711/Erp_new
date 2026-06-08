@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { WhatsAppService } from '../../whatsapp/services/whatsapp.service';
-import { UsersService } from '../../services/users.service';
 
 @Component({
   selector: 'app-whatsapp-management',
@@ -17,7 +16,6 @@ export class WhatsappManagementComponent implements OnInit {
 
   constructor(
     private whatsappService: WhatsAppService,
-    private usersService: UsersService,
     private snackBar: MatSnackBar
   ) {}
 
@@ -73,7 +71,7 @@ export class WhatsappManagementComponent implements OnInit {
 
   loadUsers(): void {
     this.loading = true;
-    this.usersService.getUsers().subscribe({
+    this.whatsappService.getAssignableUsers().subscribe({
       next: (response) => {
         this.users = response.data || response || [];
         this.loading = false;
@@ -85,14 +83,7 @@ export class WhatsappManagementComponent implements OnInit {
           panelClass: ['error-snackbar']
         });
         this.loading = false;
-        // Fallback to mock data if API fails
-        this.users = [
-          { id: 1, name: 'Admin', email: 'admin@example.com' },
-          { id: 2, name: 'User 1', email: 'user1@example.com' },
-          { id: 3, name: 'User 2', email: 'user2@example.com' },
-          { id: 4, name: 'User 3', email: 'user3@example.com' },
-          { id: 5, name: 'User 4', email: 'user4@example.com' },
-        ];
+        this.users = [];
       }
     });
   }

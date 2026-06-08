@@ -708,6 +708,84 @@
   color: var(--recipe-muted);
 }
 
+/* Bulk action buttons row */
+.recipe-import-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8f5f7;
+  border: 1px dashed var(--recipe-border, #d0d0d0);
+  border-radius: 10px;
+}
+
+.recipe-import-bulk-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--recipe-muted, #6c757d);
+  margin-inline-end: 0.25rem;
+}
+
+.recipe-action-btn--bulk {
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+}
+
+/* Items color summary section */
+.recipe-import-items-summary {
+  border: 1px solid #e0d8dd;
+  border-radius: 10px;
+  background: #fdf9fb;
+  padding: 0.85rem 1rem;
+}
+
+.recipe-import-items-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.recipe-import-item-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.recipe-import-item-chip--update {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
+
+.recipe-import-item-chip--create {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.recipe-import-item-chip__icon {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.recipe-import-items-detail {
+  margin-top: 0.5rem;
+}
+
+.recipe-import-items-detail > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--recipe-brand, #82225e);
+  font-weight: 500;
+}
+
 .recipe-import-details {
   margin-top: 0.5rem;
   border: 1px solid var(--recipe-border);

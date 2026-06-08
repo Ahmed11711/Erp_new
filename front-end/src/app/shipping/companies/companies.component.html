@@ -31,75 +31,127 @@
       </div>
     </form>
 
-    <div class="text-center">
-      <button class="btn btn-add my-3" (click)="openDialog()">اضافة<i class="fa-solid fa-plus"></i></button>
+    <div class="text-center d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
+      <button *ngIf="canManageCompanies()" class="btn btn-add" (click)="openDialog()">اضافة<i class="fa-solid fa-plus"></i></button>
+      <button
+        *ngIf="canManageCompanies()"
+        class="btn btn-outline-warning"
+        (click)="linkAllUnlinked()"
+        [disabled]="linkingAll || unlinkedCount < 1">
+        ربط غير المربوطين ({{ unlinkedCount }})
+      </button>
+      <button
+        *ngIf="canManageCompanies()"
+        class="btn"
+        [class.btn-outline-secondary]="!showUnlinkedOnly"
+        [class.btn-secondary]="showUnlinkedOnly"
+        (click)="toggleUnlinkedOnly()">
+        {{ showUnlinkedOnly ? 'عرض الكل' : 'عرض غير المربوطين فقط' }}
+      </button>
     </div>
 
     <table class="table w-75 m-auto text-center table-hover">
       <thead class="bg-dark text-white">
         <tr>
           <th scope="col"> اسم الشركة</th>
-          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 1</th>
-          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 2</th>
-          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 3</th>
-          <th scope="col" *ngIf="user == 'Admin'"> رقم الموبيل 4</th>
-          <th scope="col" *ngIf="user == 'Admin'">تلفون ارضي</th>
-          <th scope="col" *ngIf="user == 'Admin'">المحافظة</th>
-          <th scope="col" *ngIf="user == 'Admin'"> المدينة</th>
-          <th scope="col" *ngIf="user == 'Admin'">العنوان</th>
+          <th scope="col" *ngIf="canManageCompanies()"> رقم الموبيل 1</th>
+          <th scope="col" *ngIf="canManageCompanies()"> رقم الموبيل 2</th>
+          <th scope="col" *ngIf="canManageCompanies()"> رقم الموبيل 3</th>
+          <th scope="col" *ngIf="canManageCompanies()"> رقم الموبيل 4</th>
+          <th scope="col" *ngIf="canManageCompanies()">تلفون ارضي</th>
+          <th scope="col" *ngIf="canManageCompanies()">المحافظة</th>
+          <th scope="col" *ngIf="canManageCompanies()"> المدينة</th>
+          <th scope="col" *ngIf="canManageCompanies()">العنوان</th>
           <th scope="col">عدد الطلبات</th>
           <th scope="col">الرصيد</th>
+          <th scope="col" *ngIf="canManageCompanies()">الحساب</th>
           <th scope="col">-</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let item of data; let i = index">
           <td>{{item.name}}</td>
-          <td *ngIf="user == 'Admin'">{{item.phone1}}</td>
-          <ng-container *ngIf="user == 'Admin'">
+          <td *ngIf="canManageCompanies()">{{item.phone1}}</td>
+          <ng-container *ngIf="canManageCompanies()">
             <td *ngIf="item.phone2 !== 'null'; else emptyTd">{{ item.phone2 }}</td>
           </ng-container>
-          <ng-container *ngIf="user == 'Admin'">
+          <ng-container *ngIf="canManageCompanies()">
             <td *ngIf="item.phone3 !== 'null'; else emptyTd">{{ item.phone3 }}</td>
           </ng-container>
-          <ng-container *ngIf="user == 'Admin'">
+          <ng-container *ngIf="canManageCompanies()">
             <td *ngIf="item.phone4 !== 'null'; else emptyTd">{{ item.phone4 }}</td>
           </ng-container>
-          <ng-container *ngIf="user == 'Admin'">
+          <ng-container *ngIf="canManageCompanies()">
             <td *ngIf="item.tel !== 'null'; else emptyTd">{{ item.tel }}</td>
           </ng-container>
-          <ng-container *ngIf="user == 'Admin'">
+          <ng-container *ngIf="canManageCompanies()">
             <td>{{item.governorate}}</td>
           </ng-container>
-          <ng-container *ngIf="user == 'Admin'">
+          <ng-container *ngIf="canManageCompanies()">
             <td *ngIf="item.city !== 'null'; else emptyTd">{{item.city}}</td>
           </ng-container>
           <ng-template #emptyTd><td></td></ng-template>
-          <td *ngIf="user == 'Admin'">{{item.address}}</td>
+          <td *ngIf="canManageCompanies()">{{item.address}}</td>
           <td>{{item.number_of_orders}}</td>
           <td dir="ltr">{{item.balance || 0 | customNumber}}</td>
-          <td>
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
-              <mat-icon>more_vert</mat-icon>
+          <td *ngIf="canManageCompanies()">
+            <span *ngIf="isLinked(item)" class="badge bg-success">
+              {{ item.tree_account?.code || 'مرتبط' }}
             </span>
-            <mat-menu #menu="matMenu">
-              <button *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user =='Operation Management' || user =='Finance and operations management'" mat-menu-item [routerLink]="['/dashboard/shipping/companybalance',item.id]">
-                <span>كشف حساب</span>
-              </button>
-              <button *ngIf="user == 'test'" mat-menu-item [routerLink]="['/dashboard/shipping/companydetails',item.id]">
-                <span>تفاصيل</span>
-              </button>
-              <!-- <button *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user =='Operation Management'" mat-menu-item [routerLink]="['/dashboard/shipping/companydetails',item.id]">
-                <span>تفاصيل</span>
-              </button> -->
-              <button *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'" mat-menu-item (click)="collectFromCompany(item)">
-                <span>تحصيل</span>
-              </button>
-            </mat-menu>
-        </td>
+            <span *ngIf="!isLinked(item)" class="badge bg-warning text-dark">غير مربوط</span>
+          </td>
+          <td>
+            <button
+              type="button"
+              mat-icon-button
+              [matMenuTriggerFor]="customerCompanyActionsMenu"
+              [matMenuTriggerData]="{ company: item }"
+              aria-label="إجراءات"
+            >
+              <mat-icon>more_vert</mat-icon>
+            </button>
+          </td>
         </tr>
       </tbody>
     </table>
+
+    <!-- قائمة واحدة خارج الصفوف لتفادي تعارض المراجع داخل *ngFor -->
+    <mat-menu #customerCompanyActionsMenu="matMenu">
+      <ng-template matMenuContent let-company="company">
+        <button
+          type="button"
+          *ngIf="canManageCompanies()"
+          mat-menu-item
+          (click)="openEditDialog(company)"
+        >
+          <span>تعديل</span>
+        </button>
+        <button
+          type="button"
+          *ngIf="canManageCompanies() && !isLinked(company)"
+          mat-menu-item
+          (click)="linkOne(company)"
+          [disabled]="linkingId === company.id"
+        >
+          <span>{{ linkingId === company.id ? 'جاري الربط...' : 'ربط بالحساب' }}</span>
+        </button>
+        <a
+          *ngIf="canViewStatement()"
+          mat-menu-item
+          [routerLink]="['/dashboard/shipping/companybalance', company.id]"
+        >
+          <span>كشف حساب</span>
+        </a>
+        <button
+          type="button"
+          *ngIf="canCollect()"
+          mat-menu-item
+          (click)="collectFromCompany(company)"
+        >
+          <span>تحصيل</span>
+        </button>
+      </ng-template>
+    </mat-menu>
 
     <div class="mt-4">
       <mat-paginator #paginator

@@ -15,168 +15,169 @@
 
   <div class="container-fluid" *ngIf="!completedShip">
     <form #ship="ngForm" (ngSubmit)="shipOrder(ship)">
-      <div class="form-row">
-        <div class="form-group col-md-2">
-          <div class="form-group">
-            <div class="form-group">
-              <select
-                class="form-control"
-                name="collection_company"
-                ngModel
-                #collection_company="ngModel"
-                title="للطلبات بها دفعة مقدمة: تُسجّل الذمة على حساب التحصيل (مثل Paymob)"
-              >
-                <option selected value="">شركة التحصيل (اختياري)</option>
-                <option *ngFor="let item of companies" [value]="item.id">
-                  {{ item.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="form-group col-md-2" *ngIf="orderSnap && customer_type !== 'شركة'">
-          <small class="text-muted d-block">دفعة مقدمة (على التحصيل تلقائياً)</small>
-          <input class="form-control" type="text" [value]="orderSnap.prepaid_amount || 0" disabled />
-        </div>
-        <div class="form-group col-md-2" *ngIf="orderSnap && customer_type !== 'شركة'">
-          <small class="text-muted d-block">صافي الطلب</small>
-          <input class="form-control" type="text" [value]="orderSnap.net_total" disabled />
-        </div>
-        <div class="form-group col-md-2" *ngIf="customer_type !== 'شركة'">
-          <small class="text-muted d-block">يدوي: مبلغ على شركة الشحن</small>
-          <input
-            class="form-control"
-            type="number"
-            min="0"
-            step="0.01"
-            name="shipping_receivable_amount"
-            ngModel
-            title="اتركه فارغاً مع شركة تحصيل: يُقسّم تلقائياً (مقدّم → تحصيل، الباقي → شحن)"
-          />
-        </div>
-        <div class="form-group col-md-2" *ngIf="customer_type !== 'شركة'">
-          <small class="text-muted d-block">يدوي: مبلغ على شركة التحصيل</small>
-          <input
-            class="form-control"
-            type="number"
-            min="0"
-            step="0.01"
-            name="collection_receivable_amount"
-            ngModel
-            title="يجب أن يكون المجموع = صافي الطلب عند استخدام التقسيم اليدوي"
-          />
-        </div>
-        <div class="form-group col-md-2" *ngIf="customer_type !== 'شركة'">
-          <div class="form-group">
-            <div class="form-group">
-              <select class="form-control" name="line" ngModel #line="ngModel">
-                <!-- <option  disabled value=""> خط التوزيع</option> -->
-                <option selected value="">{{ lines?.name }}</option>
-              </select>
-            </div>
-          </div>
-        </div>
+
+      <!-- الصف الأول: بيانات الشحن الأساسية -->
+      <div class="form-row align-items-end">
         <div class="form-group col-md-3">
-          <div class="text-center">
-            <mat-form-field class="example-full-width">
-              <mat-label>تاريخ الشحن الفعلي</mat-label>
-              <input
-                matInput
-                [matDatepickerFilter]="myFilter"
-                [matDatepicker]="picker"
-                (dateInput)="OnDateChange($event.value)"
-              />
-              <!-- <mat-hint>MM/DD/YYYY</mat-hint> -->
-              <mat-datepicker-toggle
-                matIconSuffix
-                [for]="picker"
-              ></mat-datepicker-toggle>
-              <mat-datepicker #picker></mat-datepicker>
-            </mat-form-field>
-          </div>
-        </div>
-
-        <div class="form-group col-md-2">
-          <div class="form-group">
-            <div class="form-group">
-              <select
-                class="form-control"
-                name="company"
-                ngModel
-                #company="ngModel"
-                required
-              >
-                <option selected disabled value="">شركة الشحن</option>
-                <option *ngFor="let item of companies" value="{{ item.id }}">
-                  {{ item.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-2 form-group" *ngIf="customer_type == 'شركة'">
-          <div class="form-group">
-            <select id="paymentType" class="form-control" (change)="paymentType($event)">
-              <option selected disabled >طريقة الدفع</option>
-              <option value="أجل">أجل</option>
-              <option value="نقدي">نقدي</option>
-            </select>
-          </div>
-          <div class="form-group" *ngIf="cashType || cashval">
-            <input id="cash" min="0" placeholder="المبلغ" class="form-control" type="number" (change)="paymentType($event)" (keyup)="paymentType($event)">
-          </div>
-
-        </div>
-        <div class="form-group col-md-2">
-          <input
-          type="number"
-          name="shippment_number"
-          ngModel
-          #shippment_number="ngModel"
-          class="form-control"
-          placeholder=" رقم البوليصة"
-          />
-          <div class="text-danger" ></div>
-        </div>
-        <div class="form-group col-md-2">
-          <textarea class="form-control" placeholder="اضف ملحوظة" name="note" #note="ngModel" ngModel id="" cols="30" rows="3"></textarea>
-          <!-- <input
-            type="text"
-            name="note"
-            ngModel
-            #note="ngModel"
+          <label class="small text-muted mb-1">شركة الشحن <span class="text-danger">*</span></label>
+          <select
             class="form-control"
-            placeholder="اضف ملحوظة"
-          /> -->
+            name="company"
+            [(ngModel)]="selectedShippingCompanyId"
+            #company="ngModel"
+            required
+            (ngModelChange)="onShippingCompanyChange()"
+          >
+            <option selected disabled value="">اختر شركة الشحن</option>
+            <option *ngFor="let item of companies" [value]="item.id">
+              {{ item.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group col-md-3">
+          <label class="small text-muted mb-1">تاريخ الشحن الفعلي <span class="text-danger">*</span></label>
+          <mat-form-field class="w-100" appearance="outline">
+            <input
+              matInput
+              [matDatepickerFilter]="myFilter"
+              [matDatepicker]="picker"
+              (dateInput)="OnDateChange($event.value)"
+            />
+            <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+          </mat-form-field>
+        </div>
+
+        <div class="form-group col-md-2">
+          <label class="small text-muted mb-1">رقم البوليصة</label>
+          <input
+            type="text"
+            name="shippment_number"
+            ngModel
+            #shippment_number="ngModel"
+            class="form-control"
+            placeholder="رقم البوليصة"
+          />
+        </div>
+
+        <div class="form-group col-md-2" *ngIf="customer_type !== 'شركة'">
+          <label class="small text-muted mb-1">خط التوزيع</label>
+          <input class="form-control" type="text" [value]="lines?.name || '—'" disabled />
+        </div>
+
+        <div class="form-group col-md-2">
+          <label class="small text-muted mb-1">ملاحظة</label>
+          <textarea class="form-control" placeholder="اضف ملحوظة" name="note" #note="ngModel" ngModel rows="1"></textarea>
         </div>
       </div>
 
-      <div class="form-row">
-<!--
-        <div class="col-md-5 form-group">
-          <input type="file" >
-          <div class="text-center">
-            <input
-            type="file"
-            (change)="onFileChanged($event)"
-            name="uploadFile"
-            accept="image/*"
-            #uploadFile="ngModel"
-            ngModel
-            class="img"
-          />
-          </div>
-        </div> -->
+      <!-- الصف الثاني: التحصيل — يظهر عند طلب مؤكد/جزئي مع مبلغ للتحصيل -->
+      <div class="form-row align-items-end" *ngIf="showCollectionCompanyField">
+        <div class="form-group col-md-3">
+          <label class="small text-muted mb-1">شركة التحصيل / الدفع (اختياري)</label>
+          <select
+            class="form-control"
+            name="collection_company"
+            [(ngModel)]="selectedCollectionCompanyId"
+            #collection_company="ngModel"
+            (ngModelChange)="onCollectionCompanyChange()"
+            title="من شركات التحصيل المربوطة بشجرة الحسابات — مثل PAYMOB"
+          >
+            <option value="">— بدون —</option>
+            <option *ngFor="let item of collectionCompanies" [value]="item.id">
+              {{ item.name }}
+            </option>
+          </select>
+          <small class="text-muted" *ngIf="collectionCompanies.length === 0">
+            أضف شركات من: إدارة الشحن → شركات التحصيل والدفع
+          </small>
+        </div>
 
+        <div class="form-group col-md-2" *ngIf="orderSnap">
+          <label class="small text-muted mb-1">صافي الطلب</label>
+          <input class="form-control bg-light" type="text" [value]="orderSnap.net_total | number:'1.2-2'" disabled />
+        </div>
+
+        <div class="form-group col-md-2" *ngIf="orderSnap && showCollectionSplit">
+          <label class="small text-muted mb-1">دفعة مقدمة</label>
+          <input class="form-control bg-light" type="text" [value]="orderSnap.prepaid_amount || 0 | number:'1.2-2'" disabled />
+        </div>
+
+        <!-- حقول التقسيم اليدوي: تظهر فقط عند اختيار شركة تحصيل مختلفة -->
+        <ng-container *ngIf="showCollectionSplit && manualSplitMode">
+          <div class="form-group col-md-2">
+            <label class="small text-muted mb-1">مبلغ على شركة الشحن</label>
+            <input
+              class="form-control"
+              type="number"
+              min="0"
+              step="0.01"
+              name="shipping_receivable_amount"
+              [(ngModel)]="manualShippingAmount"
+              (ngModelChange)="recalcSplit()"
+              placeholder="تلقائي"
+            />
+          </div>
+          <div class="form-group col-md-2">
+            <label class="small text-muted mb-1">مبلغ على شركة التحصيل</label>
+            <input
+              class="form-control"
+              type="number"
+              min="0"
+              step="0.01"
+              name="collection_receivable_amount"
+              [(ngModel)]="manualCollectionAmount"
+              (ngModelChange)="recalcSplit()"
+              placeholder="تلقائي"
+            />
+          </div>
+        </ng-container>
+
+        <div class="form-group col-md-1" *ngIf="showCollectionSplit">
+          <label class="small text-muted mb-1 d-block">&nbsp;</label>
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+            (click)="manualSplitMode = !manualSplitMode"
+            [title]="manualSplitMode ? 'العودة للتقسيم التلقائي' : 'تقسيم يدوي'">
+            {{ manualSplitMode ? 'تلقائي' : 'يدوي' }}
+          </button>
+        </div>
       </div>
 
-      <div class="text-center form-group">
+      <!-- ملخص التقسيم -->
+      <div class="form-row" *ngIf="customer_type !== 'شركة' && orderSnap && selectedShippingCompanyId">
+        <div class="col-12 mb-3">
+          <div class="alert alert-info py-2 px-3 mb-0 d-flex flex-wrap gap-3 align-items-center small">
+            <span><strong>سيُسجَّل على شركة الشحن:</strong> {{ computedShippingAmount | number:'1.2-2' }}</span>
+            <span *ngIf="showCollectionSplit"><strong>على شركة التحصيل:</strong> {{ computedCollectionAmount | number:'1.2-2' }}</span>
+            <span *ngIf="splitError" class="text-danger"><i class="fa fa-exclamation-triangle"></i> {{ splitError }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- الصف الثالث: بيانات شركة (أجل/نقدي) -->
+      <div class="form-row align-items-end" *ngIf="customer_type == 'شركة'">
+        <div class="col-md-2 form-group">
+          <label class="small text-muted mb-1">طريقة الدفع <span class="text-danger">*</span></label>
+          <select id="paymentType" class="form-control" (change)="paymentType($event)">
+            <option selected disabled>اختر طريقة الدفع</option>
+            <option value="أجل">أجل</option>
+            <option value="نقدي">نقدي</option>
+          </select>
+        </div>
+        <div class="form-group col-md-2" *ngIf="cashType || cashval">
+          <label class="small text-muted mb-1">المبلغ النقدي</label>
+          <input id="cash" min="0" placeholder="المبلغ المدفوع نقدًا" class="form-control" type="number" (change)="paymentType($event)" (keyup)="paymentType($event)">
+        </div>
+      </div>
+
+      <div class="text-center form-group mt-3">
         <button
           type="submit"
-          class="btn  px-4 py-3 btn-primary"
-          [disabled]="ship.invalid || !dateSelected || !shippStatus || paymentTypeActive || cashType"
+          class="btn px-5 py-2 btn-primary"
+          [disabled]="ship.invalid || !dateSelected || !shippStatus || paymentTypeActive || cashType || !!splitError"
         >
-          شحن
+          <i class="fa fa-truck ml-1"></i> شحن
         </button>
       </div>
     </form>

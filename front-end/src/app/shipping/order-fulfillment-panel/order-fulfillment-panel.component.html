@@ -1,0 +1,72 @@
+<div class="fulfillment-panel" *ngIf="orderId">
+  <div *ngIf="loading" class="text-center py-3">جاري التحميل...</div>
+
+  <div class="row g-3" *ngIf="!loading && data">
+    <!-- التسليم -->
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light"><strong>التسليم</strong></div>
+        <div class="card-body">
+          <p class="mb-1"><span class="text-muted">شركة / مندوب:</span> {{ data.delivery?.shipping_provider_name || '—' }}</p>
+          <p class="mb-1">
+            <span [ngClass]="badgeClass('delivery', data.delivery?.delivery_status)">
+              {{ data.delivery?.delivery_status_label || data.delivery?.delivery_status }}
+            </span>
+          </p>
+          <p class="mb-0 small text-muted" *ngIf="data.delivery?.shipping_date">شُحن: {{ data.delivery?.shipping_date }}</p>
+          <p class="mb-0 small text-muted" *ngIf="data.delivery?.delivery_date">سُلّم: {{ data.delivery?.delivery_date }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- التحصيل -->
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light"><strong>التحصيل</strong></div>
+        <div class="card-body">
+          <p class="mb-1"><span class="text-muted">المسؤول:</span> {{ data.collection?.collection_provider_name || '—' }}</p>
+          <p class="mb-1 small" *ngIf="data.collection?.receivable_account_label">
+            <span class="text-muted">حساب الشجرة:</span> {{ data.collection?.receivable_account_label }}
+          </p>
+          <p class="mb-1 small text-warning" *ngIf="data.collection?.show_picker && !data.collection?.collection_provider_name">
+            يُحدَّد عند الشحن من قائمة شركات التحصيل والدفع
+          </p>
+          <p class="mb-1">
+            <span [ngClass]="badgeClass('collection', data.collection?.collection_status)">
+              {{ data.collection?.collection_status_label || data.collection?.collection_status }}
+            </span>
+          </p>
+          <p class="mb-1"><span class="text-muted">مطلوب تحصيله:</span> {{ data.collection?.amount_to_collect | number:'1.2-2' }} ج.م</p>
+          <p class="mb-0 small text-muted" *ngIf="data.collection?.collection_date">تاريخ التحصيل: {{ data.collection?.collection_date }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- المالية -->
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light"><strong>الحالة المالية</strong></div>
+        <div class="card-body">
+          <p class="mb-1">الإجمالي: <strong>{{ data.financial?.total_amount | number:'1.2-2' }}</strong></p>
+          <p class="mb-1 text-success">مدفوع: {{ data.financial?.paid_amount | number:'1.2-2' }}</p>
+          <p class="mb-1 text-danger">متبقي: {{ data.financial?.remaining_amount | number:'1.2-2' }}</p>
+          <p class="mb-1" *ngIf="data.financial?.liability_holder_name">
+            <span class="text-muted">الذمة على:</span> {{ data.financial?.liability_holder_name }}
+          </p>
+          <p class="mb-2">
+            <span [ngClass]="badgeClass('settlement', data.financial?.settlement_status)">
+              {{ data.financial?.settlement_status_label }}
+            </span>
+          </p>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary w-100"
+            *ngIf="!readonly && data.financial?.remaining_amount > 0 && !data.financial?.liability_transferred_at"
+            (click)="transferLiability()">
+            نقل الذمة للمندوب / شركة التحصيل
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

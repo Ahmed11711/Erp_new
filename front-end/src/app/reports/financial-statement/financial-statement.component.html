@@ -139,72 +139,96 @@
       {{ errorMessage }}
     </div>
 
-    <div *ngIf="details" class="card mb-4">
-      <div class="card-header bg-info text-white">
-        <h5 class="mb-0">ملخص الحساب: {{ details.account?.name }} ({{ details.account?.code }})</h5>
+    <div *ngIf="canExport" class="report-export-actions">
+      <button type="button" class="btn btn-outline-danger" (click)="exportToPdf()">
+        <i class="fa-solid fa-file-pdf"></i>
+        تحميل PDF
+      </button>
+      <button type="button" class="btn btn-outline-success" (click)="exportToExcel()">
+        <i class="fa-solid fa-file-excel"></i>
+        تحميل Excel
+      </button>
+    </div>
+
+    <div
+      id="financial-statement-export"
+      *ngIf="details"
+      class="financial-statement-pdf pdf-arabic-fix arabic-font"
+      dir="rtl">
+      <div class="pdf-report-header">
+        <h2 class="pdf-report-title">كشف حساب تفصيلي</h2>
       </div>
-      <div class="card-body">
-        <p class="text-muted small mb-2" *ngIf="details.consolidated">
-          عرض مجمّع: يشمل هذا الحساب وجميع الحسابات التابعة له ({{ details.accounts_in_scope }} حساباً في النطاق).
-        </p>
-        <div class="row text-center">
-          <div class="col-md-3 border-end">
-            <h6>الرصيد الافتتاحي</h6>
-            <h4 class="text-primary">{{ details.opening_balance | number:'1.2-2' }}</h4>
-          </div>
-          <div class="col-md-3 border-end">
-            <h6>إجمالي مدين (وارد)</h6>
-            <h4 class="text-success">{{ totals?.debit | number:'1.2-2' }}</h4>
-          </div>
-          <div class="col-md-3 border-end">
-            <h6>إجمالي دائن (صادر)</h6>
-            <h4 class="text-danger">{{ totals?.credit | number:'1.2-2' }}</h4>
-          </div>
-          <div class="col-md-3">
-            <h6>الرصيد الحالي</h6>
-            <h4 class="text-primary">{{ details.closing_balance | number:'1.2-2' }}</h4>
+
+      <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+          <h5 class="mb-0 pdf-arabic-fix">ملخص الحساب: {{ details.account?.name }} ({{ details.account?.code }})</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2 pdf-arabic-fix" *ngIf="details.consolidated">
+            عرض مجمّع: يشمل هذا الحساب وجميع الحسابات التابعة له ({{ details.accounts_in_scope }} حساباً في النطاق).
+          </p>
+          <p class="text-muted small mb-2 pdf-arabic-fix" *ngIf="lastSearchParams?.date_from || lastSearchParams?.date_to">
+            الفترة: من {{ lastSearchParams?.date_from || '—' }} إلى {{ lastSearchParams?.date_to || '—' }}
+          </p>
+          <div class="row text-center pdf-summary-row">
+            <div class="col-md-3 border-end">
+              <h6 class="pdf-arabic-fix">الرصيد الافتتاحي</h6>
+              <h4 class="text-primary numeric-cell">{{ details.opening_balance | number:'1.2-2' }}</h4>
+            </div>
+            <div class="col-md-3 border-end">
+              <h6 class="pdf-arabic-fix">إجمالي مدين (وارد)</h6>
+              <h4 class="text-success numeric-cell">{{ totals?.debit | number:'1.2-2' }}</h4>
+            </div>
+            <div class="col-md-3 border-end">
+              <h6 class="pdf-arabic-fix">إجمالي دائن (صادر)</h6>
+              <h4 class="text-danger numeric-cell">{{ totals?.credit | number:'1.2-2' }}</h4>
+            </div>
+            <div class="col-md-3">
+              <h6 class="pdf-arabic-fix">الرصيد الحالي</h6>
+              <h4 class="text-primary numeric-cell">{{ details.closing_balance | number:'1.2-2' }}</h4>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div *ngIf="data.length > 0" class="report-content-card">
-      <div class="report-table-wrap">
-      <table class="table report-data-table text-center">
-        <thead>
-          <tr>
-            <th>التاريخ</th>
-            <th *ngIf="details?.consolidated">الحساب الفرعي</th>
-            <th>البيان / الشرح</th>
-            <th class="text-success">مدين</th>
-            <th class="text-danger">دائن</th>
-            <th>الرصيد المتحرك</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let item of data">
-            <td dir="ltr">{{ (item.entry_date || item.created_at) | date:'dd/MM/yyyy' }} <span class="text-muted small">{{ item.created_at | date:'HH:mm' }}</span></td>
-            <td *ngIf="details?.consolidated">{{ item.account?.code }} — {{ item.account?.name }}</td>
-            <td>{{ item.description }}</td>
-            <td class="text-success">{{ item.debit > 0 ? (item.debit | number:'1.2-2') : '-' }}</td>
-            <td class="text-danger">{{ item.credit > 0 ? (item.credit | number:'1.2-2') : '-' }}</td>
-            <td style="direction: ltr;">{{ item.running_balance | number:'1.2-2' }}</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td [attr.colspan]="details?.consolidated ? 3 : 2">الإجمالي</td>
-            <td class="text-success">{{ (totals?.debit ?? 0) | number:'1.2-2' }}</td>
-            <td class="text-danger">{{ (totals?.credit ?? 0) | number:'1.2-2' }}</td>
-            <td style="direction: ltr;">{{ (details?.closing_balance ?? 0) | number:'1.2-2' }}</td>
-          </tr>
-        </tfoot>
-      </table>
+      <div *ngIf="data.length > 0" class="report-content-card">
+        <div class="report-table-wrap">
+        <table class="table report-data-table financial-statement-pdf-table">
+          <thead>
+            <tr>
+              <th class="pdf-arabic-fix">التاريخ</th>
+              <th class="pdf-arabic-fix" *ngIf="details?.consolidated">الحساب الفرعي</th>
+              <th class="pdf-arabic-fix">البيان / الشرح</th>
+              <th class="pdf-arabic-fix text-success">مدين</th>
+              <th class="pdf-arabic-fix text-danger">دائن</th>
+              <th class="pdf-arabic-fix">الرصيد المتحرك</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of data">
+              <td class="numeric-cell" dir="ltr">{{ (item.entry_date || item.created_at) | date:'dd/MM/yyyy' }} <span class="text-muted small">{{ item.created_at | date:'HH:mm' }}</span></td>
+              <td class="pdf-arabic-fix arabic-cell" *ngIf="details?.consolidated">{{ item.account?.code }} — {{ item.account?.name }}</td>
+              <td class="pdf-arabic-fix arabic-cell description-cell">{{ item.description }}</td>
+              <td class="text-success numeric-cell">{{ item.debit > 0 ? (item.debit | number:'1.2-2') : '-' }}</td>
+              <td class="text-danger numeric-cell">{{ item.credit > 0 ? (item.credit | number:'1.2-2') : '-' }}</td>
+              <td class="numeric-cell">{{ item.running_balance | number:'1.2-2' }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td class="pdf-arabic-fix" [attr.colspan]="details?.consolidated ? 3 : 2">الإجمالي</td>
+              <td class="text-success numeric-cell">{{ (totals?.debit ?? 0) | number:'1.2-2' }}</td>
+              <td class="text-danger numeric-cell">{{ (totals?.credit ?? 0) | number:'1.2-2' }}</td>
+              <td class="numeric-cell">{{ (details?.closing_balance ?? 0) | number:'1.2-2' }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
       </div>
-    </div>
 
-    <div *ngIf="details && data.length == 0" class="state-box--warning">
-      لا توجد حركات في الفترة المحددة
+      <div *ngIf="data.length == 0" class="state-box--warning pdf-arabic-fix">
+        لا توجد حركات في الفترة المحددة
+      </div>
     </div>
 
   </div>

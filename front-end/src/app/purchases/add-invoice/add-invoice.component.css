@@ -1,53 +1,502 @@
-.ng-autocomplete{
-    background-color: black;
-    color: red;
-    width: 90%;
+/* ——— صفحة فاتورة مشتريات ——— */
+.purchase-invoice-page {
+  --pi-primary: #5b4b8a;
+  --pi-primary-hover: #48396f;
+  --pi-accent: #0d9488;
+  --pi-accent-hover: #0f766e;
+  --pi-surface: #f8fafc;
+  --pi-border: #e2e8f0;
+  --pi-text: #0f172a;
+  --pi-label: #0f172a;
+  --pi-muted: #475569;
+  --pi-radius: 12px;
+  --pi-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --pi-shadow-lg: 0 4px 24px rgba(15, 23, 42, 0.08);
+  font-family: 'Segoe UI', Tahoma, 'Arabic UI Text', 'Geeza Pro', sans-serif;
+  color: var(--pi-text);
+  padding-bottom: 2rem;
 }
 
-.header{
-  background-color: black;
-  color: white;
-  text-align: center;
-  font-size: 2rem;
-  border-radius: 7px;
-  padding: 10px 20px;
-  width: fit-content;
+.purchase-invoice-page .pi-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 0 1.25rem;
+  border-bottom: 1px solid var(--pi-border);
+  margin-bottom: 1.5rem;
 }
 
-
-thead{
+.purchase-invoice-page .pi-title {
+  margin: 0;
   font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--pi-text);
 }
 
-.btn-add{
-  border: #82225e solid thin !important;
-  font-size: 1.8rem;
-  padding: 0.1rem 1.5rem !important;
-  border-radius: 2rem;
+.purchase-invoice-page .pi-card {
+  background: #fff;
+  border: 1px solid var(--pi-border);
+  border-radius: var(--pi-radius);
+  box-shadow: var(--pi-shadow);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
 }
 
-select , select:focus{
-  background-color: #82225e;
-  color: white;
-  font-size: 1.3rem;
+.purchase-invoice-page .pi-card-header {
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid var(--pi-border);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #312e81;
 }
 
-input{
-  font-size: 1.2rem;
+.purchase-invoice-page .pi-card-body {
+  padding: 1.25rem;
 }
 
-i{
+/* بطاقة إضافة البنود: القائمة المنسدلة للأصناف تخرج خارج البطاقة ولا تُقصّ */
+.purchase-invoice-page .pi-card.pi-card-autocomplete {
+  overflow: visible;
+  position: relative;
+  z-index: 20;
+}
+
+.purchase-invoice-page .pi-card.pi-card-autocomplete .pi-card-body-overflow-visible {
+  overflow: visible;
+}
+
+.purchase-invoice-page .form-control,
+.purchase-invoice-page select.form-control {
+  border-radius: 8px;
+  border: 1px solid var(--pi-border);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background-color: #fff;
+  color: var(--pi-text);
+}
+
+.purchase-invoice-page select.form-control {
+  cursor: pointer;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  padding-inline-start: 0.75rem;
+  padding-inline-end: 2rem;
+  appearance: none;
+}
+
+html[dir='rtl'] .purchase-invoice-page select.form-control {
+  background-position: left 0.75rem center;
+}
+
+html[dir='ltr'] .purchase-invoice-page select.form-control {
+  background-position: right 0.75rem center;
+}
+
+html:not([dir]) .purchase-invoice-page select.form-control {
+  background-position: left 0.75rem center;
+}
+
+.purchase-invoice-page .form-control:focus,
+.purchase-invoice-page select.form-control:focus {
+  border-color: var(--pi-accent);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  outline: none;
+}
+
+.purchase-invoice-page label {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--pi-label);
+  margin-bottom: 0.45rem;
+  letter-spacing: 0.01em;
+}
+
+.purchase-invoice-page .pi-label-strong {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--pi-label);
+}
+
+.purchase-invoice-page .pi-optional {
+  font-weight: 600;
+  font-size: 0.85em;
+  color: var(--pi-muted);
+}
+
+.purchase-invoice-page .pi-hint {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pi-muted);
+  margin-top: 0.35rem;
+  display: block;
+  line-height: 1.45;
+}
+
+.purchase-invoice-page .pi-file-field-label {
+  margin-bottom: 0.35rem;
+}
+
+.purchase-invoice-page .pi-file-row.pi-file-row-inline {
+  margin-bottom: 0;
+  padding: 0.65rem 0.85rem;
+  min-height: calc(2.5rem + 2px);
+  align-items: center;
+}
+
+@media (max-width: 991.98px) {
+  .purchase-invoice-page .pi-row-basic-line1 .pi-datepicker-wrap {
+    margin-top: 0.5rem;
+  }
+}
+
+/* صف أرقام الفاتورة + إرفاق الصورة */
+.purchase-invoice-page .pi-row-invoice-file {
+  padding: 1rem;
+  margin-top: 0.5rem;
+  background: #f1f5f9;
+  border-radius: var(--pi-radius);
+  border: 1px solid #e2e8f0;
+}
+
+.purchase-invoice-page .pi-input-emphasis {
+  font-weight: 600;
+  color: var(--pi-text);
+  border-color: #cbd5e1;
+}
+
+.purchase-invoice-page .pi-input-emphasis::placeholder {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.purchase-invoice-page .pi-input-emphasis:focus {
+  border-color: var(--pi-accent);
+}
+
+/* Material datepicker في الصفحة */
+.purchase-invoice-page .pi-datepicker-wrap .mat-mdc-form-field,
+.purchase-invoice-page .pi-datepicker-wrap .mat-form-field {
+  width: 100%;
+}
+
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-form-field-label,
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-mdc-floating-label,
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-mdc-floating-label.mat-mdc-floating-label-floating,
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mdc-floating-label {
+  color: #334155 !important;
+  font-weight: 700 !important;
+}
+
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep input.mat-mdc-input-element,
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep input.mat-input-element {
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-mdc-text-field-wrapper,
+.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-form-field-flex {
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* إصلاح ألوان ng-autocomplete + ظهور القائمة فوق بطاقة الجدول */
+.purchase-invoice-page ::ng-deep .ng-autocomplete {
+  width: 100% !important;
+  background: transparent !important;
+  position: relative;
+  z-index: 25;
+}
+
+.purchase-invoice-page ::ng-deep .ng-autocomplete .input-container input {
+  width: 100% !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--pi-border) !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  background: #fff !important;
+  color: #0f172a !important;
+}
+
+.purchase-invoice-page ::ng-deep .ng-autocomplete .input-container input:focus {
+  border-color: var(--pi-accent) !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12) !important;
+  outline: none !important;
+}
+
+.purchase-invoice-page ::ng-deep .ng-autocomplete .suggestions-container {
+  z-index: 11000 !important;
+  position: absolute !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--pi-border) !important;
+  box-shadow: var(--pi-shadow-lg) !important;
+  margin-top: 4px !important;
+  overflow: hidden;
+}
+
+.purchase-invoice-page ::ng-deep .ng-autocomplete .suggestions-container ul li {
+  padding: 0.5rem 0.75rem !important;
+}
+
+.purchase-invoice-page ::ng-deep .ng-autocomplete .suggestions-container ul li:hover {
+  background: #f1f5f9 !important;
+}
+
+/* صف إضافة البند */
+.purchase-invoice-page .add-line-items-row {
+  align-items: flex-end;
+  padding: 1rem;
+  background: var(--pi-surface);
+  border-radius: var(--pi-radius);
+  border: 1px dashed var(--pi-border);
+  margin-bottom: 1rem;
+}
+
+.purchase-invoice-page .add-line-items-row .add-line-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.purchase-invoice-page .add-line-items-row .add-line-label-actions {
+  visibility: hidden;
+  user-select: none;
+}
+
+.purchase-invoice-page .btn-pi-add {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: var(--pi-accent);
+  color: #fff;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.purchase-invoice-page .btn-pi-add:hover:not(:disabled) {
+  background: var(--pi-accent-hover);
+  color: #fff;
+}
+
+.purchase-invoice-page .btn-pi-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* جدول البنود — ظل فقط بدون z-index حتى لا يغطّي قوائم الـ autocomplete أعلاه */
+.purchase-invoice-page .pi-table-card-front {
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+  border: 1px solid #cbd5e1;
+  position: relative;
+  z-index: 0;
+}
+
+.purchase-invoice-page .pi-table-responsive {
+  background: #fff;
+}
+
+.purchase-invoice-page .pi-table-wrap {
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.purchase-invoice-page .pi-table {
+  margin-bottom: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 0 0 var(--pi-radius) var(--pi-radius);
+  overflow: hidden;
+  border: none;
+  box-shadow: inset 0 1px 0 #e2e8f0;
+}
+
+.purchase-invoice-page .pi-table thead th {
+  background: linear-gradient(180deg, #4c3d75 0%, var(--pi-primary) 100%);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  padding: 0.85rem 0.7rem;
+  border: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.purchase-invoice-page .pi-table tbody td,
+.purchase-invoice-page .pi-table tbody th {
+  padding: 0.75rem 0.65rem;
+  vertical-align: middle;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fff;
+}
+
+.purchase-invoice-page .pi-table tbody tr:hover:not(.pi-empty-row) td,
+.purchase-invoice-page .pi-table tbody tr:hover:not(.pi-empty-row) th {
+  background: #f1f5f9;
+}
+
+.purchase-invoice-page .pi-table tbody tr:last-child td {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* صف الحالة الفارغة — واضح وليس باهتاً */
+.purchase-invoice-page .pi-table tbody tr.pi-empty-row td.pi-table-empty-msg {
+  text-align: center;
+  padding: 2.25rem 1.25rem !important;
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  line-height: 1.6;
+  color: #0f172a !important;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  box-shadow: inset 0 0 0 2px dashed #64748b;
+}
+
+.purchase-invoice-page .pi-qty-cell {
+  max-width: 140px;
+}
+
+.purchase-invoice-page .btn-pi-remove {
+  border: none;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.purchase-invoice-page .btn-pi-remove:hover {
+  background: #fee2e2;
+}
+
+/* رفع ملف */
+.purchase-invoice-page .pi-file-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--pi-surface);
+  border-radius: var(--pi-radius);
+  border: 1px solid var(--pi-border);
+  margin-bottom: 1rem;
+}
+
+.purchase-invoice-page .pi-file-row label.pi-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--pi-border);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pi-primary);
+  margin-bottom: 0;
+}
+
+.purchase-invoice-page .pi-file-row input[type='file'] {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.purchase-invoice-page .pi-file-name {
+  margin-inline-start: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--pi-muted);
+}
+
+/* الملخص والأزرار */
+.purchase-invoice-page .pi-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--pi-surface);
+  border-radius: var(--pi-radius);
+  border: 1px solid var(--pi-border);
+  margin-bottom: 1rem;
+}
+
+.purchase-invoice-page .pi-summary .form-group {
+  margin-bottom: 0;
+  min-width: 160px;
+}
+
+.purchase-invoice-page .pi-summary .pi-due {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--pi-accent);
+  margin: 0;
+  padding-top: 0.25rem;
+}
+
+.purchase-invoice-page .pi-cost-card.card {
+  border-radius: var(--pi-radius);
+  border-color: var(--pi-border);
+  box-shadow: var(--pi-shadow);
+}
+
+.purchase-invoice-page .pi-cost-card .card-header {
+  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+  font-weight: 600;
+  color: var(--pi-primary);
+  border-bottom-color: var(--pi-border);
+}
+
+.purchase-invoice-page .btn-pi-submit {
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 2rem;
+  font-weight: 600;
+  font-size: 1rem;
+  background: var(--pi-primary);
+  color: #fff;
+  min-width: 140px;
+  transition: background 0.15s ease;
+}
+
+.purchase-invoice-page .btn-pi-submit:hover:not(:disabled) {
+  background: var(--pi-primary-hover);
+  color: #fff;
+}
+
+.purchase-invoice-page .btn-pi-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.purchase-invoice-page .alert {
+  border-radius: var(--pi-radius);
+}
+
+i {
   cursor: pointer;
 }
 
-.submit , .submit:hover{
-  background-color: black !important;
-  font-size: 1.8rem;
-  padding: 0.5rem 2rem !important;
-  color: white;
-}
-
-
-.fa-solid{
+.fa-solid {
   cursor: auto;
 }

@@ -28,6 +28,7 @@ import { EditOrderComponent } from './edit-order/edit-order.component';
 import {MatButtonModule} from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormField } from '@angular/material/form-field';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { CollectOrderComponent } from './collect-order/collect-order.component';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
@@ -48,7 +49,11 @@ import { CustomDatePipe } from '../pipes/custom-date.pipe';
 import { ShippingCompanyLinesComponent } from './shipping-company-lines/shipping-company-lines.component';
 import { FullCalendarModule } from '@fullcalendar/angular';
 import { ShippingLineStatementComponent } from './shipping-line-statement/shipping-line-statement.component';
-// import { FormsModule } from '@angular/forms';
+import { ShippingAccountsReportComponent } from './shipping-accounts-report/shipping-accounts-report.component';
+import { OrderFulfillmentPanelComponent } from './order-fulfillment-panel/order-fulfillment-panel.component';
+import { CollectionCompaniesComponent } from './collection-companies/collection-companies.component';
+import { CollectionAccountsReportComponent } from './collection-accounts-report/collection-accounts-report.component';
+import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review/dialog-shopify-order-review.component';
 @NgModule({
   declarations: [
     AddOrderComponent,
@@ -77,7 +82,12 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     PrintInvoiceComponent,
     StickerComponent,
     ShippingCompanyLinesComponent,
-    ShippingLineStatementComponent
+    ShippingLineStatementComponent,
+    ShippingAccountsReportComponent,
+    OrderFulfillmentPanelComponent,
+    CollectionCompaniesComponent,
+    CollectionAccountsReportComponent,
+    DialogShopifyOrderReviewComponent
   ],
   imports: [
     MatButtonModule,
@@ -91,6 +101,7 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
+    MatAutocompleteModule,
     MatDatepickerModule,
     MatSelectModule,
     FormsModule,

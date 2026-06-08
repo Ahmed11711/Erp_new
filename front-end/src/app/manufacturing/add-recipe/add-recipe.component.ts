@@ -77,6 +77,15 @@ export class AddRecipeComponent implements OnInit{
     };
   }
 
+  /** مخزن الصنف الفعلي (prefer category.warehouse over measurement.warehouse — وحدة القياس قد تكون مسجّلة تحت مخزن خام بينما الصنف تحت التشغيل). */
+  warehouseLabel(item: { warehouse?: string; measurement?: { warehouse?: string } } | null | undefined): string {
+    if (!item) {
+      return '';
+    }
+    const w = item.warehouse || item.measurement?.warehouse;
+    return w != null && String(w).trim() !== '' ? String(w).trim() : '';
+  }
+
   /** بحث في اسم الصنف أو المخزن — للمنتج النهائي ولمواد الوصفة */
   filterCategorySearch = (items: any[], query: string) => {
     const q = (query ?? '').trim().toLowerCase();
@@ -85,7 +94,7 @@ export class AddRecipeComponent implements OnInit{
     }
     return items.filter((item) => {
       const name = String(item.category_name ?? '').toLowerCase();
-      const wh = String(item.measurement?.warehouse ?? '').toLowerCase();
+      const wh = String(item.warehouse ?? item.measurement?.warehouse ?? '').toLowerCase();
       const code = String(item.item_code ?? '').toLowerCase();
       return name.includes(q) || wh.includes(q) || code.includes(q);
     });
@@ -304,11 +313,13 @@ export class AddRecipeComponent implements OnInit{
       const products = this.tableData.map(elm=>{
         return {id:elm.id , quantity:elm.quantity , total_price:elm.total_price}
       })
-      const extra_costs = this.extraCosts.map((ec) => ({
-        name: ec.name,
-        type: ec.type,
-        value: +ec.value,
-      }));
+      const extra_costs = this.extraCosts
+        .map((ec) => ({
+          name: String(ec.name ?? '').trim(),
+          type: ec.type === 'percentage' ? 'percentage' : 'fixed',
+          value: Number(ec.value),
+        }))
+        .filter((row) => row.name.length > 0 && Number.isFinite(row.value) && row.value >= 0);
       const data: Record<string, unknown> = {
         product_id: this.product_id,
         total: this.totalPrice,
@@ -318,10 +329,8 @@ export class AddRecipeComponent implements OnInit{
         data.extra_costs = extra_costs;
       }
       this.manufacturingService.addRecipe(data as any).subscribe({
-        next: (result) => {
-          if (result === 'success') {
-            this.route.navigate(['/dashboard/manufacturing/recipes']);
-          }
+        next: () => {
+          this.route.navigate(['/dashboard/manufacturing/recipes']);
         },
         error: (err: { error?: { message?: string } }) => {
           const msg = err?.error?.message ?? 'تعذر حفظ الوصفة';
@@ -350,6 +359,14 @@ export class AddRecipeComponent implements OnInit{
 
   /** قرار كل وصفة مكررة: replace | create_new | skip */
   recipeActionsMap: Record<string, RecipeImportAction> = {};
+
+  /** الإجراء الجماعي المُفعّل حالياً (للتلوين). */
+  bulkActionActive: RecipeImportAction | null = null;
+
+  /** ملخص تغييرات الألوان على الأصناف. */
+  itemsColorSummary: { updated: number; created: number; details: Array<{ name: string; color: string | null; action: string }> } = {
+    updated: 0, created: 0, details: [],
+  };
 
   /** السماح بإنشاء الأصناف الناقصة تلقائيًا. */
   allowCreateMissingItems = false;
@@ -383,6 +400,8 @@ export class AddRecipeComponent implements OnInit{
   private resetImportState(keepPanel = false): void {
     this.importPreview = null;
     this.recipeActionsMap = {};
+    this.bulkActionActive = null;
+    this.itemsColorSummary = { updated: 0, created: 0, details: [] };
     this.allowCreateMissingItems = false;
     this.importError = null;
     this.importSuccess = null;
@@ -414,11 +433,13 @@ export class AddRecipeComponent implements OnInit{
         this.importPreview = res;
         this.allowCreateMissingItems = res.missing_items.length === 0;
         this.recipeActionsMap = {};
+        this.bulkActionActive = 'replace';
         res.recipes.forEach((r) => {
           if (r.exists) {
             this.recipeActionsMap[r.normalized_name] = 'replace';
           }
         });
+        this.computeItemsColorSummary(res);
         input.value = '';
       },
       error: (err: HttpErrorResponse) => {
@@ -431,6 +452,17 @@ export class AddRecipeComponent implements OnInit{
 
   setRecipeAction(recipe: RecipeImportRecipePreview, action: RecipeImportAction): void {
     this.recipeActionsMap[recipe.normalized_name] = action;
+    this.bulkActionActive = null;
+  }
+
+  setAllRecipeActions(action: RecipeImportAction): void {
+    if (!this.importPreview) return;
+    this.importPreview.recipes.forEach((r) => {
+      if (r.exists) {
+        this.recipeActionsMap[r.normalized_name] = action;
+      }
+    });
+    this.bulkActionActive = action;
   }
 
   /** هل يملك المستخدم ما يكفي من قرارات للمتابعة؟ */
@@ -475,6 +507,33 @@ export class AddRecipeComponent implements OnInit{
       });
   }
 
+  private computeItemsColorSummary(res: RecipeImportPreviewResponse): void {
+    const seen = new Set<string>();
+    const details: Array<{ name: string; color: string | null; action: string }> = [];
+    let updated = 0;
+    let created = 0;
+
+    for (const recipe of res.recipes) {
+      for (const ing of recipe.ingredients) {
+        const key = (ing.normalized_name || ing.item_name) + '|' + (ing.color || '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        if (!ing.color) continue;
+
+        if (ing.item_exists) {
+          details.push({ name: ing.item_name, color: ing.color, action: 'update' });
+          updated++;
+        } else {
+          details.push({ name: ing.item_name, color: ing.color, action: 'create' });
+          created++;
+        }
+      }
+    }
+
+    this.itemsColorSummary = { updated, created, details };
+  }
+
   private buildSuccessMessage(res: RecipeImportConfirmResponse): string {
     const r = res.result;
     const parts = [
@@ -482,6 +541,7 @@ export class AddRecipeComponent implements OnInit{
       `تم إنشاء ${r.recipes_created} وصفة`,
       `تم تحديث ${r.recipes_updated} وصفة`,
       `أُنشئ ${r.items_created} صنف خام (مخزن مواد خام)`,
+      ...(r.items_updated > 0 ? [`تم تحديث لون ${r.items_updated} صنف موجود`] : []),
       `أُنشئ ${r.products_created} منتج تام (مخزن منتج تام)`,
     ];
     if (r.products_linked > 0) {

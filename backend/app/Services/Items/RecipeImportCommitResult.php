@@ -8,6 +8,8 @@ namespace App\Services\Items;
 class RecipeImportCommitResult
 {
     public int $itemsCreated = 0;
+    /** Existing items whose color was filled from Excel (no quantity change). */
+    public int $itemsUpdated = 0;
     public int $recipesCreated = 0;
     public int $recipesUpdated = 0;
     public int $recipesSkipped = 0;
@@ -30,6 +32,7 @@ class RecipeImportCommitResult
     {
         return [
             'items_created' => $this->itemsCreated,
+            'items_updated' => $this->itemsUpdated,
             'recipes_created' => $this->recipesCreated,
             'recipes_updated' => $this->recipesUpdated,
             'recipes_skipped' => $this->recipesSkipped,

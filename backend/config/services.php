@@ -73,6 +73,8 @@ return [
         'tracking_user_id' => ($uid = env('SHOPIFY_TRACKING_USER_ID')) !== null && $uid !== ''
             ? (int) $uid
             : null,
+        /** عند false: webhooks orders/create و orders/updated لا تستورد؛ المزامنة اليدوية فقط. */
+        'auto_import_orders' => filter_var(env('SHOPIFY_AUTO_IMPORT_ORDERS', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
     'shipping_partner' => [

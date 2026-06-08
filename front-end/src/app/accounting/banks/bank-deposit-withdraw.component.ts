@@ -1,160 +1,449 @@
 import { Component, OnInit } from '@angular/core';
+import { FormControl } from '@angular/forms';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { BankService } from '../services/bank.service';
-import { VoucherService } from '../services/voucher.service';
-// Reuse Voucher Service for this as it's essentially a voucher but maybe simplified UI?
-// Or maybe specific endpoint?
-// For now, I'll use a direct approach if backend supports it, or use VoucherService.
-// Given strict accounting, "Deposit/Withdraw" is essentially a Receipt/Payment Voucher where the "Partner" is NOT a client/supplier, but a General Account (e.g. Capital, Expenses).
-// Vouchers support `client` and `supplier` types. We might need `general` type.
-// But the user request is just "activate these pages".
-// I will create a component that creates a "General" voucher (if supported) or just uses the existing VoucherService with a tweak.
-// Actually, BankController usually doesn't handle direct deposit/withdraw unless against an account. 
-// I will implement it as a "Voucher" but with UI focused on Banks.
+import { TreeAccountService } from '../services/tree-account.service';
+
+interface AccountOption {
+  id: number;
+  label: string;
+}
+
+interface DirectTxnRow {
+  id: number;
+  bank_id: number;
+  bank_name?: string;
+  type: 'receipt' | 'payment';
+  counter_account_id: number;
+  counter_account_name?: string;
+  counter_account_code?: string;
+  amount: number;
+  date: string;
+  notes?: string;
+  editable: boolean;
+  user_name?: string;
+}
 
 @Component({
-   selector: 'app-bank-deposit-withdraw',
-   template: `
+  selector: 'app-bank-deposit-withdraw',
+  template: `
     <div class="container-fluid">
-       <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2>سحب وإيداع نقدي (بنك)</h2>
-       </div>
-       <div class="alert alert-info">
-          ملاحظة: هذه العملية تنتج سند قبض/صرف.
-       </div>
-       <div class="card p-3">
-          <div class="row">
-             <div class="col-md-6 mb-3">
-                <label>البنك</label>
-                <select class="form-control" [(ngModel)]="bankId">
-                   <option *ngFor="let bank of banks" [value]="bank.id">{{bank.name}} ({{bank.balance}})</option>
-                </select>
-             </div>
-             <div class="col-md-6 mb-3">
-                <label>العملية</label>
-                <select class="form-control" [(ngModel)]="type">
-                   <option value="receipt">إيداع (قبض)</option>
-                   <option value="payment">سحب (صرف)</option>
-                </select>
-             </div>
-             <!-- Counter Agent: For simple deposit/withdraw, it could be owner or generic. 
-                  If we want to deposit CASH into BANK, that's a transfer (Safe -> Bank).
-                  If we want to withdraw CASH from BANK, that's a transfer (Bank -> Safe).
-                  So "Deposit/Withdraw" here usually means "External" money coming in/out NOT from Safe.
-                  e.g. Owner Capital, Loan, etc.
-                  So we need to select a "Tree Account" as the counter party.
-              -->
-             <div class="col-md-6 mb-3">
-                <label>الحساب المقابل (مصدر/وجهة الأموال)</label>
-                 <!-- We need a tree account selector here. For now, simple dropdown of all accounts -->
-                <select class="form-control" [(ngModel)]="counterAccountId">
-                   <option *ngFor="let acc of accounts" [value]="acc.id">{{acc.name}}</option>
-                </select>
-             </div>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>سحب وإيداع نقدي (بنك)</h2>
+        <button *ngIf="editingId" type="button" class="btn btn-outline-secondary btn-sm" (click)="cancelEdit()">
+          إلغاء التعديل — عملية جديدة
+        </button>
+      </div>
+      <div class="alert alert-info">
+        ملاحظة: تُسجّل قيوداً على حساب البنك والحساب المقابل. يمكن تعديل العمليات المسجّلة من الجدول أدناه (عكس القيود القديمة ثم إنشاء قيود جديدة).
+      </div>
+      <div class="card p-3 mb-4">
+        <h5 class="mb-3">{{ editingId ? 'تعديل عملية #' + editingId : 'عملية جديدة' }}</h5>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label>البنك</label>
+            <select class="form-control" [(ngModel)]="bankId">
+              <option [ngValue]="null" disabled>اختر البنك</option>
+              <option *ngFor="let bank of banks" [ngValue]="bank.id">
+                {{ bank.name }} ({{ bank.balance }})
+              </option>
+            </select>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label>العملية</label>
+            <select class="form-control" [(ngModel)]="type">
+              <option value="receipt">إيداع (قبض)</option>
+              <option value="payment">سحب (صرف)</option>
+            </select>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label>الحساب المقابل (مصدر/وجهة الأموال)</label>
+            <mat-form-field appearance="outline" class="w-100 banks-account-field" dir="rtl">
+              <input
+                matInput
+                [formControl]="counterAccountCtrl"
+                [matAutocomplete]="counterAccAuto"
+                (focus)="onCounterAccountFocus()"
+                (blur)="onCounterAccountBlur()"
+                placeholder="ابحث بالاسم أو رمز الحساب"
+                autocomplete="off"
+              />
+              <mat-autocomplete
+                #counterAccAuto="matAutocomplete"
+                panelClass="banks-account-autocomplete-panel"
+                [displayWith]="displayAccountOption"
+                (optionSelected)="onCounterAccountSelected($event)"
+                [autoActiveFirstOption]="true"
+              >
+                <mat-option *ngFor="let acc of filteredCounterAccounts" [value]="acc">
+                  {{ acc.label }}
+                </mat-option>
+              </mat-autocomplete>
+            </mat-form-field>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label>المبلغ</label>
+            <input type="number" class="form-control" [(ngModel)]="amount" min="0.01" step="0.01" />
+          </div>
+          <div class="col-md-6 mb-3">
+            <label>التاريخ</label>
+            <input type="date" class="form-control" [(ngModel)]="date" />
+          </div>
+          <div class="col-12 mb-3">
+            <label>ملاحظات</label>
+            <textarea class="form-control" [(ngModel)]="notes"></textarea>
+          </div>
+        </div>
+        <div class="text-end">
+          <button class="btn btn-primary" (click)="submit()" [disabled]="loading">
+            <span *ngIf="loading">جاري التنفيذ...</span>
+            <span *ngIf="!loading">{{ editingId ? 'حفظ التعديل' : 'حفظ' }}</span>
+          </button>
+        </div>
+      </div>
 
-             <div class="col-md-6 mb-3">
-                <label>المبلغ</label>
-                <input type="number" class="form-control" [(ngModel)]="amount" min="1">
-             </div>
-             <div class="col-md-6 mb-3">
-                <label>التاريخ</label>
-                <input type="date" class="form-control" [(ngModel)]="date">
-             </div>
-             <div class="col-12 mb-3">
-                <label>ملاحظات</label>
-                <textarea class="form-control" [(ngModel)]="notes"></textarea>
-             </div>
+      <div class="card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">سجل العمليات</h5>
+          <div class="d-flex gap-2 align-items-center">
+            <select class="form-control form-control-sm" style="width: 180px" [(ngModel)]="filterBankId" (change)="loadHistory()">
+              <option [ngValue]="null">كل البنوك</option>
+              <option *ngFor="let bank of banks" [ngValue]="bank.id">{{ bank.name }}</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-primary" (click)="loadHistory()">تحديث</button>
           </div>
-          <div class="text-end">
-             <button class="btn btn-primary" (click)="submit()" [disabled]="loading">
-                <span *ngIf="loading">جاري التنفيذ...</span>
-                <span *ngIf="!loading">حفظ</span>
-             </button>
-          </div>
-       </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-hover mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>التاريخ</th>
+                <th>البنك</th>
+                <th>العملية</th>
+                <th>الحساب المقابل</th>
+                <th>المبلغ</th>
+                <th>ملاحظات</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngIf="historyLoading">
+                <td colspan="8" class="text-center text-muted">جاري التحميل...</td>
+              </tr>
+              <tr *ngIf="!historyLoading && historyRows.length === 0">
+                <td colspan="8" class="text-center text-muted">لا توجد عمليات مسجّلة قابلة للتعديل</td>
+              </tr>
+              <tr *ngFor="let row of historyRows">
+                <td>{{ row.id }}</td>
+                <td>{{ row.date }}</td>
+                <td>{{ row.bank_name }}</td>
+                <td>
+                  <span class="badge" [ngClass]="row.type === 'receipt' ? 'bg-success' : 'bg-warning text-dark'">
+                    {{ row.type === 'receipt' ? 'إيداع' : 'سحب' }}
+                  </span>
+                </td>
+                <td>{{ row.counter_account_name }}{{ row.counter_account_code ? ' — ' + row.counter_account_code : '' }}</td>
+                <td>{{ row.amount | number:'1.2-2' }}</td>
+                <td>{{ row.notes || '—' }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-primary"
+                    [disabled]="!row.editable"
+                    (click)="startEdit(row)"
+                    [title]="row.editable ? '' : 'عملية قديمة غير مرتبطة بسجل قيود'"
+                  >
+                    تعديل
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   `,
-   styles: []
+  styles: [
+    `
+      .banks-account-field {
+        width: 100%;
+        margin-bottom: 0;
+      }
+      .banks-account-field ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+        margin-top: 4px;
+      }
+    `
+  ]
 })
 export class BankDepositWithdrawComponent implements OnInit {
-   banks: any[] = [];
-   accounts: any[] = [];
-   loading = false;
+  banks: any[] = [];
+  accountOptions: AccountOption[] = [];
+  filteredCounterAccounts: AccountOption[] = [];
+  counterAccountCtrl = new FormControl<string | AccountOption>('', { nonNullable: true });
+  readonly accountAutocompleteCap = 400;
 
-   bankId: any = null;
-   type: 'receipt' | 'payment' = 'receipt';
-   counterAccountId: any = null;
-   amount: number = 0;
-   date: string = new Date().toISOString().split('T')[0];
-   notes: string = '';
+  loading = false;
+  historyLoading = false;
+  historyRows: DirectTxnRow[] = [];
+  filterBankId: number | null = null;
+  editingId: number | null = null;
 
-   constructor(
-      private bankService: BankService,
-      private voucherService: VoucherService // Need to inject VoucherService or TreeAccountService
-   ) { }
+  bankId: number | null = null;
+  type: 'receipt' | 'payment' = 'receipt';
+  counterAccountId: number | null = null;
+  amount = 0;
+  date = new Date().toISOString().split('T')[0];
+  notes = '';
 
-   ngOnInit() {
-      this.getBanks();
-      this.getAccounts();
-   }
+  constructor(
+    private bankService: BankService,
+    private treeAccountService: TreeAccountService
+  ) {}
 
-   getBanks() {
-      this.bankService.getAll().subscribe(res => {
-         this.banks = res.data || (Array.isArray(res) ? res : []);
-      });
-   }
+  ngOnInit(): void {
+    this.getBanks();
+    this.getTreeAccounts();
+    this.counterAccountCtrl.valueChanges.subscribe(v => {
+      this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+    });
+  }
 
-   getAccounts() {
-      this.voucherService.getAccounts().subscribe(res => {
-         this.accounts = Array.isArray(res) ? res : (res.data || []);
-      });
-   }
+  displayAccountOption = (value: string | AccountOption | null): string => {
+    if (!value) return '';
+    return typeof value === 'string' ? value : value.label;
+  };
 
-   submit() {
-      if (!this.bankId || !this.counterAccountId || this.amount <= 0) {
-         alert('يرجى تعبئة جميع الحقول');
-         return;
+  getBanks(): void {
+    this.bankService.getAll().subscribe(res => {
+      this.banks = res.data || (Array.isArray(res) ? res : []);
+      this.loadHistory();
+    });
+  }
+
+  loadHistory(): void {
+    this.historyLoading = true;
+    const params: Record<string, string | number> = { per_page: 50 };
+    if (this.filterBankId) {
+      params['bank_id'] = this.filterBankId;
+    }
+    this.bankService.listDirectTransactions(params).subscribe({
+      next: res => {
+        this.historyRows = res.data || [];
+        this.historyLoading = false;
+      },
+      error: () => {
+        this.historyRows = [];
+        this.historyLoading = false;
       }
+    });
+  }
 
-      // Logic: access the Bank's Tree Account ID
-      const selectedBank = this.banks.find(b => b.id == this.bankId);
-      if (!selectedBank || !selectedBank.asset_id) {
-         alert('البنك المحدد غير مرتبط بحساب شجري');
-         return;
+  getTreeAccounts(): void {
+    this.treeAccountService.getAll().subscribe({
+      next: res => {
+        const raw = (res as any)?.data;
+        const arr = Array.isArray(raw) ? raw : raw ? [raw] : Array.isArray(res) ? res : [];
+        const flat = this.flattenAccounts(arr);
+        if (flat.length > 0) {
+          this.setAccountOptions(flat);
+          return;
+        }
+        this.treeAccountService.getTree().subscribe({
+          next: (treeRes: any) => {
+            const t = treeRes?.data ?? treeRes;
+            const tArr = Array.isArray(t) ? t : t ? [t] : [];
+            this.setAccountOptions(this.flattenAccounts(tArr));
+          },
+          error: () => alert('تعذر تحميل شجرة الحسابات')
+        });
+      },
+      error: () => alert('تعذر تحميل شجرة الحسابات')
+    });
+  }
+
+  private setAccountOptions(options: AccountOption[]): void {
+    this.accountOptions = options;
+    this.applyCounterAccountFilter('');
+  }
+
+  private flattenAccounts(nodes: any[]): AccountOption[] {
+    const out: AccountOption[] = [];
+    const walk = (list: any[]) => {
+      for (const n of list || []) {
+        if (n?.id != null && n?.name) {
+          const code = n.code != null && n.code !== '' ? String(n.code) : '';
+          out.push({
+            id: Number(n.id),
+            label: code ? `${n.name} — ${code}` : String(n.name)
+          });
+        }
+        if (Array.isArray(n?.children) && n.children.length) {
+          walk(n.children);
+        }
       }
+    };
+    walk(nodes);
+    return out.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }
 
-      // We will create a generic voucher or manually call an accounting endpoint.
-      // Since VoucherController is set up for Client/Supplier, using it might be tricky if we don't have a client_id/supplier_id.
-      // But we can create a "General" voucher type if we modify the backend. 
-      // OR, we manually create AccountEntries here via a new API in BankController?
-      // Actually, standard practice: direct Journal Entry or a Generic Voucher.
-      // Let's assume for now we can't use VoucherController without client/supplier easily (it requires them). 
-      // I will implement a "direct_transaction" endpoint in BankController or similar, OR just alert the user that this feature needs backend support.
-      // But I must "Activate" the pages. 
-      // I will implement the UI and try to call a new endpoint `direct-transaction` on BankService, 
-      // and I will update BankController to handle it.
+  private applyCounterAccountFilter(term: string): void {
+    this.filteredCounterAccounts = this.filterAccountOptions(term);
+  }
 
-      this.loading = true;
-      const payload = {
-         bank_id: this.bankId,
-         type: this.type, // 'receipt' (Deposit), 'payment' (Withdraw)
-         counter_account_id: this.counterAccountId,
-         amount: this.amount,
-         date: this.date,
-         notes: this.notes
-      };
-
-      this.bankService.directTransaction(payload).subscribe({
-         next: () => {
-            alert('تمت العملية بنجاح');
-            this.loading = false;
-            this.amount = 0;
-            this.notes = '';
-            this.getBanks();
-         },
-         error: (err) => {
-            alert(err.error?.message || 'حدث خطأ');
-            this.loading = false;
-         }
+  private filterAccountOptions(term: string): AccountOption[] {
+    const raw = String(term ?? '').trim();
+    const q = raw.toLowerCase();
+    let list = this.accountOptions;
+    if (q) {
+      list = list.filter(a => {
+        if (String(a.id).includes(raw)) return true;
+        return a.label.toLowerCase().includes(q) || a.label.includes(raw);
       });
-   }
+    }
+    return list.slice(0, this.accountAutocompleteCap);
+  }
+
+  onCounterAccountFocus(): void {
+    const v = this.counterAccountCtrl.value;
+    this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+  }
+
+  onCounterAccountSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value as AccountOption;
+    if (!acc?.id) return;
+    this.counterAccountId = acc.id;
+    this.counterAccountCtrl.setValue(acc, { emitEvent: false });
+    this.applyCounterAccountFilter('');
+  }
+
+  onCounterAccountBlur(): void {
+    setTimeout(() => this.syncCounterAccountOnBlur(), 150);
+  }
+
+  private syncCounterAccountOnBlur(): void {
+    const v = this.counterAccountCtrl.value;
+    if (v && typeof v === 'object') {
+      this.counterAccountId = v.id;
+      return;
+    }
+
+    const str = typeof v === 'string' ? v.trim() : '';
+    if (!str) {
+      this.counterAccountId = null;
+      return;
+    }
+
+    const exact = this.accountOptions.find(a => a.label === str);
+    if (exact) {
+      this.counterAccountId = exact.id;
+      this.counterAccountCtrl.setValue(exact, { emitEvent: false });
+      return;
+    }
+
+    this.counterAccountId = null;
+    this.counterAccountCtrl.setValue(str, { emitEvent: false });
+  }
+
+  private resolveCounterAccountId(): boolean {
+    const v = this.counterAccountCtrl.value;
+    if (v && typeof v === 'object' && v.id) {
+      this.counterAccountId = v.id;
+      return true;
+    }
+    const str = typeof v === 'string' ? v.trim() : '';
+    if (!str) {
+      this.counterAccountId = null;
+      return false;
+    }
+    const exact = this.accountOptions.find(a => a.label === str);
+    if (exact) {
+      this.counterAccountId = exact.id;
+      this.counterAccountCtrl.setValue(exact, { emitEvent: false });
+      return true;
+    }
+    return this.counterAccountId != null;
+  }
+
+  startEdit(row: DirectTxnRow): void {
+    if (!row.editable) {
+      alert('هذه العملية قديمة ولا يمكن تعديلها تلقائياً — أنشئ عملية تصحيحية جديدة');
+      return;
+    }
+    this.editingId = row.id;
+    this.bankId = row.bank_id;
+    this.type = row.type;
+    this.amount = row.amount;
+    this.date = row.date;
+    this.notes = row.notes || '';
+    this.counterAccountId = row.counter_account_id;
+    const opt = this.accountOptions.find(a => a.id === row.counter_account_id);
+    if (opt) {
+      this.counterAccountCtrl.setValue(opt, { emitEvent: false });
+    } else if (row.counter_account_name) {
+      const label = row.counter_account_code
+        ? `${row.counter_account_name} — ${row.counter_account_code}`
+        : row.counter_account_name;
+      this.counterAccountCtrl.setValue(label, { emitEvent: false });
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  cancelEdit(): void {
+    this.editingId = null;
+    this.resetForm();
+  }
+
+  private resetForm(): void {
+    this.amount = 0;
+    this.notes = '';
+    this.type = 'receipt';
+    this.counterAccountId = null;
+    this.counterAccountCtrl.setValue('', { emitEvent: false });
+    this.applyCounterAccountFilter('');
+    this.date = new Date().toISOString().split('T')[0];
+  }
+
+  submit(): void {
+    this.syncCounterAccountOnBlur();
+
+    if (!this.bankId || !this.resolveCounterAccountId() || this.amount <= 0) {
+      alert('يرجى تعبئة جميع الحقول واختيار حساب مقابل صحيح من القائمة');
+      return;
+    }
+
+    const selectedBank = this.banks.find(b => Number(b.id) === Number(this.bankId));
+    if (!selectedBank?.asset_id) {
+      alert('البنك المحدد غير مرتبط بحساب شجري');
+      return;
+    }
+
+    this.loading = true;
+    const payload = {
+      bank_id: Number(this.bankId),
+      type: this.type,
+      counter_account_id: Number(this.counterAccountId),
+      amount: Number(this.amount),
+      date: this.date,
+      notes: this.notes
+    };
+
+    const req = this.editingId
+      ? this.bankService.updateDirectTransaction(this.editingId, payload)
+      : this.bankService.directTransaction(payload);
+
+    req.subscribe({
+      next: () => {
+        alert(this.editingId ? 'تم تعديل العملية بنجاح' : 'تمت العملية بنجاح');
+        this.loading = false;
+        this.editingId = null;
+        this.resetForm();
+        this.getBanks();
+      },
+      error: err => {
+        alert(err.error?.message || err.error?.errors?.counter_account_id?.[0] || 'حدث خطأ');
+        this.loading = false;
+      }
+    });
+  }
 }

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/env/env';
+import { httpOptionsFromParams } from 'src/app/shared/utils/http-query.util';
 
 @Injectable({
     providedIn: 'root'
@@ -13,16 +14,7 @@ export class AccountingReportService {
     constructor(private http: HttpClient) { }
 
     getDailyLedger(params: any): Observable<any> {
-        let httpParams = new HttpParams();
-
-        // Append all params to HttpParams
-        Object.keys(params).forEach(key => {
-            if (params[key] !== null && params[key] !== undefined && params[key] !== '') {
-                httpParams = httpParams.append(key, params[key]);
-            }
-        });
-
-        return this.http.get(`${this.apiUrl}/daily-ledger`, { params: httpParams });
+        return this.http.get(`${this.apiUrl}/daily-ledger`, httpOptionsFromParams(params));
     }
 
     getAccountBalance(params: any): Observable<any> {
@@ -58,13 +50,7 @@ export class AccountingReportService {
     }
 
     getAccountHierarchy(params?: any): Observable<any> {
-        let httpParams = new HttpParams();
-        if (params) {
-            Object.keys(params).forEach(key => {
-                if (params[key]) httpParams = httpParams.append(key, params[key]);
-            });
-        }
-        return this.http.get(`${this.apiUrl}/account-hierarchy`, { params: httpParams });
+        return this.http.get(`${this.apiUrl}/account-hierarchy`, httpOptionsFromParams(params));
     }
 
     validateIncomeStructure(): Observable<any> {
@@ -81,6 +67,16 @@ export class AccountingReportService {
 
     recalculateAllHierarchyBalances(): Observable<any> {
         return this.http.post(`${this.accountingUrl}/recalculate-all-hierarchy-balances`, {});
+    }
+
+    /** معاينة فروقات تسوية أرصدة المخزون مع التكلفة الفعلية للأصناف (بدون ترحيل). */
+    previewInventoryGlSync(): Observable<any> {
+        return this.http.get(`${environment.Url}/categories/inventory-gl-sync-preview`);
+    }
+
+    /** ترحيل قيد تسوية لمطابقة أرصدة حسابات المخزون مع التكلفة الفعلية للأصناف. */
+    postInventoryGlSync(): Observable<any> {
+        return this.http.post(`${environment.Url}/categories/inventory-gl-sync`, {});
     }
 
     getProductPerformance(params: { date_from?: string; date_to?: string }): Observable<any> {

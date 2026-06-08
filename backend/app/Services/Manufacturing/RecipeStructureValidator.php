@@ -38,11 +38,16 @@ final class RecipeStructureValidator
             if (! $ingItem) {
                 throw new \InvalidArgumentException('Ingredient item missing for recipe line #' . $ing->id);
             }
-            if ((int) $ingItem->id === (int) $outputItemId) {
+            /** @var Item $ingEffective */
+            $ingEffective = $ingItem->parent_item_id
+                ? (Item::query()->find((int) $ingItem->parent_item_id) ?? $ingItem)
+                : $ingItem;
+
+            if ((int) $ingEffective->id === (int) $outputItemId) {
                 throw new \InvalidArgumentException('Recipe cannot list the output product as its own ingredient.');
             }
 
-            $inType = $ingItem->resolvedProductType();
+            $inType = $ingEffective->resolvedProductType();
             if ($inType === ProductType::Finished) {
                 throw new \InvalidArgumentException(
                     'Recipe ingredients must be raw materials or semi-finished items only (finished product used as ingredient: '

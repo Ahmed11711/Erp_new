@@ -12,6 +12,9 @@ use App\Models\RecipeExtraCost;
 use App\Models\RecipeIngredient;
 use App\Models\Stock;
 use App\Models\TreeAccount;
+use App\Services\Manufacturing\RecipeVariantBootstrapService;
+use App\Services\Manufacturing\SupportsColorEstimator;
+use App\Support\ArabicTextNormalizer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -90,6 +93,7 @@ class RecipeSheetImportService
 
     public function __construct(
         private ItemCodeService $itemCodes,
+        private RecipeVariantBootstrapService $recipeVariants,
     ) {
     }
 
@@ -146,7 +150,8 @@ class RecipeSheetImportService
                     'normalized_name' => $this->normalizeName($recipeName),
                     'sell_price' => $this->parseOptionalDecimal($sellPriceRaw),
                     'total_direct_cost' => null,
-                    'color' => $colorRaw !== '' ? $colorRaw : null,
+                    // ألوان المنتج التام (عناوين الصنف) — ليست ألوان كل سطر خام
+                    'finish_colors' => $this->splitRecipeHeaderColors($colorRaw),
                     'ingredients' => [],
                     'extra_costs' => [],
                     'source_row' => $row,
@@ -174,6 +179,46 @@ class RecipeSheetImportService
                     $currentRecipe = $recipes[$currentRecipe['order']];
                 }
                 continue;
+            }
+
+            /*
+             * بعض ملفات العملاء تضع قائمة ألوان المنتج التام عمودياً أسفل الصنف
+             * (خلية الخامّة فارغة أو كلمة جديد)، وقد كانت هذه الصفوف تُستهلك قبل
+             * هنا بتجاهُل كامل — فكان finish_colors فارغاً ولا يُنشأ التام بولوانه.
+             */
+            if (
+                $currentRecipe !== null
+                && trim($recipeName) === ''
+                && $col['color'] !== null
+                && trim((string) $colorRaw) !== ''
+            ) {
+                $ingTrim = trim((string) $ingredientName);
+                $qtyProbe = $this->parseOptionalDecimal($qtyRaw);
+                $isMeta = $ingTrim !== '' && $this->isManufacturingRecipeMetaLabel($ingredientName);
+
+                $looksLikeIngredientRow = ! $isMeta
+                    && $ingTrim !== ''
+                    && ! $this->isIgnoreLabel($ingredientName)
+                    && ! $this->isFooterLabel($ingredientName)
+                    && ! $this->isExtraCostLabel($ingredientName)
+                    && ! $this->isTotalDirectCostLabel($ingredientName)
+                    && $qtyProbe !== null
+                    && $qtyProbe > 0;
+
+                if (! $looksLikeIngredientRow) {
+                    $chunks = $this->splitRecipeHeaderColors((string) $colorRaw);
+                    $ord = $currentRecipe['order'];
+                    if ($chunks !== []) {
+                        $merged = array_values(array_unique(array_merge(
+                            $recipes[$ord]['finish_colors'] ?? [],
+                            $chunks,
+                        )));
+                        $recipes[$ord]['finish_colors'] = $merged;
+                        $currentRecipe = $recipes[$ord];
+                    }
+
+                    continue;
+                }
             }
 
             // --- Pure totals → ignore completely ---
@@ -220,6 +265,7 @@ class RecipeSheetImportService
                 'unit_cost' => $unitCost,
                 'line_cost' => $lineCost,
                 'color' => $colorRaw !== '' ? $colorRaw : null,
+                'supports_color' => SupportsColorEstimator::guessFromLabel($ingredientName),
                 'source_row' => $row,
             ];
             $currentRecipe = $recipes[$currentRecipe['order']];
@@ -230,6 +276,38 @@ class RecipeSheetImportService
         if (count($recipes) === 0) {
             throw new \InvalidArgumentException('لم يتم العثور على وصفات صالحة داخل الملف.');
         }
+
+        // --- جمع ألوان المنتج التام من صفوف المكوّنات ---
+        // الألوان المكتوبة على صفوف الخامات (مثل Black, Orange) هي ألوان المنتج
+        // التام التي يُصنَع بها هذا الصنف — نُضيفها لـ finish_colors.
+        foreach ($recipes as &$r) {
+            $ingredientColors = [];
+            foreach ($r['ingredients'] as $ing) {
+                $c = trim((string) ($ing['color'] ?? ''));
+                if ($c !== '') {
+                    $ingredientColors[] = $c;
+                }
+            }
+            if ($ingredientColors !== []) {
+                $existing = $r['finish_colors'] ?? [];
+                $merged = array_values(array_unique(array_merge($existing, $ingredientColors)));
+                // تنقية: استبعاد ما يبدو قياساً أو كلمة وصفية وليس لوناً
+                $merged = array_filter($merged, function (string $label): bool {
+                    $n = $this->normalizeName($label);
+                    if ($n === '') {
+                        return false;
+                    }
+                    // أبعاد مثل 160x45cm ليست لوناً
+                    if (preg_match('/\d+\s*[xX×]\s*\d+/', $label)) {
+                        return false;
+                    }
+                    // كلمات وصفية
+                    return ! $this->isManufacturingRecipeMetaLabel($label);
+                });
+                $r['finish_colors'] = array_values($merged);
+            }
+        }
+        unset($r);
 
         return $this->enrichWithExistence($recipes);
     }
@@ -293,7 +371,8 @@ class RecipeSheetImportService
 
                 $computedCost = 0.0;
                 foreach ($recipe['ingredients'] as $ing) {
-                    $itemId = $itemIdByNormalized[$ing['normalized_name']] ?? null;
+                    $compositeKey = $this->ingredientMaterializationKey($ing);
+                    $itemId = $itemIdByNormalized[$compositeKey] ?? null;
                     if ($itemId === null) {
                         throw new \RuntimeException(
                             'تعذّر ربط الخامة "'.$ing['item_name'].'" أثناء الحفظ.'
@@ -366,15 +445,25 @@ class RecipeSheetImportService
                     ? (float) $sellPrice
                     : 0.0;
 
-                $recipeColor = $recipe['color'] ?? null;
+                $finishColors = $recipe['finish_colors'] ?? [];
 
                 $product = $this->ensureFinishedGoodForRecipe(
                     recipe: $recipeModel,
                     cost: $recipeTotalCost,
                     sellPrice: $effectiveSellPrice,
                     result: $result,
-                    color: $recipeColor,
                 );
+
+                if ($product !== null) {
+                    $recipeModel->output_item_id = $product->id;
+                    $recipeModel->save();
+
+                    $this->recipeVariants->syncRecipeVariants(
+                        $recipeModel->fresh(['ingredients.item']),
+                        $product,
+                        is_array($finishColors) ? $finishColors : [],
+                    );
+                }
 
                 // Also write the Manufacture + ManufactureProduct rows so the
                 // recipe appears on the /dashboard/manufacturing/recipes page.
@@ -439,7 +528,6 @@ class RecipeSheetImportService
         float $cost,
         float $sellPrice,
         RecipeImportCommitResult $result,
-        ?string $color = null,
     ): ?Item {
         $linked = Item::query()
             ->where('recipe_id', $recipe->id)
@@ -457,10 +545,6 @@ class RecipeSheetImportService
             }
             if ($linked->stock_id === null) {
                 $linked->stock_id = $this->resolveStockIdForWarehouse(self::WAREHOUSE_FINISHED);
-                $dirty = true;
-            }
-            if ($color !== null && ($linked->color === null || $linked->color === '')) {
-                $linked->color = $color;
                 $dirty = true;
             }
             if ($dirty) {
@@ -515,7 +599,7 @@ class RecipeSheetImportService
             cost: $cost,
             sellPrice: $sellPrice,
             recipeId: $recipe->id,
-            color: $color,
+            color: null,
         );
         $result->productsCreated++;
         Log::info('[recipe-import] finished-good created for recipe', [
@@ -581,7 +665,8 @@ class RecipeSheetImportService
         /** @var array<int, array{id:int, quantity:float, total_price:float}> $byItemId */
         $byItemId = [];
         foreach ($ingredients as $ing) {
-            $itemId = $itemIdByNormalized[$ing['normalized_name']] ?? null;
+            $compositeKey = $this->ingredientMaterializationKey($ing);
+            $itemId = $itemIdByNormalized[$compositeKey] ?? null;
             if ($itemId === null) {
                 continue;
             }
@@ -622,23 +707,63 @@ class RecipeSheetImportService
      * Annotates each recipe with `exists=true/false` and produces a global
      * list of `missingItems`.
      *
+     * Uses color-aware matching: "سوسته 10 مللي (Black)" and "سوسته 10 مللي
+     * (Maroon)" are treated as distinct items.
+     *
      * @param  array<int, array<string,mixed>>  $recipes
      */
     private function enrichWithExistence(array $recipes): ParsedRecipeSheet
     {
-        $allIngredientNames = [];
+        $allNormalizedNames = [];
         foreach ($recipes as $recipe) {
             foreach ($recipe['ingredients'] as $ing) {
-                $allIngredientNames[$ing['normalized_name']] = $ing['item_name'];
+                $allNormalizedNames[$ing['normalized_name']] = true;
             }
         }
 
-        $existingItemsMap = $this->findExistingItemsByNormalizedName(array_keys($allIngredientNames));
+        $existingByNameAndColor = $this->findExistingItemsByNormalizedNameAndColor(array_keys($allNormalizedNames));
 
+        // Track which colorless DB items have been "reserved" for a specific
+        // color during preview so the same colorless item is not promised to
+        // two different colors.
+        // Key = item DB id, value = true (already reserved).
+        $reservedColorlessIds = [];
+
+        // First pass: collect all unique composite keys and determine missing.
         $missingItems = [];
-        foreach ($allIngredientNames as $normalized => $display) {
-            if (! isset($existingItemsMap[$normalized])) {
-                $missingItems[] = $display;
+        $seenComposites = [];
+        // Also store matched item ids per composite key for the second pass.
+        $matchByComposite = [];
+
+        foreach ($recipes as $recipe) {
+            foreach ($recipe['ingredients'] as $ing) {
+                $compositeKey = $this->ingredientMaterializationKey($ing);
+                if (isset($seenComposites[$compositeKey])) {
+                    continue;
+                }
+                $seenComposites[$compositeKey] = true;
+
+                $group = $existingByNameAndColor[$ing['normalized_name']] ?? [];
+                if (! empty($ing['supports_color'])) {
+                    $matched = $this->matchSupportsColorBaseItem($group);
+                } else {
+                    $matched = $this->matchItemFromColorGroup(
+                        $group,
+                        $ing['color'] ?? null,
+                        $reservedColorlessIds,
+                    );
+                }
+                $matchByComposite[$compositeKey] = $matched;
+
+                if ($matched === null) {
+                    $label = $ing['item_name'];
+                    if (! empty($ing['supports_color'])) {
+                        $label .= ' [قاعدة خام قابلة للتلوين]';
+                    } elseif (! empty($ing['color'])) {
+                        $label .= ' (' . $ing['color'] . ')';
+                    }
+                    $missingItems[] = $label;
+                }
             }
         }
 
@@ -652,7 +777,8 @@ class RecipeSheetImportService
             $recipe['existing_recipe_name'] = $existingRecipe['recipe_name'] ?? null;
 
             foreach ($recipe['ingredients'] as &$ing) {
-                $match = $existingItemsMap[$ing['normalized_name']] ?? null;
+                $compositeKey = $this->ingredientMaterializationKey($ing);
+                $match = $matchByComposite[$compositeKey] ?? null;
                 $ing['item_exists'] = $match !== null;
                 $ing['existing_item_id'] = $match['id'] ?? null;
                 $ing['existing_item_name'] = $match['category_name'] ?? null;
@@ -669,6 +795,54 @@ class RecipeSheetImportService
             missingItems: array_values(array_unique($missingItems)),
             existingRecipes: $existingRecipeNames,
         );
+    }
+
+    /**
+     * Given a list of DB rows with the same normalized name but potentially
+     * different colors, find the best match for the requested color.
+     *
+     * Priority:
+     *  1) Exact color match (item already has this color)
+     *  2) If requested color is non-empty and a colorless item exists that has
+     *     NOT been reserved for another color → reserve it (will be updated
+     *     with this color during commit)
+     *  3) If requested color is empty → return the first available item
+     *  4) Otherwise → null (item is missing, needs to be created)
+     *
+     * @param  list<array{id:int, category_name:string, category_price:float|null, color:?string, normalized_color:string, color_claimed:bool}>  $group
+     * @param  array<int,bool>  &$reservedColorlessIds  tracks colorless items already promised to a color
+     * @return array{id:int, category_name:string, category_price:float|null}|null
+     */
+    private function matchItemFromColorGroup(array $group, ?string $requestedColor, array &$reservedColorlessIds = []): ?array
+    {
+        if (empty($group)) {
+            return null;
+        }
+
+        $normalizedRequested = ($requestedColor !== null && $requestedColor !== '')
+            ? $this->normalizeName($requestedColor)
+            : '';
+
+        if ($normalizedRequested !== '') {
+            // 1) Exact color match — always wins
+            foreach ($group as $row) {
+                if ($row['normalized_color'] === $normalizedRequested) {
+                    return $row;
+                }
+            }
+            // 2) Colorless item not yet reserved → adopt it for this color
+            foreach ($group as $row) {
+                if ($row['normalized_color'] === '' && ! isset($reservedColorlessIds[$row['id']])) {
+                    $reservedColorlessIds[$row['id']] = true;
+                    return $row;
+                }
+            }
+            // 3) No match at all → missing
+            return null;
+        }
+
+        // No color requested → any item with same name
+        return $group[0] ?? null;
     }
 
     /**
@@ -705,6 +879,56 @@ class RecipeSheetImportService
                         'id' => (int) $row->id,
                         'category_name' => (string) $row->category_name,
                         'category_price' => $row->category_price !== null ? (float) $row->category_price : null,
+                    ];
+                }
+            });
+
+        return $map;
+    }
+
+    /**
+     * Like findExistingItemsByNormalizedName but groups results by normalized
+     * name and includes the color field so that the caller can distinguish
+     * "سوسته 10 مللي (Black)" from "سوسته 10 مللي (Maroon)".
+     *
+     * @param  array<int,string>  $normalizedNames
+     * @return array<string, list<array{id:int, category_name:string, category_price:float|null, color:?string, normalized_color:string, color_claimed:bool, supports_color:bool, parent_item_id:?int, color_id:?int}>>
+     */
+    private function findExistingItemsByNormalizedNameAndColor(array $normalizedNames): array
+    {
+        if (empty($normalizedNames)) {
+            return [];
+        }
+
+        $needed = array_flip($normalizedNames);
+        /** @var array<string, list<array>> $map */
+        $map = [];
+
+        Item::query()
+            ->select(['id', 'category_name', 'category_price', 'color', 'supports_color', 'parent_item_id', 'color_id'])
+            ->whereNotNull('category_name')
+            ->orderBy('id')
+            ->chunk(2000, function ($rows) use (&$map, $needed) {
+                foreach ($rows as $row) {
+                    $key = $this->normalizeName((string) $row->category_name);
+                    if ($key === '' || ! isset($needed[$key])) {
+                        continue;
+                    }
+                    $color = $row->color !== null ? trim((string) $row->color) : null;
+                    $normalizedColor = ($color !== null && $color !== '')
+                        ? $this->normalizeName($color)
+                        : '';
+
+                    $map[$key][] = [
+                        'id' => (int) $row->id,
+                        'category_name' => (string) $row->category_name,
+                        'category_price' => $row->category_price !== null ? (float) $row->category_price : null,
+                        'color' => $color ?: null,
+                        'normalized_color' => $normalizedColor,
+                        'color_claimed' => false,
+                        'supports_color' => (bool) ($row->supports_color ?? false),
+                        'parent_item_id' => $row->parent_item_id !== null ? (int) $row->parent_item_id : null,
+                        'color_id' => $row->color_id !== null ? (int) $row->color_id : null,
                     ];
                 }
             });
@@ -754,36 +978,37 @@ class RecipeSheetImportService
     }
 
     /**
-     * Returns a map of normalized_name => item_id for every ingredient in the sheet,
+     * Returns a map of composite_key => item_id for every ingredient in the sheet,
      * creating missing items in مخزن مواد خام on the fly when allowed by the user.
      *
-     * New items inherit the unit (measurement) + unit_cost from the first Excel row
-     * where they appear, so they show up in the items list with the correct data.
+     * Composite key = normalized_name + "|" + normalized_color so that the same
+     * raw material in different colors (e.g. "سوسته 10 مللي Black" vs "Maroon")
+     * is stored as separate items while reusing an existing colourless item when
+     * its color field is still empty.
      *
-     * @return array<string,int>
+     * @return array<string,int>  composite_key => item_id
      */
     private function materializeItems(ParsedRecipeSheet $parsed, bool $createMissing, RecipeImportCommitResult $result): array
     {
-        // Collect the best-known unit + price for each ingredient across all recipes.
-        /** @var array<string, array{name:string, unit:?string, price:?float}> $candidates */
+        /** @var array<string, array{name:string, normalized_name:string, unit:?string, price:?float, color:?string, supports_sc:bool}> $candidates */
         $candidates = [];
         foreach ($parsed->recipes as $recipe) {
             foreach ($recipe['ingredients'] as $ing) {
-                $key = $ing['normalized_name'];
+                $key = $this->ingredientMaterializationKey($ing);
                 if (! isset($candidates[$key])) {
                     $candidates[$key] = [
                         'name' => $ing['item_name'],
+                        'normalized_name' => $ing['normalized_name'],
                         'unit' => $ing['unit'] ?? null,
                         'price' => $ing['unit_cost'] ?? null,
-                        'color' => $ing['color'] ?? null,
+                        'color' => ! empty($ing['supports_color']) ? null : ($ing['color'] ?? null),
+                        'supports_sc' => ! empty($ing['supports_color']),
                     ];
+
                     continue;
                 }
                 if ($candidates[$key]['unit'] === null && ! empty($ing['unit'])) {
                     $candidates[$key]['unit'] = $ing['unit'];
-                }
-                if ($candidates[$key]['color'] === null && ! empty($ing['color'])) {
-                    $candidates[$key]['color'] = $ing['color'];
                 }
                 if (($candidates[$key]['price'] === null || $candidates[$key]['price'] <= 0)
                     && ($ing['unit_cost'] ?? null) !== null
@@ -794,23 +1019,119 @@ class RecipeSheetImportService
             }
         }
 
-        $existing = $this->findExistingItemsByNormalizedName(array_keys($candidates));
+        $allNormalizedNames = array_values(array_unique(
+            array_column($candidates, 'normalized_name')
+        ));
+        $existing = $this->findExistingItemsByNormalizedNameAndColor($allNormalizedNames);
 
         $map = [];
-        foreach ($existing as $k => $row) {
-            $map[$k] = (int) $row['id'];
-        }
 
-        foreach ($candidates as $normalized => $meta) {
-            if (isset($map[$normalized])) {
+        foreach ($candidates as $compositeKey => $meta) {
+            $color = $meta['color'];
+            $normalizedColor = $color !== null ? $this->normalizeName($color) : '';
+            $nameKey = $meta['normalized_name'];
+            $isSc = ! empty($meta['supports_sc']);
+
+            $matchedItemId = null;
+
+            if ($isSc && isset($existing[$nameKey])) {
+                $pick = $this->matchSupportsColorBaseItem($existing[$nameKey]);
+                if ($pick !== null) {
+                    $matchedItemId = (int) $pick['id'];
+                    $item = Item::query()->find($matchedItemId);
+                    if ($item) {
+                        $dirty = false;
+                        if (! $item->supports_color) {
+                            $item->supports_color = true;
+                            $dirty = true;
+                        }
+                        if ($meta['price'] !== null && $meta['price'] > 0
+                            && ((float) ($item->category_price ?? 0)) <= 0
+                        ) {
+                            $item->category_price = $meta['price'];
+                            $item->unit_price = $meta['price'];
+                            $dirty = true;
+                        }
+                        if ($dirty) {
+                            $item->save();
+                            $result->itemsUpdated++;
+                        }
+                    }
+                }
+            }
+
+            if ($matchedItemId === null && ! $isSc && $normalizedColor !== '' && isset($existing[$nameKey])) {
+                foreach ($existing[$nameKey] as $row) {
+                    if ($row['normalized_color'] === $normalizedColor) {
+                        $matchedItemId = (int) $row['id'];
+                        if ($meta['price'] !== null && $meta['price'] > 0
+                            && ($row['category_price'] === null || $row['category_price'] <= 0)
+                        ) {
+                            $item = Item::query()->find($row['id']);
+                            if ($item) {
+                                $item->category_price = $meta['price'];
+                                $item->unit_price = $meta['price'];
+                                $item->save();
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if ($matchedItemId === null) {
+                    foreach ($existing[$nameKey] as &$rowRef) {
+                        if ($rowRef['normalized_color'] === '' && ! $rowRef['color_claimed']) {
+                            $item = Item::query()->find($rowRef['id']);
+                            if ($item) {
+                                $item->color = $color;
+                                if ($meta['price'] !== null && $meta['price'] > 0
+                                    && ((float) ($item->category_price ?? 0)) <= 0
+                                ) {
+                                    $item->category_price = $meta['price'];
+                                    $item->unit_price = $meta['price'];
+                                }
+                                $item->save();
+                                $rowRef['normalized_color'] = $normalizedColor;
+                                $rowRef['color_claimed'] = true;
+                                $matchedItemId = (int) $rowRef['id'];
+                                $result->itemsUpdated++;
+                                Log::info('[recipe-import] existing item updated with color', [
+                                    'item_id' => $item->id,
+                                    'name' => $item->category_name,
+                                    'color' => $color,
+                                ]);
+                            }
+                            break;
+                        }
+                    }
+                    unset($rowRef);
+                }
+            } elseif ($matchedItemId === null && ! $isSc && $normalizedColor === '' && isset($existing[$nameKey])) {
+                $first = $existing[$nameKey][0] ?? null;
+                if ($first) {
+                    $matchedItemId = (int) $first['id'];
+                }
+            }
+
+            if ($matchedItemId !== null) {
+                $map[$compositeKey] = $matchedItemId;
                 Log::info('[recipe-import] ingredient matched existing item', [
                     'name' => $meta['name'],
-                    'item_id' => $map[$normalized],
+                    'color' => $color,
+                    'supports_sc' => $isSc,
+                    'item_id' => $matchedItemId,
                 ]);
+
                 continue;
             }
+
             if (! $createMissing) {
-                throw new \InvalidArgumentException('الخامة "'.$meta['name'].'" غير موجودة وتم رفض إنشاء الأصناف.');
+                $label = $meta['name'];
+                if ($isSc) {
+                    $label .= ' [قاعدة خام قابلة للتلوين]';
+                }
+                $label .= $color ? ' ('.$color.')' : '';
+                throw new \InvalidArgumentException('الخامة "'.$label.'" غير موجودة وتم رفض إنشاء الأصناف.');
             }
 
             $item = $this->createItem(
@@ -818,14 +1139,33 @@ class RecipeSheetImportService
                 warehouse: self::WAREHOUSE_RAW,
                 unitText: $meta['unit'],
                 price: $meta['price'],
-                color: $meta['color'] ?? null,
+                color: $color,
+                supportsColor: $isSc,
             );
             $result->itemsCreated++;
-            $map[$normalized] = (int) $item->id;
+            $map[$compositeKey] = (int) $item->id;
+
+            if (! isset($existing[$nameKey])) {
+                $existing[$nameKey] = [];
+            }
+            $newNormColor = ($color !== null && $color !== '') ? $this->normalizeName($color) : '';
+            $existing[$nameKey][] = [
+                'id' => (int) $item->id,
+                'category_name' => $item->category_name,
+                'category_price' => (float) $item->category_price,
+                'color' => $color,
+                'normalized_color' => $newNormColor,
+                'color_claimed' => true,
+                'supports_color' => $isSc,
+                'parent_item_id' => null,
+                'color_id' => null,
+            ];
 
             Log::info('[recipe-import] raw material item created', [
                 'id' => $item->id,
                 'name' => $item->category_name,
+                'color' => $color,
+                'supports_sc' => $isSc,
                 'warehouse' => $item->warehouse,
                 'stock_id' => $item->stock_id,
                 'measurement_id' => $item->measurement_id,
@@ -835,6 +1175,106 @@ class RecipeSheetImportService
         }
 
         return $map;
+    }
+
+    /**
+     * Build a composite key for an ingredient: normalized_name + "|" + normalized_color.
+     * Two rows with the same name but different colors produce different keys.
+     */
+    private function ingredientCompositeKey(string $normalizedName, ?string $color): string
+    {
+        $colorPart = ($color !== null && $color !== '')
+            ? $this->normalizeName($color)
+            : '';
+
+        return $normalizedName . '|' . $colorPart;
+    }
+
+    /** One logical BOM line for materials that track production color dynamically. */
+    private function ingredientMaterializationKey(array $ing): string
+    {
+        if (! empty($ing['supports_color'])) {
+            return $ing['normalized_name'] . '|__SC__';
+        }
+
+        return $this->ingredientCompositeKey($ing['normalized_name'], $ing['color'] ?? null);
+    }
+
+    /**
+     * @param  list<array{id:int, supports_color?:bool, parent_item_id?:?int, normalized_color:string}>  $group
+     */
+    private function matchSupportsColorBaseItem(array $group): ?array
+    {
+        $candidates = [];
+        foreach ($group as $row) {
+            if (($row['parent_item_id'] ?? null) !== null) {
+                continue;
+            }
+            if (($row['normalized_color'] ?? '') !== '') {
+                continue;
+            }
+            $candidates[] = $row;
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        usort($candidates, function (array $a, array $b): int {
+            $sa = ($a['supports_color'] ?? false) ? 1 : 0;
+            $sb = ($b['supports_color'] ?? false) ? 1 : 0;
+            if ($sa !== $sb) {
+                return $sb <=> $sa;
+            }
+
+            return ($a['id'] ?? 0) <=> ($b['id'] ?? 0);
+        });
+
+        return $candidates[0] ?? null;
+    }
+
+    /**
+     * عناصر شكلية بين الصنف وباقي الألوان (مثل «جديد») — ليست خامات.
+     */
+    private function isManufacturingRecipeMetaLabel(string $raw): bool
+    {
+        $n = $this->normalizeName($raw);
+        $metas = [
+            'جديد', 'جديده', 'جديدة',
+            'new',
+            '-',
+            '—',
+            '--',
+            '***',
+        ];
+        foreach ($metas as $m) {
+            if ($n === $this->normalizeName($m)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Colors available for the finished good (header column «ألوانه» / variants). */
+    private function splitRecipeHeaderColors(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $parts = preg_split('/[\n\r،,؛;\/|\t]+/u', $raw) ?: [];
+
+        $out = [];
+        foreach ($parts as $p) {
+            $p = trim((string) $p);
+            if ($p !== '') {
+                $out[] = $p;
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     /**
@@ -855,6 +1295,7 @@ class RecipeSheetImportService
         ?float $price = null,
         ?int $recipeId = null,
         ?string $color = null,
+        bool $supportsColor = false,
     ): Item {
         $defaults = config('items_import.new_item', []);
 
@@ -876,6 +1317,9 @@ class RecipeSheetImportService
             'item_code' => null,
             'color' => $color,
             'recipe_id' => $recipeId,
+            'supports_color' => $supportsColor,
+            'parent_item_id' => null,
+            'color_id' => null,
         ];
 
         $item = new Item($attrs);
@@ -915,6 +1359,9 @@ class RecipeSheetImportService
             'item_code' => null,
             'color' => $color,
             'recipe_id' => $recipeId,
+            'supports_color' => false,
+            'parent_item_id' => null,
+            'color_id' => null,
         ];
 
         $item = new Item($attrs);
@@ -1073,41 +1520,7 @@ class RecipeSheetImportService
      */
     private function normalizeName(string $raw): string
     {
-        $s = $raw;
-
-        // 1) strip tashkeel (combining marks) + Arabic presentation forms & tatweel
-        $s = preg_replace('/[\x{0610}-\x{061A}\x{064B}-\x{065F}\x{0670}\x{06D6}-\x{06ED}]/u', '', $s) ?? $s;
-        $s = str_replace("\u{0640}", '', $s); // tatweel
-
-        // 2) alef variants
-        $s = preg_replace('/[\x{0622}\x{0623}\x{0625}\x{0671}]/u', "\u{0627}", $s) ?? $s;
-
-        // 3) yeh / alef-maksura / yeh-hamza → yeh
-        $s = str_replace(["\u{0649}", "\u{0626}"], "\u{064A}", $s);
-
-        // 4) teh marbuta → heh (both are often interchangeable in product names)
-        $s = str_replace("\u{0629}", "\u{0647}", $s);
-
-        // 5) Arabic-Indic digits
-        $s = strtr($s, [
-            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
-            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
-            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
-            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
-        ]);
-
-        // 6) normalize every possible "invisible" whitespace to a regular space
-        $s = preg_replace(
-            '/[\x{00A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}]/u',
-            ' ',
-            $s
-        ) ?? $s;
-
-        // 7) collapse whitespace + trim + lowercase
-        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
-        $s = trim($s);
-
-        return mb_strtolower($s, 'UTF-8');
+        return ArabicTextNormalizer::normalize($raw);
     }
 
     private function isFooterLabel(string $raw): bool
@@ -1280,9 +1693,13 @@ class RecipeSheetImportService
                 'sell_price', 'selling_price', 'price_sell',
                 'سعر البيع', 'سعر_البيع', 'سعر بيع',
             ]),
+            // ملفات العملاء غالباً تستخدم «ألوانه / الوانه» وليس «اللون» فقط.
             'color' => $this->matchColumn($headers, [
-                'color', 'colour',
+                'color', 'colour', 'shade', 'colourway',
                 'اللون', 'الون', 'لون',
+                'ألوانه', 'الوانه', 'ألوانها', 'الوانها',
+                'ألوان', 'الوان', 'الألوان', 'الالوان',
+                'لون الخامة', 'لون الخامه', 'لون الصنف',
             ]),
         ];
     }

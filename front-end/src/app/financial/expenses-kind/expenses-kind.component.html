@@ -13,8 +13,8 @@
   <div class="container">
     <p class="text-muted small mb-2">
       كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري).
-      <strong>حساب الشجرة (مدين):</strong> اختر حساب مصروف طرفي في الشجرة لكل فئة — يُستخدم عند صرف المصروف في القيد المحاسبي.
-      إذا تركت «تلقائي» يُستخدم حساب احتياطي حسب نوع المصروف الرئيسي فقط.
+      <strong>حساب الشجرة (مدين):</strong> جميع حسابات المصروف تحت حساب الأب
+      <strong>{{ cashOutParentName }}</strong> — يُنشأ حساب فرعي تلقائياً باسم الفئة عند الحفظ إذا اخترت «تلقائي».
     </p>
     <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
 
@@ -42,7 +42,7 @@
         <div class="form-group">
           <label class="form-label">حساب الشجرة للقيد المدين <span class="text-muted">(اختياري)</span></label>
           <select class="form-control" formControlName="tree_account_id">
-            <option [ngValue]="null">— تلقائي حسب نوع المصروف —</option>
+            <option [ngValue]="null">— تلقائي (حساب فرعي تحت {{ cashOutParentName }}) —</option>
             <option *ngFor="let acc of expenseLeafAccounts" [ngValue]="acc.id">
               {{ acc.code }} — {{ acc.name }}
             </option>
@@ -99,7 +99,7 @@
           <td>
             <select class="form-control form-control-sm" [(ngModel)]="elm.tree_account_id"
               [ngModelOptions]="{standalone: true}" [name]="'a'+elm.id">
-              <option [ngValue]="null">— تلقائي —</option>
+              <option [ngValue]="null">— تلقائي (تحت {{ cashOutParentName }}) —</option>
               <option *ngFor="let acc of expenseLeafAccounts" [ngValue]="acc.id">
                 {{ acc.code }} — {{ acc.name }}
               </option>

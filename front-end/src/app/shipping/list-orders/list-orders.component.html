@@ -43,6 +43,9 @@
         <button mat-menu-item (click)="reviewFn()" *ngIf="user == 'Admin'">
           <span>تم مراجعة الاوردرات المختارة</span>
         </button>
+        <button dir="rtl" mat-menu-item (click)="openOrdersAccountingReconcileWizard()" *ngIf="user == 'Admin'">
+          <span>تسوية قيود المحاسبة للطلبات (نطاق تاريخ)</span>
+        </button>
         <button class="d-flex justify-content-end" mat-menu-item [matMenuTriggerFor]="users">
           <span>ارسال الي</span>
         </button>
@@ -54,7 +57,8 @@
 
   <div class="report-panel orders-filters-panel">
   <div class="d-md-flex">
-    <div class="col" *ngIf="user != 'Review Management' && !isFinancialAccountsReadonly">
+    <div class="col">
+      <ng-container *ngIf="user != 'Review Management' && !isFinancialAccountsReadonly">
       <div class="input-group">
         <select  id="customer_type" class="form-control type bg-main" (change)="filter($event)">
           <option disabled selected>نوع العميل</option>
@@ -82,28 +86,6 @@
         <option value="">الكل</option>
       </select>
 
-      <div class="mt-2">
-
-        <ng-autocomplete
-          [data]="products"
-          [searchKeyword]="catword"
-          placeholder="اختر المنتج"
-          (selected)='productChange($event)'
-          (inputCleared)="resetInp()"
-          [itemTemplate]="itemTemplates"
-          [notFoundTemplate]="notFoundTemplate">
-        </ng-autocomplete>
-
-        <ng-template #itemTemplates let-item>
-          <a [innerHTML]="item.category_name"></a>
-        </ng-template>
-
-        <ng-template #notFoundTemplate let-notFound>
-          <div [innerHTML]="notFound"></div>
-        </ng-template>
-
-      </div>
-
       <div>
         <input id="vip" type="checkbox" (change)="filter($event)">
         <label class="mx-2 mt-1">vip</label>
@@ -123,6 +105,7 @@
         <input id="prepaidAmount" type="checkbox" (change)="filter($event)">
         <label class="mx-2">مبلغ تحت الحساب</label>
       </div>
+      </ng-container>
     </div>
     <div class="col">
       <mat-form-field class="example-full-width w-100" *ngIf="user != 'Review Management' && !isFinancialAccountsReadonly">
@@ -222,6 +205,29 @@
                       placeholder="رقم الطلب"
                       />
                       </div>
+                  <div class="form-group orders-product-filter-wrap">
+                    <label class="orders-product-filter-label" for="orders-product-filter">المنتج</label>
+                    <div class="orders-product-filter-field">
+                      <ng-autocomplete
+                        id="orders-product-filter"
+                        [data]="products"
+                        [searchKeyword]="catword"
+                        placeholder="ابحث واختر المنتج..."
+                        (selected)="productChange($event)"
+                        (inputCleared)="resetProductFilter()"
+                        [itemTemplate]="productItemTemplate"
+                        [notFoundTemplate]="productNotFoundTemplate">
+                      </ng-autocomplete>
+
+                      <ng-template #productItemTemplate let-item>
+                        <a [innerHTML]="item.category_name"></a>
+                      </ng-template>
+
+                      <ng-template #productNotFoundTemplate let-notFound>
+                        <div [innerHTML]="notFound"></div>
+                      </ng-template>
+                    </div>
+                  </div>
 
     </div>
     <div class="col">
@@ -238,6 +244,7 @@
         <option value="طلب مؤكد" *ngIf="this.user != 'Review Management' && this.user !== 'Financial Accounts'">طلب مؤكد</option>
         <option value="شحن جزئي" *ngIf="this.user != 'Review Management'">شحن جزئي</option>
         <option value="تم شحن">تم شحن</option>
+        <option value="تم التسليم">تم التسليم</option>
         <option value="تم الاستلام" *ngIf="this.user != 'Review Management'">تم الاستلام</option>
         <option value="تم التحصيل" *ngIf="user != 'Operation Management' && user != 'Finance and operations management' && this.user != 'Operation Specialist' && this.user != 'Logistics Specialist'">تم التحصيل</option>
         <option value="مؤجل" *ngIf="user !== 'Financial Accounts'">مؤجل</option>
@@ -275,6 +282,15 @@
         <option value="1">تم المراجعة</option>
       </select>
      </div>
+     <div class="form-group" *ngIf="canShopifyReview() && !isFinancialAccountsReadonly">
+      <select id="shopifyfilter" class="form-control bg-main" (change)="filter($event)">
+        <option selected disabled value="">طلبات Shopify</option>
+        <option value="all">الكل</option>
+        <option value="1">Shopify فقط</option>
+        <option value="pending_review">بانتظار المراجعة</option>
+        <option value="reviewed">تمت مراجعتها</option>
+      </select>
+     </div>
      <div class="form-group" *ngIf="user == 'Admin'">
       <select id="collectType" class="form-control bg-main" (change)="filter($event)">
         <option selected disabled >نوع التحصيل</option>
@@ -304,6 +320,7 @@
         <tr>
           <!-- <th scope="col">#</th> -->
           <th scope="col">  رقم الطلب</th>
+          <th scope="col">Shopify</th>
           <th scope="col"> تاريح الطلب</th>
           <th scope="col" >تاريخ التسليم ( حسب العميل )</th>
           <th scope="col" *ngIf="user!= 'Admin'"> الايام</th>
@@ -334,10 +351,10 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let item of orders; trackBy: trackById; let i = index" [id]="item?.id">
+        <tr *ngFor="let item of orders; trackBy: trackById; let i = index" [id]="item?.id" [class.shopify-pending-row]="isShopifyOrder(item) && !isShopifyReviewed(item)">
           <!-- <th scope="row">{{i+1}}</th> -->
           <td>
-            <div class="d-flex">
+            <div class="d-flex align-items-center flex-wrap">
               <!-- <span>{{item.id}}</span> -->
               <a [routerLink]="['/dashboard/shipping/orderdetails', item.id]" target="_blank">
                 <span style="cursor: pointer;">
@@ -364,6 +381,27 @@
                 </mat-menu>
               </span>
             </div>
+          </td>
+          <td class="shopify-cell">
+            <ng-container *ngIf="isShopifyOrder(item); else notShopify">
+              <div class="shopify-cell-inner">
+                <span class="shopify-order-badge" [matTooltip]="item.reference_number ? ('Shopify ' + item.reference_number) : 'طلب Shopify'">Shopify</span>
+                <button
+                  type="button"
+                  class="shopify-review-btn"
+                  *ngIf="canShopifyReview()"
+                  [matTooltip]="shopifyReviewTooltip(item)"
+                  (click)="openShopifyReview(item)">
+                  <mat-icon>{{ isShopifyReviewed(item) ? 'verified' : 'rate_review' }}</mat-icon>
+                </button>
+              </div>
+              <small class="shopify-review-meta d-block" *ngIf="isShopifyReviewed(item)">
+                {{ item.shopify_reviewer?.name || '—' }}
+              </small>
+              <span class="badge bg-danger d-block mt-1" *ngIf="item.shopify_needs_product_review"
+                matTooltip="منتج غير مربوط بصنف — راجع الطلب واربط الصنف الصحيح">⚠️ يحتاج ربط منتج</span>
+            </ng-container>
+            <ng-template #notShopify>—</ng-template>
           </td>
           <td style="white-space: pre-line;">{{item.order_date  | customDate}}</td>
           <td style="white-space: pre-line;">{{item.delivery_date  | customDate}}</td>
@@ -459,8 +497,12 @@
                 <mat-icon>more_vert</mat-icon>
               </span>
             <mat-menu #menu="matMenu">
-              <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.customer_type == 'شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي' || item.order_status =='مؤجل')" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
+              <button mat-menu-item *ngIf="isShopifyOrder(item) && canShopifyReview()" (click)="openShopifyReview(item)">
+                <span>مراجعة طلب Shopify</span>
+                <mat-icon class="mx-2">fact_check</mat-icon>
+              </button>
+              <ng-container *ngIf="canShipOrderMenu()">
+                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="canShipOrder(item)" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
                   <span>شحن الطلب</span>
                 </button>
               </ng-container>
@@ -472,12 +514,6 @@
               </ng-container>
 
               <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.customer_type == 'افراد' && (item.order_status =='طلب مؤكد' || item.order_status =='مؤجل')" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
-                  <span>شحن الطلب</span>
-                </button>
-              </ng-container>
-
-              <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
                 <button mat-menu-item *ngIf="item.order_status=='تم شحن'&& item.order_type == 'طلب صيانة' && !item.order_details.maintenance_date " (click)="receive(item.id)">
                   <span> استلام الطلب</span>
                 </button>
@@ -489,8 +525,14 @@
                 </button>
               </ng-container>
 
+              <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist' || user == 'Shipping Management'">
+                <button mat-menu-item *ngIf="item.order_status=='تم شحن' || item.order_status=='شحن جزئي'" (click)="confirmDelivery(item.id)">
+                  <span>تأكيد التسليم</span>
+                </button>
+              </ng-container>
+
               <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.order_status=='تم شحن' && (item.order_type !='طلب صيانة' || item.order_details.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
+                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم') && (item.order_type !='طلب صيانة' || item.order_details.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
                   <span> تحصيل الطلب</span>
                 </button>
               </ng-container>
@@ -520,7 +562,7 @@
               </ng-container>
 
               <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' || item.order_status == 'تم شحن' " mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التاجيل','postponed',item)">
+                <button *ngIf="canPostponeOrder() && (item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' || item.order_status == 'تم شحن' )" mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التاجيل','postponed',item)">
                   <span>تاجيل الطلب</span>
                 </button>
               </ng-container>
@@ -537,17 +579,14 @@
                 </button>
               </ng-container>
 
-              <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Shipping Management'">
-                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="(item?.order_type == 'جديد' || item?.order_type == 'طلب استبدال' || (item?.order_type == 'طلب مرتجع' && user == 'Admin')) &&
-                  (item?.order_status=='طلب جديد' ||
-                  item?.order_status=='طلب مؤكد' ||
-                  item?.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/editorder',item.id]">
+              <ng-container *ngIf="canEditOrder(item)">
+                <button (click)="orderScroll(item.id)" mat-menu-item [routerLink]="['/dashboard/shipping/editorder',item.id]">
                   <span>تعديل الطلب</span>
                 </button>
               </ng-container>
 
-              <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management'">
-                <button *ngIf="item.order_status=='تم شحن'" mat-menu-item [routerLink]="['/dashboard/shipping/editorder',item.id]">
+              <ng-container *ngIf="canEditShippedOrder(item)">
+                <button mat-menu-item [routerLink]="['/dashboard/shipping/editorder',item.id]">
                   <span> تحصيل متغير</span>
                 </button>
               </ng-container>
@@ -614,6 +653,7 @@
           <a class="item-title" [routerLink]="['/dashboard/shipping/orderdetails', item.id]" target="_blank" (click)="$event.stopPropagation()">
             {{ item.id }} — {{ item.customer_name }}
           </a>
+          <span *ngIf="isShopifyOrder(item)" class="shopify-order-badge shopify-order-badge--sm">Shopify</span>
           <span class="list-orders-status-pill" [ngClass]="getStatusColor(item.order_status)">{{ item.order_status }}</span>
         </div>
         <div class="item-head-tools">
@@ -639,19 +679,18 @@
             <mat-icon>tune</mat-icon>
           </span>
           <mat-menu #mMain="matMenu">
-            <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.customer_type == 'شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي' || item.order_status =='مؤجل')" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
+            <button mat-menu-item *ngIf="isShopifyOrder(item) && canShopifyReview()" (click)="openShopifyReview(item)">
+              <span>مراجعة طلب Shopify</span>
+              <mat-icon class="mx-2">fact_check</mat-icon>
+            </button>
+            <ng-container *ngIf="canShipOrderMenu()">
+              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="canShipOrder(item)" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
                 <span>شحن الطلب</span>
               </button>
             </ng-container>
             <ng-container *ngIf="user == 'Admin' || user == 'Customer Service' || user == 'Shipping Management' || ((user =='Operation Management' || user =='Finance and operations management') && item.order_status=='تم الصيانة')">
               <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.order_status=='جديد' || item.order_status=='طلب جديد' || item.order_status=='تم الصيانة'" [routerLink]="['/dashboard/shipping/confirmOrder',item.id]">
                 <span> تاكيد الطلب</span>
-              </button>
-            </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.customer_type == 'افراد' && (item.order_status =='طلب مؤكد' || item.order_status =='مؤجل')" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
-                <span>شحن الطلب</span>
               </button>
             </ng-container>
             <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
@@ -664,8 +703,13 @@
                 <span>  تم الصيانة</span>
               </button>
             </ng-container>
+            <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist' || user == 'Shipping Management'">
+              <button mat-menu-item *ngIf="item.order_status=='تم شحن' || item.order_status=='شحن جزئي'" (click)="confirmDelivery(item.id)">
+                <span>تأكيد التسليم</span>
+              </button>
+            </ng-container>
             <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item.order_status=='تم شحن' && (item.order_type !='طلب صيانة' || item.order_details.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
+              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم') && (item.order_type !='طلب صيانة' || item.order_details.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
                 <span> تحصيل الطلب</span>
               </button>
             </ng-container>
@@ -690,7 +734,7 @@
               </button>
             </ng-container>
             <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' || item.order_status == 'تم شحن' " mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التاجيل','postponed',item)">
+              <button *ngIf="canPostponeOrder() && (item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' || item.order_status == 'تم شحن' )" mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التاجيل','postponed',item)">
                 <span>تاجيل الطلب</span>
               </button>
             </ng-container>
@@ -704,16 +748,13 @@
                 <span> تحصيل جزئي</span>
               </button>
             </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Shipping Management'">
-              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="(item?.order_type == 'جديد' || item?.order_type == 'طلب استبدال' || (item?.order_type == 'طلب مرتجع' && user == 'Admin')) &&
-                (item?.order_status=='طلب جديد' ||
-                item?.order_status=='طلب مؤكد' ||
-                item?.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/editorder',item.id]">
+            <ng-container *ngIf="canEditOrder(item)">
+              <button (click)="orderScroll(item.id)" mat-menu-item [routerLink]="['/dashboard/shipping/editorder',item.id]">
                 <span>تعديل الطلب</span>
               </button>
             </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management'">
-              <button *ngIf="item.order_status=='تم شحن'" mat-menu-item [routerLink]="['/dashboard/shipping/editorder',item.id]">
+            <ng-container *ngIf="canEditShippedOrder(item)">
+              <button mat-menu-item [routerLink]="['/dashboard/shipping/editorder',item.id]">
                 <span> تحصيل متغير</span>
               </button>
             </ng-container>

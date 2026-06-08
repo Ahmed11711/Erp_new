@@ -11,6 +11,8 @@ import { ShippingCompanyService } from '../services/shipping-company.service';
 import { ShippingLinesService } from '../services/shipping-lines.service';
 import { ShippingWayService } from '../services/shipping-way.service';
 import { ActivatedRoute } from '@angular/router';
+import { BanksService } from 'src/app/financial/services/banks.service';
+import { collectRenewPrepaidParams } from '../utils/order-renew-prepaid.flow';
 
 @Component({
   selector: 'app-customer-company-details',
@@ -37,16 +39,19 @@ export class CustomerCompanyDetailsComponent {
   pageSizeOptions = [15,50,100];
 
   company_id!:number;
+  banks: { id: number; name: string }[] = [];
 
     constructor(private orderSource:OrderSourceService ,private shippingWay: ShippingWayService , private datePipe:DatePipe,
       private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
-      private filterService:FilterOrderService , private shippingLine:ShippingLinesService, private route:ActivatedRoute
+      private filterService:FilterOrderService , private shippingLine:ShippingLinesService, private route:ActivatedRoute,
+      private bankService: BanksService
       ) {
 
     }
 
     ngOnInit(): void {
       this.company_id = this.route.snapshot.params['id'];
+      this.bankService.bankSelect().subscribe((res: any) => (this.banks = res || []));
       console.log(this.company_id);
 
       this.filter(arguments);
@@ -210,7 +215,7 @@ export class CustomerCompanyDetailsComponent {
   }
 
 
-  changeOrderStatus(type:string,id:number,title:string,action:string){
+  changeOrderStatus(type:string,id:number,title:string,action:string, orderItem?: any){
     if (type =='شركة' && (action=='cancel' || action=='refused')) {
       Swal.fire({
         title: title,
@@ -254,11 +259,21 @@ export class CustomerCompanyDetailsComponent {
             return 'يجب ادخال ملاحظة'
           }
           if (value !== '') {
-            this.order.chngeStatus(id,action,value,0,0,0).subscribe(res=>{
-              console.log(res);
-              this.filter(arguments);
-            }
-            )
+            const runChange = async () => {
+              const param: Record<string, string | number> = {};
+              if (action === 'renew' && orderItem) {
+                const renewParams = await collectRenewPrepaidParams(orderItem, this.banks);
+                if (renewParams === null) {
+                  return;
+                }
+                Object.assign(param, renewParams);
+              }
+              this.order.chngeStatus(id, action, value, 0, 0, 0, param).subscribe((res) => {
+                console.log(res);
+                this.filter(arguments);
+              });
+            };
+            runChange();
           }
           return undefined
         }

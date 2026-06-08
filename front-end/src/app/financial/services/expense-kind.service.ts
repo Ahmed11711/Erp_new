@@ -31,4 +31,8 @@ export class ExpenseKindService {
   update(id: number, body: { expense_type: string; expense_kind: string; tree_account_id?: number | null }): Observable<any> {
     return this.http.put<any>(`${environment.Url}/expense_kind/${id}`, body);
   }
+
+  ledgerAccounts(): Observable<{ parent: { id: number; code: string; name: string }; accounts: { id: number; code?: string; name: string }[] }> {
+    return this.http.get<any>(`${environment.Url}/expense_kind/ledger-accounts`);
+  }
 }

@@ -12,14 +12,17 @@ export class TokenInterceptor implements HttpInterceptor {
   constructor(private authService: AuthService, private loadingService: LoadingService) {}
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    this.loadingService.showLoading(); // Display loading indicator before request
+    const skipGlobalLoading = request.headers.get('X-Skip-Global-Loading') === '1';
+    if (!skipGlobalLoading) {
+      this.loadingService.showLoading(); // Display loading indicator before request
+    }
 
     const token = this.authService.getToken();
 
-    // Clone request to add the authorization header
-    const modifiedRequest = token ? request.clone({
-      setHeaders: { Authorization: `Bearer ${token}` }
-    }) : request;
+    // Clone request to add the authorization header (يطبّق على الطلبات التي تضيفها الخدمة مثل X-Skip-Global-Loading)
+    const modifiedRequest = token
+      ? request.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
+      : request;
 
     return next.handle(modifiedRequest).pipe(
       catchError((error: HttpErrorResponse) => {
@@ -43,7 +46,9 @@ export class TokenInterceptor implements HttpInterceptor {
         return throwError(error);
       }),
       finalize(() => {
-        this.loadingService.hideLoading(); // Hide loading indicator after response
+        if (!skipGlobalLoading) {
+          this.loadingService.hideLoading(); // Hide loading indicator after response
+        }
       })
     );
   }

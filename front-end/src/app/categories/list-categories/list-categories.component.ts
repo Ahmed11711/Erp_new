@@ -82,11 +82,7 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
 
  /** مطابقة تكلفة الأصناف مع حسابات المخزون في الشجرة + قيد يومية. */
  openInventoryGlSync(): void {
-  const allowed =
-   this.user === 'Admin' ||
-   this.user === 'Account Management' ||
-   this.user === 'Financial Accounts';
-  if (!allowed) {
+  if (this.user !== 'Admin') {
    return;
   }
 
@@ -361,6 +357,42 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
      },
     });
    }
+  });
+ }
+
+ promoteToFinished(item: { id: number; category_name?: string; warehouse?: string; quantity?: number }) {
+  const qty = Number(item?.quantity ?? 0);
+  Swal.fire({
+   title: 'ترقية لمنتج تام',
+   html:
+    `<p>هل تريد ترقية الصنف <strong>${item.category_name ?? ''}</strong> من تحت التشغيل إلى منتج تام؟</p>` +
+    `<p class="text-muted small">الكمية الحالية: ${qty} — سيتم نقلها بالكامل إلى مخزن المنتج التام مع قيد محاسبي.</p>`,
+   icon: 'question',
+   showCancelButton: true,
+   confirmButtonText: 'ترقية',
+   cancelButtonText: 'إلغاء',
+  }).then((result: { isConfirmed: boolean }) => {
+   if (!result.isConfirmed) return;
+   this.category.promoteToFinished(item.id).subscribe({
+    next: (res: any) => {
+     if (res?.success) {
+      Swal.fire({
+       icon: 'success',
+       title: 'تم ترقية الصنف بنجاح',
+       text: res.message ?? 'تم نقل الصنف إلى مخزن المنتج التام',
+       timer: 3000,
+       showConfirmButton: false,
+      });
+      this.search();
+     } else {
+      Swal.fire({ icon: 'error', title: 'فشلت الترقية', text: res?.message ?? '' });
+     }
+    },
+    error: (err: any) => {
+     const msg = err?.error?.message ?? err?.error?.error ?? err?.message ?? 'تعذر ترقية الصنف';
+     Swal.fire({ icon: 'error', title: 'فشلت الترقية', text: String(msg) });
+    },
+   });
   });
  }
 

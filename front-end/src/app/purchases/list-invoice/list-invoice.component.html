@@ -52,6 +52,14 @@
           <label for="">تاريخ الاستلام</label>
           <input class="form-control" type="date" (change)="onrecieveDateChange($event)" [value]="recieveDate">
         </div>
+        <div class="col-md-2">
+          <label for="purchase-id-search">الرقم التسلسلي</label>
+          <input id="purchase-id-search" class="form-control" type="number" min="1" step="1"
+            placeholder="بحث بالرقم..."
+            [(ngModel)]="purchaseIdSearch"
+            (ngModelChange)="onPurchaseIdSearchChange()"
+            name="purchaseIdSearch">
+        </div>
 
       </div>
     </form>
@@ -60,6 +68,7 @@
     <table class="table w-75 m-auto text-center table-hover">
       <thead class="bg-dark text-white">
         <tr>
+          <th scope="col">الرقم التسلسلي</th>
           <th scope="col">  المرجع</th>
           <th scope="col"> اسم المورد</th>
           <th scope="col"> حالة الشراء</th>
@@ -76,6 +85,7 @@
       </thead>
       <tbody>
         <tr *ngFor="let item of invoices; let i = index" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
+          <td dir="ltr">{{ item?.id }}</td>
           <td>{{item?.invoice_number}}</td>
           <td>{{item?.supplier?.supplier_name}}</td>
           <td>{{item?.invoice_type}}</td>
@@ -96,7 +106,7 @@
           </td>
           <td>{{item?.edits}}</td>
           <td dir="ltr">{{ item?.invoice_lines_qty != null ? item?.invoice_lines_qty : '—' }}</td>
-          <td>{{item?.receipt_date}}</td>
+          <td dir="ltr">{{ !item?.updated_purchase ? item?.receipt_date : item?.updated_purchase?.receipt_date }}</td>
           <td>
             <span [matMenuTriggerFor]="rowMenu" style="cursor: pointer; font-size: 1.25rem; line-height: 1;" class="text-secondary" title="خيارات">&#8942;</span>
             <mat-menu #rowMenu="matMenu">

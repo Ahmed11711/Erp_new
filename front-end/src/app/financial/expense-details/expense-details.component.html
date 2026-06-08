@@ -25,14 +25,14 @@
           <p>{{ paymentPlaceLabel(data) }}</p>
         </div>
         <div class="col-md-4">
-          <h3>مصدر الدفع</h3>
+          <h3>مصدر الدفع (دائن)</h3>
           <p>{{ paymentSourceName(data) }}</p>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4" *ngIf="!isSplit">
           <h3>نوع المصروف</h3>
           <p>{{ data.expense_type }}</p>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4" *ngIf="!isSplit">
             <h3>فئة المصروف</h3>
             <p>{{ data?.kind?.expense_kind }}</p>
         </div>
@@ -41,18 +41,14 @@
           <p>{{ data?.expens_statement }}</p>
         </div>
         <div class="col-md-4">
-          <h3>المبلغ</h3>
+          <h3>المبلغ الإجمالي</h3>
           <p>{{ data?.amount | customNumber }}</p>
         </div>
         <div class="col-md-4">
           <h3>ملاحظات</h3>
           <p>{{ data?.note }}</p>
         </div>
-        <div class="col-md-4">
-          <h3>الوصف</h3>
-          <p>{{ data?.address }}</p>
-        </div>
-        <div class="col-md-6">
+        <div class="col-md-6" *ngIf="!isSplit">
           <h3>حساب المصروف في الشجرة <span class="text-muted fs-6">(مدين في القيد)</span></h3>
           <p class="text-muted">{{ treeAccountLine(data.debit_tree_account) }}</p>
         </div>
@@ -61,6 +57,31 @@
           <p class="text-muted">{{ treeAccountLine(creditTreeFromRow(data)) }}</p>
         </div>
       </div>
+
+      <div class="row mt-4" *ngIf="isSplit">
+        <div class="col-12">
+          <h3>بنود التقسيم (مدين)</h3>
+          <table class="table table-bordered text-center">
+            <thead class="bg-dark text-white">
+              <tr>
+                <th>نوع المصروف</th>
+                <th>فئة المصروف</th>
+                <th>المبلغ</th>
+                <th>حساب الشجرة (مدين)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let line of data.lines">
+                <td>{{ line.expense_type }}</td>
+                <td>{{ line.kind?.expense_kind }}</td>
+                <td dir="ltr">{{ line.amount | customNumber }}</td>
+                <td class="text-start small text-muted">{{ lineDebitTreeLabel(line) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="row mt-3" *ngIf="data.expense_image">
         <div class="col-12">
           <h3>صورة</h3>

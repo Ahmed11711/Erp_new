@@ -157,13 +157,27 @@
               </thead>
               <tbody formArrayName="items">
                 <tr *ngFor="let item of itemsFormArray.controls; let i = index" [formGroupName]="i">
-                  <td>
-                    <select class="form-control" formControlName="account_id" required>
-                      <option value="">اختر الحساب</option>
-                      <option *ngFor="let account of accounts" [value]="account.id">
-                        {{ account.code }} - {{ account.name }}
-                      </option>
-                    </select>
+                  <td class="account-cell">
+                    <input type="text" class="form-control account-search-input"
+                      *ngIf="itemAccountCtrls[i]"
+                      [formControl]="itemAccountCtrls[i]"
+                      [matAutocomplete]="accountAuto"
+                      (focus)="refreshRowFilter(i)"
+                      (blur)="onAccountBlur(i)"
+                      placeholder="ابحث بالكود أو الاسم..."
+                      autocomplete="off" />
+                    <mat-autocomplete #accountAuto="matAutocomplete"
+                      class="daily-entry-account-panel"
+                      [displayWith]="displayAccountOption"
+                      (optionSelected)="onAccountSelected(i, $event)"
+                      [autoActiveFirstOption]="true">
+                      <mat-option *ngFor="let acc of getRowFilteredAccounts(i)" [value]="acc">
+                        {{ acc.label }}
+                      </mat-option>
+                    </mat-autocomplete>
+                    <small class="account-search-hint" *ngIf="accountOptions.length > accountAutocompleteCap">
+                      اكتب للبحث — يُعرض أول {{ accountAutocompleteCap }} نتيجة
+                    </small>
                   </td>
                   <td>
                     <input type="number" class="form-control" formControlName="debit" 

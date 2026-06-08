@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { TreeAccountService } from '../services/tree-account.service';
 import { AccountingReportService } from '../services/accounting-report.service';
 import { TreeAccount } from '../interfaces/tree-account.interface';
+import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-accounting-tree',
@@ -16,6 +17,7 @@ export class AccountingTreeComponent implements OnInit {
   searchTerm = '';
   loading = false;
   recalculating = false;
+  syncingInventoryGl = false;
   showAddDialog = false;
   showEditDialog = false;
   selectedAccount: TreeAccount | null = null;
@@ -361,6 +363,136 @@ export class AccountingTreeComponent implements OnInit {
         console.error('Recalculate error:', err);
         alert(err?.error?.message || 'فشل إعادة حساب الأرصدة');
       }
+    });
+  }
+
+  private escHtml(s: string): string {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private formatMoney(n: number): string {
+    const x = Number(n ?? 0);
+    if (Number.isNaN(x)) {
+      return '0.00';
+    }
+    return x.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /**
+   * مطابقة أرصدة حسابات المخزون في الشجرة مع التكلفة الفعلية للأصناف في المخازن.
+   * يعرض الفروقات أولاً، ثم يُرحّل قيد تسوية واحد بالفرق فقط (آمن وقابل للتكرار).
+   */
+  openInventoryGlSync(): void {
+    if (this.syncingInventoryGl) {
+      return;
+    }
+
+    this.syncingInventoryGl = true;
+    this.accountingReportService.previewInventoryGlSync().subscribe({
+      next: (preview: any) => {
+        this.syncingInventoryGl = false;
+        const rows: any[] = preview?.adjustments ?? [];
+        const willPost = !!preview?.will_post;
+
+        let table =
+          '<div dir="rtl" style="max-height:320px;overflow:auto;text-align:right;font-size:13px;">';
+        if (!willPost || rows.length === 0) {
+          table +=
+            '<p class="mb-2">لا توجد فروقات تتطلب ترحيلاً؛ أرصدة حسابات المخزون متطابقة بالفعل مع مجموع تكلفة الأصناف في المخازن.</p>';
+        } else {
+          table +=
+            '<table class="table table-sm table-bordered mb-0"><thead><tr>' +
+            '<th>الحساب</th><th>الكود</th><th>تكلفة الأصناف</th><th>رصيد القيود</th><th>فرق التسوية</th>' +
+            '</tr></thead><tbody>';
+          for (const r of rows) {
+            const nm = this.escHtml(String(r.account_name ?? ''));
+            const adj = Number(r.adjustment ?? 0);
+            const adjCls = adj >= 0 ? 'text-success' : 'text-danger';
+            table += `<tr><td>${nm}</td><td>${this.escHtml(String(r.account_code ?? ''))}</td>` +
+              `<td>${this.formatMoney(Number(r.target_cost_from_items ?? 0))}</td>` +
+              `<td>${this.formatMoney(Number(r.book_balance_from_entries ?? 0))}</td>` +
+              `<td class="${adjCls}">${this.formatMoney(adj)}</td></tr>`;
+          }
+          table += '</tbody></table>';
+        }
+        table += '</div>';
+
+        Swal.fire({
+          title: 'تصحيح أرصدة المخزون',
+          html:
+            '<p class="text-muted small mb-2">يُحسب مجموع تكلفة الأصناف لكل حساب مخزون ويُقارن برصيد القيود، ثم يُنشأ <strong>قيد يومية واحد</strong> بالفرق فقط مع طرف مقابل فروقات الجرد.</p>' +
+            table,
+          width: '720px',
+          showCancelButton: willPost && rows.length > 0,
+          confirmButtonText: willPost && rows.length > 0 ? 'ترحيل قيد التسوية' : 'حسناً',
+          cancelButtonText: 'إلغاء',
+        }).then((res: { isConfirmed: boolean }) => {
+          if (!res.isConfirmed || !willPost || rows.length === 0) {
+            return;
+          }
+          this.syncingInventoryGl = true;
+          this.accountingReportService.postInventoryGlSync().subscribe({
+            next: (out: any) => {
+              this.syncingInventoryGl = false;
+              if (!out?.success) {
+                Swal.fire({ icon: 'error', title: 'لم يتم الترحيل', text: String(out?.message ?? '') });
+                return;
+              }
+              if (!out?.posted) {
+                Swal.fire({ icon: 'info', title: out?.message ?? 'لا يوجد ما يُرحَّل' });
+                return;
+              }
+
+              const jl: any[] = out?.journal_lines ?? [];
+              let jt =
+                '<div dir="rtl" style="max-height:280px;overflow:auto;font-size:13px;">' +
+                `<p class="mb-2"><strong>رقم القيد:</strong> ${this.escHtml(String(out.entry_number ?? ''))} ` +
+                `(معرّف ${this.escHtml(String(out.daily_entry_id ?? ''))})</p>` +
+                '<table class="table table-sm table-bordered mb-0"><thead><tr>' +
+                '<th>الحساب</th><th>مدين</th><th>دائن</th><th>البيان</th>' +
+                '</tr></thead><tbody>';
+              for (const ln of jl) {
+                const nm = this.escHtml(String(ln.account_name ?? ln.account_code ?? ''));
+                jt += `<tr><td>${nm}</td><td>${this.formatMoney(Number(ln.debit ?? 0))}</td>` +
+                  `<td>${this.formatMoney(Number(ln.credit ?? 0))}</td>` +
+                  `<td>${this.escHtml(String(ln.note ?? ''))}</td></tr>`;
+              }
+              jt += '</tbody></table></div>';
+
+              Swal.fire({
+                icon: 'success',
+                title: 'تم إنشاء القيد وتحديث الشجرة',
+                html: jt,
+                width: '720px',
+              });
+              this.loadAccounts();
+            },
+            error: (err: any) => {
+              this.syncingInventoryGl = false;
+              const msg =
+                err?.error?.message ||
+                (err?.status === 403
+                  ? 'ليست لديك صلاحية لترحيل تسوية المخزون.'
+                  : 'فشل ترحيل قيد التسوية.');
+              Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+            },
+          });
+        });
+      },
+      error: (err: any) => {
+        this.syncingInventoryGl = false;
+        const msg =
+          err?.error?.message ||
+          (err?.status === 403
+            ? 'ليست لديك صلاحية لمعاينة تسوية المخزون.'
+            : 'فشل تحميل معاينة التسوية.');
+        Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+      },
     });
   }
 

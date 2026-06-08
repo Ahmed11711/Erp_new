@@ -646,6 +646,28 @@ tbody tr:hover {
   box-shadow: 0 12px 40px rgba(14, 64, 87, 0.22) !important;
 }
 
+/* شركات الشحن — لوحة بحث حساب الذمم فوق الجدول وأزرار الـ toolbar في لوحة التحكم */
+.cdk-overlay-pane.shipping-company-receivable-panel {
+  z-index: 100200 !important;
+}
+
+/* القيود اليومية — لوحة بحث الحساب فوق نافذة القيد والقائمة الجانبية */
+.cdk-overlay-container:has(.cdk-overlay-pane.daily-entry-account-panel) {
+  z-index: 100300 !important;
+}
+
+.cdk-overlay-pane.daily-entry-account-panel {
+  z-index: 100300 !important;
+}
+
+.mat-mdc-autocomplete-panel.daily-entry-account-panel {
+  max-width: min(420px, calc(100vw - 22rem - 48px));
+}
+
+/* حسابات الخدمات — لوحة بحث الحساب فوق نافذة الحوار */
+.cdk-overlay-pane.service-account-autocomplete-panel {
+  z-index: 100200 !important;
+}
 /* ╔══════════════════════════════════════════════════════════╗
    ║              MOBILE RESPONSIVE STYLES                   ║
    ╚══════════════════════════════════════════════════════════╝ */

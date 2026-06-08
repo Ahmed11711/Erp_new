@@ -7,34 +7,26 @@ import { WarehouseDetailsComponent } from './warehouse-details/warehouse-details
 import { MonthlyInventoryComponent } from './monthly-inventory/monthly-inventory.component';
 import { InventoryImportComponent } from './inventory-import/inventory-import.component';
 import { departmentGuard } from '../guards/department.guard';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
+
+const warehouseAccess = {
+  canActivate: [departmentGuard],
+  data: { rbacPermissions: [...RBAC_ROUTE.inventoryWarehouse] },
+};
 
 const routes: Routes = [
-  {path: 'list',component:ListWarehouseComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
-  {path: 'listwarhouse',component:ListWarehouseComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
+  { path: 'list', component: ListWarehouseComponent, ...warehouseAccess },
+  { path: 'listwarhouse', component: ListWarehouseComponent, ...warehouseAccess },
   { path: 'listwarehouse', redirectTo: 'listwarhouse', pathMatch: 'full' },
-  {path:'cat',component:CatComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
-  {path:'cat_details/:id',component:CatDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
-  {path:'warehousedetails',component:WarehouseDetailsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
-  {path:'monthlyinventory',component:MonthlyInventoryComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
-  {path:'inventory-import',component:InventoryImportComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin','Account Management','Logistics Specialist']}
-  },
+  { path: 'cat', component: CatComponent, ...warehouseAccess },
+  { path: 'cat_details/:id', component: CatDetailsComponent, ...warehouseAccess },
+  { path: 'warehousedetails', component: WarehouseDetailsComponent, ...warehouseAccess },
+  { path: 'monthlyinventory', component: MonthlyInventoryComponent, ...warehouseAccess },
+  { path: 'inventory-import', component: InventoryImportComponent, ...warehouseAccess },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class WarehouseRoutingModule { }
+export class WarehouseRoutingModule {}

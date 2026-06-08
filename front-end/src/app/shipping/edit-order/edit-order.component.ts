@@ -10,6 +10,7 @@ import { OrderSourceService } from '../services/order-source.service';
 import { OrderService } from '../services/order.service';
 import { ShippingWayService } from '../services/shipping-way.service';
 import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 
@@ -31,6 +32,11 @@ export class EditOrderComponent {
   errormessage:boolean=false;
   products:any[]=[];
   banksData:any[]=[];
+  location:any[]=[];
+  cities:any[]=[];
+  governName = false;
+  useArabicLocation = true;
+  orderLoading = true;
 
   openbtn:boolean=true;
   formdiv:boolean=false;
@@ -48,7 +54,8 @@ export class EditOrderComponent {
     private _snackBar:MatSnackBar,
     private router:Router,
     private route:ActivatedRoute,
-    private authService:AuthService
+    private authService:AuthService,
+    public rbac: RbacService,
     ){
       this.imgUrl = environment.imgUrl;
 
@@ -61,15 +68,81 @@ export class EditOrderComponent {
       this.id = result?.id;
     });
     this.bankService.bankSelect().subscribe((result:any)=>this.banksData=result);
+    this.shippingWay.data().subscribe(result => this.shippingWays = result);
+    this.http.get('assets/egypt/governorates.json').subscribe((data: any) => {
+      this.location = data;
+      if (this.order?.governorate) {
+        this.syncLocationMode(this.order.governorate);
+      }
+    });
+    this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
+      this.cities = data;
+    });
     this.getOrder();
 
     this.orderService.getProducts().subscribe((result:any)=>this.products = result);
 
   }
 
+  get canEditOrder(): boolean {
+    return this.rbac.can('orders.edit');
+  }
+
+  filterCitiesForGovernorate(governorate: string): void {
+    const gov = this.location.find(
+      (elem: any) => elem.governorate_name_ar === governorate || elem.governorate_name_en === governorate
+    );
+    if (!gov) {
+      return;
+    }
+    this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
+      this.cities = data.filter((elem: any) => elem.governorate_id == gov.id);
+    });
+  }
+
+  private syncLocationMode(governorate: string | null | undefined): void {
+    const value = String(governorate ?? '').trim();
+    if (value === '') {
+      this.useArabicLocation = true;
+      this.governName = false;
+      return;
+    }
+    const matched = this.location.find(
+      (elem: any) => elem.governorate_name_ar === value || elem.governorate_name_en === value
+    );
+    this.useArabicLocation = !!matched;
+    this.governName = value === 'القاهرة' || matched?.governorate_name_ar === 'القاهرة';
+    if (matched) {
+      this.filterCitiesForGovernorate(matched.governorate_name_ar);
+    }
+  }
+
+  onGovernorateChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.syncLocationMode(value);
+    this.form.patchValue({ city: '' });
+  }
+
+  displayText(value: unknown): string {
+    if (value === null || value === undefined) {
+      return '—';
+    }
+    const text = String(value).trim();
+    return text === '' || text.toLowerCase() === 'null' ? '—' : text;
+  }
+
+  productImageSrc(imgsrc: string | null | undefined): string | null {
+    if (!imgsrc || String(imgsrc).trim() === '' || String(imgsrc).toLowerCase() === 'null') {
+      return null;
+    }
+    return this.imgUrl + imgsrc;
+  }
+
   getOrder(){
+    this.orderLoading = true;
     this.orderService.getOrderById(this.id).subscribe((result:any)=>{
       this.order = result;
+      this.orderLoading = false;
 
       this.customer_companyID = result?.company_id;
 
@@ -79,6 +152,8 @@ export class EditOrderComponent {
       this.prepaid_amount = result?.prepaid_amount;
 
       this.customerTypeVal = result?.customer_type;
+      this.orderStatus = result?.order_status;
+      this.syncLocationMode(result?.governorate);
 
       this.order_details = result?.order_products.map(elm=>{
         return {
@@ -98,14 +173,22 @@ export class EditOrderComponent {
       this.net_total = result?.net_total;
 
       this.form.patchValue({
-        'shipping_cost' :result.shipping_cost,
-        'prepaid_amount' :result.prepaid_amount,
-        'discount' :result.discount,
-        'order_notes' :result.order_notes,
-        'bank':result?.bank_id
-      })
-
-
+        shipping_cost: result.shipping_cost,
+        prepaid_amount: result.prepaid_amount,
+        discount: result.discount,
+        order_notes: result.order_notes,
+        bank: result?.bank_id,
+        customer_name: result.customer_name,
+        customer_phone_1: result.customer_phone_1,
+        customer_phone_2: result.customer_phone_2,
+        tel: result.tel,
+        governorate: result.governorate,
+        city: result.city,
+        address: result.address,
+        shipping_method_id: result.shipping_method_id,
+      });
+    }, () => {
+      this.orderLoading = false;
     })
   }
 
@@ -121,7 +204,7 @@ export class EditOrderComponent {
 
 
   editQuantity(e,index:number){
-    if ((this.user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management') && e.target.value < this.order_details[index].minQuantity) {
+    if (!this.canEditOrder && e.target.value < this.order_details[index].minQuantity) {
       Swal.fire({
         icon:'error',
         title:'لا يمكنك تقليل الكمية'
@@ -156,17 +239,25 @@ export class EditOrderComponent {
 
 
   form:FormGroup = new FormGroup({
-    'bank' :new FormControl(null),
-    'productprice' :new FormControl(null ),
-    'productquantity' :new FormControl(null ),
-    'order_notes' :new FormControl(null ),
-    'order_image' :new FormControl(null),
-    'total_invoice' :new FormControl(null ),
-    'shipping_cost' :new FormControl(null ),
-    'prepaid_amount' :new FormControl(null ),
-    'discount' :new FormControl(null),
-    'net_total' :new FormControl(null),
-    'vat' :new FormControl(null),
+    bank: new FormControl(null),
+    productprice: new FormControl(null),
+    productquantity: new FormControl(null),
+    order_notes: new FormControl(null),
+    order_image: new FormControl(null),
+    total_invoice: new FormControl(null),
+    shipping_cost: new FormControl(null),
+    prepaid_amount: new FormControl(null),
+    discount: new FormControl(null),
+    net_total: new FormControl(null),
+    vat: new FormControl(null),
+    customer_name: new FormControl(null),
+    customer_phone_1: new FormControl(null),
+    customer_phone_2: new FormControl(null),
+    tel: new FormControl(null),
+    governorate: new FormControl(null),
+    city: new FormControl(null),
+    address: new FormControl(null),
+    shipping_method_id: new FormControl(null),
   })
 
   changeProductPrice(e:any){
@@ -225,8 +316,17 @@ export class EditOrderComponent {
     formData.append('discount', data.discount);
     formData.append('net_total', data.net_total);
     formData.append('order_id', data.order_id);
-    formData.append('bank_id', data.bank);
+    formData.append('bank_id', data.bank ?? '');
     formData.append('vat', data.vat);
+    formData.append('customer_name', data.customer_name ?? '');
+    formData.append('customer_phone_1', data.customer_phone_1 ?? '');
+    formData.append('customer_phone_2', data.customer_phone_2 ?? '');
+    formData.append('tel', data.tel ?? '');
+    formData.append('governorate', data.governorate ?? '');
+    formData.append('city', data.city ?? '');
+    formData.append('address', data.address ?? '');
+    formData.append('customer_type', this.customerTypeVal ?? '');
+    formData.append('shipping_method_id', data.shipping_method_id ?? '');
     if(this.customerTypeVal == 'شركة'){
       formData.append('company_id', data.customer_company);
     }

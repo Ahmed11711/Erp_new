@@ -9,6 +9,8 @@ use App\Models\Safe;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\DirectCashTransactionService;
+use App\Services\Accounting\BankOperationalLedgerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -314,6 +316,19 @@ class BankController extends Controller
                     'user_id' => auth()->id(),
                 ]);
 
+                app(BankOperationalLedgerService::class)->transfer(
+                    $fromEntity,
+                    $toEntity,
+                    (float) $amount,
+                    $request->notes ?? '',
+                    'V2-T' . $transaction->id,
+                    $date
+                );
+
+                DB::commit();
+
+                return response()->json(['message' => 'تم التحويل بنجاح'], 200);
+
             } elseif ($type === 'transfer_bank_to_safe') {
                 $fromEntity = Bank::find($fromId);
                 $toEntity = Safe::find($toId);
@@ -351,23 +366,47 @@ class BankController extends Controller
                 ]);
             }
 
-            // Execute Balance Updates
-            $fromEntity->decrement('balance', $amount);
-            $toEntity->increment('balance', $amount);
-            
-            // Create Accounting Entries
-            // Assuming tree accounts are linked via 'asset_id' for Banks and 'account_id' for Safes
-            // Normalize the ID field name access
-            $fromAccountId = ($type === 'transfer_safe_to_bank') ? $fromEntity->account_id : $fromEntity->asset_id;
-            $toAccountId   = ($type === 'transfer_bank_to_safe') ? $toEntity->account_id : $toEntity->asset_id;
-            // For Bank to Bank
-            if ($type === 'transfer_bank_to_bank') {
-               $fromAccountId = $fromEntity->asset_id;
-               $toAccountId = $toEntity->asset_id;
+            // Execute Balance Updates (bank↔safe transfers only; bank↔bank handled above)
+            if ($type !== 'transfer_bank_to_bank') {
+                $ledger = app(BankOperationalLedgerService::class);
+                $transferRef = 'V2-T' . ($transaction->id ?? '');
+                $note = $request->notes ?? '';
+
+                if ($type === 'transfer_bank_to_safe') {
+                    $toEntity->increment('balance', $amount);
+                    $ledger->recordOperationalMovement(
+                        $fromEntity,
+                        -(float) $amount,
+                        'تحويل إلى خزينة - ' . $note,
+                        $transferRef,
+                        'تحويل',
+                        auth()->id(),
+                        $date
+                    );
+                } elseif ($type === 'transfer_safe_to_bank') {
+                    $fromEntity->decrement('balance', $amount);
+                    $ledger->recordOperationalMovement(
+                        $toEntity,
+                        (float) $amount,
+                        'استلام من خزينة - ' . $note,
+                        $transferRef,
+                        'تحويل',
+                        auth()->id(),
+                        $date
+                    );
+                }
             }
 
+            if ($type === 'transfer_bank_to_bank') {
+                DB::commit();
 
-            $accService = app(\App\Services\Accounting\AccountingService::class);
+                return response()->json(['message' => 'تم التحويل بنجاح'], 200);
+            }
+
+            $fromAccountId = ($type === 'transfer_safe_to_bank') ? $fromEntity->account_id : $fromEntity->asset_id;
+            $toAccountId = ($type === 'transfer_bank_to_safe') ? $toEntity->account_id : $toEntity->asset_id;
+
+            $accService = app(AccountingService::class);
 
             if ($fromAccountId) {
                 AccountEntry::create([
@@ -390,6 +429,7 @@ class BankController extends Controller
             }
 
             DB::commit();
+
             return response()->json(['message' => 'تم التحويل بنجاح'], 200);
 
         } catch (\Exception $e) {
@@ -400,7 +440,7 @@ class BankController extends Controller
     /**
      * Handle Direct Deposit/Withdraw (Receipt/Payment) against a Tree Account
      */
-    public function directTransaction(Request $request)
+    public function directTransaction(Request $request, DirectCashTransactionService $cashService)
     {
         $validator = Validator::make($request->all(), [
             'bank_id' => 'required|exists:banks,id',
@@ -415,77 +455,61 @@ class BankController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        DB::beginTransaction();
         try {
-            $bank = Bank::find($request->bank_id);
-            $counterAccount = TreeAccount::find($request->counter_account_id);
-            $amount = $request->amount;
-            $type = $request->type;
-            $date = $request->date;
-            $notes = $request->notes;
+            $txn = $cashService->createBank($validator->validated());
 
-            // Ensure Bank has a linked Tree Account
-            if (!$bank->asset_id) {
-                return response()->json(['message' => 'البنك غير مرتبط بحساب شجري'], 422);
-            }
-            $bankAccountId = $bank->asset_id;
-
-            // Check Balance for Withdrawal (Payment)
-            if ($type === 'payment' && $bank->balance < $amount) {
-                return response()->json(['message' => 'رصيد البنك غير كافي للسحب'], 422);
-            }
-
-            // Create Accounting Entries
-            // Receipt (Deposit): Debit Bank, Credit Counter Account
-            // Payment (Withdraw): Credit Bank, Debit Counter Account
-
-            if ($type === 'receipt') {
-                AccountEntry::create([
-                    'tree_account_id' => $bankAccountId,
-                    'debit' => $amount,
-                    'credit' => 0,
-                    'description' => "إيداع بنكي - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                AccountEntry::create([
-                    'tree_account_id' => $counterAccount->id,
-                    'debit' => 0,
-                    'credit' => $amount,
-                    'description' => "إيداع بنكي - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                $bank->increment('balance', $amount);
-            } else {
-                AccountEntry::create([
-                    'tree_account_id' => $bankAccountId,
-                    'debit' => 0,
-                    'credit' => $amount,
-                    'description' => "سحب بنكي - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                AccountEntry::create([
-                    'tree_account_id' => $counterAccount->id,
-                    'debit' => $amount,
-                    'credit' => 0,
-                    'description' => "سحب بنكي - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                $bank->decrement('balance', $amount);
-            }
-
-            $accService = app(\App\Services\Accounting\AccountingService::class);
-            $accService->updateAccountHierarchyBalances($bankAccountId);
-            $accService->updateAccountHierarchyBalances($counterAccount->id);
-
-            DB::commit();
-            return response()->json(['message' => 'تمت العملية بنجاح'], 200);
-
+            return response()->json([
+                'message' => 'تمت العملية بنجاح',
+                'data' => $cashService->showBankDirect($txn->id),
+            ], 201);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function listDirectTransactions(Request $request, DirectCashTransactionService $cashService)
+    {
+        $filters = $request->only(['bank_id', 'from_date', 'to_date', 'per_page']);
+
+        return response()->json($cashService->listBankDirect($filters), 200);
+    }
+
+    public function showDirectTransaction(int $id, DirectCashTransactionService $cashService)
+    {
+        try {
+            return response()->json(['data' => $cashService->showBankDirect($id)], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
+    }
+
+    public function updateDirectTransaction(Request $request, int $id, DirectCashTransactionService $cashService)
+    {
+        $validator = Validator::make($request->all(), [
+            'bank_id' => 'required|exists:banks,id',
+            'type' => 'required|in:receipt,payment',
+            'counter_account_id' => 'required|exists:tree_accounts,id',
+            'amount' => 'required|numeric|min:0.01',
+            'date' => 'required|date',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $txn = $cashService->updateBankDirect($id, $validator->validated());
+
+            return response()->json([
+                'message' => 'تم تعديل العملية بنجاح',
+                'data' => $cashService->showBankDirect($txn->id),
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
             return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
         }
     }

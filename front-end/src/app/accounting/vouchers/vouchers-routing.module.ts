@@ -1,37 +1,29 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { VouchersComponent } from './vouchers.component';
 import { departmentGuard } from '../../guards/department.guard';
+import { RBAC_ROUTE } from '../../guards/rbac-route-data';
+import { VouchersComponent } from './vouchers.component';
+
+const fin = [...RBAC_ROUTE.financeTeam];
 
 const routes: Routes = [
   {
     path: 'clients',
     component: VouchersComponent,
     canActivate: [departmentGuard],
-    data: {
-      allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'],
-      voucherType: 'client'
-    }
+    data: { rbacPermissions: fin, voucherType: 'client' },
   },
   {
     path: 'suppliers',
     component: VouchersComponent,
     canActivate: [departmentGuard],
-    data: {
-      allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'],
-      voucherType: 'supplier'
-    }
+    data: { rbacPermissions: fin, voucherType: 'supplier' },
   },
-  {
-    path: '',
-    redirectTo: 'clients',
-    pathMatch: 'full'
-  }
+  { path: '', redirectTo: 'clients', pathMatch: 'full' },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class VouchersRoutingModule { }
-
+export class VouchersRoutingModule {}

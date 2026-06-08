@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ExpenseKindService } from '../services/expense-kind.service';
 import { ToastService } from '../../shared/toast/toast.service';
-import { TreeAccountService } from '../../accounting/services/tree-account.service';
 
 @Component({
   selector: 'app-expenses-kind',
@@ -22,8 +21,9 @@ export class ExpensesKindComponent implements OnInit {
   data:any[]=[];
   savingRowId: number | null = null;
 
-  /** حسابات مصروف طرفية (للقيد المدين) */
+  /** حسابات مصروف طرفية تحت «النقد الصادر» (للقيد المدين) */
   expenseLeafAccounts: { id: number; code?: string; name: string }[] = [];
+  cashOutParentName = 'النقد الصادر';
 
   length = 50;
   pageSize = 15;
@@ -33,7 +33,6 @@ export class ExpensesKindComponent implements OnInit {
   constructor(
     private expenseKindService: ExpenseKindService,
     private toast: ToastService,
-    private treeAccountService: TreeAccountService
   ) {}
 
   ngOnInit(){
@@ -43,14 +42,11 @@ export class ExpensesKindComponent implements OnInit {
   }
 
   private loadExpenseAccounts(): void {
-    this.treeAccountService.getAll().subscribe({
-      next: (res: any) => {
-        const raw = res?.data ?? res ?? [];
-        const list = Array.isArray(raw) ? raw : [];
-        const flat = this.flattenAccounts(list);
-        this.expenseLeafAccounts = flat
-          .filter((a: any) => a?.type === 'expense' && (!a.children || a.children.length === 0))
-          .map((a: any) => ({
+    this.expenseKindService.ledgerAccounts().subscribe({
+      next: (res) => {
+        this.cashOutParentName = res?.parent?.name || 'النقد الصادر';
+        this.expenseLeafAccounts = (res?.accounts || [])
+          .map((a) => ({
             id: a.id,
             code: a.code,
             name: a.name,
@@ -61,16 +57,6 @@ export class ExpensesKindComponent implements OnInit {
         this.expenseLeafAccounts = [];
       },
     });
-  }
-
-  private flattenAccounts(accounts: any[], result: any[] = []): any[] {
-    (accounts || []).forEach((acc) => {
-      result.push(acc);
-      if (acc.children && acc.children.length) {
-        this.flattenAccounts(acc.children, result);
-      }
-    });
-    return result;
   }
 
   onPageChange(event:any){

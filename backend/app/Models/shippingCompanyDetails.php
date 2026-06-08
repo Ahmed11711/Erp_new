@@ -21,6 +21,7 @@ class shippingCompanyDetails extends Model
 
     protected $fillable = [
         'order_id',
+        'voucher_id',
         'shipping_date',
         'collect_date',
         'status',
@@ -28,7 +29,8 @@ class shippingCompanyDetails extends Model
         'shipping_company_id',
         'ref',
         'by',
-        'old_amount'
+        'old_amount',
+        'is_done',
     ];
 
     public function order(){

@@ -124,46 +124,113 @@ export class WorkingHoursComponent implements OnInit {
         return;
       }
 
-      this.sheetData = rows.map(row => {
-        const dateObj = this.parseExcelDate(row.Time);
+      const parsedRows = rows
+        .map(row => {
+          const dateObj = this.parseExcelDate(row.Time);
+          if (!dateObj) return null;
 
-        const iso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}T${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:00.000Z`;
+          const iso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}T${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:00.000Z`;
 
-        return {
-          acc_no: row['AC-No.'],
-          state: row['State'],
-          date: iso.split('T')[0],
-          hour: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
-          iso_date: iso
-        };
-      });
+          return {
+            acc_no: row['AC-No.'],
+            state: row['State'],
+            date: iso.split('T')[0],
+            hour: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+            iso_date: iso
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
 
+      if (!parsedRows.length) {
+        Swal.fire({
+          icon: 'error',
+          title: 'تعذّر قراءة التواريخ',
+          text: 'تحقق من عمود Time في الملف (مثال: 5/14/2026 9:00).'
+        });
+        return;
+      }
+
+      this.sheetData = parsedRows;
       this.days = [...new Set(this.sheetData.map(d => d.date))].sort();
+
+      Swal.fire({
+        icon: 'success',
+        title: 'تم قراءة الملف',
+        html: `عدد السجلات: <b>${this.sheetData.length}</b><br>عدد الأيام: <b>${this.days.length}</b><br>تأكد أن الشهر المختار أعلاه يطابق تواريخ الملف (<b>${this.currentMonthValue}</b>).`,
+        timer: 4000,
+        showConfirmButton: true
+      });
     };
 
     reader.readAsArrayBuffer(this.selectedFile);
   }
 
   /* ======================================================
-     EXCEL TIME PARSER (Õ = AM , ã = PM)
+     EXCEL TIME PARSER
+     ZKTeco exports M/D/YYYY (e.g. 5/14/2026 9) — not D/M/Y.
+     Õ / ã = corrupted AM/PM markers from Arabic locale exports.
   ====================================================== */
-  parseExcelDate(value: string): Date {
+  parseExcelDate(value: string | number): Date | null {
+    if (value == null || value === '') return null;
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const wholeDays = Math.floor(value);
+      const dayFraction = value - wholeDays;
+      const date = new Date(excelEpoch.getTime() + wholeDays * 86400000);
+      if (dayFraction > 0) {
+        const totalMinutes = Math.round(dayFraction * 24 * 60);
+        date.setHours(Math.floor(totalMinutes / 60), totalMinutes % 60, 0, 0);
+      }
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return null;
+
     let isAM = false;
     let isPM = false;
+    const lower = raw.toLowerCase();
+    if (raw.includes('Õ') || lower.includes('am') || raw.includes('ص')) isAM = true;
+    if (raw.includes('ã') || lower.includes('pm') || raw.includes('م')) isPM = true;
 
-    if (value.includes('Õ')) isAM = true;
-    if (value.includes('ã')) isPM = true;
+    const cleaned = raw.replace(/[^\d/:\s]/g, '').trim();
+    const [datePart, timePart = '0'] = cleaned.split(/\s+/);
+    const dateBits = datePart.split('/').map(Number);
+    if (dateBits.length !== 3 || dateBits.some(n => Number.isNaN(n))) return null;
 
-    value = value.replace(/[^\d/:\s]/g, '').trim();
-    const [datePart, timePart] = value.split(' ');
+    const [a, b, y] = dateBits;
+    let month: number;
+    let day: number;
+    if (a > 12) {
+      day = a;
+      month = b;
+    } else if (b > 12) {
+      month = a;
+      day = b;
+    } else {
+      // Ambiguous (e.g. 5/5/2026) — fingerprint machines use M/D/Y.
+      month = a;
+      day = b;
+    }
 
-    const [d, m, y] = datePart.split('/').map(Number);
-    let [h, min] = timePart.split(':').map(Number);
+    let h = 0;
+    let min = 0;
+    if (timePart.includes(':')) {
+      const [hourRaw, minRaw] = timePart.split(':');
+      h = Number(hourRaw);
+      min = Number(minRaw ?? 0);
+    } else {
+      h = Number(timePart);
+    }
+    if (Number.isNaN(h)) h = 0;
+    if (Number.isNaN(min)) min = 0;
 
     if (isPM && h < 12) h += 12;
     if (isAM && h === 12) h = 0;
 
-    return new Date(y, m - 1, d, h, min, 0);
+    const date = new Date(y, month - 1, day, h, min, 0);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
   /* ======================================================

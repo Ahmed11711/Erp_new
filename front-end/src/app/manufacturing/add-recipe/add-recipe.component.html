@@ -60,8 +60,8 @@
               <span class="recipe-category-option__name" [innerHTML]="item.category_name"></span>
               <span class="recipe-category-option__code text-muted" dir="ltr" *ngIf="item.item_code">{{ item.item_code }}</span>
               <span class="recipe-category-option__swatch" *ngIf="item.color" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
-              <span class="recipe-category-option__meta text-muted" *ngIf="item.measurement?.warehouse">{{
-                item.measurement.warehouse
+              <span class="recipe-category-option__meta text-muted" *ngIf="warehouseLabel(item)">{{
+                warehouseLabel(item)
               }}</span>
             </div>
           </ng-template>
@@ -113,8 +113,8 @@
           <span class="recipe-category-option__name" [innerHTML]="item.category_name"></span>
           <span class="recipe-category-option__code text-muted" dir="ltr" *ngIf="item.item_code">{{ item.item_code }}</span>
           <span class="recipe-category-option__swatch" *ngIf="item.color" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
-          <span class="recipe-category-option__meta text-muted" *ngIf="item.measurement?.warehouse">{{
-            item.measurement.warehouse
+          <span class="recipe-category-option__meta text-muted" *ngIf="warehouseLabel(item)">{{
+            warehouseLabel(item)
           }}</span>
         </div>
       </ng-template>
@@ -170,7 +170,7 @@
                 </span>
                 <span *ngIf="!elm.color">—</span>
               </td>
-              <td data-label="النوع">{{ elm.measurement.warehouse }}</td>
+              <td data-label="النوع">{{ warehouseLabel(elm) }}</td>
               <td data-label="الكمية" class="text-center">
                 <input
                   class="form-control recipe-qty-input"
@@ -228,7 +228,7 @@
           <button
             type="button"
             class="btn recipe-btn-primary btn-sm w-100"
-            [disabled]="!newExtraCostName?.trim() || newExtraCostValue == null || newExtraCostValue < 0"
+            [disabled]="!newExtraCostName.trim() || newExtraCostValue == null || newExtraCostValue < 0"
             (click)="addExtraCost()">
             <span>+ إضافة</span>
           </button>
@@ -311,9 +311,9 @@
         </div>
         <div class="row mt-2" *ngIf="costBreakdown.margin_percent != null">
           <div class="col text-center">
-            <span class="badge" [class.badge-success]="+(costBreakdown.margin_percent ?? 0) >= 0"
-                                [class.badge-danger]="+(costBreakdown.margin_percent ?? 0) < 0">
-              هامش الربح: {{ +(costBreakdown.margin_percent ?? 0) * 100 | number: '1.0-2' }}%
+            <span class="badge" [class.badge-success]="+costBreakdown.margin_percent >= 0"
+                                [class.badge-danger]="+costBreakdown.margin_percent < 0">
+              هامش الربح: {{ +costBreakdown.margin_percent * 100 | number: '1.0-2' }}%
             </span>
           </div>
         </div>
@@ -394,7 +394,7 @@
       <div *ngIf="!importPreview && !importUploading && !importConfirming && !importSuccess" class="recipe-import-hint">
         <p class="mb-2">
           ارفع ملف <strong>.xlsx</strong> بنفس تنسيق ملف الأصناف المعتاد:
-          أعمدة <em>اسم الصنف</em> و <em>الخامات</em> و <em>الكمية</em> (بالإضافة إلى <em>الوحدة</em> و <em>السعر</em> اختياريًا).
+          أعمدة <em>اسم الصنف</em> و <em>الخامات</em> و <em>الكمية</em> (بالإضافة إلى <em>الوحدة</em> و <em>السعر</em> وعمود اللون مثل <em>اللون</em> أو <em>ألوانه</em> اختياريًا).
         </p>
         <!-- <p class="mb-0 small text-muted">
           يتم تجاهل صفوف «سعر المكن / سعر القص / الاجمالي / نسبه هالك / اجمالي التكاليف المباشرة» تلقائيًا.
@@ -416,21 +416,83 @@
         </div>
         <p class="recipe-import-message">{{ importPreview.message }}</p>
 
+        <!-- ملخص الأصناف: تعديل لون / إنشاء جديد -->
+        <section class="recipe-import-section recipe-import-items-summary" *ngIf="itemsColorSummary.updated > 0 || itemsColorSummary.created > 0">
+          <h3 class="recipe-import-section__title">ملخص تغييرات الأصناف:</h3>
+          <div class="recipe-import-items-chips">
+            <span class="recipe-import-item-chip recipe-import-item-chip--update" *ngIf="itemsColorSummary.updated > 0">
+              <span class="recipe-import-item-chip__icon">✎</span>
+              <strong>{{ itemsColorSummary.updated }}</strong> صنف موجود سيُحدَّث لونه
+            </span>
+            <span class="recipe-import-item-chip recipe-import-item-chip--create" *ngIf="itemsColorSummary.created > 0">
+              <span class="recipe-import-item-chip__icon">+</span>
+              <strong>{{ itemsColorSummary.created }}</strong> صنف جديد سيُنشأ بلونه
+            </span>
+          </div>
+          <details class="recipe-import-items-detail" *ngIf="itemsColorSummary.details.length > 0">
+            <summary>عرض التفاصيل ({{ itemsColorSummary.details.length }} صنف)</summary>
+            <table class="recipe-import-recipe__table mt-2">
+              <thead>
+                <tr>
+                  <th>اسم الصنف</th>
+                  <th>اللون</th>
+                  <th>الإجراء</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let d of itemsColorSummary.details">
+                  <td>{{ d.name }}</td>
+                  <td>
+                    <span *ngIf="d.color" class="recipe-table-color-cell">
+                      <span class="recipe-color-swatch" [style.backgroundColor]="d.color" [attr.title]="d.color"></span>
+                      <span class="recipe-color-label">{{ d.color }}</span>
+                    </span>
+                    <span *ngIf="!d.color">—</span>
+                  </td>
+                  <td>
+                    <span class="recipe-import-badge recipe-import-badge--ok" *ngIf="d.action === 'update'">تعديل اللون</span>
+                    <span class="recipe-import-badge recipe-import-badge--missing" *ngIf="d.action === 'create'">إنشاء جديد</span>
+                    <span class="recipe-import-badge" *ngIf="d.action === 'match'">مطابق</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </details>
+        </section>
+
         <!-- أ) الأصناف الناقصة -->
         <section *ngIf="importPreview.missing_items.length > 0" class="recipe-import-section">
-          <h3 class="recipe-import-section__title">الأصناف التالية غير موجودة:</h3>
+          <h3 class="recipe-import-section__title">الأصناف التالية غير موجودة وستُنشأ كأصناف جديدة:</h3>
           <ul class="recipe-import-missing-list">
             <li *ngFor="let name of importPreview.missing_items">{{ name }}</li>
           </ul>
           <label class="recipe-import-check">
             <input type="checkbox" [(ngModel)]="allowCreateMissingItems" name="allowCreateMissingItems" />
-            إنشاء الأصناف واستكمال الاستيراد (ستُضاف كمواد خام بسعر 0)
+            إنشاء الأصناف واستكمال الاستيراد (ستُضاف كمواد خام بسعرها من Excel)
           </label>
         </section>
 
         <!-- ب) الوصفات المتعارضة -->
         <section *ngIf="importPreview.existing_recipes.length > 0" class="recipe-import-section">
           <h3 class="recipe-import-section__title">الوصفة موجودة بالفعل — اختر الإجراء:</h3>
+          <div class="recipe-import-bulk-actions">
+            <span class="recipe-import-bulk-label">تطبيق على الجميع:</span>
+            <button type="button" class="recipe-action-btn recipe-action-btn--bulk"
+              [class.recipe-action-btn--active]="bulkActionActive === 'replace'"
+              (click)="setAllRecipeActions('replace')">
+              استبدال الجميع
+            </button>
+            <button type="button" class="recipe-action-btn recipe-action-btn--bulk"
+              [class.recipe-action-btn--active]="bulkActionActive === 'create_new'"
+              (click)="setAllRecipeActions('create_new')">
+              إنشاء نسخة جديدة للجميع
+            </button>
+            <button type="button" class="recipe-action-btn recipe-action-btn--bulk recipe-action-btn--muted"
+              [class.recipe-action-btn--active]="bulkActionActive === 'skip'"
+              (click)="setAllRecipeActions('skip')">
+              تخطي الجميع
+            </button>
+          </div>
           <div class="recipe-import-conflict-list">
             <div *ngFor="let r of importPreview.recipes" class="recipe-import-conflict" [hidden]="!r.exists">
               <div class="recipe-import-conflict__name">
@@ -475,6 +537,7 @@
                 <thead>
                   <tr>
                     <th>المادة (من الملف)</th>
+                    <th>اللون</th>
                     <th>الصنف المطابق في النظام</th>
                     <th class="text-center">الكمية</th>
                     <th>الوحدة</th>
@@ -484,6 +547,13 @@
                 <tbody>
                   <tr *ngFor="let ing of r.ingredients">
                     <td>{{ ing.item_name }}</td>
+                    <td>
+                      <span *ngIf="ing.color" class="recipe-table-color-cell">
+                        <span class="recipe-color-swatch" [style.backgroundColor]="ing.color" [attr.title]="ing.color"></span>
+                        <span class="recipe-color-label">{{ ing.color }}</span>
+                      </span>
+                      <span *ngIf="!ing.color">—</span>
+                    </td>
                     <td>
                       <ng-container *ngIf="ing.item_exists; else willCreate">
                         <div class="recipe-import-match">

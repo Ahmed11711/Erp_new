@@ -31,6 +31,7 @@
               type="text" class="form-control">
               <option disabled>الحالة</option>
               <option selected value="تم شحن">تم شحن</option>
+              <option value="تم التسليم">تم التسليم</option>
               <option value="تم التحصيل">تم التحصيل</option>
               <option value="رفض استلام">رفض الاستلام</option>
             </select>
@@ -119,14 +120,32 @@
             <span>{{elm.collect_date}}</span>
           </td>
           <td>{{elm?.status}}</td>
-          <td>{{elm?.order?.order_details?.edits}}</td>
+          <td class="text-start modifications-cell small">
+            <ng-container *ngIf="modificationsSummary(elm) as mod">
+              <ng-container *ngIf="mod.hasAny; else noModsCell">
+                <div *ngIf="mod.editsCount > 0" class="mb-1">
+                  <span class="text-muted">تعديلات الطلب:</span> {{ mod.editsCount }}
+                </div>
+                <div *ngIf="mod.deliveryDate" class="mb-1">
+                  <span class="text-muted">تأكيد التسليم:</span> {{ mod.deliveryDate }}
+                  <span *ngIf="mod.deliveryBatch" class="text-muted"> ({{ mod.deliveryBatch }})</span>
+                </div>
+                <ul class="mb-0 ps-3 tracking-list" *ngIf="mod.recentTracking.length">
+                  <li *ngFor="let tr of mod.recentTracking" [title]="tr.title">
+                    {{ tr.line }}
+                  </li>
+                </ul>
+              </ng-container>
+              <ng-template #noModsCell><span class="text-muted">—</span></ng-template>
+            </ng-container>
+          </td>
           <td dir="ltr"><span *ngIf="elm.old_amount">{{elm?.old_amount | customNumber}} - </span>{{elm?.amount | customNumber}} </td>
           <td *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management'  || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="elm.status=='تم شحن'  && elm?.order?.order_status=='تم شحن'">
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="menuVisibleForRow(elm)">
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu" >
-              <button mat-menu-item *ngIf="elm.status=='تم شحن' && elm?.order?.order_status=='تم شحن' " [routerLink]="['/dashboard/shipping/collectorder',elm.order_id]">
+              <button mat-menu-item *ngIf="canCollectFromRow(elm)" [routerLink]="['/dashboard/shipping/collectorder',elm.order_id]">
                 <span> تحصيل الطلب</span>
               </button>
 
@@ -152,7 +171,7 @@
             </mat-menu>
           </td>
           <td *ngIf="canBulkCollectRole">
-            <input [disabled]="elm?.order?.order_details?.reviewed == 1" [id]="elm.order_id" type="checkbox"  (change)="selectOrder($event,elm)">
+            <input [disabled]="!canCollectFromRow(elm) || elm?.order?.order_details?.reviewed == 1" [id]="elm.order_id" type="checkbox"  (change)="selectOrder($event,elm)">
           </td>
 
         </tr>

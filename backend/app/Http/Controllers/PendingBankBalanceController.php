@@ -2,65 +2,108 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Bank;
+use App\Models\Order;
 use App\Models\PendingBankBalance;
-use Illuminate\Support\Facades\DB;
+use App\Services\Accounting\AccountLinkingService;
+use App\Services\Accounting\BankOperationalLedgerService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PendingBankBalanceController extends Controller
 {
-    public function pendingBanks(Request $request){
+    public function pendingBanks(Request $request)
+    {
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
-        $search = PendingBankBalance::query()->with(['user' , 'bank']);
-        if($request->has('status')){
-            $search = $search->where('status' , $request->status);
+        $search = PendingBankBalance::query()->with(['user', 'bank']);
+        if ($request->has('status')) {
+            $search = $search->where('status', $request->status);
         }
-        $search = $search->orderBy('id' , 'desc')->paginate($itemsPerPage);
+        $search = $search->orderBy('id', 'desc')->paginate($itemsPerPage);
+
         return response()->json($search, 200);
     }
 
-    public function pendingBanksStatus(Request $request){
+    public function pendingBanksStatus(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|exists:pending_bank_balances,id',
+            'status' => 'required|in:approved,rejected',
+            'bank_id' => 'nullable|exists:banks,id',
+            'counter_account_id' => 'nullable|exists:tree_accounts,id',
+        ]);
+
         DB::beginTransaction();
-        try{
-            $id = $request->id;
-            $pendingBank = PendingBankBalance::find($id);
+        try {
+            $pendingBank = PendingBankBalance::findOrFail($request->id);
             $pendingBank->status = $request->status;
-            $pendingBank->bank_id = $request->bank_id;
-            $pendingBank->save();
-            if ($request->status == 'approved') {
-                $amount = $pendingBank->amount;
-                $details = $pendingBank->details;
-                $ref = $pendingBank->ref;
-                $type = $pendingBank->type;
-                $bank = $request->bank_id;
-                $user_id = $pendingBank->user_id;
-                $currenct_bank = DB::table('banks')->where('id', $bank)->first();
-                if ($currenct_bank) {
-                    $current_balance = $currenct_bank->balance;
-                    $new_balance = $current_balance + $amount;
 
-                    DB::table('banks')->where('id', $bank)->update(['balance' => $new_balance]);
-
-                    DB::table('bank_details')->insert([
-                        'bank_id' => $bank,
-                        'details' => $details,
-                        'ref' => $ref,
-                        'type' => $type,
-                        'amount' => $amount,
-                        'balance_before' => $current_balance,
-                        'balance_after' => $new_balance,
-                        'date' => date('Y-m-d'),
-                        'created_at' => now(),
-                        'user_id' => $user_id
-                    ]);
+            if ($request->status === 'approved') {
+                if (! $request->bank_id) {
+                    return response()->json(['message' => 'يجب اختيار البنك عند الموافقة'], 422);
                 }
+
+                $pendingBank->bank_id = $request->bank_id;
+                $pendingBank->save();
+
+                $bank = Bank::findOrFail($request->bank_id);
+                $amount = (float) $pendingBank->amount;
+                $counterAccountId = (int) ($request->counter_account_id ?: $this->resolveCounterAccountFromPending($pendingBank));
+
+                if (! $counterAccountId) {
+                    return response()->json([
+                        'message' => 'يجب تحديد الحساب المقابل (counter_account_id) — لم يُستنتج من الطلب المرتبط',
+                    ], 422);
+                }
+
+                $ledger = app(BankOperationalLedgerService::class);
+                $ref = (string) ($pendingBank->ref ?? $pendingBank->id);
+                $reason = $pendingBank->details ?? 'موافقة رصيد بنك معلّق';
+                $absAmount = abs($amount);
+
+                if ($amount >= 0) {
+                    $ledger->deposit($bank, $absAmount, $counterAccountId, $reason, $pendingBank->type ?? 'موافقة', $ref);
+                } else {
+                    $ledger->withdraw($bank, $absAmount, $counterAccountId, $reason, $pendingBank->type ?? 'موافقة', $ref);
+                }
+            } else {
+                $pendingBank->save();
             }
+
             DB::commit();
-            return response()->json(['message'=>'success'], 201);
-        }catch(\Exception $e){
-            DB::rollback();
-            return response()->json(['message'=>$e->getMessage()], 500);
+
+            return response()->json(['message' => 'success'], 201);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 500);
         }
     }
 
+    private function resolveCounterAccountFromPending(PendingBankBalance $pending): ?int
+    {
+        if (! is_numeric($pending->ref)) {
+            return null;
+        }
 
+        $order = Order::find((int) $pending->ref);
+        if (! $order) {
+            return null;
+        }
+
+        $linking = app(AccountLinkingService::class);
+        $account = $linking->resolveOrderCustomerAccount(
+            (string) $order->customer_type,
+            (string) ($order->customer_name ?? ''),
+            $order->customer_phone ?? null,
+            $order->company_id ? (int) $order->company_id : null,
+            $order->order_source_id ? (int) $order->order_source_id : null
+        );
+
+        return $account?->id;
+    }
 }

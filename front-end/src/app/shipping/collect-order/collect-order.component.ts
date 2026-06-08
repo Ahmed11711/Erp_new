@@ -38,7 +38,13 @@ export class CollectOrderComponent {
       this.company = res.order_details.shipping_company?.name;
       this.total_balance = res.net_total;
       this.order_type = res.order_type;
-    })
+
+      if (res.order_status === 'تم التحصيل') {
+        Swal.fire({ icon: 'info', title: 'تم تحصيل هذا الطلب مسبقاً' }).then(() =>
+          this.router.navigate(['/dashboard/shipping/listorders'])
+        );
+      }
+    });
 
     this.bank.bankSelect().subscribe((res: any) => {
       this.banks = res;
@@ -66,12 +72,17 @@ export class CollectOrderComponent {
         let body = { amount: this.total_balance, bank_id: form.value.bank, note: form.value.note }
         if (result.isConfirmed) {
           body['receivedOrder'] = true;
-          this.order.collectOrder(id, body).subscribe((res: any) => {
-            console.log(res);
-            if (res.message == 'success') {
-              this.router.navigate(['/dashboard/shipping/listorders']);
-            }
-          })
+          this.order.collectOrder(id, body).subscribe({
+            next: (res: any) => {
+              if (res.message == 'success') {
+                this.router.navigate(['/dashboard/shipping/listorders']);
+              }
+            },
+            error: (err) => {
+              const msg = err?.error?.message || 'تعذر إتمام التحصيل';
+              Swal.fire({ icon: 'warning', title: msg });
+            },
+          });
           console.log(true);
         } else if (result.isDismissed) {
           body['receivedOrder'] = false;
@@ -86,12 +97,17 @@ export class CollectOrderComponent {
               }
               if (value !== '') {
                 body['reason'] = value;
-                this.order.collectOrder(id, body).subscribe((res: any) => {
-                  console.log(res);
-                  if (res.message == 'success') {
-                    this.router.navigate(['/dashboard/shipping/listorders']);
-                  }
-                })
+                this.order.collectOrder(id, body).subscribe({
+                  next: (res: any) => {
+                    if (res.message == 'success') {
+                      this.router.navigate(['/dashboard/shipping/listorders']);
+                    }
+                  },
+                  error: (err) => {
+                    const msg = err?.error?.message || 'تعذر إتمام التحصيل';
+                    Swal.fire({ icon: 'warning', title: msg });
+                  },
+                });
 
               }
               return undefined
@@ -124,11 +140,17 @@ export class CollectOrderComponent {
         formData.append('bank_id', form.value.bank);
       }
 
-      this.order.collectOrder(id, formData).subscribe((res: any) => {
-        if (res.message == 'success') {
-          this.router.navigate(['/dashboard/shipping/listorders']);
-        }
-      })
+      this.order.collectOrder(id, formData).subscribe({
+        next: (res: any) => {
+          if (res.message == 'success') {
+            this.router.navigate(['/dashboard/shipping/listorders']);
+          }
+        },
+        error: (err) => {
+          const msg = err?.error?.message || 'تعذر إتمام التحصيل';
+          Swal.fire({ icon: 'warning', title: msg });
+        },
+      });
     }
 
   }

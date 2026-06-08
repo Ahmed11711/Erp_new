@@ -62,6 +62,19 @@
   padding: 16px 0;
 }
 
+.products-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+mat-form-field.narrow-days {
+  min-width: 200px;
+  max-width: 280px;
+}
+
 table.full {
   width: 100%;
 }

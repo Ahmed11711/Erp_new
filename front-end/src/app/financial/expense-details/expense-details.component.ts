@@ -84,6 +84,16 @@ export class ExpenseDetailsComponent {
     return name || code || '—';
   }
 
+  get isSplit(): boolean {
+    return Array.isArray(this.data?.lines) && this.data.lines.length > 1;
+  }
+
+  lineDebitTreeLabel(line: any): string {
+    const kind = line?.kind;
+    const acc = kind?.tree_account ?? kind?.treeAccount;
+    return this.treeAccountLine(acc);
+  }
+
   creditTreeFromRow(row: any): { code?: string; name?: string } | null {
     if (!row) {
       return null;

@@ -3,6 +3,7 @@ import { ServiceAccountsService } from '../../services/service-accounts.service'
 import { MatDialog } from '@angular/material/dialog';
 import { ServiceAccountsCreateComponent } from '../service-accounts-create/service-accounts-create.component';
 import { ServiceAccountsTransferComponent } from '../service-accounts-transfer/service-accounts-transfer.component';
+import Swal from 'sweetalert2';
 
 @Component({
     selector: 'app-service-accounts-list',
@@ -47,6 +48,34 @@ export class ServiceAccountsListComponent implements OnInit {
             if (result) {
                 this.getAccounts();
             }
+        });
+    }
+
+    deleteAccount(account: any): void {
+        if (!account?.id) return;
+
+        Swal.fire({
+            title: 'هل أنت متأكد؟',
+            text: `حذف الحساب الخدمي «${account.name}»؟`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'نعم، احذف',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d'
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+
+            this.serviceAccountsService.delete(account.id).subscribe({
+                next: (res: any) => {
+                    Swal.fire('تم الحذف', res?.message || 'تم حذف الحساب بنجاح', 'success');
+                    this.getAccounts();
+                },
+                error: (err) => {
+                    const msg = err.error?.message || 'تعذر حذف الحساب';
+                    Swal.fire('خطأ', msg, 'error');
+                }
+            });
         });
     }
 }

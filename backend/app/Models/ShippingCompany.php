@@ -28,4 +28,9 @@ class ShippingCompany extends Model
     {
         return $this->belongsTo(TreeAccount::class, 'receivable_tree_account_id');
     }
+
+    public function details()
+    {
+        return $this->hasMany(shippingCompanyDetails::class, 'shipping_company_id');
+    }
 }

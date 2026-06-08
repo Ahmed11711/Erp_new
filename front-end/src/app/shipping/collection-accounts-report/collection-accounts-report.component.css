@@ -1,0 +1,13 @@
+.report-panel {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+}
+
+.header {
+  background: #333;
+  color: #fff;
+  font-size: 1.25rem;
+  border-radius: 6px;
+  padding: 0.4rem 1rem;
+}

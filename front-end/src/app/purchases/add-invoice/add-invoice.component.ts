@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
@@ -17,9 +17,15 @@ import { finalize } from 'rxjs/operators';
 })
 export class AddInvoiceComponent implements OnInit {
   invoiceId;
+  /** للعرض فقط عند التعديل */
+  purchaseSerialId: number | null = null;
   errorMessage = '';
   /** يمنع النقر المتكرر أثناء إرسال الفاتورة */
   isSubmitting = false;
+  /** رقم فاتورة داخلي مخصص؛ يُترك فارغاً للترقيم التلقائي PUR-xxxx */
+  customInvoiceNo = '';
+  /** رقم فاتورة المورد (ورقي) — اختياري */
+  externalInvoiceNo = '';
   products:any[] = [];
   categories : any[] = [];
   suppliers : any[] = [];
@@ -38,18 +44,30 @@ export class AddInvoiceComponent implements OnInit {
     private router: Router,
     private datePipe: DatePipe,
     private invoice: InvoiceService,
-    private supplier: SuppliersService,
+    private suppliersService: SuppliersService,
     private cat: CategoryService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
     this.invoiceId =
       this.route.snapshot.paramMap.get('id') ||
       this.route.snapshot.queryParamMap.get('editId');
-    this.supplier.suppliersname().subscribe((res:any)=>{
-      this.suppliers = res;
-    })
+    this.suppliersService.suppliersname().subscribe({
+      next: (res: unknown) => {
+        const raw = res != null && typeof res === 'object' && 'data' in (res as object)
+          ? (res as { data: unknown }).data
+          : res;
+        this.suppliers = Array.isArray(raw) ? raw.filter((s: any) => s && (s.supplier_name ?? '').toString().trim() !== '') : [];
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.suppliers = [];
+        this.errorMessage = 'تعذّر تحميل قائمة الموردين. تحقّق من الصلاحيات أو اتصال الخادم.';
+        this.cdr.markForCheck();
+      },
+    });
 
     this.cat.getCatBywarehouse('مخزن مواد خام').subscribe((res:any)=>{
       this.categories = res;
@@ -66,6 +84,7 @@ export class AddInvoiceComponent implements OnInit {
     });
 
     if (this.invoiceId) {
+      this.purchaseSerialId = Number(this.invoiceId);
       this.invoice.getInvoiceById(this.invoiceId,true).subscribe(res=>{
         this.products = res['categories'];
         let status:any = document.getElementById('status');
@@ -80,6 +99,15 @@ export class AddInvoiceComponent implements OnInit {
         this.bankId = res['invoice'].bank_id;
         this.safeId = res['invoice'].safe_id;
         this.serviceAccountId = res['invoice'].service_account_id;
+        this.externalInvoiceNo = res['invoice'].external_invoice_no || '';
+        const inv = res['invoice'];
+        const no = inv?.invoice_no != null && String(inv.invoice_no).trim() !== ''
+          ? String(inv.invoice_no).trim()
+          : '';
+        const num = inv?.invoice_number != null && String(inv.invoice_number).trim() !== ''
+          ? String(inv.invoice_number).trim()
+          : '';
+        this.customInvoiceNo = no || num;
         let receipt_date:any = document.getElementById('receipt_date');
         receipt_date.value = res['invoice'].receipt_date;
         this.date = res['invoice'].receipt_date;
@@ -90,7 +118,6 @@ export class AddInvoiceComponent implements OnInit {
         if (supplier) {
           const input = supplier.querySelector('input');
           if (input) {
-            this.supplier = res['invoice'].supplier_id;
             input.value = res['invoice'].supplier.supplier_name;
           }
         }
@@ -270,6 +297,14 @@ export class AddInvoiceComponent implements OnInit {
     }
     if (this.paymentType === 'service_account' && this.serviceAccountId) {
       invoice.append('service_account_id', this.serviceAccountId.toString());
+    }
+    const ext = (this.externalInvoiceNo || '').trim();
+    if (ext) {
+      invoice.append('external_invoice_no', ext);
+    }
+    const custom = (this.customInvoiceNo || '').trim();
+    if (custom) {
+      invoice.append('custom_invoice_no', custom);
     }
     if(this.selectedImg){
       invoice.append('invoice_image', this.selectedImg, this.selectedImg.name);

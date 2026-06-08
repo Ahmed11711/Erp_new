@@ -14,8 +14,10 @@ class SafeTransaction extends Model
         'type',
         'from_safe_id',
         'to_safe_id',
+        'counter_account_id',
         'amount',
         'notes',
+        'entry_batch_code',
         'user_id',
     ];
 
@@ -37,6 +39,11 @@ class SafeTransaction extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function counterAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'counter_account_id');
     }
 }
 

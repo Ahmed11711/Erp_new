@@ -4,10 +4,12 @@ namespace App\Services\Items;
 
 use App\Enums\InventoryMovementType;
 use App\Models\Category;
+use App\Models\InventoryMovement;
+use App\Models\Item;
 use App\Models\Recipe;
-use App\Models\StockMovement;
 use App\Services\CategoryInventoryCostService;
 use App\Services\Inventory\InventoryMovementLedgerService;
+use App\Services\Manufacturing\ManufacturingConsumptionResolver;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,14 +49,35 @@ class InventoryService
             $deducted  = [];
             $ledger = app(InventoryMovementLedgerService::class);
 
+            /** @var Item $finishMeta */
+            $finishMeta = Item::query()->findOrFail($finishedItemId);
+            $productionColorId = $finishMeta->color_id !== null ? (int) $finishMeta->color_id : null;
+
+            /** @var ManufacturingConsumptionResolver $resolver */
+            $resolver = app(ManufacturingConsumptionResolver::class);
+
             foreach ($recipe->ingredients as $ingredient) {
                 $requiredQty = bcmul((string) $ingredient->quantity, (string) $batchQty, 6);
 
-                $rawItem = Category::lockForUpdate()->find($ingredient->item_id);
+                $bomLine = Item::query()->find($ingredient->item_id);
+
+                if (! $bomLine) {
+                    throw new \InvalidArgumentException(
+                        "Ingredient item #{$ingredient->item_id} not found in categories."
+                    );
+                }
+
+                try {
+                    $consume = $resolver->resolveForProduction($bomLine, $productionColorId);
+                } catch (\InvalidArgumentException $e) {
+                    throw new \RuntimeException($e->getMessage(), 0, $e);
+                }
+
+                $rawItem = Category::lockForUpdate()->find($consume->id);
 
                 if (! $rawItem) {
                     throw new \InvalidArgumentException(
-                        "Ingredient item #{$ingredient->item_id} not found in categories."
+                        "Ingredient item #{$consume->id} not found in categories."
                     );
                 }
 
@@ -163,6 +186,19 @@ class InventoryService
             throw new \InvalidArgumentException("Finished goods item #{$finishedItemId} does not exist.");
         }
 
+        $finishedRow = Item::query()->find($finishedItemId);
+        if ($finishedRow instanceof Item) {
+            $expected = $recipe->output_item_id;
+            if ($expected !== null) {
+                $anchorId = ManufacturingConsumptionResolver::outputAnchorId($finishedRow);
+                if ((int) $expected !== $anchorId) {
+                    throw new \InvalidArgumentException(
+                        'Finished goods item must match the recipe output base (colour variants inherit the same BOM).'
+                    );
+                }
+            }
+        }
+
         foreach ($recipe->ingredients as $ing) {
             if ((float) $ing->quantity <= 0) {
                 throw new \InvalidArgumentException(
@@ -177,20 +213,47 @@ class InventoryService
      *
      * @return array{sufficient: bool, shortages: array<int, array{item_id:int, item_name:string, required:string, available:string}>}
      */
-    public function checkStockAvailability(Recipe $recipe, int $batchQty = 1): array
+    public function checkStockAvailability(Recipe $recipe, int $batchQty = 1, ?int $productionColorId = null): array
     {
         $recipe->loadMissing('ingredients');
 
         $shortages = [];
 
+        /** @var ManufacturingConsumptionResolver $resolver */
+        $resolver = app(ManufacturingConsumptionResolver::class);
+
         foreach ($recipe->ingredients as $ing) {
             $requiredQty = bcmul((string) $ing->quantity, (string) $batchQty, 6);
-            $item = Category::find($ing->item_id);
+            $bomLine = Item::query()->find($ing->item_id);
 
-            if (! $item) {
+            if (! $bomLine) {
                 $shortages[] = [
                     'item_id'   => $ing->item_id,
                     'item_name' => '(not found)',
+                    'required'  => $requiredQty,
+                    'available' => '0',
+                ];
+                continue;
+            }
+
+            try {
+                $target = $resolver->resolveForProduction($bomLine, $productionColorId);
+            } catch (\InvalidArgumentException $e) {
+                $shortages[] = [
+                    'item_id'   => $bomLine->id,
+                    'item_name' => $bomLine->category_name . ' — ' . $e->getMessage(),
+                    'required'  => $requiredQty,
+                    'available' => '0',
+                ];
+                continue;
+            }
+
+            $item = Category::find($target->id);
+
+            if (! $item) {
+                $shortages[] = [
+                    'item_id'   => $target->id,
+                    'item_name' => '(resolved material not found)',
                     'required'  => $requiredQty,
                     'available' => '0',
                 ];
@@ -220,7 +283,7 @@ class InventoryService
      */
     public function movementsForReference(string $referenceType, int $referenceId): \Illuminate\Database\Eloquent\Collection
     {
-        return StockMovement::where('reference_type', $referenceType)
+        return InventoryMovement::where('reference_type', $referenceType)
             ->where('reference_id', $referenceId)
             ->orderBy('created_at')
             ->get();

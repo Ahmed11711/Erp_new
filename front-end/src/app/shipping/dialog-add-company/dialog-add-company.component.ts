@@ -18,6 +18,9 @@ export class DialogAddCompanyComponent {
   cities:any[]=[];
   governName:boolean=false;
 
+  isEdit = false;
+  companyId: number | null = null;
+
   govern(event){
     if (event.target.value == "القاهرة") {
       this.governName = true;
@@ -34,17 +37,34 @@ export class DialogAddCompanyComponent {
   ) {}
 
   ngOnInit(){
-    console.log(this.data);
+    this.isEdit = !!this.data?.company;
+    this.companyId = this.data?.company?.id ?? null;
+
     this.http.get('assets/egypt/governorates.json').subscribe((data:any)=>this.location=data);
     this.http.get('assets/egypt/cities.json').subscribe((data:any)=>{
       this.cities = data.filter((elem:any)=>elem.governorate_id == 1);
     });
 
-    this.form.patchValue({
-      governorate:'المحافظة',
-      city:'المدينة'
-
-    });
+    if (this.isEdit && this.data.company) {
+      const c = this.data.company;
+      this.governName = c.governorate === 'القاهرة';
+      this.form.patchValue({
+        name: c.name,
+        phone1: c.phone1,
+        phone2: c.phone2 === 'null' ? null : c.phone2,
+        phone3: c.phone3 === 'null' ? null : c.phone3,
+        phone4: c.phone4 === 'null' ? null : c.phone4,
+        tel: c.tel === 'null' ? null : c.tel,
+        governorate: c.governorate,
+        city: c.city === 'null' ? null : c.city,
+        address: c.address,
+      });
+    } else {
+      this.form.patchValue({
+        governorate:'المحافظة',
+        city:'المدينة'
+      });
+    }
   }
 
   form:FormGroup = new FormGroup({
@@ -71,19 +91,23 @@ export class DialogAddCompanyComponent {
       const formData = new FormData();
       formData.append('name', data.name);
       formData.append('phone1', data.phone1);
-      formData.append('phone2', data.phone2);
-      formData.append('phone3', data.phone3);
-      formData.append('phone4', data.phone4);
-      formData.append('tel', data.tel);
+      formData.append('phone2', data.phone2 ?? '');
+      formData.append('phone3', data.phone3 ?? '');
+      formData.append('phone4', data.phone4 ?? '');
+      formData.append('tel', data.tel ?? '');
       formData.append('governorate', data.governorate);
-      if (data.city != "المدينة") {
+      if (data.city && data.city != "المدينة") {
         formData.append('city', data.city);
       }
       formData.append('address', data.address);
 
       console.log(this.form.value);
 
-      this.companyService.addCompany(formData).subscribe(result=>{
+      const request$ = this.isEdit && this.companyId
+        ? this.companyService.updateCompany(this.companyId, formData)
+        : this.companyService.addCompany(formData);
+
+      request$.subscribe(result=>{
         console.log(result);
 
         if (result.message == 'success') {
@@ -95,13 +119,16 @@ export class DialogAddCompanyComponent {
         this.errormessage = true;
         this.existName = '';
         this.existPhone = '';
-        if (error.error.errors.name) {
+        if (error.error?.errors?.name) {
           this.existName = '.الشركة موجودة بالفعل '
         }
-        if (error.error.errors.phone1) {
+        if (error.error?.errors?.phone1) {
           this.existPhone = '.الرقم مستخدم من قبل شركة '
         }
-        console.log(error.error.errors);
+        if (error.error?.message && !error.error?.errors) {
+          this.existName = error.error.message;
+        }
+        console.log(error.error?.errors);
       }
       )
     }

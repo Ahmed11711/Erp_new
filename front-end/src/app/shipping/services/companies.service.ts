@@ -31,4 +31,20 @@ export class CompaniesService {
   companyCollect(id:number , formData:any){
     return this.http.post(`${environment.Url}/companies/companycollect/${id}` ,formData);
   }
+
+  unlinkedSummary(){
+    return this.http.get(`${environment.Url}/companies/unlinked-summary`);
+  }
+
+  linkUnlinked(){
+    return this.http.post(`${environment.Url}/companies/link-unlinked`, {});
+  }
+
+  linkAccount(id:number){
+    return this.http.post(`${environment.Url}/companies/${id}/link-account`, {});
+  }
+
+  updateCompany(id:number, formData:any){
+    return this.http.put(`${environment.Url}/companies/${id}`, formData);
+  }
 }

@@ -68,4 +68,17 @@ class User extends Authenticatable implements JWTSubject{
     {
         return $this->hasMany(Offers::class, 'user_id');
     }
+
+    public function permissionOverrides()
+    {
+        return $this->hasMany(UserPermissionOverride::class);
+    }
+
+    /**
+     * Effective permission keys (slug + legacy display name) for API / frontend.
+     */
+    public function resolvedPermissionKeys(): array
+    {
+        return app(\App\Services\Rbac\PermissionResolutionService::class)->effectiveKeys($this);
+    }
 }

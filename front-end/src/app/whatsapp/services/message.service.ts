@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, of, shareReplay } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { environment } from 'src/env/env';
+import { WHATSAPP_SKIP_GLOBAL_LOADING } from './whatsapp-http.util';
 
 export type MessageDirection = 'sent' | 'received';
 export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | string;
@@ -71,7 +72,7 @@ export class MessageService {
 
     return this.http.get<MessagesPage>(
       `${this.baseUrl}/conversations/${conversationId}/messages`,
-      { params }
+      { params, headers: WHATSAPP_SKIP_GLOBAL_LOADING }
     );
   }
 
@@ -83,7 +84,10 @@ export class MessageService {
     }
 
     const stream$ = this.http
-      .get(`${this.baseUrl}/media/${messageId}`, { responseType: 'blob' })
+      .get(`${this.baseUrl}/media/${messageId}`, {
+        responseType: 'blob',
+        headers: WHATSAPP_SKIP_GLOBAL_LOADING,
+      })
       .pipe(
         map((blob) => URL.createObjectURL(blob)),
         tap((url) => {
@@ -107,6 +111,7 @@ export class MessageService {
       .get(`${this.baseUrl}/media/${messageId}`, {
         responseType: 'blob',
         params: { download: '1' },
+        headers: WHATSAPP_SKIP_GLOBAL_LOADING,
       })
       .pipe(
         map((blob) => {

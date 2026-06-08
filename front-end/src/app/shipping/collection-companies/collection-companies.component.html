@@ -1,0 +1,135 @@
+<div class="container-fluid cc-page py-3">
+  <div class="row mb-3 align-items-center">
+    <div class="col-md-4"><app-time></app-time></div>
+    <div class="col-md-4 text-center">
+      <p class="title header mb-0">شركات التحصيل والدفع</p>
+    </div>
+    <div class="col-md-4"></div>
+  </div>
+
+  <p class="cc-hint text-muted mb-3">
+    يمكنك ربط كل شركة بحساب موجود من شجرة الحسابات، أو ترك الحقل فارغاً ليُنشأ حساب تلقائياً تحت «شركات التحصيل».
+    ربط شركة الشحن اختياري.
+  </p>
+
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <button
+      type="button"
+      class="btn btn-outline-warning btn-sm"
+      (click)="linkAllUnlinked()"
+      [disabled]="linkingAll || unlinkedCount < 1">
+      ربط غير المربوطين ({{ unlinkedCount }})
+    </button>
+  </div>
+
+  <!-- نموذج -->
+  <div class="cc-panel mb-4">
+    <h6 class="cc-panel-title">{{ editingId ? 'تعديل' : 'إضافة شركة' }}</h6>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">الاسم *</label>
+        <input class="form-control" [(ngModel)]="form.name" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">الهاتف</label>
+        <input class="form-control" [(ngModel)]="form.phone" dir="ltr" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">البريد</label>
+        <input class="form-control" [(ngModel)]="form.email" dir="ltr" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">الحالة</label>
+        <div class="cc-select-wrap">
+          <select class="cc-select" [(ngModel)]="form.status">
+            <option value="active">نشط</option>
+            <option value="inactive">موقوف</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">ربط شركة شحن</label>
+        <div class="cc-select-wrap">
+          <select class="cc-select" [(ngModel)]="form.linked_shipping_company_id">
+            <option [ngValue]="null">— بدون —</option>
+            <option *ngFor="let s of shippingCompanies" [ngValue]="s.id">{{ s.name }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">حساب الشجرة (اختياري)</label>
+        <mat-form-field appearance="outline" class="w-100 cc-mat-field" dir="rtl">
+          <input
+            matInput
+            [formControl]="receivableAccountCtrl"
+            [matAutocomplete]="recvAuto"
+            placeholder="ابحث: PAYMOB"
+          />
+          <mat-autocomplete
+            #recvAuto="matAutocomplete"
+            [displayWith]="displayReceivableAccount"
+            (optionSelected)="onReceivableAccountSelected($event)"
+          >
+            <mat-option *ngFor="let acc of filteredReceivableAccounts" [value]="acc">
+              {{ acc.label }}
+            </mat-option>
+          </mat-autocomplete>
+        </mat-form-field>
+      </div>
+      <div class="col-12">
+        <button type="button" class="btn btn-primary btn-sm px-4" (click)="save()">
+          {{ editingId ? 'حفظ' : 'إضافة' }}
+        </button>
+        <button type="button" class="btn btn-light btn-sm px-3 ms-2" *ngIf="editingId" (click)="reset()">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- جدول -->
+  <div class="cc-panel">
+    <h6 class="cc-panel-title">القائمة</h6>
+    <div class="table-responsive" *ngIf="list.length; else empty">
+      <table class="table table-sm table-hover mb-0 cc-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>حساب الشجرة</th>
+            <th>ربط شحن</th>
+            <th>الحالة</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of list">
+            <td>{{ c.id }}</td>
+            <td>{{ c.name }}</td>
+            <td>
+              <span *ngIf="c.receivable_tree_account" class="text-success">
+                {{ c.receivable_tree_account.code }} — {{ c.receivable_tree_account.name }}
+              </span>
+              <span *ngIf="!c.receivable_tree_account" class="text-danger">غير مربوط</span>
+            </td>
+            <td>{{ c.linked_shipping_company?.name || '—' }}</td>
+            <td>{{ c.status === 'active' ? 'نشط' : 'موقوف' }}</td>
+            <td class="text-nowrap">
+              <button
+                type="button"
+                class="btn btn-link btn-sm p-0"
+                *ngIf="!isLinked(c)"
+                (click)="linkOne(c)"
+                [disabled]="linkingId === c.id">
+                ربط
+              </button>
+              <button type="button" class="btn btn-link btn-sm p-0 ms-2" (click)="edit(c)">تعديل</button>
+              <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2" (click)="remove(c.id)">حذف</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #empty>
+      <p class="text-muted text-center py-4 mb-0">لا توجد شركات بعد</p>
+    </ng-template>
+  </div>
+</div>

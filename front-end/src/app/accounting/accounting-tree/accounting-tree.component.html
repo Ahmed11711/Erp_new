@@ -28,6 +28,9 @@
           <button class="btn btn-outline-secondary" (click)="recalculateAllBalances()" [disabled]="loading || recalculating" title="إعادة حساب جميع الأرصدة وتحديث الشجرة">
             <i class="fas fa-sync-alt" [class.fa-spin]="recalculating"></i> إعادة حساب الأرصدة
           </button>
+          <button class="btn btn-outline-warning" (click)="openInventoryGlSync()" [disabled]="loading || syncingInventoryGl" title="مطابقة أرصدة حسابات المخزون مع التكلفة الفعلية للأصناف في المخازن">
+            <i class="fas fa-balance-scale" [class.fa-spin]="syncingInventoryGl"></i> تصحيح أرصدة المخزون
+          </button>
           <button class="btn btn-primary" (click)="openAddDialog()" [disabled]="loading">
             <i class="fas fa-plus"></i> إضافة حساب رئيسي
           </button>

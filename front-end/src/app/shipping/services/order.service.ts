@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { environment } from 'src/env/env';
+import { httpOptionsFromParams } from 'src/app/shared/utils/http-query.util';
 
 @Injectable({
   providedIn: 'root'
@@ -90,17 +91,65 @@ export class OrderService {
     return this.http.get(`${environment.Url}/addnote/${id}?value=${value}`);
   }
 
+  getOrderFulfillment(id: number) {
+    return this.http.get(`${environment.Url}/orders/${id}/fulfillment`);
+  }
+
+  assignOrderFulfillmentProviders(id: number, body: any) {
+    return this.http.put(`${environment.Url}/orders/${id}/fulfillment/providers`, body);
+  }
+
+  transferOrderLiability(id: number, body: { to_holder_type: string; to_holder_id: number; amount?: number; reason?: string }) {
+    return this.http.post(`${environment.Url}/orders/${id}/fulfillment/transfer-liability`, body);
+  }
+
+  deliverOrder(id: number, body: any = {}) {
+    return this.http.post(`${environment.Url}/order/${id}/deliver`, body);
+  }
+
+  bulkDeliverOrders(body: { order_ids: number[] }) {
+    return this.http.post(`${environment.Url}/orders/bulk-deliver`, body);
+  }
+
   collectOrder(id:number,formData:any){
     return this.http.post(`${environment.Url}/collectorder/${id}`,formData);
   }
 
-  /** تحصيل عدة طلبات دفعة واحدة (نفس القيود المحاسبية للتحصيل الفردي) */
   bulkCollectOrders(formData: FormData) {
     return this.http.post(`${environment.Url}/collectorder-bulk`, formData);
   }
 
+  getShippingAccountsSummary(params: any = {}) {
+    return this.http.get(`${environment.Url}/reports/shipping-accounts`, httpOptionsFromParams(params));
+  }
+
+  getShippingCompanyStatement(id: number, params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/${id}/statement`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  getShippingPendingOrders(params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/pending-orders`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  getSettlementSummary(params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/settlement-summary`,
+      httpOptionsFromParams(params)
+    );
+  }
+
   reviewOrder(formData:any){
     return this.http.post(`${environment.Url}/revieworder`,formData);
+  }
+
+  shopifyReviewOrder(id: number, payload: { note?: string | null; order?: any; order_products?: any[] }) {
+    return this.http.post(`${environment.Url}/orders/${id}/shopify-review`, payload);
   }
 
   userReviewOrder(formData:any){
@@ -120,5 +169,15 @@ export class OrderService {
 
   postGoogleSheet(sheet:string, data:any){
     return this.http.post(`${environment.Url}/googlesheet/${sheet}` , data);
+  }
+
+  /** معاينة عدد الطلبات في نطاق «تاريخ الطلب» قبل تسوية القيود (أدمن فقط — API). */
+  previewOrdersAccountingReconcile(body: { date_from: string; date_to: string }) {
+    return this.http.post(`${environment.Url}/orders/accounting/reconcile/preview`, body);
+  }
+
+  /** إعادة بناء قيود الفاتورة ORD-* من بيانات الطلب الحالية ضمن النطاق (أدمن فقط — API). */
+  runOrdersAccountingReconcile(body: { date_from: string; date_to: string; rebuild_prepaid?: boolean }) {
+    return this.http.post(`${environment.Url}/orders/accounting/reconcile/run`, body);
   }
 }

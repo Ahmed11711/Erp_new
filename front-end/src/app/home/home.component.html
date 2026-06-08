@@ -76,6 +76,16 @@
         <h4>حساب المندوبين وشركات الشحن</h4>
         <mat-icon>commute</mat-icon>
       </div>
+      <div class="head" routerLink="/dashboard/shipping/collection-companies"
+        *ngIf="rbac.canAny(['nav.shipping.master', 'shipping.companies.manage', 'collection_companies.manage', 'system.rbac'])">
+        <h4>شركات التحصيل والدفع</h4>
+        <mat-icon>payments</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/shipping/shipping-accounts-report"
+        *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
+        <h4>تقارير ذمم الشحن والتحصيل</h4>
+        <mat-icon>account_balance_wallet</mat-icon>
+      </div>
     </div>
     <div class="row d-flex justify-content-center">
       <div class="head" routerLink="/dashboard/approvals" *ngIf="user == 'Admin'">
@@ -85,6 +95,10 @@
       <div class="head" routerLink="/dashboard/admin/tracking" *ngIf="user == 'Admin'">
         <h4>تتبع</h4>
         <mat-icon>checklist</mat-icon>
+      </div>
+      <div class="head" routerLink="/dashboard/shopify" *ngIf="user == 'Admin'">
+        <h4>Shopify</h4>
+        <mat-icon>storefront</mat-icon>
       </div>
     </div>
   </div>

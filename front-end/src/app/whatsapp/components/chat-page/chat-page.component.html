@@ -2,10 +2,9 @@
   <div class="row wa-chat-row g-0">
     <!-- Customers (conversation) list -->
     <div
-      #listScrollArea
-      class="col-md-3 border-end wa-customer-list wa-chat-main-col"
+      class="col-12 col-md-3 border-end wa-customer-list wa-chat-main-col"
       [class.wa-customer-list--loading]="listLoading"
-      (scroll)="onListScroll()"
+      [class.wa-customer-list--thread-open]="!!customerId"
     >
       <div class="wa-conv-list-sticky">
       <div class="p-3 border-bottom wa-panel-header">
@@ -63,70 +62,134 @@
       </div>
       </div>
       <div
-        *ngIf="listLoading"
+        #listScrollArea
+        class="wa-list-body"
+        (scroll)="onListScroll()"
+      >
+      <div
+        *ngIf="listLoading && customers.length > 0"
         class="text-center p-2 text-muted small wa-list-loading"
       >
         <p class="mb-0">جاري تحديث القائمة…</p>
       </div>
-      <div *ngIf="loading && !customerId" class="text-center p-3 text-muted">
+      <div
+        *ngIf="(listInitialLoading || listLoading) && !customers.length"
+        class="text-center p-3 text-muted wa-list-initial-loading"
+      >
         <p class="mb-0">جاري التحميل...</p>
       </div>
       <div
-        *ngIf="!loading && customers.length > 0 && !filteredCustomers.length"
+        *ngIf="listLoadError && !customers.length && !listLoading"
+        class="text-center p-3 text-danger small"
+      >
+        <p class="mb-2">{{ listLoadError }}</p>
+        <button type="button" class="btn btn-sm btn-outline-primary" (click)="loadCustomers(true)">
+          إعادة المحاولة
+        </button>
+      </div>
+      <div
+        *ngIf="!listInitialLoading && customers.length > 0 && !filteredCustomers.length"
         class="text-center p-3 text-muted small"
       >
         <p class="mb-0">لا توجد نتائج مطابقة</p>
       </div>
       <div
         *ngFor="let c of filteredCustomers"
-        class="wa-customer-item p-3 border-bottom"
+        class="wa-customer-item"
         [class.wa-customer-active]="customerId === c.id"
         (click)="selectCustomer(c)"
       >
-        <div class="d-flex justify-content-between align-items-center">
-          <div class="flex-grow-1 min-w-0">
-            <strong class="d-block text-truncate">{{ c.name }}</strong>
-            <small class="text-muted d-block text-truncate">{{ c.phone }}</small>
-            <small class="text-muted" *ngIf="c.messages_count > 0">
-              {{ c.messages_count }} رسالة
-            </small>
-          </div>
-          <button
-            mat-icon-button
-            type="button"
-            (click)="openWhatsApp(c); $event.stopPropagation()"
-            matTooltip="فتح واتساب"
-          >
-            <mat-icon>chat</mat-icon>
-          </button>
+        <div class="wa-customer-avatar" [attr.data-letter]="customerInitial(c)">
+          {{ customerInitial(c) }}
         </div>
+        <div class="wa-customer-body">
+          <div class="wa-customer-row1">
+            <span class="wa-customer-name text-truncate">{{ c.name || c.phone }}</span>
+            <span class="wa-customer-time" *ngIf="customerLastTime(c) as t">{{ t }}</span>
+          </div>
+          <div class="wa-customer-row2">
+            <span class="wa-customer-preview text-truncate">{{ customerLastPreview(c) }}</span>
+            <span class="wa-customer-badge" *ngIf="c.messages_count > 0">{{ c.messages_count }}</span>
+          </div>
+        </div>
+        <button
+          mat-icon-button
+          type="button"
+          class="wa-customer-wa-btn"
+          (click)="openWhatsApp(c); $event.stopPropagation()"
+          matTooltip="فتح واتساب"
+          aria-label="فتح واتساب"
+        >
+          <mat-icon>open_in_new</mat-icon>
+        </button>
+      </div>
+      </div>
+      <div
+        *ngIf="canLoadMoreCustomers"
+        class="wa-list-paginate-more border-top p-2 bg-white"
+      >
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm w-100 wa-load-more-btn"
+          (click)="loadMoreCustomers($event)"
+          [disabled]="listLoadingMore"
+        >
+          <span *ngIf="!listLoadingMore">تحميل المزيد ({{ customers.length }} / {{ listTotalCustomers }})</span>
+          <span *ngIf="listLoadingMore">جاري التحميل…</span>
+        </button>
       </div>
     </div>
 
     <!-- Chat area -->
     <div
-      class="col-md-9 d-flex flex-column wa-chat-main wa-chat-main-col"
-      *ngIf="customerId && customer"
+      class="col-12 col-md-9 d-flex flex-column wa-chat-main wa-chat-main-col"
+      *ngIf="customerId"
     >
       <div
         class="p-3 border-bottom wa-chat-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+        [class.wa-chat-header--filters-open]="threadFiltersOpen"
       >
-        <div class="d-flex align-items-center gap-2 wa-chat-header-identity flex-shrink-0 min-w-0">
-          <div class="min-w-0">
-            <h5 class="mb-0 text-truncate">{{ customer.name }}</h5>
-            <small class="text-muted">{{ customer.phone }}</small>
+        <div
+          class="d-flex align-items-center gap-1 flex-shrink-0 min-w-0 wa-chat-header-lead"
+        >
+          <button
+            type="button"
+            mat-icon-button
+            class="d-md-none wa-chat-back flex-shrink-0"
+            (click)="backToConversations()"
+            aria-label="العودة لقائمة المحادثات"
+          >
+            <mat-icon>arrow_forward</mat-icon>
+          </button>
+          <div
+            class="d-flex align-items-center gap-2 wa-chat-header-identity flex-shrink-0 min-w-0"
+          >
+            <div class="min-w-0">
+              <h5 class="mb-0 text-truncate">{{ customer?.name || 'محادثة' }}</h5>
+              <small class="text-muted d-block text-truncate">{{ customer?.phone }}</small>
+            </div>
+            <button
+              mat-icon-button
+              type="button"
+              (click)="customer && openWhatsApp(customer)"
+              matTooltip="فتح واتساب"
+              [disabled]="!customer?.phone"
+            >
+              <mat-icon>open_in_new</mat-icon>
+            </button>
           </div>
           <button
-            mat-icon-button
             type="button"
-            (click)="openWhatsApp(customer)"
-            matTooltip="فتح واتساب"
+            mat-icon-button
+            class="d-md-none wa-chat-filter-toggle flex-shrink-0"
+            (click)="toggleThreadFilters()"
+            [attr.aria-expanded]="threadFiltersOpen"
+            aria-label="فلترة الرسائل"
           >
-            <mat-icon>open_in_new</mat-icon>
+            <mat-icon>{{ threadFiltersOpen ? 'expand_less' : 'tune' }}</mat-icon>
           </button>
         </div>
 
-        <!-- تصفية الرسائل بجانب الاسم (بدون صف إضافي → مساحة أعلى للرسائل) -->
         <form
           [formGroup]="filtersForm"
           class="wa-header-filters flex-grow-1 min-w-0"
@@ -357,7 +420,21 @@
       </div>
 
       <!-- Suggestions + input -->
-      <div class="wa-footer border-top bg-white">
+      <div
+        class="wa-footer border-top bg-white"
+        [class.wa-footer--suggestions-open]="suggestionsOpen"
+      >
+        <div class="wa-footer-toolbar d-md-none">
+          <button
+            type="button"
+            class="wa-footer-toggle-btn"
+            (click)="toggleSuggestions()"
+            *ngIf="templates.length > 0 || quickSnippets.length > 0"
+          >
+            <mat-icon>{{ suggestionsOpen ? 'expand_more' : 'lightbulb' }}</mat-icon>
+            {{ suggestionsOpen ? 'إخفاء الاقتراحات' : 'اقتراحات سريعة' }}
+          </button>
+        </div>
         <div
           class="wa-suggestions"
           *ngIf="templates.length > 0 || quickSnippets.length > 0"
@@ -413,7 +490,7 @@
 
     <!-- Empty placeholder -->
     <div
-      class="col-md-9 d-flex flex-column align-items-center justify-content-center wa-empty-bg wa-chat-main-col"
+      class="col-12 col-md-9 d-flex flex-column align-items-center justify-content-center wa-empty-bg wa-chat-main-col"
       *ngIf="!customerId"
     >
       <div class="text-center text-muted">

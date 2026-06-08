@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/env/env';
@@ -9,6 +9,7 @@ export interface RecipeImportIngredientPreview {
   quantity: number;
   unit: string | null;
   unit_cost: number | null;
+  color: string | null;
   item_exists: boolean;
   existing_item_id: number | null;
   existing_item_name: string | null;
@@ -53,6 +54,7 @@ export interface RecipeImportConfirmResponse {
   message: string;
   result: {
     items_created: number;
+    items_updated: number;
     recipes_created: number;
     recipes_updated: number;
     recipes_skipped: number;
@@ -136,8 +138,19 @@ export class ManufacturingService {
     return this.http.get<any[]>(`${environment.Url}/manufacture`);
   }
 
-  manfuctureByWarhouse(data:any){
-    return this.http.get(`${environment.Url}/manufacture/manfucture_by_warhouse?warehouse=${data}`)
+  /**
+   * @param warehouse اسم المخزن
+   * @param scope manufacture_only = أصناف لها Manufacture في هذا المخزن؛ all_categories = كل الأصناف (لدمج WIP→تام)
+   */
+  manfuctureByWarhouse(
+    warehouse: string,
+    scope: 'manufacture_only' | 'all_categories' = 'manufacture_only'
+  ) {
+    let params = new HttpParams().set('warehouse', warehouse);
+    if (scope === 'all_categories') {
+      params = params.set('scope', 'all_categories');
+    }
+    return this.http.get(`${environment.Url}/manufacture/manfucture_by_warhouse`, { params });
   }
 
   confirmed(){

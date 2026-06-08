@@ -21,6 +21,12 @@ use App\Services\CategoryInventoryCostService;
 use App\Services\Inventory\InventoryMovementLedgerService;
 use App\Enums\InventoryMovementType;
 use App\Models\Category;
+use App\Models\TransactionType;
+use App\Services\Documents\DocumentNumberService;
+use App\Services\Stock\PurchaseStockDocumentService;
+use App\Services\Stock\StockMovementJournalService;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 use Validator;
 class PurchasesController extends Controller
 {
@@ -53,19 +59,35 @@ class PurchasesController extends Controller
         if($request->has('supplier_id')){
             $search->where('supplier_id', $request->supplier_id);
         }
+        if ($request->filled('purchase_id')) {
+            $search->where('id', (int) $request->purchase_id);
+        }
         if ($request->filled('q')) {
-            $term = '%' . trim($request->q) . '%';
-            $search->where(function ($q) use ($term) {
-                $q->where('invoice_number', 'like', $term)
-                    ->orWhereHas('supplier', function ($s) use ($term) {
-                        $s->where('supplier_name', 'like', $term);
-                    })
-                    ->orWhereIn('id', function ($sub) use ($term) {
-                        $sub->select('purchase_id')
-                            ->from('invoice_categories')
-                            ->where('product_name', 'like', $term);
-                    });
-            });
+            $raw = trim($request->q);
+            if (ctype_digit($raw)) {
+                $id = (int) $raw;
+                $search->where(function ($q) use ($id, $raw) {
+                    $q->where('id', $id)
+                        ->orWhere('invoice_number', 'like', '%' . $raw . '%')
+                        ->orWhere('invoice_no', 'like', '%' . $raw . '%')
+                        ->orWhere('external_invoice_no', 'like', '%' . $raw . '%');
+                });
+            } else {
+                $term = '%' . $raw . '%';
+                $search->where(function ($q) use ($term) {
+                    $q->where('invoice_number', 'like', $term)
+                        ->orWhere('invoice_no', 'like', $term)
+                        ->orWhere('external_invoice_no', 'like', $term)
+                        ->orWhereHas('supplier', function ($s) use ($term) {
+                            $s->where('supplier_name', 'like', $term);
+                        })
+                        ->orWhereIn('id', function ($sub) use ($term) {
+                            $sub->select('purchase_id')
+                                ->from('invoice_categories')
+                                ->where('product_name', 'like', $term);
+                        });
+                });
+            }
         }
         $search->select('purchases.*');
         $search->addSelect([
@@ -98,7 +120,6 @@ class PurchasesController extends Controller
                 ->first();
 
             if ($latestPurchase) {
-                $latestPurchase->invoice_number = 'PO' . $latestPurchase->id;
                 $categories = DB::table('invoice_categories')->where('purchase_id', $latestPurchase->id)->get();
                 $invoice = $latestPurchase;
             } else {
@@ -107,7 +128,12 @@ class PurchasesController extends Controller
 
             return response()->json([
                 'invoice' => $invoice,
-                'categories' => $categories
+                'categories' => $categories,
+                'print_url' => URL::temporarySignedRoute(
+                    'documents.purchases.print',
+                    now()->addHours(48),
+                    ['purchase' => $invoice->ref ? (int) $invoice->ref : (int) $invoice->id]
+                ),
             ], 200);
         }
 
@@ -137,6 +163,11 @@ class PurchasesController extends Controller
             'tracking' => $tracking,
             'categories' => $categories,
             'cost_breakdown' => LandedCostService::purchaseBreakdown($invoice),
+            'print_url' => URL::temporarySignedRoute(
+                'documents.purchases.print',
+                now()->addHours(48),
+                ['purchase' => $mainId]
+            ),
         ];
 
         return response()->json($data, 200);
@@ -166,6 +197,34 @@ class PurchasesController extends Controller
             'products.*.price_edited' => 'required|boolean',
         ];
         $paymentType = $request->payment_type ?? 'bank';
+        if ($request->has('invoiceId')) {
+            $mainId = (int) $request->input('invoiceId');
+            $chainIds = Purchase::query()
+                ->where(function ($q) use ($mainId) {
+                    $q->where('id', $mainId)->orWhere('ref', $mainId);
+                })
+                ->pluck('id')
+                ->all();
+            $rules['custom_invoice_no'] = [
+                'nullable',
+                'string',
+                'max:64',
+                Rule::unique('purchases', 'invoice_no')->where(function ($query) use ($chainIds) {
+                    return $query->whereNotIn('id', $chainIds);
+                }),
+                Rule::unique('purchases', 'invoice_number')->where(function ($query) use ($chainIds) {
+                    return $query->whereNotIn('id', $chainIds);
+                }),
+            ];
+        } else {
+            $rules['custom_invoice_no'] = [
+                'nullable',
+                'string',
+                'max:64',
+                Rule::unique('purchases', 'invoice_no'),
+                Rule::unique('purchases', 'invoice_number'),
+            ];
+        }
         if ((float) $request->paid_amount > 0) {
             if ($paymentType === 'bank') {
                 $rules['bank_id'] = 'required|exists:banks,id';
@@ -181,6 +240,10 @@ class PurchasesController extends Controller
             if (is_array($decodedProducts)) {
                 $data['products'] = $decodedProducts;
             }
+        }
+        if (isset($data['custom_invoice_no'])) {
+            $trimmed = trim((string) $data['custom_invoice_no']);
+            $data['custom_invoice_no'] = $trimmed === '' ? null : $trimmed;
         }
         Validator::make($data, $rules)->validate();
 
@@ -227,6 +290,25 @@ class PurchasesController extends Controller
                     'عكس سطر مشتريات عند تعديل الفاتورة',
                     null,
                     auth()->user()->name ?? null
+                );
+
+                $movementJournal = app(StockMovementJournalService::class);
+                $afterQty = (float) Category::query()->where('id', $revCatId)->value('quantity');
+                $beforeQty = $afterQty + $qty;
+                $revStockId = Category::query()->where('id', $revCatId)->value('stock_id');
+                $movementJournal->record(
+                    (int) $revCatId,
+                    $revStockId ? (int) $revStockId : null,
+                    'out',
+                    $qty,
+                    InventoryMovementType::PurchaseReceiptReversal->value,
+                    $beforeQty,
+                    $afterQty,
+                    'purchase',
+                    (int) $oldInvice->id,
+                    null,
+                    $effectiveUnit,
+                    $lineTotal,
                 );
 
                 CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
@@ -283,6 +365,9 @@ class PurchasesController extends Controller
             'invoice_image' => $img_name,
             'payment_type' => $paymentType,
             'status' => $status,
+            'notes' => request('notes'),
+            'external_invoice_no' => request('external_invoice_no'),
+            'printable_status' => 'draft',
         ];
         if ($paymentType === 'bank') {
             $purchaseData['bank_id'] = $request->bank_id;
@@ -300,9 +385,10 @@ class PurchasesController extends Controller
             $purchaseData['service_account_id'] = null;
         }
         $purchase = Purchase::create($purchaseData);
-        if($request->has('invoiceId')){
+        if ($request->has('invoiceId')) {
             $mainInvoice->status = '0';
             $mainInvoice->edits = $mainInvoice->edits + 1;
+            $mainInvoice->receipt_date = $purchase->receipt_date;
             $mainInvoice->save();
             PurchasesTracking::create([
                 'invoice_id' => $mainInvoice->id,
@@ -311,9 +397,39 @@ class PurchasesController extends Controller
                 'user_id' => auth()->id(),
             ]);
             $purchase->ref = $mainInvoice->id;
-            $purchase->invoice_number = $mainInvoice->invoice_number;
-            $purchase->save();
+            $customEdit = trim((string) $request->input('custom_invoice_no', ''));
+            if ($customEdit !== '') {
+                $purchase->invoice_no = $customEdit;
+                $purchase->invoice_number = $customEdit;
+            } else {
+                $purchase->invoice_number = $mainInvoice->invoice_number;
+                $purchase->invoice_no = $mainInvoice->invoice_no ?: $mainInvoice->invoice_number;
+            }
+
+            // مراجعة جديدة بنفس رقم المستند: الصف السابق ما زال يحمل invoice_no فتفشل DB (فهرس فريد).
+            // يبقى الرقم على آخر صف فقط؛ المراجعة الحالية هي المرجع للطباعة والسندات.
+            $mainId = (int) $mainInvoice->id;
+            Purchase::query()
+                ->where(function ($q) use ($mainId) {
+                    $q->where('id', $mainId)->orWhere('ref', $mainId);
+                })
+                ->where('id', '!=', (int) $purchase->id)
+                ->update(['invoice_no' => null]);
+        } else {
+            $custom = trim((string) $request->input('custom_invoice_no', ''));
+            if ($custom !== '') {
+                $purchase->invoice_no = $custom;
+                $purchase->invoice_number = $custom;
+            } else {
+                $purchaseType = TransactionType::query()->where('code', 'PURCHASE_ADD')->firstOrFail();
+                $purchase->invoice_no = app(DocumentNumberService::class)->generate((int) $purchaseType->id);
+                $purchase->invoice_number = $purchase->invoice_no;
+            }
         }
+        $purchase->external_invoice_no = $request->input('external_invoice_no');
+        $purchase->notes = $request->input('notes');
+        $purchase->printable_status = $purchase->printable_status ?: 'draft';
+        $purchase->save();
         $products = $request->products;
         $products = json_decode($products, true);
         $linesSum = 0;
@@ -476,6 +592,9 @@ class PurchasesController extends Controller
                 'user_id' => auth()->id(),
             ]);
         }
+
+        app(PurchaseStockDocumentService::class)->syncPurchaseDocument($purchase->fresh());
+
         DB::commit();
         return response()->json(['success' => true], 200);
         } catch (\Exception $e) {
@@ -673,6 +792,25 @@ class PurchasesController extends Controller
                 auth()->user()->name ?? null
             );
 
+            $movementJournal = app(StockMovementJournalService::class);
+            $afterQty = (float) Category::query()->where('id', $delCatId)->value('quantity');
+            $beforeQty = $afterQty + $qty;
+            $delStockId = Category::query()->where('id', $delCatId)->value('stock_id');
+            $movementJournal->record(
+                (int) $delCatId,
+                $delStockId ? (int) $delStockId : null,
+                'out',
+                $qty,
+                InventoryMovementType::PurchaseReceiptReversal->value,
+                $beforeQty,
+                $afterQty,
+                'purchase',
+                (int) $purchase->id,
+                null,
+                $effectiveUnit,
+                $lineTotal,
+            );
+
             CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
 
             DB::table('categories_balance')->insert([
@@ -760,5 +898,23 @@ class PurchasesController extends Controller
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Marks purchase invoice printable lifecycle state (draft / printed / archived).
+     */
+    public function updatePrintable(Request $request, $id)
+    {
+        $request->validate([
+            'printable_status' => 'required|string|in:draft,printed,archived',
+        ]);
+
+        $row = Purchase::query()->findOrFail($id);
+        $mainId = $row->ref ? (int) $row->ref : (int) $row->id;
+        $main = Purchase::query()->findOrFail($mainId);
+        $main->printable_status = $request->printable_status;
+        $main->save();
+
+        return response()->json(['success' => true, 'invoice' => $main], 200);
     }
 }

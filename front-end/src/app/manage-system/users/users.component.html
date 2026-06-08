@@ -44,6 +44,10 @@
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu">
+              <a mat-menu-item [routerLink]="['/dashboard/system/powers']" [queryParams]="{ userId: elm.id }">
+                <mat-icon class="me-1" style="vertical-align: middle;">security</mat-icon>
+                <span>صلاحيات المستخدم</span>
+              </a>
               <button mat-menu-item (click)="deleteData(elm.id)" *ngIf="elm?.status != 1">
                 <span>حذف</span>
               </button>

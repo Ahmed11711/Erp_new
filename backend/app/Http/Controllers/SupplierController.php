@@ -30,7 +30,13 @@ class SupplierController extends Controller
         return response()->json($suppliers, 200);
     }
     public function supplier_names(){
-        $data = Supplier::select('id', 'supplier_name')->get();
+        $data = Supplier::query()
+            ->select('id', 'supplier_name')
+            ->whereNotNull('supplier_name')
+            ->where('supplier_name', '!=', '')
+            ->orderBy('supplier_name')
+            ->get();
+
         return response()->json($data, 200);
     }
     public function store(Request $request){

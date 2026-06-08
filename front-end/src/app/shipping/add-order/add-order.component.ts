@@ -15,6 +15,8 @@ import { DialogAddCompanyComponent } from '../dialog-add-company/dialog-add-comp
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { AuthService } from 'src/app/auth/auth.service';
+import { catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
@@ -62,7 +64,9 @@ export class AddOrderComponent implements OnInit {
     this.orderSource.data().subscribe(reuslt => this.orderSources = reuslt);
     this.orderService.getNumbers().subscribe((reuslt: any) => this.numbers = reuslt);
     this.shippingWay.data().subscribe(result => this.shippingWays = result);
-    this.orderService.getProducts().subscribe((result: any) => this.products = result);
+    this.orderService.getProducts().pipe(catchError(() => of([]))).subscribe((result: any) => {
+      this.products = Array.isArray(result) ? result : [];
+    });
     this.bankService.bankSelect().subscribe((result: any) => this.banksData = result);
     this.serviceAccountsService.index().subscribe((result: any) => this.serviceAccountsData = result); // Fetch Service Accounts
 

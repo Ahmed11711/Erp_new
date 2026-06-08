@@ -42,6 +42,7 @@ export class FilterOrderService {
   shipping_method_id!:string;
   shipping_line_id!:string;
   reviewed!:string;
+  shopify!:string;
   company_id!:number;
   category_id!:number | null;
   confimedOrderNotifi!:boolean;
@@ -66,6 +67,10 @@ export class FilterOrderService {
 
     if (this.reviewed) {
       url += `reviewed=${this.reviewed}&`
+    }
+
+    if (this.shopify) {
+      url += `shopify=${this.shopify}&`
     }
 
     if (this.customer_type) {

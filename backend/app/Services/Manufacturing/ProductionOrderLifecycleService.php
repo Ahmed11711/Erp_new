@@ -28,13 +28,15 @@ final class ProductionOrderLifecycleService
             if ($recipe->ingredients->isEmpty()) {
                 throw new EmptyRecipeException('Cannot create a production order: recipe has no ingredient lines.');
             }
-            if ((int) ($recipe->output_item_id ?? 0) !== (int) $outputProductId) {
+            $output = Item::query()->findOrFail($outputProductId);
+            $anchorId = ManufacturingConsumptionResolver::outputAnchorId($output);
+            if ((int) ($recipe->output_item_id ?? 0) !== $anchorId) {
                 throw new \InvalidArgumentException(
-                    'Output product must match the recipe output (recipe.output_item_id must equal output_product_id).'
+                    'Output product must match the recipe output (recipe.output_item_id must equal the finished base / anchor for this variant).'
                 );
             }
 
-            RecipeStructureValidator::assertValidForRecipe($recipe, $outputProductId);
+            RecipeStructureValidator::assertValidForRecipe($recipe, $anchorId);
 
             return ProductionOrder::query()->create([
                 'recipe_id' => $recipe->id,
@@ -64,18 +66,27 @@ final class ProductionOrderLifecycleService
             $materialsTotal = 0.0;
             $glLines = [];
 
-            foreach ($recipe->ingredients as $ing) {
-                $item = $ing->item;
-                if (! $item) {
-                    continue;
-                }
+            $order->loadMissing('outputProduct');
+            /** @var ManufacturingConsumptionResolver $resolver */
+            $resolver = app(ManufacturingConsumptionResolver::class);
+            $productionColorId = $order->outputProduct?->color_id !== null
+                ? (int) $order->outputProduct->color_id
+                : null;
 
+            foreach ($recipe->ingredients as $ing) {
                 $need = (float) $ing->quantity * $batchQty;
                 if ($need <= 0) {
                     continue;
                 }
 
-                $cat = Item::query()->lockForUpdate()->findOrFail($item->id);
+                $bomLine = Item::query()->findOrFail((int) $ing->item_id);
+                try {
+                    $consume = $resolver->resolveForProduction($bomLine, $productionColorId);
+                } catch (\InvalidArgumentException $e) {
+                    throw new \RuntimeException($e->getMessage(), 0, $e);
+                }
+
+                $cat = Item::query()->lockForUpdate()->findOrFail((int) $consume->id);
                 $currentQty = (float) ($cat->quantity ?? 0);
                 if ($currentQty + 1e-9 < $need) {
                     throw new \RuntimeException(

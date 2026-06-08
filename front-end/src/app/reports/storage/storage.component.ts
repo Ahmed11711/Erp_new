@@ -1,25 +1,66 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CategoryService } from 'src/app/categories/services/category.service';
+import { environment } from 'src/env/env';
+
+type WarehouseSortField =
+  | 'quantity'
+  | 'total_value'
+  | 'sell_value'
+  | 'category_name'
+  | 'period_in_qty'
+  | 'period_out_qty'
+  | 'period_net_qty';
+
+interface WarehouseReportTotals {
+  items_count: number;
+  total_quantity: number;
+  total_value: number;
+  total_sell_value: number;
+  period_in_total: number;
+  period_out_total: number;
+  is_finished_warehouse: boolean;
+  warehouse: string;
+  date_from: string | null;
+  date_to: string | null;
+}
 
 @Component({
   selector: 'app-storage',
   templateUrl: './storage.component.html',
   styleUrls: ['../../shared/styles/report-page-shell.css', './storage.component.css']
 })
-export class StorageComponent implements OnInit {
+export class StorageComponent implements OnInit, OnDestroy {
   data: any[] = [];
-  filteredData: any[] = [];
   dateFrom: string | null = null;
   dateTo: string | null = null;
   warehouse = 'مخزن منتج تام';
   searchTerm = '';
   loading = false;
-  loadError = false;
+  loadError: string | null = null;
   length = 0;
   page = 0;
   pageSize = 15;
   pageSizeOptions = [15, 50, 100];
   showFilters = true;
+  sortField: WarehouseSortField = 'total_value';
+  totals: WarehouseReportTotals = {
+    items_count: 0,
+    total_quantity: 0,
+    total_value: 0,
+    total_sell_value: 0,
+    period_in_total: 0,
+    period_out_total: 0,
+    is_finished_warehouse: true,
+    warehouse: '',
+    date_from: null,
+    date_to: null
+  };
+
+  imgUrl = environment.imgUrl;
+  expanded = new Set<number>();
+  imageFailed = new Set<number>();
+
+  private searchDebounce?: ReturnType<typeof setTimeout>;
 
   warehouses = [
     { value: 'مخزن مواد خام', label: 'مخزن المواد الخام' },
@@ -41,26 +82,57 @@ export class StorageComponent implements OnInit {
     this.load();
   }
 
+  ngOnDestroy(): void {
+    clearTimeout(this.searchDebounce);
+  }
+
+  get isFinishedWarehouse(): boolean {
+    return this.warehouse === 'مخزن منتج تام';
+  }
+
+  get primaryValueLabel(): string {
+    return this.isFinishedWarehouse ? 'قيمة البيع' : 'قيمة التكلفة';
+  }
+
+  get primaryValueTotal(): number {
+    return this.isFinishedWarehouse ? this.totals.total_sell_value : this.totals.total_value;
+  }
+
+  itemPrimaryValue(row: any): number {
+    return this.isFinishedWarehouse ? this.num(row.sell_value) : this.num(row.total_value);
+  }
+
   load(): void {
     this.loading = true;
-    this.loadError = false;
-    const params: any = {
+    this.loadError = null;
+    const params: Record<string, string | undefined> = {
       warehouse: this.warehouse,
-      date_from: this.dateFrom,
-      date_to: this.dateTo
+      date_from: this.dateFrom || undefined,
+      date_to: this.dateTo || undefined,
+      sort: this.sortField,
+      search: this.searchTerm.trim() || undefined
     };
-    this.categoryService.warehouseDetails(this.pageSize, this.page + 1, params).subscribe({
+    this.categoryService.warehouseInventoryReport(this.pageSize, this.page + 1, params).subscribe({
       next: (res: any) => {
         this.data = res?.data || [];
         this.length = res?.total || 0;
-        this.applyFilter();
+        this.totals = { ...this.totals, ...(res?.totals || {}) };
+        this.expanded.clear();
+        this.imageFailed.clear();
         this.loading = false;
       },
-      error: () => {
+      error: (err) => {
         this.data = [];
-        this.filteredData = [];
-        this.loadError = true;
         this.loading = false;
+        const body = err?.error;
+        const msg =
+          (typeof body?.message === 'string' && body.message) ||
+          (body?.errors && typeof body.errors === 'object'
+            ? Object.values(body.errors).flat().join(' ')
+            : null) ||
+          err?.message ||
+          'تعذر تحميل التقرير. تحقق من التواريخ والاتصال بالخادم.';
+        this.loadError = msg;
       }
     });
   }
@@ -72,56 +144,31 @@ export class StorageComponent implements OnInit {
   }
 
   onSearchChange(): void {
-    this.applyFilter();
+    clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => {
+      this.page = 0;
+      this.load();
+    }, 400);
   }
 
-  applyFilter(): void {
-    const term = (this.searchTerm || '').trim().toLowerCase();
-    if (!term) {
-      this.filteredData = [...this.data];
-    } else {
-      this.filteredData = this.data.filter((r: any) =>
-        (r.category_name || '').toLowerCase().includes(term) ||
-        (r.type || '').toLowerCase().includes(term)
-      );
-    }
+  onSortChange(): void {
+    this.page = 0;
+    this.load();
   }
 
-  formatDate(d: string): string {
-    if (!d) return '-';
-    const dt = new Date(d);
-    return dt.toLocaleDateString('ar-EG');
+  onWarehouseChange(): void {
+    this.page = 0;
+    this.load();
   }
 
-  private num(v: unknown): number {
-    if (v == null || v === '') {
-      return 0;
-    }
-    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  get sumBalanceBefore(): number {
-    return this.filteredData.reduce((s, r) => s + this.num(r.balance_before), 0);
-  }
-
-  get sumQuantity(): number {
-    return this.filteredData.reduce((s, r) => s + this.num(r.quantity), 0);
-  }
-
-  get sumBalanceAfter(): number {
-    return this.filteredData.reduce((s, r) => s + this.num(r.balance_after), 0);
-  }
-
-  get filteredRowCount(): number {
-    return this.filteredData.length;
+  onDateChange(): void {
+    this.page = 0;
+    this.load();
   }
 
   toggleFilters(): void {
     this.showFilters = !this.showFilters;
   }
-
-  expanded = new Set<number>();
 
   toggleExpand(index: number): void {
     if (this.expanded.has(index)) {
@@ -131,7 +178,20 @@ export class StorageComponent implements OnInit {
     }
   }
 
+  onImgError(index: number): void {
+    this.imageFailed.add(index);
+  }
+
   trackByIndex(index: number): number {
     return index;
   }
+
+  private num(v: unknown): number {
+    if (v == null || v === '') {
+      return 0;
+    }
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
 }
+

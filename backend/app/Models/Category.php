@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Category extends Model
 {
@@ -12,8 +15,12 @@ class Category extends Model
   'category_name',
   'item_code',
   'color',
+  'parent_item_id',
+  'supports_color',
+  'color_id',
   'recipe_id',
   'product_type',
+  'shipping_size_tier',
   'allow_wip_sale',
   'item_revision',
   'lineage_root_id',
@@ -36,6 +43,7 @@ class Category extends Model
 
  protected $casts = [
      'allow_wip_sale' => 'boolean',
+     'supports_color' => 'boolean',
  ];
 
  public function production()
@@ -54,5 +62,28 @@ class Category extends Model
  public function recipe()
  {
   return $this->belongsTo(Recipe::class);
+ }
+
+ public function parentItem(): BelongsTo
+ {
+  return $this->belongsTo(Category::class, 'parent_item_id');
+ }
+
+ public function variants(): HasMany
+ {
+  return $this->hasMany(Category::class, 'parent_item_id');
+ }
+
+ public function tintColor(): BelongsTo
+ {
+  return $this->belongsTo(Color::class, 'color_id');
+ }
+
+ /**
+  * Available production / sales colors for a base finished-good (pivot).
+  */
+ public function manufacturingColors(): BelongsToMany
+ {
+  return $this->belongsToMany(Color::class, 'category_color', 'category_id', 'color_id')->withTimestamps();
  }
 }

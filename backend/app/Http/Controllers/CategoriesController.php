@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\Manufacture;
+use App\Models\ManufactureProduct;
+use App\Models\RecipeIngredient;
 use App\Models\Stock;
 use App\Models\TreeAccount;
 use Validator;
 use Carbon\Carbon;
 use App\Models\OrderProduct;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -75,7 +79,49 @@ class CategoriesController extends Controller
   if (!$category) {
    return response()->json(['error' => 'Category not found'], 404);
   }
-  $category->delete();
+
+  $blockReasons = [];
+  if (ManufactureProduct::query()->where('product_id', $id)->exists()) {
+   $blockReasons[] = 'الصنف مستخدم كمكوّن (مادة خام) ضمن تفاصيل أوامر التصنيع.';
+  }
+  if (Manufacture::query()->where('product_id', $id)->exists()) {
+   $blockReasons[] = 'الصنف معرّف كمنتج نهائي في أمر تصنيع.';
+  }
+  if (OrderProduct::query()->where('category_id', $id)->exists()) {
+   $blockReasons[] = 'الصنف مستخدم في طلبات مبيعات.';
+  }
+  if (RecipeIngredient::query()->where('item_id', $id)->exists()) {
+   $blockReasons[] = 'الصنف مستخدم كمكوّن في وصفة تصنيع.';
+  }
+
+  if ($blockReasons !== []) {
+   return response()->json([
+    'message' => 'لا يمكن حذف هذا الصنف لوجود ارتباطات في النظام.',
+    'details' => $blockReasons,
+   ], 422);
+  }
+
+  try {
+   $category->delete();
+  } catch (QueryException $e) {
+   $sqlState = $e->errorInfo[0] ?? '';
+   $isFkBlock = $sqlState === '23000'
+    || str_contains($e->getMessage(), 'Integrity constraint violation')
+    || str_contains($e->getMessage(), '1451');
+   if ($isFkBlock) {
+    Log::warning('category_delete_blocked_by_fk', [
+     'category_id' => $id,
+     'exception' => $e->getMessage(),
+    ]);
+
+    return response()->json([
+     'message' => 'لا يمكن حذف هذا الصنف لوجود سجلات مرتبطة في قاعدة البيانات. احذف أو عدّل تلك السجلات ثم أعد المحاولة.',
+     'details' => config('app.debug') ? [$e->getMessage()] : [],
+    ], 422);
+   }
+
+   throw $e;
+  }
 
   return response()->json(['message' => 'Category deleted successfully'], 200);
  }
@@ -103,6 +149,7 @@ class CategoriesController extends Controller
    'color' => 'nullable|string|max:128',
    'recipe_id' => 'nullable|integer|exists:recipes,id',
    'product_type' => 'nullable|string|in:raw_material,semi_finished,finished',
+   'shipping_size_tier' => 'nullable|string|in:small,medium,large',
    'allow_wip_sale' => 'nullable|boolean',
   ]);
   $img_name = '';
@@ -150,6 +197,9 @@ class CategoriesController extends Controller
 
   if ($request->filled('product_type')) {
    $attrs['product_type'] = (string) $request->input('product_type');
+  }
+  if ($request->filled('shipping_size_tier')) {
+   $attrs['shipping_size_tier'] = (string) $request->input('shipping_size_tier');
   }
   if ($request->has('allow_wip_sale')) {
    $attrs['allow_wip_sale'] = $request->boolean('allow_wip_sale');
@@ -226,6 +276,7 @@ class CategoriesController extends Controller
    'color' => 'nullable|string|max:128',
    'recipe_id' => 'nullable|integer|exists:recipes,id',
    'product_type' => 'nullable|string|in:raw_material,semi_finished,finished',
+   'shipping_size_tier' => 'nullable|string|in:small,medium,large',
    'allow_wip_sale' => 'nullable|boolean',
 
   ]);
@@ -287,6 +338,9 @@ class CategoriesController extends Controller
   if ($request->has('product_type')) {
    $update['product_type'] = $request->filled('product_type') ? (string) $request->input('product_type') : null;
   }
+  if ($request->has('shipping_size_tier')) {
+   $update['shipping_size_tier'] = $request->filled('shipping_size_tier') ? (string) $request->input('shipping_size_tier') : null;
+  }
   if ($request->has('allow_wip_sale')) {
    $update['allow_wip_sale'] = $request->boolean('allow_wip_sale');
   }
@@ -300,6 +354,31 @@ class CategoriesController extends Controller
 
 
   return response()->json($category, 200);
+ }
+
+ /**
+  * ترقية صنف من تحت التشغيل (WIP) إلى منتج تام مع حركة مخزون وقيد محاسبي.
+  */
+ public function promoteToFinished(int $id)
+ {
+  try {
+   $result = app(\App\Services\Manufacturing\WipToFinishedPromotionService::class)
+    ->promote($id, auth()->id());
+
+   $cat = $result['category'];
+
+   return response()->json([
+    'success' => true,
+    'message' => 'تم ترقية الصنف إلى منتج تام بنجاح',
+    'category' => $cat,
+    'daily_entry_id' => $result['daily_entry_id'],
+   ]);
+  } catch (\RuntimeException $e) {
+   return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+  } catch (\Throwable $e) {
+   Log::error('promoteToFinished failed', ['id' => $id, 'error' => $e->getMessage()]);
+   return response()->json(['success' => false, 'message' => 'حدث خطأ أثناء ترقية الصنف.'], 500);
+  }
  }
 
  /**
@@ -871,22 +950,159 @@ public function changeCategoryQuantityss(Request $request)
  }
 
 
+ /**
+  * تقرير مخزون مجمّع لكل صنف ضمن فترة (رصيد افتتاحي/ختامي + حركة وارد/صادر + قيمة).
+  */
+ public function warehouseInventoryReport(Request $request)
+ {
+  $request->validate([
+   'warehouse' => 'required|string',
+   'date_from' => 'nullable|date',
+   'date_to' => 'nullable|date|after_or_equal:date_from',
+   'sort' => 'nullable|string|in:quantity,total_value,sell_value,category_name,period_in_qty,period_out_qty,period_net_qty',
+   'search' => 'nullable|string|max:200',
+   'itemsPerPage' => 'nullable|integer|min:1|max:500',
+  ]);
+
+  $itemsPerPage = (int) $request->input('itemsPerPage', 15);
+  $warehouse = (string) $request->warehouse;
+  $isFinished = $warehouse === 'مخزن منتج تام';
+  $dateFrom = $request->filled('date_from') ? $request->date_from.' 00:00:00' : null;
+  $dateTo = $request->filled('date_to') ? $request->date_to.' 23:59:59' : null;
+  $search = $request->filled('search') ? trim((string) $request->search) : null;
+
+  $closingExpr = 'COALESCE(closing.closing_qty, c.quantity, 0)';
+  $openingExpr = 'COALESCE(opening.opening_qty, 0)';
+  $costValueExpr = "CASE WHEN c.quantity > 0.0000001 THEN ({$closingExpr} / c.quantity) * c.total_price ELSE ({$closingExpr}) * COALESCE(c.unit_price, 0) END";
+  $sellValueExpr = "({$closingExpr}) * COALESCE(c.category_price, 0)";
+  $unitCostExpr = "CASE WHEN c.quantity > 0.0000001 THEN c.total_price / c.quantity ELSE COALESCE(c.unit_price, 0) END";
+
+  $baseQuery = $this->warehouseInventoryReportBaseQuery($warehouse, $dateFrom, $dateTo, $search);
+
+  $totalsRow = (clone $baseQuery)->selectRaw("
+    COUNT(*) as items_count,
+    SUM({$closingExpr}) as total_quantity,
+    SUM({$costValueExpr}) as total_value,
+    SUM({$sellValueExpr}) as total_sell_value,
+    SUM(COALESCE(period.period_in_qty, 0)) as period_in_total,
+    SUM(COALESCE(period.period_out_qty, 0)) as period_out_total
+  ")->first();
+
+  $query = (clone $baseQuery)->select(
+    'c.id as category_id',
+    'c.category_name',
+    'c.category_image',
+    DB::raw("{$openingExpr} as opening_qty"),
+    DB::raw("{$closingExpr} as quantity"),
+    DB::raw('COALESCE(period.period_in_qty, 0) as period_in_qty'),
+    DB::raw('COALESCE(period.period_out_qty, 0) as period_out_qty'),
+    DB::raw('COALESCE(period.period_net_qty, 0) as period_net_qty'),
+    DB::raw("ROUND({$unitCostExpr}, 4) as unit_cost"),
+    DB::raw("ROUND({$costValueExpr}, 2) as total_value"),
+    DB::raw("ROUND({$sellValueExpr}, 2) as sell_value"),
+    DB::raw('COALESCE(m.unit, "-") as measurement_unit')
+   );
+
+  $sort = (string) $request->input('sort', 'total_value');
+  $sortMap = [
+   'quantity' => DB::raw($closingExpr),
+   'total_value' => DB::raw($costValueExpr),
+   'sell_value' => DB::raw($sellValueExpr),
+   'category_name' => 'c.category_name',
+   'period_in_qty' => DB::raw('COALESCE(period.period_in_qty, 0)'),
+   'period_out_qty' => DB::raw('COALESCE(period.period_out_qty, 0)'),
+   'period_net_qty' => DB::raw('COALESCE(period.period_net_qty, 0)'),
+  ];
+  $sortCol = $sortMap[$sort] ?? $sortMap['total_value'];
+  $direction = $sort === 'category_name' ? 'asc' : 'desc';
+
+  $paginated = $query->orderBy($sortCol, $direction)->paginate($itemsPerPage);
+
+  $payload = $paginated->toArray();
+  $payload['totals'] = [
+   'items_count' => (int) ($totalsRow->items_count ?? 0),
+   'total_quantity' => round((float) ($totalsRow->total_quantity ?? 0), 2),
+   'total_value' => round((float) ($totalsRow->total_value ?? 0), 2),
+   'total_sell_value' => round((float) ($totalsRow->total_sell_value ?? 0), 2),
+   'period_in_total' => round((float) ($totalsRow->period_in_total ?? 0), 2),
+   'period_out_total' => round((float) ($totalsRow->period_out_total ?? 0), 2),
+   'is_finished_warehouse' => $isFinished,
+   'warehouse' => $warehouse,
+   'date_from' => $request->input('date_from'),
+   'date_to' => $request->input('date_to'),
+  ];
+
+  return response()->json($payload, 200);
+ }
+
+ /**
+  * @return \Illuminate\Database\Query\Builder
+  */
+ private function warehouseInventoryReportBaseQuery(string $warehouse, ?string $dateFrom, ?string $dateTo, ?string $search)
+ {
+  $closingSub = DB::table('categories_balance as cb_close')
+   ->select('cb_close.category_id', 'cb_close.balance_after as closing_qty')
+   ->joinSub(
+    DB::table('categories_balance')
+     ->select('category_id', DB::raw('MAX(id) as max_id'))
+     ->when($dateTo, fn ($q) => $q->where('created_at', '<=', $dateTo))
+     ->groupBy('category_id'),
+    'latest_close',
+    fn ($join) => $join->on('cb_close.id', '=', 'latest_close.max_id')
+   );
+
+  $openingSub = DB::table('categories_balance as cb_open')
+   ->select('cb_open.category_id', 'cb_open.balance_after as opening_qty')
+   ->joinSub(
+    DB::table('categories_balance')
+     ->select('category_id', DB::raw('MAX(id) as max_id'))
+     ->when($dateFrom, fn ($q) => $q->where('created_at', '<', $dateFrom))
+     ->groupBy('category_id'),
+    'latest_open',
+    fn ($join) => $join->on('cb_open.id', '=', 'latest_open.max_id')
+   );
+
+  $periodSub = DB::table('categories_balance')
+   ->select(
+    'category_id',
+    DB::raw('SUM(CASE WHEN quantity > 0 THEN quantity ELSE 0 END) as period_in_qty'),
+    DB::raw('SUM(CASE WHEN quantity < 0 THEN ABS(quantity) ELSE 0 END) as period_out_qty'),
+    DB::raw('SUM(quantity) as period_net_qty')
+   )
+   ->when($dateFrom && $dateTo, fn ($q) => $q->whereBetween('created_at', [$dateFrom, $dateTo]))
+   ->groupBy('category_id');
+
+  $query = DB::table('categories as c')
+   ->leftJoinSub($closingSub, 'closing', 'closing.category_id', '=', 'c.id')
+   ->leftJoinSub($openingSub, 'opening', 'opening.category_id', '=', 'c.id')
+   ->leftJoinSub($periodSub, 'period', 'period.category_id', '=', 'c.id')
+   ->leftJoin('measurements as m', 'c.measurement_id', '=', 'm.id')
+   ->where('c.warehouse', $warehouse);
+
+  if ($search !== null && $search !== '') {
+   $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search).'%';
+   $query->where('c.category_name', 'like', $like);
+  }
+
+  return $query;
+ }
+
  public function warehouseDetails(Request $request)
  {
   $itemsPerPage = $request->input('itemsPerPage', 15);
 
-  $warehouse = DB::table('categories_balance')
-   ->join('categories', 'categories_balance.category_id', '=', 'categories.id')
+  $warehouse = $this->categoryBalanceMovementsQuery()
+   ->join('categories', 'cb.category_id', '=', 'categories.id')
    ->leftJoin('measurements', 'categories.measurement_id', '=', 'measurements.id')
    ->where('categories.warehouse', $request->warehouse)
    ->when($request->has('date_from') && $request->has('date_to'), function ($query) use ($request) {
-    return $query->whereBetween('categories_balance.created_at', [$request->date_from . ' 00:00:00', $request->date_to . ' 23:59:59']);
+    return $query->whereBetween('cb.created_at', [$request->date_from . ' 00:00:00', $request->date_to . ' 23:59:59']);
    })
    ->when($request->has('date') && !$request->has('date_from'), function ($query) use ($request) {
-    return $query->whereDate('categories_balance.created_at', $request->date);
+    return $query->whereDate('cb.created_at', $request->date);
    })
-   ->select('categories_balance.*', 'categories.category_name', 'categories.warehouse', DB::raw('COALESCE(measurements.unit, "-") as measurement_unit'))
-   ->orderBy('categories_balance.id', 'desc')
+   ->addSelect('categories.category_name', 'categories.warehouse', DB::raw('COALESCE(measurements.unit, "-") as measurement_unit'))
+   ->orderBy('cb.id', 'desc')
    ->paginate($itemsPerPage);
 
   return response()->json($warehouse, 200);
@@ -897,13 +1113,43 @@ public function changeCategoryQuantityss(Request $request)
   $itemsPerPage = $request->input('itemsPerPage', 15);
   $name = Category::findOrFail($id)->category_name;
 
-  $cat_details =  DB::table('categories_balance')->where('category_id', $id);
+  $cat_details = $this->categoryBalanceMovementsQuery()
+   ->where('cb.category_id', $id);
   if ($request->has('ref')) {
-   $cat_details->where('ref', 'like', '%' . $request->ref . '%');
+   $cat_details->where('cb.ref', 'like', '%' . $request->ref . '%');
   }
-  $cat_details = $cat_details->orderBy('created_at', 'desc')->paginate($itemsPerPage);
+  $cat_details = $cat_details->orderBy('cb.created_at', 'desc')->paginate($itemsPerPage);
 
   return response()->json(['name' => $name, 'details' => $cat_details], 200);
+ }
+
+ /**
+  * Base query for categories_balance with movement date and counterparty (supplier / customer / return).
+  */
+ private function categoryBalanceMovementsQuery()
+ {
+  $partyNameSql = <<<'SQL'
+CASE
+ WHEN cb.type IN ('فواتير مشتريات', 'تعديل فواتير مشتريات', 'حذف فواتير مشتريات') THEN (
+  SELECT s.supplier_name FROM purchases p
+  INNER JOIN suppliers s ON s.id = p.supplier_id
+  WHERE p.invoice_number = cb.invoice_number
+  LIMIT 1
+ )
+ WHEN cb.type = 'رفض استلام طلب' THEN 'مرتجع'
+ WHEN cb.type IN ('شحن طلب', 'تاجيل طلب') THEN (
+  SELECT o.customer_name FROM orders o WHERE o.id = cb.invoice_number LIMIT 1
+ )
+ WHEN cb.type = 'صيانة' THEN (
+  SELECT o.customer_name FROM orders o WHERE o.id = cb.ref LIMIT 1
+ )
+ WHEN cb.type = 'تصنيع' THEN 'تصنيع'
+ ELSE NULL
+END
+SQL;
+
+  return DB::table('categories_balance as cb')
+   ->select('cb.*', DB::raw('cb.created_at as movement_date'), DB::raw("({$partyNameSql}) as party_name"));
  }
 
  public function warehouse_balance()

@@ -43,6 +43,7 @@ class PaymentSourcesController extends Controller
             });
 
         $banks = Bank::with('asset:id,name,code,balance,debit_balance,credit_balance')
+            ->where('type', 'main')
             ->orderBy('name')
             ->get()
             ->map(function ($bank) {

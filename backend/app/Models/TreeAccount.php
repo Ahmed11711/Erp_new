@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Models\Setting;
 
 class TreeAccount extends Model
 {
@@ -401,8 +402,200 @@ class TreeAccount extends Model
     }
 
     /**
+     * حساب الأب لمصروفات «نقد صادر» — من الإعدادات أو بالاسم «النقد الصادر».
+     */
+    public static function resolveCashOutExpenseParent(): ?self
+    {
+        $settingId = Setting::where('key', 'cash_out_expense_parent_account_id')->value('value');
+        if ($settingId) {
+            $acc = static::query()->whereKey((int) $settingId)->where('type', 'expense')->first();
+            if ($acc) {
+                return $acc;
+            }
+        }
+
+        $acc = static::query()
+            ->where('type', 'expense')
+            ->where('detail_type', 'cash_out_expenses')
+            ->orderBy('level')
+            ->orderBy('id')
+            ->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        foreach (['النقد الصادر', 'نقد صادر', 'النقد صادر'] as $name) {
+            $acc = static::query()
+                ->where('type', 'expense')
+                ->where(function ($q) use ($name) {
+                    $q->where('name', $name)
+                        ->orWhere('name', 'like', '%'.$name.'%');
+                })
+                ->orderBy('level')
+                ->orderBy('id')
+                ->first();
+            if ($acc) {
+                return $acc;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * إنشاء حساب «النقد الصادر» تحت جذر المصروفات إن لم يكن موجوداً.
+     */
+    public static function ensureCashOutExpenseParent(): self
+    {
+        $existing = static::resolveCashOutExpenseParent();
+        if ($existing) {
+            return $existing;
+        }
+
+        $expensesRoot = static::query()
+            ->where('code', '5000')
+            ->where('type', 'expense')
+            ->first()
+            ?? static::query()->where('type', 'expense')->whereNull('parent_id')->orderBy('id')->first();
+
+        if (! $expensesRoot) {
+            throw new \RuntimeException('لم يُعثر على حساب جذر المصروفات في شجرة الحسابات لإنشاء «النقد الصادر».');
+        }
+
+        $level = (int) $expensesRoot->level + 1;
+        $nextCode = (string) static::nextNumericAccountCodeUnderParent($expensesRoot);
+        while (static::where('code', $nextCode)->exists()) {
+            $nextCode = (string) ((int) preg_replace('/\D/', '', $nextCode) + 1);
+        }
+
+        return static::create([
+            'name' => 'النقد الصادر',
+            'name_en' => 'Cash out expenses',
+            'code' => $nextCode,
+            'parent_id' => $expensesRoot->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'cash_out_expenses',
+        ]);
+    }
+
+    public static function isUnderCashOutExpenseParent(self $account): bool
+    {
+        $parent = static::resolveCashOutExpenseParent();
+        if (! $parent) {
+            return false;
+        }
+
+        return static::isDescendantOf($account, (int) $parent->id) || (int) $account->id === (int) $parent->id;
+    }
+
+    public static function isDescendantOf(self $account, int $ancestorId): bool
+    {
+        $current = $account;
+        $guard = 0;
+        while ($current->parent_id && $guard < 32) {
+            if ((int) $current->parent_id === $ancestorId) {
+                return true;
+            }
+            $current = static::query()->whereKey((int) $current->parent_id)->first();
+            if (! $current) {
+                break;
+            }
+            $guard++;
+        }
+
+        return false;
+    }
+
+    /**
+     * حساب طرفي تحت «النقد الصادر» باسم فئة المصروف (يُنشأ تلقائياً عند الحاجة).
+     */
+    public static function ensureExpenseKindLedgerAccount(ExpenseKind $kind, string $expenseType): self
+    {
+        if ($kind->tree_account_id) {
+            $linked = static::query()
+                ->whereKey((int) $kind->tree_account_id)
+                ->where('type', 'expense')
+                ->first();
+            if ($linked) {
+                return $linked;
+            }
+        }
+
+        $parent = static::ensureCashOutExpenseParent();
+        $label = trim((string) $kind->expense_kind);
+        if ($label === '') {
+            $label = trim($expenseType) !== '' ? trim($expenseType) : 'مصروف عام';
+        }
+
+        $existing = static::query()
+            ->where('parent_id', $parent->id)
+            ->where('type', 'expense')
+            ->where('name', $label)
+            ->whereDoesntHave('children')
+            ->first();
+        if ($existing) {
+            if (! $kind->tree_account_id) {
+                $kind->tree_account_id = $existing->id;
+                $kind->saveQuietly();
+            }
+
+            return $existing;
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = (string) static::nextNumericAccountCodeUnderParent($parent);
+        while (static::where('code', $nextCode)->exists()) {
+            $nextCode = (string) ((int) preg_replace('/\D/', '', $nextCode) + 1);
+        }
+
+        $created = static::create([
+            'name' => $label,
+            'code' => $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
+        if (! $kind->tree_account_id) {
+            $kind->tree_account_id = $created->id;
+            $kind->saveQuietly();
+        }
+
+        return $created;
+    }
+
+    /**
+     * أوراق المصروف تحت حساب «النقد الصادر» (للقوائم في الواجهة).
+     *
+     * @return \Illuminate\Support\Collection<int, self>
+     */
+    public static function cashOutExpenseLeafAccounts()
+    {
+        $parent = static::ensureCashOutExpenseParent();
+        $ids = static::query()
+            ->where('type', 'expense')
+            ->where('id', '!=', $parent->id)
+            ->get(['id', 'parent_id'])
+            ->filter(fn (self $acc) => static::isDescendantOf($acc, (int) $parent->id))
+            ->pluck('id');
+
+        return static::query()
+            ->whereIn('id', $ids)
+            ->whereDoesntHave('children')
+            ->orderBy('code')
+            ->get();
+    }
+
+    /**
      * حساب المدين في قيد المصروف: يفضّل الحساب المربوط بفئة المصروف (expense_kinds.tree_account_id)،
-     * ثم الاحتياطي حسب نوع المصروف الرئيسي.
+     * ثم حساب فرعي تحت «النقد الصادر» باسم الفئة، ثم الاحتياطي حسب نوع المصروف الرئيسي.
      */
     public static function resolveExpenseDebitForKind(?ExpenseKind $kind, string $expenseType): ?self
     {
@@ -413,6 +606,14 @@ class TreeAccount extends Model
                 ->first();
             if ($acc) {
                 return $acc;
+            }
+        }
+
+        if ($kind) {
+            try {
+                return static::ensureExpenseKindLedgerAccount($kind, $expenseType);
+            } catch (\Throwable) {
+                // fallback below
             }
         }
 

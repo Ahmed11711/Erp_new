@@ -11,11 +11,28 @@ use App\Http\Controllers\Inventory\StockCountImportController;
 use App\Http\Controllers\Manufacturing\ProductionOrderController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\MeasurementController;
+use App\Http\Middleware\MeasurementApiAccess;
+use App\Http\Middleware\CategoriesApiAccess;
+use App\Http\Middleware\InventoryGlSyncApiAccess;
+use App\Http\Middleware\WarehouseCategoryBalanceApiAccess;
+use App\Http\Middleware\SuppliersPurchasesApiAccess;
+use App\Http\Middleware\FinanceOperationsLegacyApiAccess;
+use App\Http\Middleware\RecipeManufacturingApiAccess;
+use App\Http\Middleware\ManufacturingModuleApiAccess;
+use App\Http\Middleware\EmployeesHrApiAccess;
+use App\Http\Middleware\CorporateSalesApiAccess;
+use App\Http\Middleware\SettingsUserManagementApiAccess;
+use App\Http\Middleware\SystemAdminToolsApiAccess;
+use App\Http\Middleware\CustomerCompanyIndexApiAccess;
 use App\Http\Controllers\OrderSourceController;
 use App\Http\Controllers\ShippingLineController;
 use App\Http\Controllers\V2\stock\stockController;
+use App\Http\Middleware\WarehouseStockApiAccess;
 use App\Http\Controllers\CustomerCompanyController;
 use App\Http\Controllers\ShippingCompanyController;
+use App\Http\Controllers\CollectionCompanyController;
+use App\Http\Controllers\SettlementController;
+use App\Http\Controllers\OrderFulfillmentController;
 use App\Http\Controllers\ShippingMethodsController;
 use App\Http\Controllers\CorporateSalesLeadController;
 use App\Http\Controllers\PendingBankBalanceController;
@@ -80,6 +97,37 @@ Route::get('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::
 Route::post('/shopify/webhook', [\App\Http\Controllers\ShopifyWebhookController::class, 'handle']);
 Route::post('/webhooks/shipping/update', [\App\Http\Controllers\ShippingPartnerWebhookController::class, 'update']);
 
+// Shopify Admin API — صلاحيات منفصلة: إعدادات المزامنة ↔ لوحة الشحن (مع الإبقاء على nav.shopify كاملة)
+Route::middleware(['auth', 'permission:nav.shopify.settings|nav.shopify|system.rbac'])->group(function () {
+    Route::get('shopify/status', [\App\Http\Controllers\ShopifyIntegrationController::class, 'status'])
+        ->name('shopify.status');
+    Route::get('shopify/integration-settings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'integrationSettings'])
+        ->name('shopify.integration-settings');
+    Route::post('shopify/integration-settings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'updateIntegrationSettings'])
+        ->name('shopify.update-integration-settings');
+    Route::post('shopify/sync-product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncProductMappings'])
+        ->name('shopify.sync-product-mappings');
+    Route::post('shopify/sync-orders', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncOrders'])
+        ->name('shopify.sync-orders');
+    Route::post('shopify/preview-order-sync', [\App\Http\Controllers\ShopifyIntegrationController::class, 'previewOrderSync'])
+        ->name('shopify.preview-order-sync');
+    Route::get('shopify/product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'productMappingsIndex'])
+        ->name('shopify.product-mappings');
+    Route::patch('shopify/product-mappings/{id}', [\App\Http\Controllers\ShopifyIntegrationController::class, 'updateMappingCategory'])
+        ->name('shopify.update-mapping');
+    Route::post('shopify/create-unmatched-categories', [\App\Http\Controllers\ShopifyIntegrationController::class, 'createUnmatchedCategories'])
+        ->name('shopify.create-unmatched');
+    Route::post('shopify/update-prices', [\App\Http\Controllers\ShopifyIntegrationController::class, 'updatePrices'])
+        ->name('shopify.update-prices');
+});
+
+Route::middleware(['auth', 'permission:nav.shopify.dashboard|nav.shopify|system.rbac'])->group(function () {
+    Route::get('shopify/integration/orders', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationOrders']);
+    Route::get('shopify/integration/products', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationProducts']);
+    Route::patch('shopify/integration/products/{id}', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'updateIntegrationProduct']);
+    Route::get('shopify/integration/failed-jobs', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'failedJobs']);
+});
+
 
 Route::group(['middleware' => 'api', 'prefix' => 'auth'], function ($router) {
     Route::post('login', [AuthController::class, 'login']);
@@ -124,6 +172,10 @@ Route::middleware('auth')->group(function () {
         Route::post('templates', [App\Http\Controllers\WhatsAppMessageController::class, 'createTemplate']);
         
         // WhatsApp Number Assignment Routes
+        Route::middleware(['permission:whatsapp.assign_numbers|system.rbac'])->get(
+            'assignable-users',
+            [App\Http\Controllers\UserController::class, 'whatsappAssignmentPicker']
+        );
         Route::get('phone-numbers', [App\Http\Controllers\WhatsAppMessageController::class, 'getAvailablePhoneNumbers']);
         Route::get('assignments', [App\Http\Controllers\WhatsAppMessageController::class, 'getAllAssignments']);
         Route::get('user-phone-numbers', [App\Http\Controllers\WhatsAppMessageController::class, 'getUserPhoneNumbers']);
@@ -135,6 +187,9 @@ Route::middleware('auth')->group(function () {
     Route::get('shipping_methods', [ShippingMethodsController::class, 'index']);
     Route::get('shippinglines', [ShippingLineController::class, 'index']);
     Route::get('orders/search', [OrdersController::class, 'search']);
+    Route::post('orders/{id}/shopify-review', [OrdersController::class, 'shopifyReview'])
+        ->middleware('permission:orders.shopify.review|nav.shopify.dashboard|nav.shopify|system.rbac')
+        ->whereNumber('id');
     Route::get('orders/{id}', [OrdersController::class, 'show']);
 
     Route::get('productions', [ProductionController::class, 'index']);
@@ -144,13 +199,27 @@ Route::middleware('auth')->group(function () {
 
     // Reports and charts
     Route::get('reports/categoriesSellReports', [App\Http\Controllers\CategoriesController::class, 'categoriesSellReports']);
+    Route::get('reports/warehouse-inventory', [App\Http\Controllers\CategoriesController::class, 'warehouseInventoryReport']);
     Route::get('reports/shipping-companies', [ShippingCompanyController::class, 'shippingCompaniesReport']);
 
-    Route::middleware(['department.access:Admin,Account Management,Logistics Specialist,Financial Accounts'])->group(function () {
-        Route::get('transactions/by-supplier-order/search', [SupplierController::class, 'supplierAccountsAggregated']);
-        Route::get('categories/warehouse_balance', [CategoriesController::class, 'warehouse_balance']);
+    // Shipping accounting reports (ذمم الشحن والتحصيل — RBAC)
+    Route::middleware(['permission:nav.shipping.accounts_report|system.rbac'])->group(function () {
+        Route::get('reports/shipping-accounts', [App\Http\Controllers\ShippingAccountingReportController::class, 'accountsSummary']);
+        Route::get('reports/shipping-accounts/{id}/statement', [App\Http\Controllers\ShippingAccountingReportController::class, 'companyStatement']);
+        Route::get('reports/shipping-accounts/pending-orders', [App\Http\Controllers\ShippingAccountingReportController::class, 'pendingOrders']);
+        Route::get('reports/shipping-accounts/settlement-summary', [App\Http\Controllers\ShippingAccountingReportController::class, 'settlementSummary']);
+        Route::get('reports/collection-accounts', [App\Http\Controllers\CollectionAccountingReportController::class, 'accountsSummary']);
+        Route::get('reports/collection-accounts/pending-orders', [App\Http\Controllers\CollectionAccountingReportController::class, 'pendingOrders']);
+        Route::get('reports/collection-accounts/{id}/statement', [App\Http\Controllers\CollectionAccountingReportController::class, 'companyStatement']);
+    });
+
+    Route::middleware([InventoryGlSyncApiAccess::class])->group(function () {
         Route::get('categories/inventory-gl-sync-preview', [CategoriesController::class, 'previewInventoryGlSyncFromCategories']);
         Route::post('categories/inventory-gl-sync', [CategoriesController::class, 'syncInventoryAccountsFromActualCosts']);
+    });
+
+    Route::middleware([WarehouseCategoryBalanceApiAccess::class])->group(function () {
+        Route::get('categories/warehouse_balance', [CategoriesController::class, 'warehouse_balance']);
         Route::get('categories/categories_details/{id}', [CategoriesController::class, 'categories_details']);
         Route::get('categories/warehousedetails', [CategoriesController::class, 'warehouseDetails']);
         Route::get('categories/categoryDetailsByWherehouse', [CategoriesController::class, 'categoryDetailsByWherehouse']);
@@ -158,8 +227,10 @@ Route::middleware('auth')->group(function () {
         Route::get('categories/monthlyinventory', [CategoriesController::class, 'monthlyInventory']);
         Route::get('categories/monthlyInventoryDetailsByWherehouse', [CategoriesController::class, 'monthlyInventoryDetailsByWherehouse']);
         Route::get('categories/categoryByWarehouse', [CategoriesController::class, 'categoryByWarehouse']);
+    });
 
-
+    Route::middleware([SuppliersPurchasesApiAccess::class])->group(function () {
+        Route::get('transactions/by-supplier-order/search', [SupplierController::class, 'supplierAccountsAggregated']);
         Route::get('suppliers/search', [SupplierController::class, 'search']);
         Route::post('suppliers/StoreSupplierType', [SupplierController::class, 'StoreSupplierType']);
         Route::delete('suppliers/deleteType/{id}', [SupplierController::class, 'deleteType']);
@@ -169,6 +240,13 @@ Route::middleware('auth')->group(function () {
         Route::get('suppliers/supplier_names', [SupplierController::class, 'supplier_names']);
         Route::apiResource('suppliers', App\Http\Controllers\SupplierController::class);
 
+        Route::get('purchases/search', [App\Http\Controllers\PurchasesController::class, 'search']);
+        Route::get('purchases/{id}', [App\Http\Controllers\PurchasesController::class, 'show']);
+        Route::patch('purchases/{id}/print-status', [App\Http\Controllers\PurchasesController::class, 'updatePrintable']);
+        Route::apiResource('purchases', App\Http\Controllers\PurchasesController::class);
+    });
+
+    Route::middleware([FinanceOperationsLegacyApiAccess::class])->group(function () {
         Route::post('inventory/import/items', [InventoryExcelImportController::class, 'importItems']);
         Route::post('inventory/import/opening-balances', [InventoryExcelImportController::class, 'importOpeningBalances']);
         Route::post('inventory/import/adjustments', [InventoryExcelImportController::class, 'importAdjustments']);
@@ -178,10 +256,6 @@ Route::middleware('auth')->group(function () {
         Route::post('inventory/stock-count/cancel', [StockCountImportController::class, 'cancel']);
         Route::get('inventory/stock-count/history', [StockCountImportController::class, 'history']);
         Route::get('inventory/stock-count/{id}', [StockCountImportController::class, 'show']);
-
-        Route::get('purchases/search', [App\Http\Controllers\PurchasesController::class, 'search']);
-        Route::get('purchases/{id}', [App\Http\Controllers\PurchasesController::class, 'show']);
-        Route::apiResource('purchases', App\Http\Controllers\PurchasesController::class);
 
         Route::get('banks', [BanksController::class, 'index']);
         Route::apiResource('FactoryBankMovements', App\Http\Controllers\FactoryBankMovementsController::class);
@@ -201,6 +275,7 @@ Route::middleware('auth')->group(function () {
         Route::post('deleteexpense/{id}', [App\Http\Controllers\ExpenseController::class, 'deleteExpense']);
         Route::apiResource('expense', App\Http\Controllers\ExpenseController::class);
         Route::get('expense_kind/search', [App\Http\Controllers\ExpenseKindController::class, 'search']);
+        Route::get('expense_kind/ledger-accounts', [App\Http\Controllers\ExpenseKindController::class, 'ledgerAccounts']);
         Route::apiResource('expense_kind', App\Http\Controllers\ExpenseKindController::class);
 
         Route::apiResource('assets', App\Http\Controllers\AssetController::class);
@@ -212,22 +287,48 @@ Route::middleware('auth')->group(function () {
         Route::apiResource('incomes', App\Http\Controllers\IncomeController::class);
     });
 
-    Route::middleware(['department.access:Admin,Data Entry,Account Management,Logistics Specialist,Customer Service'])->group(function () {
-        Route::get('categories/search', [CategoriesController::class, 'search']);
-        Route::patch('/categories/{id}/quantity', [CategoriesController::class, 'changeCategoryQuantityss']);
-        Route::patch('/categories/{id}/average-unit-cost', [CategoriesController::class, 'changeCategoryAverageUnitCost']);
-
-        Route::get('productions/{production}', [ProductionController::class, 'show']);
-        Route::get('measurements', [MeasurementController::class, 'index']);
-        Route::get('measurements/{measurement}', [MeasurementController::class, 'show']);
+    /** كان stocks تحت Admin فقط؛ يُوسَّع ليطابق وصول المخازن (قسم أو RBAC). */
+    Route::middleware([WarehouseStockApiAccess::class])->group(function () {
+        Route::apiResource('stocks', stockController::class)->names('stock');
+        Route::get('stock-transaction-types', [\App\Http\Controllers\Stock\StockTransactionController::class, 'typesIndex']);
+        Route::get('stock-transactions', [\App\Http\Controllers\Stock\StockTransactionController::class, 'index']);
+        Route::post('stock-transactions', [\App\Http\Controllers\Stock\StockTransactionController::class, 'store']);
+        Route::get('stock-transactions/{id}', [\App\Http\Controllers\Stock\StockTransactionController::class, 'show']);
     });
 
-    Route::middleware(['department.access:Admin,Data Entry,Account Management,Logistics Specialist'])->group(function () {
+    /** وحدات القياس — مواءمة مع حارس الواجهة (categories.view / categories.manage). */
+    Route::middleware([MeasurementApiAccess::class])->group(function () {
+        Route::get('measurements', [MeasurementController::class, 'index']);
+        Route::get('measurements/{measurement}', [MeasurementController::class, 'show']);
+        Route::post('measurements', [MeasurementController::class, 'store']);
+        Route::put('measurements/{measurement}', [MeasurementController::class, 'update']);
+        Route::delete('measurements/{measurement}', [MeasurementController::class, 'destroy']);
+    });
+
+    /** مسارات الأصناف — RBAC categories.view / categories.manage مع الأقسام السابقة */
+    Route::middleware([CategoriesApiAccess::class])->group(function () {
+        Route::get('categories/search', [CategoriesController::class, 'search']);
         Route::get('allcategories', [CategoriesController::class, 'allCategories']);
         Route::get('categories', [CategoriesController::class, 'index']);
         Route::get('getCategoryByStockId', [CategoriesController::class, 'getCategoryByStockId']);
 
         Route::post('categories', [CategoriesController::class, 'store']);
+        Route::get('category/{id}', [CategoriesController::class, 'getCategoryById']);
+        Route::post('editcategory/{id}', [CategoriesController::class, 'editCategory']);
+        Route::post('categories/{id}/promote-to-finished', [CategoriesController::class, 'promoteToFinished']);
+        Route::delete('deletecategory/{id}', [CategoriesController::class, 'deleteCategory']);
+        Route::post('categories/{id}/revision-roll-forward', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'rollForward']);
+        Route::get('categories/{id}/revision-lineage', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'lineage']);
+        Route::patch('/categories/{id}/quantity', [CategoriesController::class, 'changeCategoryQuantityss']);
+        Route::patch('/categories/{id}/average-unit-cost', [CategoriesController::class, 'changeCategoryAverageUnitCost']);
+        Route::put('categories/{category}', [CategoriesController::class, 'update']);
+        Route::delete('categories/{category}', [CategoriesController::class, 'destroy']);
+        Route::get('categories/{category}', [CategoriesController::class, 'show']);
+    });
+
+    Route::middleware([RecipeManufacturingApiAccess::class])->group(function () {
+        Route::get('productions/{production}', [ProductionController::class, 'show']);
+
         Route::get('recipes', [\App\Http\Controllers\RecipeController::class, 'index']);
         Route::post('recipes', [\App\Http\Controllers\RecipeController::class, 'store']);
         Route::post('recipes/bulk-delete', [\App\Http\Controllers\RecipeController::class, 'bulkDestroy']);
@@ -252,29 +353,12 @@ Route::middleware('auth')->group(function () {
         Route::delete('recipes/{recipeId}/extra-costs/{extraCostId}', [\App\Http\Controllers\RecipeExtraCostController::class, 'destroy'])->whereNumber(['recipeId', 'extraCostId']);
         Route::get('recipes/{recipeId}/breakdown', [\App\Http\Controllers\RecipeExtraCostController::class, 'breakdown'])->whereNumber('recipeId');
 
-        Route::post('categories/{id}/revision-roll-forward', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'rollForward']);
-        Route::get('categories/{id}/revision-lineage', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'lineage']);
-
-        Route::get('category/{id}', [CategoriesController::class, 'getCategoryById']);
-        Route::post('editcategory/{id}', [CategoriesController::class, 'editCategory']);
-        Route::delete('deletecategory/{id}', [CategoriesController::class, 'deleteCategory']);
-        Route::put('categories/{category}', [CategoriesController::class, 'update']);
-        Route::delete('categories/{category}', [CategoriesController::class, 'destroy']);
-        Route::get('categories/{category}', [CategoriesController::class, 'show']);
-
         Route::post('productions', [ProductionController::class, 'store']);
         Route::put('productions/{production}', [ProductionController::class, 'update']);
         Route::delete('productions/{production}', [ProductionController::class, 'destroy']);
-
-        Route::post('measurements', [MeasurementController::class, 'store']);
-        Route::put('measurements/{measurement}', [MeasurementController::class, 'update']);
-        Route::delete('measurements/{measurement}', [MeasurementController::class, 'destroy']);
     });
 
-    Route::middleware(['department.access:Admin'])->group(function () {
-        Route::get('allnotification', [App\Http\Controllers\NotificationController::class, 'allNotifiy']);
-        Route::delete('notification/delete/{id}', [App\Http\Controllers\NotificationController::class, 'destroy']);
-
+    Route::middleware([ManufacturingModuleApiAccess::class])->group(function () {
         Route::post('manufacture', [App\Http\Controllers\ManufactureController::class, 'store']);
         Route::get('manufacture', [App\Http\Controllers\ManufactureController::class, 'index']);
         Route::get('manufacture/manfucture_by_warhouse', [App\Http\Controllers\ManufactureController::class, 'manfucture_by_warhouse']);
@@ -288,6 +372,25 @@ Route::middleware('auth')->group(function () {
         Route::post('manufacturing/production-orders/{id}/start', [ProductionOrderController::class, 'start'])->whereNumber('id');
         Route::post('manufacturing/production-orders/{id}/complete', [ProductionOrderController::class, 'complete'])->whereNumber('id');
         Route::post('manufacturing/production-orders/{id}/cancel', [ProductionOrderController::class, 'cancel'])->whereNumber('id');
+    });
+
+    Route::middleware([SettingsUserManagementApiAccess::class])->group(function () {
+        Route::post('register', [AuthController::class, 'register']);
+        Route::prefix('rbac')->group(function () {
+            Route::get('roles', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'index']);
+        });
+    });
+
+    Route::middleware([SystemAdminToolsApiAccess::class])->group(function () {
+        Route::get('users/compact-directory', [App\Http\Controllers\UserController::class, 'compactUserDirectory']);
+        Route::get('tracking', [OrdersController::class, 'getTrackings']);
+        Route::post('tracking/undo', [OrdersController::class, 'undo']);
+        Route::get('getActions', [OrdersController::class, 'getActions']);
+    });
+
+    Route::middleware(['department.access:Admin'])->group(function () {
+        Route::get('allnotification', [App\Http\Controllers\NotificationController::class, 'allNotifiy']);
+        Route::delete('notification/delete/{id}', [App\Http\Controllers\NotificationController::class, 'destroy']);
 
         Route::get('pendingBanks', [PendingBankBalanceController::class, 'pendingBanks']);
         Route::post('pendingBanks', [PendingBankBalanceController::class, 'pendingBanksStatus']);
@@ -295,7 +398,6 @@ Route::middleware('auth')->group(function () {
 
         Route::get('users', [App\Http\Controllers\UserController::class, 'index']);
         Route::delete('user/delete/{id}', [App\Http\Controllers\AuthController::class, 'destroy']);
-        Route::post('register', [App\Http\Controllers\AuthController::class, 'register']);
 
         Route::apiResource('approvals', App\Http\Controllers\ApprovalsController::class);
 
@@ -308,38 +410,57 @@ Route::middleware('auth')->group(function () {
         Route::put('shippinglines/{shippingline}', [ShippingLineController::class, 'update']);
         Route::delete('shippinglines/{shippingline}', [ShippingLineController::class, 'destroy']);
 
-        Route::get('tracking', [OrdersController::class, 'getTrackings']);
-        Route::post('tracking/undo', [OrdersController::class, 'undo']);
-        Route::get('getActions', [OrdersController::class, 'getActions']);
+        Route::post('orders/accounting/reconcile/preview', [\App\Http\Controllers\OrderAccountingReconcileController::class, 'preview']);
+        Route::post('orders/accounting/reconcile/run', [\App\Http\Controllers\OrderAccountingReconcileController::class, 'run']);
 
         // V2
         //  Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
-        Route::apiResource('stocks', stockController::class)->names('stock');
 
-        Route::get('shopify/status', [\App\Http\Controllers\ShopifyIntegrationController::class, 'status']);
-        Route::post('shopify/sync-product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncProductMappings']);
-        Route::post('shopify/sync-orders', [\App\Http\Controllers\ShopifyIntegrationController::class, 'syncOrders']);
-        Route::get('shopify/product-mappings', [\App\Http\Controllers\ShopifyIntegrationController::class, 'productMappingsIndex']);
+        Route::prefix('rbac')->group(function () {
+            Route::get('permissions', [\App\Http\Controllers\Rbac\RbacPermissionController::class, 'index']);
+            Route::post('permissions', [\App\Http\Controllers\Rbac\RbacPermissionController::class, 'store']);
+            Route::put('permissions/{permission}', [\App\Http\Controllers\Rbac\RbacPermissionController::class, 'update']);
+            Route::delete('permissions/{permission}', [\App\Http\Controllers\Rbac\RbacPermissionController::class, 'destroy']);
+            Route::post('permissions/bulk-roles', [\App\Http\Controllers\Rbac\RbacPermissionController::class, 'bulkAssignRoles']);
 
-        Route::get('shopify/integration/orders', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationOrders']);
-        Route::get('shopify/integration/products', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'integrationProducts']);
-        Route::patch('shopify/integration/products/{id}', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'updateIntegrationProduct']);
-        Route::get('shopify/integration/failed-jobs', [\App\Http\Controllers\ShopifyShippingIntegrationController::class, 'failedJobs']);
+            Route::get('roles/{role}', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'show']);
+            Route::post('roles', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'store']);
+            Route::put('roles/{role}', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'update']);
+            Route::delete('roles/{role}', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'destroy']);
+            Route::post('roles/{role}/clone', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'clone']);
+            Route::put('roles/{role}/permissions', [\App\Http\Controllers\Rbac\RbacRoleController::class, 'syncPermissions']);
+
+            Route::get('users/{user}/matrix', [\App\Http\Controllers\Rbac\RbacUserAccessController::class, 'matrix']);
+            Route::put('users/{user}/access', [\App\Http\Controllers\Rbac\RbacUserAccessController::class, 'update']);
+
+            Route::get('department-templates', [\App\Http\Controllers\Rbac\RbacDepartmentTemplateController::class, 'show']);
+            Route::get('department-suggestions', [\App\Http\Controllers\Rbac\RbacDepartmentTemplateController::class, 'suggest']);
+            Route::post('department-templates', [\App\Http\Controllers\Rbac\RbacDepartmentTemplateController::class, 'store']);
+            Route::post('department-templates/sample', [\App\Http\Controllers\Rbac\RbacDepartmentTemplateController::class, 'touchSample']);
+            Route::delete('department-templates', [\App\Http\Controllers\Rbac\RbacDepartmentTemplateController::class, 'destroy']);
+        });
+
+        Route::post('give_permission/{id}', [App\Http\Controllers\UserController::class, 'give_permission']);
+        Route::post('revoke_permssion/{id}', [App\Http\Controllers\UserController::class, 'revoke_permssion']);
+        Route::get('user_permission/{id}', [App\Http\Controllers\UserController::class, 'user_permission']);
+
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Logistics Specialist'])->group(function () {
+    Route::middleware(['order.profile:ship_collect'])->group(function () {
         Route::post('shiporder/{id}', [OrdersController::class, 'ship_order']);
-        Route::post('collectorder/{id}', [OrdersController::class, 'collect_order']); // all
+        Route::post('order/{id}/deliver', [OrdersController::class, 'deliver_order']);
+        Route::post('orders/bulk-deliver', [OrdersController::class, 'bulk_deliver_orders']);
+        Route::post('collectorder/{id}', [OrdersController::class, 'collect_order']);
         Route::post('collectorder-bulk', [OrdersController::class, 'bulk_collect_orders']); 
         Route::get('order/received/{id}', [OrdersController::class, 'received']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management'])->group(function () {
+    Route::middleware(['order.profile:part_shipment'])->group(function () {
         Route::post('partcollectorder/{id}', [OrdersController::class, 'partCollect_order']); // part
         Route::get('addshippmentnumber/{id}', [OrdersController::class, 'addShippmentNumber']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Financial Accounts,Account Management,Logistics Specialist'])->group(function () {
+    Route::middleware([EmployeesHrApiAccess::class])->group(function () {
         Route::get('employees/search', [App\Http\Controllers\EmployeeController::class, 'search']);
         Route::get('employeepermonth/{id}', [App\Http\Controllers\EmployeeController::class, 'employeePerMonth']);
         Route::get('employeespermonth', [App\Http\Controllers\EmployeeController::class, 'employeesPerMonth']);
@@ -369,7 +490,7 @@ Route::middleware('auth')->group(function () {
     });
 
     // new role Corparates
-    Route::middleware(['department.access:Admin,Shipping Management,Corparates'])->group(function () {
+    Route::middleware([CorporateSalesApiAccess::class])->group(function () {
         Route::post('googlesheet/{sheet}', [App\Http\Controllers\GoogleController::class, 'addData']);
 
         Route::post('edit-lead', [CorporateSalesLeadController::class, 'edit']);
@@ -383,76 +504,120 @@ Route::middleware('auth')->group(function () {
         Route::apiResource('lead-tool', App\Http\Controllers\CorporateSalesLeadToolController::class);
         Route::apiResource('lead-industry', App\Http\Controllers\CorporateSalesIndustryController::class);
         
-        // Lead Status Management Routes
-        Route::apiResource('lead-statuses', App\Http\Controllers\LeadStatusController::class);
+        // Lead Status Management Routes ( literals قبل apiResource حتى لا تُفعَّل كـ {lead_status} )
         Route::get('lead-statuses/active', [App\Http\Controllers\LeadStatusController::class, 'getActive']);
         Route::get('lead-statuses/closed-won', [App\Http\Controllers\LeadStatusController::class, 'getClosedWon']);
         Route::get('lead-statuses/closed-lost', [App\Http\Controllers\LeadStatusController::class, 'getClosedLost']);
         Route::get('lead-statuses/follow-up-leads', [App\Http\Controllers\LeadStatusController::class, 'getFollowUpLeads']);
         Route::put('lead-statuses/lead/{lead}', [App\Http\Controllers\LeadStatusController::class, 'updateLeadStatus']);
+        Route::apiResource('lead-statuses', App\Http\Controllers\LeadStatusController::class);
     });
 
-    Route::middleware(['department.access:Admin,Data Entry'])->group(function () {
+    Route::middleware(['order.profile:orders_create'])->group(function () {
         Route::post('orders', [OrdersController::class, 'store']);
         Route::get('phonenumbers', [OrdersController::class, 'phoneNumbers']);
         Route::post('shipping_methods', [ShippingMethodsController::class, 'store']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Account Management,Logistics Specialist,Financial Accounts,Data Entry'])->group(function () {
-        Route::post('companies', [CustomerCompanyController::class, 'store']);
+    Route::middleware([CustomerCompanyIndexApiAccess::class])->group(function () {
         Route::get('companies', [CustomerCompanyController::class, 'index']);
+    });
+
+    Route::middleware(['order.profile:companies_main'])->group(function () {
+        Route::post('companies', [CustomerCompanyController::class, 'store']);
         Route::get('getOrdersNumbers', [OrdersController::class, 'getOrdersNumbers']);
         Route::apiResource('ShippingLineStatement', App\Http\Controllers\ShippingLineStatementController::class);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Account Management,Logistics Specialist,Financial Accounts'])->group(function () {
+    Route::middleware(['order.profile:companies_balance'])->group(function () {
+        Route::get('companies/unlinked-summary', [CustomerCompanyController::class, 'unlinkedSummary']);
+        Route::post('companies/link-unlinked', [CustomerCompanyController::class, 'linkUnlinked']);
+        Route::post('companies/{id}/link-account', [CustomerCompanyController::class, 'linkAccount']);
+        Route::put('companies/{id}', [CustomerCompanyController::class, 'update']);
         Route::get('companies/search', [CustomerCompanyController::class, 'search']);
         Route::get('companies/{id}', [CustomerCompanyController::class, 'customerCompanyBalance']);
         Route::post('companies/companycollect/{id}', [CustomerCompanyController::class, 'companyCollect']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Shipping Management'])->group(function () {
+    Route::middleware(['order.profile:edit_order'])->group(function () {
         Route::post('editorder/{id}', [OrdersController::class, 'edit']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Shipping Management,Customer Service'])->group(function () {
+    Route::middleware(['order.profile:confirm_order'])->group(function () {
         Route::post('confirm/{id}', [OrdersController::class, 'confirm']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Logistics Specialist,Shipping Management'])->group(function () {
+    Route::middleware(['order.profile:refuse_maintain'])->group(function () {
         Route::get('refuseorder/{id}', [OrdersController::class, 'refuseOrder']);
         Route::post('order/maintained/{id}', [OrdersController::class, 'maintained']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Account Management,Logistics Specialist'])->group(function () {
-        Route::get('shippingcompany/search', [ShippingCompanyController::class, 'search']);
+    Route::middleware(['order.profile:shipping_company_crud'])->group(function () {
         Route::get('shippingcompanies', [ShippingCompanyController::class, 'index']);
-        Route::post('shippingcompanies', [ShippingCompanyController::class, 'store']);
         Route::get('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'show']);
+    });
+
+    Route::middleware(['order.profile:shipping_company_manage'])->group(function () {
+        Route::get('shippingcompanies/unlinked-summary', [ShippingCompanyController::class, 'unlinkedSummary']);
+        Route::post('shippingcompanies/link-unlinked', [ShippingCompanyController::class, 'linkUnlinked']);
+        Route::post('shippingcompanies/{id}/link-account', [ShippingCompanyController::class, 'linkAccount']);
+        Route::post('shippingcompanies', [ShippingCompanyController::class, 'store']);
         Route::put('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'update']);
         Route::delete('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'destroy']);
+    });
+
+    Route::middleware(['order.profile:shipping_company_statement'])->group(function () {
+        Route::get('shippingcompany/search', [ShippingCompanyController::class, 'search']);
         Route::get('shippingcompany/{id}', [ShippingCompanyController::class, 'show']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Logistics Specialist,Shipping Management,Data Entry'])->group(function () {
+    Route::middleware(['order.profile:shipping_company_crud'])->group(function () {
+        Route::get('collection-companies/select', [CollectionCompanyController::class, 'select']);
+        Route::get('collection-companies', [CollectionCompanyController::class, 'index']);
+        Route::get('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'show']);
+    });
+
+    Route::middleware(['order.profile:shipping_company_manage'])->group(function () {
+        Route::get('collection-companies/unlinked-summary', [CollectionCompanyController::class, 'unlinkedSummary']);
+        Route::post('collection-companies/link-unlinked', [CollectionCompanyController::class, 'linkUnlinked']);
+        Route::post('collection-companies/{collectionCompany}/link-account', [CollectionCompanyController::class, 'linkAccount']);
+        Route::post('collection-companies', [CollectionCompanyController::class, 'store']);
+        Route::put('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'update']);
+        Route::delete('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'destroy']);
+    });
+
+    Route::middleware(['order.profile:ship_collect'])->group(function () {
+        Route::get('orders/{id}/fulfillment', [OrderFulfillmentController::class, 'show']);
+        Route::put('orders/{id}/fulfillment/providers', [OrderFulfillmentController::class, 'assignProviders']);
+        Route::post('orders/{id}/fulfillment/transfer-liability', [OrderFulfillmentController::class, 'transferLiability']);
+    });
+
+    Route::middleware(['order.profile:collection_settlements'])->group(function () {
+        Route::get('settlements', [SettlementController::class, 'index']);
+        Route::get('settlements/{settlement}', [SettlementController::class, 'show']);
+        Route::post('settlements', [SettlementController::class, 'store']);
+        Route::post('settlements/{settlement}/post', [SettlementController::class, 'post']);
+    });
+
+    Route::middleware(['order.profile:change_status'])->group(function () {
         Route::get('changestatus/{id}', [OrdersController::class, 'change_status']);
     });
 
-    Route::middleware(['department.access:Admin,Data Entry,Shipping Management,Customer Service'])->group(function () {
+    Route::middleware(['order.profile:vip_shortage'])->group(function () {
         Route::get('vip/{id}', [OrdersController::class, 'vip']);
         Route::get('shortage/{id}', [OrdersController::class, 'shortage']);
     });
 
-    Route::middleware(['department.access:Admin,Data Entry,Shipping Management,Customer Service,Corparates'])->group(function () {
+    Route::middleware(['order.profile:offer_crud'])->group(function () {
         Route::apiResource('offer', App\Http\Controllers\OffersController::class);
     });
 
-    Route::middleware(['department.access:Admin,Data Entry,Review Management'])->group(function () {
+    Route::middleware(['order.profile:review_temp'])->group(function () {
         Route::post('userrevieworder', [OrdersController::class, 'userReviewOrder']);
         Route::get('tempreview/{id}', [OrdersController::class, 'userTempReviewOrder']);
     });
 
-    Route::middleware(['department.access:Admin,Operation Management,Operation Specialist,Shipping Management,Data Entry,Account Management,Logistics Specialist,Customer Service'])->group(function () {
+    Route::middleware(['order.profile:add_note'])->group(function () {
         Route::get('addnote/{id}', [OrdersController::class, 'addNote']);
     });
 });
@@ -496,6 +661,9 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::post('/', [App\Http\Controllers\V2\Accounting\SafeController::class, 'store']);
         Route::post('/transfer', [App\Http\Controllers\V2\Accounting\SafeController::class, 'transfer']);
         Route::post('/direct-transaction', [App\Http\Controllers\V2\Accounting\SafeController::class, 'directTransaction']);
+        Route::get('/direct-transactions', [App\Http\Controllers\V2\Accounting\SafeController::class, 'listDirectTransactions']);
+        Route::get('/direct-transactions/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'showDirectTransaction']);
+        Route::put('/direct-transactions/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'updateDirectTransaction']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'update']);
         Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\SafeController::class, 'destroy']);
@@ -516,6 +684,9 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::post('/', [App\Http\Controllers\V2\Accounting\BankController::class, 'store']);
         Route::post('/transfer', [App\Http\Controllers\V2\Accounting\BankController::class, 'transfer']);
         Route::post('/direct-transaction', [App\Http\Controllers\V2\Accounting\BankController::class, 'directTransaction']);
+        Route::get('/direct-transactions', [App\Http\Controllers\V2\Accounting\BankController::class, 'listDirectTransactions']);
+        Route::get('/direct-transactions/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'showDirectTransaction']);
+        Route::put('/direct-transactions/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'updateDirectTransaction']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'update']);
         Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'destroy']);
@@ -554,7 +725,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::post('/', [App\Http\Controllers\ServiceAccountsController::class, 'store']);
         Route::post('/transfer', [App\Http\Controllers\ServiceAccountsController::class, 'transfer']);
         Route::put('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'update']);
-        // Route::delete('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'destroy']);
+        Route::delete('/{id}', [App\Http\Controllers\ServiceAccountsController::class, 'destroy']);
     });
 
     // Settings

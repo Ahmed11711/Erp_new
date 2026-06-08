@@ -1,20 +1,35 @@
 <div class="container-fluid receive-payment" dir="rtl">
   <div class="card">
     <div class="card-header">
-      <h3 class="mb-0">استلام نقدي (قبض)</h3>
-      <p class="text-muted small mb-0 mt-1">اختر الجهة ثم مكان الإيداع: خزنة، بنك، أو حساب خدمي</p>
+      <h3 class="mb-0">{{ fundDirection === 'payment' && party === 'shipping_company' ? 'صرف نقدي (دفع) لشركة شحن / مندوب' : 'استلام نقدي (قبض)' }}</h3>
+      <p class="text-muted small mb-0 mt-1">
+        <ng-container *ngIf="party !== 'shipping_company' || fundDirection === 'receipt'">
+          اختر الجهة (عميل، مورد، شركة شحن أو مندوب) ثم مكان الإيداع: خزنة، بنك، أو حساب خدمي
+        </ng-container>
+        <ng-container *ngIf="party === 'shipping_company' && fundDirection === 'payment'">
+          دفع مستحقات أو تسوية لصالح شركة الشحن أو المندوب من خزنة، بنك، أو حساب خدمي (يُخفّض حساب الذمم المرتبط بهم)
+        </ng-container>
+      </p>
     </div>
     <div class="card-body">
       <div class="row">
+        <div class="col-md-6 form-group" *ngIf="party === 'shipping_company'">
+          <label>نوع الحركة</label>
+          <select class="form-control" [(ngModel)]="fundDirection" (ngModelChange)="onFundDirectionChange()">
+            <option ngValue="receipt">قبض — استلام أموال من المندوب/شركة الشحن</option>
+            <option ngValue="payment">صرف — دفع لمندوب / شركة الشحن</option>
+          </select>
+        </div>
         <div class="col-md-6 form-group">
           <label>الجهة</label>
           <select class="form-control" [(ngModel)]="party" (ngModelChange)="onPartyChange()">
             <option ngValue="client">عميل</option>
             <option ngValue="supplier">مورد</option>
+            <option ngValue="shipping_company">شركة شحن / مندوب</option>
           </select>
         </div>
         <div class="col-md-6 form-group">
-          <label>مكان الإيداع</label>
+          <label>{{ fundDirection === 'payment' && party === 'shipping_company' ? 'مصدر السداد (خزنة / بنك / خدمي)' : 'مكان الإيداع' }}</label>
           <select class="form-control" [(ngModel)]="paymentPlace" (ngModelChange)="onPlaceChange()">
             <option ngValue="safe">خزنة</option>
             <option ngValue="bank">بنك</option>
@@ -64,6 +79,13 @@
             <option *ngFor="let sup of suppliers" [ngValue]="sup.id">{{ sup.supplier_name }}</option>
           </select>
         </div>
+        <div class="col-md-6 form-group" *ngIf="party === 'shipping_company'">
+          <label>شركة الشحن أو المندوب</label>
+          <select class="form-control" [(ngModel)]="voucher.shipping_company_id">
+            <option [ngValue]="null" disabled>— اختر من القائمة —</option>
+            <option *ngFor="let s of shippingPartners" [ngValue]="s.id">{{ s.name }} — {{ s.type }}</option>
+          </select>
+        </div>
 
         <div class="col-md-6 form-group">
           <label>المبلغ</label>
@@ -80,7 +102,9 @@
       </div>
     </div>
     <div class="card-footer">
-      <button type="button" class="btn btn-primary" (click)="save()">حفظ القبض</button>
+      <button type="button" class="btn btn-primary" (click)="save()">
+        {{ fundDirection === 'payment' && party === 'shipping_company' ? 'حفظ الصرف' : 'حفظ القبض' }}
+      </button>
     </div>
   </div>
 </div>

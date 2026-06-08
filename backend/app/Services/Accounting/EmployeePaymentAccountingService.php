@@ -22,10 +22,17 @@ class EmployeePaymentAccountingService
         if ($id && TreeAccount::find($id)) {
             return (int) $id;
         }
-        $account = TreeAccount::where('name', 'like', '%رواتب وأجور%')
-            ->orWhere('name', 'like', '%رواتب موظفين%')
-            ->orderBy('level', 'desc')
+        // يقتصر على مصروفات؛ يفضّل أعمق حساب (ورقة) لتفادي مطابقة أسماء خارج مجموعة المصروفات.
+        $account = TreeAccount::query()
+            ->where('type', 'expense')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%رواتب وأجور%')
+                    ->orWhere('name', 'like', '%رواتب موظفين%');
+            })
+            ->orderByDesc('level')
+            ->orderByDesc('id')
             ->first();
+
         return $account ? $account->id : null;
     }
 

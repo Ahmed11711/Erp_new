@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Item;
+use App\Models\Manufacture;
+use App\Models\ManufactureProduct;
 use App\Models\Recipe;
 use App\Models\RecipeExtraCost;
 use App\Models\RecipeIngredient;
@@ -19,6 +21,24 @@ use Illuminate\Support\Facades\DB;
 
 class RecipeController extends Controller
 {
+    /**
+     * قائمة المواد (BOM) في الواجهة تُحمَّل من GET /manufacture — يجب مسحها مع حذف الوصفة لنفس المنتج.
+     *
+     * @param  iterable<int, int|null>  $outputItemIds
+     */
+    private function deleteLegacyManufacturesForOutputProducts(iterable $outputItemIds): void
+    {
+        $ids = collect($outputItemIds)->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        foreach ($ids as $productId) {
+            $manufactureIds = Manufacture::query()->where('product_id', $productId)->pluck('id');
+            if ($manufactureIds->isEmpty()) {
+                continue;
+            }
+            ManufactureProduct::query()->whereIn('manufacture_id', $manufactureIds)->delete();
+            Manufacture::query()->whereIn('id', $manufactureIds)->delete();
+        }
+    }
+
     public function __construct(
         private CostCalculationService $costService,
         private InventoryService $inventoryService,
@@ -28,7 +48,7 @@ class RecipeController extends Controller
     public function index(): JsonResponse
     {
         $rows = Recipe::query()
-            ->with(['outputItem:id,category_name,product_type'])
+            ->with(['outputItem:id,category_name,product_type,color,item_code'])
             ->withCount(['ingredients', 'extraCosts'])
             ->orderBy('recipe_name')
             ->get();
@@ -41,7 +61,11 @@ class RecipeController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $recipe = Recipe::with(['ingredients.item', 'extraCosts'])->findOrFail($id);
+        $recipe = Recipe::with([
+            'ingredients.item:id,category_name,item_code,color,warehouse',
+            'extraCosts',
+            'outputItem:id,category_name,item_code,color,warehouse,category_price,unit_price',
+        ])->findOrFail($id);
 
         $breakdown = $this->costService->breakdownForRecipe($recipe);
 
@@ -258,6 +282,7 @@ class RecipeController extends Controller
                 DB::table('categories')->where('recipe_id', $recipe->id)->update(['recipe_id' => null]);
                 if ($recipe->output_item_id) {
                     Item::query()->whereKey((int) $recipe->output_item_id)->update(['recipe_id' => null]);
+                    $this->deleteLegacyManufacturesForOutputProducts([(int) $recipe->output_item_id]);
                 }
 
                 $recipe->delete();
@@ -282,7 +307,11 @@ class RecipeController extends Controller
         $ids = $data['ids'];
         $count = 0;
 
-        DB::transaction(function () use ($ids, &$count) {
+        $outputItemIdsForManufactures = Recipe::query()
+            ->whereIn('id', $ids)
+            ->pluck('output_item_id');
+
+        DB::transaction(function () use ($ids, &$count, $outputItemIdsForManufactures) {
             StockMovement::where('reference_type', 'recipe')
                 ->whereIn('reference_id', $ids)
                 ->delete();
@@ -296,6 +325,8 @@ class RecipeController extends Controller
                     Item::query()->whereKey((int) $r->output_item_id)->update(['recipe_id' => null]);
                 }
             }
+
+            $this->deleteLegacyManufacturesForOutputProducts($outputItemIdsForManufactures);
 
             $count = Recipe::whereIn('id', $ids)->delete();
         });
@@ -311,10 +342,16 @@ class RecipeController extends Controller
      */
     public function checkStock(int $id, Request $request): JsonResponse
     {
-        $recipe   = Recipe::findOrFail($id);
+        $recipe = Recipe::findOrFail($id);
         $batchQty = (int) $request->input('batch_qty', 1);
+        $finishedItemId = (int) $request->input('finished_item_id', 0);
+        $prodColorId = null;
+        if ($finishedItemId > 0) {
+            $raw = Item::query()->whereKey($finishedItemId)->value('color_id');
+            $prodColorId = $raw !== null ? (int) $raw : null;
+        }
 
-        $result = $this->inventoryService->checkStockAvailability($recipe, $batchQty);
+        $result = $this->inventoryService->checkStockAvailability($recipe, $batchQty, $prodColorId);
 
         return response()->json($result);
     }

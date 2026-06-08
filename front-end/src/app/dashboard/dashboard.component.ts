@@ -1,11 +1,13 @@
-import { Component, OnDestroy, Renderer2 } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, Renderer2 } from '@angular/core';
 import { NavigationEnd, Route, Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
-import { filter, interval, startWith, Subscription, switchMap } from 'rxjs';
+import { filter, forkJoin, interval, startWith, Subscription, switchMap } from 'rxjs';
 import { NotificationService } from '../notification/service/notification.service';
 import Swal from 'sweetalert2';
 import { FilterOrderService } from '../shipping/services/filter-order.service';
 import { WhatsAppService } from '../whatsapp/services/whatsapp.service';
+import { RbacService } from '../core/rbac/rbac.service';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
 
 
 @Component({
@@ -26,10 +28,43 @@ export class DashboardComponent implements OnDestroy {
   user!:string;
   userName!:string;
 
-  /** قسم «الإيصالات والأذونات» + روابط عروض الأسعار: Corparates يرى داخل القسم عروض الأسعار فقط (الباقي Admin). */
+  readonly RBAC = RBAC_ROUTE;
+
+  /** Combined RBAC for main «الحسابات» sidebar block */
+  get showAccountingSection(): boolean {
+    return this.rbac.can('finance.view');
+  }
+
+  canReportsSection(): boolean {
+    return this.rbac.canAny([...RBAC_ROUTE.reportsSection]);
+  }
+
+  /** قسم «الإيصالات والأذونات»: يظهر إن وُجدت صلاحية القسم أو عروض الأسعار فقط */
   get showReceiptsAndPermissionsMenu(): boolean {
-    const u = this.user;
-    return u === 'Corparates' || u === 'Admin' || u === 'Data Entry' || u === 'Shipping Management' || u === 'Customer Service';
+    return this.rbac.canAny(['nav.receipts', 'nav.receipts.quotes']);
+  }
+
+  /** لوحة Shopify في التبويب السريع (أعلى المحتوى) */
+  get showShopifyQuickTabs(): boolean {
+    return this.rbac.canAny(['nav.shopify.dashboard', 'nav.shopify', 'system.rbac']);
+  }
+
+  /** Shopify: طلبات/منتجات في لوحة الشحن */
+  canAccessShopifyDashboard(): boolean {
+    return this.rbac.canAny(['nav.shopify.dashboard', 'nav.shopify', 'system.rbac']);
+  }
+
+  /** Shopify: مزامنة يدوية واختبار اتصال */
+  canAccessShopifySettings(): boolean {
+    return this.rbac.canAny(['nav.shopify.settings', 'nav.shopify', 'system.rbac']);
+  }
+
+  showShopifySubmenu(): boolean {
+    return this.canAccessShopifyDashboard() || this.canAccessShopifySettings();
+  }
+
+  showShippingMenuSection(): boolean {
+    return this.rbac.can('orders.view') || this.showShopifySubmenu();
   }
 
   /** True if the current user is assigned to at least one WhatsApp number */
@@ -42,13 +77,15 @@ export class DashboardComponent implements OnDestroy {
 
   /** مسار المحتوى تحت /dashboard لتمييز التبويب النشط */
   dashboardNavUrl = '';
-  /** تبويب سريع: الرئيسية ↔ Shopify */
-  showShopifyQuickTabs = false;
+
   private navUrlSub?: Subscription;
+  private permissionsCookieSub?: Subscription;
 
   constructor(private loginService:AuthService , private notificationService:NotificationService, private route:Router,
     private orderFilter :FilterOrderService, private renderer: Renderer2,
     private whatsappService: WhatsAppService,
+    public rbac: RbacService,
+    private cdr: ChangeDetectorRef,
     ) {
 
     }
@@ -64,8 +101,23 @@ export class DashboardComponent implements OnDestroy {
 
 
     this.applyUserDepartmentFromCookie();
-    this.loginService.syncSessionDepartmentFromServer().subscribe(() => {
+    forkJoin({
+      dept: this.loginService.syncSessionDepartmentFromServer(),
+      permissions: this.loginService.syncSessionPermissionsFromServer(),
+    }).subscribe(() => {
       this.applyUserDepartmentFromCookie();
+      const perms = this.loginService.getPermission();
+      this.canAssignWhatsAppNumbers =
+        (Array.isArray(perms) && perms.includes('assign to whatsapp number'))
+        || this.rbac.can('whatsapp.assign_numbers');
+      this.cdr.detectChanges();
+    });
+    this.permissionsCookieSub = this.loginService.permissionsCookieUpdated.subscribe(() => {
+      const perms = this.loginService.getPermission();
+      this.canAssignWhatsAppNumbers =
+        (Array.isArray(perms) && perms.includes('assign to whatsapp number'))
+        || this.rbac.can('whatsapp.assign_numbers');
+      this.cdr.detectChanges();
     });
     this.userName = this.loginService.userName();
     this.dashboardNavUrl = this.route.url;
@@ -77,7 +129,8 @@ export class DashboardComponent implements OnDestroy {
 
     const perms = this.loginService.getPermission();
     this.canAssignWhatsAppNumbers =
-      Array.isArray(perms) && perms.includes('assign to whatsapp number');
+      (Array.isArray(perms) && perms.includes('assign to whatsapp number'))
+      || this.rbac.can('whatsapp.assign_numbers');
 
     this.whatsappService.getUserPhoneNumbers().subscribe({
       next: (res) => {
@@ -126,12 +179,12 @@ export class DashboardComponent implements OnDestroy {
 
   private applyUserDepartmentFromCookie(): void {
     const raw = this.loginService.getUser();
-    this.user = typeof raw === 'string' ? raw : '';
-    this.showShopifyQuickTabs = this.user === 'Admin' || this.user === 'Logistics Specialist';
+    this.user = typeof raw === 'string' ? raw.trim() : '';
   }
 
   ngOnDestroy(): void {
     this.navUrlSub?.unsubscribe();
+    this.permissionsCookieSub?.unsubscribe();
   }
 
   isHomeDashTabActive(): boolean {
@@ -166,6 +219,7 @@ export class DashboardComponent implements OnDestroy {
     this.orderFilter.shipping_line_id = '';
     this.orderFilter.private_order = '';
     this.orderFilter.collectType = '';
+    this.orderFilter.category_id = null;
     this.orderFilter.confimedOrderNotifi = false;
     if (e === 'confirmedOrder') {
       this.orderFilter.order_number = '';

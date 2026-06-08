@@ -41,7 +41,9 @@ export class TrackingsComponent {
 
 
   getUsers(){
-    this.userService.data().subscribe((res:any)=>this.userdata = res);
+    this.userService.compactDirectory().subscribe((res:any)=> {
+      this.userdata = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+    });
   }
 
   form:FormGroup = new FormGroup({

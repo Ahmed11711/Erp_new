@@ -29,4 +29,8 @@ export class ServiceAccountsService {
   transfer(data: any) {
     return this.http.post(environment.Url + '/accounting/service-accounts/transfer', data);
   }
+
+  delete(id: number) {
+    return this.http.delete(environment.Url + '/accounting/service-accounts/' + id);
+  }
 }

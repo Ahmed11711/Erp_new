@@ -2,19 +2,19 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { GeneralAccountsComponent } from './general-accounts.component';
 import { departmentGuard } from '../../guards/department.guard';
+import { RBAC_ROUTE } from '../../guards/rbac-route-data';
 
 const routes: Routes = [
   {
     path: '',
     component: GeneralAccountsComponent,
     canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Financial Accounts'] }
-  }
+    data: { rbacPermissions: [...RBAC_ROUTE.financeTeam] },
+  },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class GeneralAccountsRoutingModule { }
-
+export class GeneralAccountsRoutingModule {}

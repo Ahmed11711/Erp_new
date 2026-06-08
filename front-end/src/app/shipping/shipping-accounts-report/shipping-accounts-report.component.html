@@ -1,0 +1,319 @@
+<div class="container-fluid">
+  <div class="row py-3">
+    <div class="col-4 d-flex align-items-center">
+      <app-time></app-time>
+    </div>
+    <div class="col-4 text-center">
+      <p class="title header mb-0">تقارير حسابات الشحن والتحصيل</p>
+    </div>
+    <div class="col-4"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="d-flex gap-2 mb-3 px-3">
+    <button class="btn" [class.btn-primary]="activeTab === 'summary'" [class.btn-outline-primary]="activeTab !== 'summary'" (click)="activeTab = 'summary'">
+      ملخص الأرصدة
+    </button>
+    <button class="btn" [class.btn-primary]="activeTab === 'settlement'" [class.btn-outline-primary]="activeTab !== 'settlement'" (click)="activeTab = 'settlement'">
+      ملخص التسوية
+    </button>
+    <button class="btn btn-outline-secondary" *ngIf="activeTab === 'statement'" (click)="backToSummary()">
+      ← رجوع
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="report-panel p-3 mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">النوع</label>
+        <select class="form-control" [(ngModel)]="typeFilter">
+          <option value="">الكل</option>
+          <option value="مندوب">مندوب</option>
+          <option value="شركة">شركة</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">من تاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="dateFrom">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">إلى تاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="dateTo">
+      </div>
+      <div class="col-md-2" *ngIf="activeTab === 'statement'">
+        <label class="form-label">الحالة</label>
+        <select class="form-control" [(ngModel)]="statusFilter">
+          <option value="">الكل</option>
+          <option value="تم شحن">تم شحن</option>
+          <option value="تم التسليم">تم التسليم</option>
+          <option value="تم التحصيل">تم التحصيل</option>
+        </select>
+      </div>
+      <div class="col-md-2" *ngIf="activeTab === 'statement'">
+        <label class="form-label">التسوية</label>
+        <select class="form-control" [(ngModel)]="isDoneFilter">
+          <option value="">الكل</option>
+          <option value="0">معلق</option>
+          <option value="1">تمت التسوية</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" (click)="applyFilters()">بحث</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary Tab -->
+  <div *ngIf="activeTab === 'summary'">
+    <div class="row g-3 px-3 mb-3">
+      <div class="col-md-3">
+        <div class="card text-center p-3 border-primary">
+          <div class="text-muted small">إجمالي المعلق</div>
+          <div class="h4 mb-0 text-primary">{{ summary.total_pending_amount | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center p-3 border-success">
+          <div class="text-muted small">إجمالي المشحون</div>
+          <div class="h4 mb-0 text-success">{{ summary.total_shipped_amount | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center p-3 border-secondary">
+          <div class="text-muted small">إجمالي المحصل</div>
+          <div class="h4 mb-0">{{ summary.total_collected_amount | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center p-3">
+          <div class="text-muted small">عدد الشركات/المناديب</div>
+          <div class="h4 mb-0">{{ summary.total_companies }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive px-3" *ngIf="!loading">
+      <table class="table table-hover table-bordered text-center">
+        <thead class="table-dark">
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>النوع</th>
+            <th>الرصيد الحالي</th>
+            <th>عدد الطلبات</th>
+            <th>معلق تحصيل</th>
+            <th>تم التسليم (معلق)</th>
+            <th>المبلغ المعلق</th>
+            <th>المبلغ المشحون</th>
+            <th>المبلغ المحصل</th>
+            <th>سند نقدي</th>
+            <th>كشف حساب</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of companies; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td>{{ c.name }}</td>
+            <td>
+              <span class="badge" [class.bg-info]="c.type === 'مندوب'" [class.bg-warning]="c.type === 'شركة'">{{ c.type }}</span>
+            </td>
+            <td dir="ltr">{{ c.balance | number:'1.2-2' }}</td>
+            <td>{{ c.total_orders }}</td>
+            <td>{{ c.pending_collection_count }}</td>
+            <td>{{ c.delivered_pending_settlement }}</td>
+            <td dir="ltr" class="text-danger fw-bold">{{ c.total_pending_amount | number:'1.2-2' }}</td>
+            <td dir="ltr">{{ c.total_shipped_amount | number:'1.2-2' }}</td>
+            <td dir="ltr">{{ c.total_collected_amount | number:'1.2-2' }}</td>
+            <td>
+              <div class="d-flex flex-wrap justify-content-center gap-1">
+                <a class="btn btn-sm btn-success text-white" [routerLink]="['/dashboard/financial/cash/receive']" [queryParams]="cashQueryReceipt(c, pendingAmountFromRow(c))">قبض</a>
+                <a class="btn btn-sm btn-danger" [routerLink]="['/dashboard/financial/cash/pay-shipping-partner']" [queryParams]="cashQueryPayment(c, pendingAmountFromRow(c))">دفع</a>
+              </div>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" (click)="openStatement(c)">كشف حساب</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="text-center py-5" *ngIf="loading">
+      <div class="spinner-border text-primary"></div>
+      <p>جاري التحميل...</p>
+    </div>
+  </div>
+
+  <!-- Statement Tab -->
+  <div *ngIf="activeTab === 'statement' && selectedCompany">
+    <div class="px-3 mb-3">
+      <h5 class="mb-2">كشف حساب: {{ selectedCompany.name }} ({{ selectedCompany.type }})</h5>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="text-muted small">تسوية نقدية (يتم فتح شاشة السند مع تعبئة مبدئية):</span>
+        <a class="btn btn-sm btn-success text-white" [routerLink]="['/dashboard/financial/cash/receive']" [queryParams]="cashQueryReceipt(selectedCompany, suggestedAmountFromStatementAggregates())">قبض من المندوب/الشركة</a>
+        <a class="btn btn-sm btn-danger" [routerLink]="['/dashboard/financial/cash/pay-shipping-partner']" [queryParams]="cashQueryPayment(selectedCompany, suggestedAmountFromStatementAggregates())">دفع للمندوب/الشركة</a>
+      </div>
+    </div>
+
+    <div class="row g-3 px-3 mb-3" *ngIf="statementAggregates">
+      <div class="col-md-2">
+        <div class="card text-center p-2 border-danger">
+          <div class="text-muted small">المعلق</div>
+          <div class="h5 mb-0 text-danger">{{ statementAggregates.outstanding | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <div class="card text-center p-2 border-success">
+          <div class="text-muted small">تمت التسوية</div>
+          <div class="h5 mb-0 text-success">{{ statementAggregates.settled | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <div class="card text-center p-2">
+          <div class="text-muted small">مشحون (معلق)</div>
+          <div class="h5 mb-0">{{ statementAggregates.shipped_pending | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <div class="card text-center p-2 border-info">
+          <div class="text-muted small">تم التسليم (معلق)</div>
+          <div class="h5 mb-0 text-info">{{ statementAggregates.delivered_pending | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <div class="card text-center p-2">
+          <div class="text-muted small">عدد الطلبات</div>
+          <div class="h5 mb-0">{{ statementAggregates.total_orders }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive px-3" *ngIf="statementDetails">
+      <table class="table table-hover table-bordered table-sm text-center">
+        <thead class="table-dark">
+          <tr>
+            <th>رقم الطلب</th>
+            <th>اسم العميل</th>
+            <th>هاتف العميل</th>
+            <th>صافي الطلب</th>
+            <th>المبلغ</th>
+            <th>الحالة</th>
+            <th>تاريخ الشحن</th>
+            <th>تسوية</th>
+            <th>قبض طلب</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of statementDetails.data">
+            <td>
+              <a [routerLink]="['/dashboard/shipping/orderdetails', d.order_id]" target="_blank">{{ d.order_id }}</a>
+            </td>
+            <td>{{ d.order?.customer_name }}</td>
+            <td dir="ltr">{{ d.order?.customer_phone_1 }}</td>
+            <td dir="ltr">{{ d.order?.net_total | number:'1.2-2' }}</td>
+            <td dir="ltr" class="fw-bold">{{ d.amount | number:'1.2-2' }}</td>
+            <td>
+              <span class="badge" 
+                [class.bg-warning]="d.status === 'تم شحن'" 
+                [class.bg-info]="d.status === 'تم التسليم'"
+                [class.bg-secondary]="d.status === 'تم التحصيل'">
+                {{ d.status }}
+              </span>
+            </td>
+            <td>{{ d.shipping_date }}</td>
+            <td>
+              <span class="badge" [class.bg-danger]="!d.is_done" [class.bg-success]="d.is_done">
+                {{ d.is_done ? 'تمت' : 'معلق' }}
+              </span>
+            </td>
+            <td>
+              <a
+                *ngIf="!d.is_done && (d.status === 'تم شحن' || d.status === 'تم التسليم')"
+                class="btn btn-sm btn-success text-white"
+                [routerLink]="['/dashboard/financial/cash/receive']"
+                [queryParams]="cashQueryReceipt(selectedCompany, +d.amount, [d.order_id])"
+              >قبض</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-center" *ngIf="statementDetails?.last_page > 1">
+      <nav>
+        <ul class="pagination">
+          <li class="page-item" *ngFor="let p of [].constructor(statementDetails.last_page); let i = index"
+              [class.active]="statementDetails.current_page === i + 1">
+            <a class="page-link" (click)="loadStatement(i + 1)" style="cursor:pointer">{{ i + 1 }}</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Settlement Tab -->
+  <div *ngIf="activeTab === 'settlement'">
+    <div class="px-3 mb-3">
+      <h5>ملخص التسوية — المبالغ المعلقة حسب المندوب/الشركة</h5>
+    </div>
+
+    <div class="row g-3 px-3 mb-3">
+      <div class="col-md-4">
+        <div class="card text-center p-3 border-danger">
+          <div class="text-muted small">إجمالي المعلق</div>
+          <div class="h4 mb-0 text-danger">{{ settlementTotals.total_outstanding | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center p-3">
+          <div class="text-muted small">إجمالي الطلبات</div>
+          <div class="h4 mb-0">{{ settlementTotals.total_orders }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive px-3">
+      <table class="table table-hover table-bordered text-center">
+        <thead class="table-dark">
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>النوع</th>
+            <th>عدد الطلبات</th>
+            <th>إجمالي المعلق</th>
+            <th>مشحون</th>
+            <th>تم التسليم</th>
+            <th>أقدم شحنة</th>
+            <th>أحدث شحنة</th>
+            <th>سند نقدي</th>
+            <th>كشف حساب</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of settlementData; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td>{{ s.name }}</td>
+            <td>
+              <span class="badge" [class.bg-info]="s.type === 'مندوب'" [class.bg-warning]="s.type === 'شركة'">{{ s.type }}</span>
+            </td>
+            <td>{{ s.orders_count }}</td>
+            <td dir="ltr" class="text-danger fw-bold">{{ s.total_outstanding | number:'1.2-2' }}</td>
+            <td dir="ltr">{{ s.shipped_amount | number:'1.2-2' }}</td>
+            <td dir="ltr">{{ s.delivered_amount | number:'1.2-2' }}</td>
+            <td>{{ s.oldest_shipment }}</td>
+            <td>{{ s.latest_shipment }}</td>
+            <td>
+              <div class="d-flex flex-wrap justify-content-center gap-1">
+                <a class="btn btn-sm btn-success text-white" [routerLink]="['/dashboard/financial/cash/receive']" [queryParams]="cashQueryReceipt(s, pendingAmountFromSettlementRow(s))">قبض</a>
+                <a class="btn btn-sm btn-danger" [routerLink]="['/dashboard/financial/cash/pay-shipping-partner']" [queryParams]="cashQueryPayment(s, pendingAmountFromSettlementRow(s))">دفع</a>
+              </div>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" (click)="openStatement({id: s.id, name: s.name, type: s.type})">تفاصيل</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

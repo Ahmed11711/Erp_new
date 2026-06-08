@@ -3,25 +3,17 @@ import { RouterModule, Routes } from '@angular/router';
 import { SafesComponent } from './safes.component';
 import { SafeDepositWithdrawComponent } from './safe-deposit-withdraw.component';
 import { departmentGuard } from '../../guards/department.guard';
+import { RBAC_ROUTE } from '../../guards/rbac-route-data';
+
+const d = { rbacPermissions: [...RBAC_ROUTE.financeTeam] };
 
 const routes: Routes = [
-  {
-    path: '',
-    component: SafesComponent,
-    canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
-  },
-  {
-    path: 'deposit-withdraw',
-    component: SafeDepositWithdrawComponent,
-    canActivate: [departmentGuard],
-    data: { allowedDepartments: ['Admin', 'Account Management', 'Logistics Specialist', 'Financial Accounts'] }
-  }
+  { path: '', component: SafesComponent, canActivate: [departmentGuard], data: d },
+  { path: 'deposit-withdraw', component: SafeDepositWithdrawComponent, canActivate: [departmentGuard], data: d },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class SafesRoutingModule { }
-
+export class SafesRoutingModule {}

@@ -1,0 +1,119 @@
+<h2 mat-dialog-title dir="rtl" class="shopify-review-title">
+  <span class="shopify-badge">Shopify</span>
+  مراجعة طلب #{{ data.orderId }}
+</h2>
+
+<mat-dialog-content dir="rtl" class="shopify-review-content">
+  <div *ngIf="loading" class="text-center py-4">
+    <p>جاري تحميل البيانات...</p>
+  </div>
+
+  <ng-container *ngIf="!loading && order">
+    <div class="review-status-bar" [class.reviewed]="isReviewed" [class.pending]="!isReviewed">
+      <mat-icon>{{ isReviewed ? 'verified' : 'pending_actions' }}</mat-icon>
+      <div>
+        <strong>{{ isReviewed ? 'تمت المراجعة' : 'بانتظار المراجعة' }}</strong>
+        <div *ngIf="isReviewed" class="review-meta">
+          {{ order.shopify_reviewer?.name || '—' }}
+          ·
+          {{ order.shopify_reviewed_at | date:'yyyy-MM-dd HH:mm' }}
+        </div>
+      </div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-block">
+        <label>رقم Shopify</label>
+        <div>{{ order.reference_number || order.shopify_order_id || '—' }}</div>
+      </div>
+      <div class="info-block">
+        <label>حالة الدفع</label>
+        <div>{{ financialStatusLabel }}</div>
+      </div>
+      <div class="info-block">
+        <label>اسم العميل</label>
+        <div>{{ order.customer_name }}</div>
+      </div>
+      <div class="info-block">
+        <label>الهاتف</label>
+        <div dir="ltr">{{ order.customer_phone_1 }}</div>
+      </div>
+      <div class="info-block">
+        <label>المحافظة / المدينة</label>
+        <div>{{ order.governorate }} — {{ order.city || '—' }}</div>
+      </div>
+      <div class="info-block full">
+        <label>العنوان</label>
+        <div>{{ order.address }}</div>
+      </div>
+      <div class="info-block">
+        <label>الصافي</label>
+        <div dir="ltr">{{ order.net_total | customNumber }}</div>
+      </div>
+      <div class="info-block">
+        <label>المدفوع</label>
+        <div dir="ltr">{{ order.prepaid_amount | customNumber }}</div>
+      </div>
+      <div class="info-block">
+        <label>إجمالي الفاتورة</label>
+        <div dir="ltr">{{ order.total_invoice | customNumber }}</div>
+      </div>
+      <div class="info-block">
+        <label>الخصم</label>
+        <div dir="ltr">{{ order.discount | customNumber }}</div>
+      </div>
+      <div class="info-block">
+        <label>الشحن</label>
+        <div dir="ltr">{{ order.shipping_cost | customNumber }}</div>
+      </div>
+    </div>
+
+    <div class="products-block" *ngIf="order.order_products?.length">
+      <h3>المنتجات</h3>
+      <table class="table table-sm table-bordered mb-0">
+        <thead>
+          <tr>
+            <th>الصنف</th>
+            <th>الكمية</th>
+            <th>السعر</th>
+            <th>الإجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let p of order.order_products">
+            <td>{{ p.category?.category_name || p.special_details || '—' }}</td>
+            <td>{{ p.quantity }}</td>
+            <td dir="ltr">{{ p.price | customNumber }}</td>
+            <td dir="ltr">{{ p.total_price | customNumber }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note-block mt-3">
+      <label for="shopifyReviewNote">ملاحظة المراجعة (اختياري)</label>
+      <textarea
+        id="shopifyReviewNote"
+        class="form-control"
+        rows="3"
+        [(ngModel)]="reviewNote"
+        placeholder="مثال: تم التحقق من العنوان والمبالغ"></textarea>
+    </div>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end" dir="rtl">
+  <button mat-button type="button" (click)="close()">إغلاق</button>
+  <button mat-stroked-button color="primary" type="button" (click)="openEditOrder()" *ngIf="order">
+    تعديل الطلب
+  </button>
+  <button
+    mat-flat-button
+    color="primary"
+    type="button"
+    *ngIf="canConfirmReview"
+    [disabled]="loading || submitting || !order"
+    (click)="confirmReview()">
+    {{ isReviewed ? 'تحديث المراجعة' : 'تأكيد المراجعة' }}
+  </button>
+</mat-dialog-actions>

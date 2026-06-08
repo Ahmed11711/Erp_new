@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Safe;
 use App\Models\ServiceAccount;
 use App\Models\TreeAccount;
+use App\Services\Shipping\CollectionReceivableAccountResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -197,7 +198,8 @@ class SalesOrderAccountingService
 
         $od = $order->order_details;
         $shipAr = $od?->shipping_company?->receivable_tree_account_id;
-        $collectAr = $od?->collection_company?->receivable_tree_account_id;
+        $collectAr = app(CollectionReceivableAccountResolver::class)
+            ->receivableAccountIdForOrderDetails($od);
 
         $buckets = [];
 
@@ -246,9 +248,9 @@ class SalesOrderAccountingService
     {
         $order->loadMissing(['order_details.collection_company']);
 
-        $c = $order->order_details?->collection_company;
-        if ($c && $c->receivable_tree_account_id) {
-            return (int) $c->receivable_tree_account_id;
+        $resolved = app(CollectionReceivableAccountResolver::class)->receivableAccountIdForOrder($order);
+        if ($resolved) {
+            return $resolved;
         }
 
         $cust = $this->resolveCustomerAccount($order);

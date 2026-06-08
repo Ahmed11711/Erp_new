@@ -16,7 +16,7 @@
     <mat-menu class="notification" #userNotification [overlapTrigger]="false" yPosition="below">
         <div class="notifiy">
             <button mat-menu-item (click)="openNotifiy('confirmedOrder')"
-                *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Shipping Management'">
+                *ngIf="rbac.can('orders.view')">
                 <p> يوجد عدد ( {{confirmedOrderCount}} ) طلب مؤكد اكثر من 3 أيام ولم تتغير الحالة.</p>
             </button>
             <div *ngFor="let elm of notifications" [ngClass]="elm.is_read === 0 ? 'bg-gray' : ''"
@@ -57,12 +57,12 @@
 
             <!-- واتساب -->
             <mat-list-item routerLink="/dashboard/whatsapp/chat" routerLinkActive="active"
-                *ngIf="hasWhatsAppAccess || user == 'Admin'">
+                *ngIf="hasWhatsAppAccess || rbac.can('nav.whatsapp_chat')">
                 <span class="d-flex"><mat-icon class="mx-2">chat</mat-icon>محادثات واتساب</span>
             </mat-list-item>
 
             <mat-list-item routerLink="/dashboard/admin/whatsapp-management" routerLinkActive="active"
-                *ngIf="canAssignWhatsAppNumbers && user != 'Admin'">
+                *ngIf="canAssignWhatsAppNumbers && !rbac.canStrict('system.rbac')">
                 <span class="d-flex"><mat-icon class="mx-2">settings_phone</mat-icon>إدارة أرقام الواتساب</span>
             </mat-list-item>
 
@@ -70,7 +70,7 @@
 
                 <!-- ══════ المخازن ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                    *ngIf="rbac.can('inventory.view')">
                     <mat-expansion-panel-header>
                         <mat-icon>warehouse</mat-icon>
                         المخازن
@@ -79,36 +79,40 @@
                         <a mat-list-item routerLink="/dashboard/warehouse/list" routerLinkActive="active">
                             <span>المخازن</span>
                         </a>
-                        <a mat-list-item routerLink="/dashboard/warehouse/listwarhouse" routerLinkActive="active">
+                        <a mat-list-item routerLink="/dashboard/warehouse/monthlyinventory" routerLinkActive="active">
                             <span>الجرد الشهري</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/warehouse/inventory-import" routerLinkActive="active">
                             <span>استيراد Excel والجرد</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsWarehouse)">
+                            <span>تقرير المخزون</span>
                         </a>
                     </mat-nav-list>
                 </mat-expansion-panel>
 
                 <!-- ══════ الأصناف ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Customer Service'">
+                    *ngIf="rbac.canAny(['categories.view', 'categories.manage'])">
                     <mat-expansion-panel-header>
                         <mat-icon>widgets</mat-icon>
                         الأصناف
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/categories/add_category" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            *ngIf="rbac.can('categories.manage')">
                             <span>إضافة صنف</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/categories/all_categories" routerLinkActive="active">
                             <span>الأصناف</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/categories/units" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            *ngIf="rbac.can('categories.manage')">
                             <span>وحدات القياس</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/categories/production" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            *ngIf="rbac.can('categories.manage')">
                             <span>خطوط الإنتاج</span>
                         </a>
                     </mat-nav-list>
@@ -116,7 +120,7 @@
 
                 <!-- ══════ الموردين ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                    *ngIf="rbac.can('suppliers.view')">
                     <mat-expansion-panel-header>
                         <mat-icon>perm_identity</mat-icon>
                         الموردين
@@ -136,7 +140,7 @@
 
                 <!-- ══════ المشتريات ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist'">
+                    *ngIf="rbac.can('purchases.view')">
                     <mat-expansion-panel-header>
                         <mat-icon>commute</mat-icon>
                         المشتريات
@@ -148,11 +152,55 @@
                         <a mat-list-item routerLink="/dashboard/purchases/list_invoice" routerLinkActive="active">
                             <span>المشتريات</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/reports/procurement" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsProcurement)">
+                            <span>تقرير المشتريات</span>
+                        </a>
+                    </mat-nav-list>
+                </mat-expansion-panel>
+
+                <!-- ══════ تقارير (بدون قسم الحسابات) ══════ -->
+                <mat-expansion-panel [class.mat-elevation-z0]="true"
+                    *ngIf="canReportsSection() && !showAccountingSection">
+                    <mat-expansion-panel-header>
+                        <mat-icon>assessment</mat-icon>
+                        التقارير
+                    </mat-expansion-panel-header>
+                    <mat-nav-list>
+                        <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsWarehouse)">
+                            <span>تقرير المخزون</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/reports/procurement" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsProcurement)">
+                            <span>تقرير المشتريات</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/reports/productsales" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsProductSales)">
+                            <span>تقرير مبيعات المنتجات</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/categoriesreports" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.categoriesReportsHome)">
+                            <span>تقارير الأصناف</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/reports/category" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsCategoryProfit)">
+                            <span>تقرير ربحية الصنف</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/reports/shippingcompany" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.reportsShippingCompanies)">
+                            <span>تقرير شركات الشحن</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/shipping/shipping-accounts-report" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.shippingAccountsReport)">
+                            <span>تقارير ذمم الشحن والتحصيل</span>
+                        </a>
                     </mat-nav-list>
                 </mat-expansion-panel>
 
                 <!-- ══════ التصنيع ══════ -->
-                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                <mat-expansion-panel [class.mat-elevation-z0]="true"
+                    *ngIf="rbac.can('manufacturing.view')">
                     <mat-expansion-panel-header>
                         <mat-icon>precision_manufacturing</mat-icon>
                         التصنيع
@@ -181,7 +229,7 @@
 
                 <!-- ══════ الحسابات ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                    *ngIf="showAccountingSection">
                     <mat-expansion-panel-header>
                         <mat-icon>account_balance</mat-icon>
                         الحسابات
@@ -191,7 +239,7 @@
 
                         <!-- ── شجرة الحسابات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('finance.edit')">
                             <mat-expansion-panel-header>
                                 <mat-icon>account_tree</mat-icon> شجرة الحسابات
                             </mat-expansion-panel-header>
@@ -228,7 +276,7 @@
                                     <span>تحويل من خزينة إلى بنك</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/service-accounts" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                                    *ngIf="rbac.can('finance.edit')">
                                     <span>حسابات الخدمات</span>
                                 </a>
                                 <!-- <a mat-list-item routerLink="/dashboard/financial/banks" routerLinkActive="active">
@@ -238,7 +286,7 @@
                                     <span>سحب وإيداع</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/pendingBanks" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>قيد الانتظار</span>
                                 </a>
                                
@@ -255,7 +303,7 @@
                                     <span>حسابات العملاء</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/individualsclients" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>العملاء الأفراد</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/shipping/companies" routerLinkActive="active">
@@ -272,7 +320,7 @@
 
                         <!-- ── السندات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('finance.edit')">
                             <mat-expansion-panel-header>
                                 <mat-icon>receipt_long</mat-icon> السندات
                             </mat-expansion-panel-header>
@@ -306,7 +354,7 @@
 
                         <!-- ── رأس المال والإيرادات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                            *ngIf="rbac.canAny(['finance.edit', 'inventory.transfer'])">
                             <mat-expansion-panel-header>
                                 <mat-icon>trending_up</mat-icon> رأس المال والإيرادات
                             </mat-expansion-panel-header>
@@ -318,27 +366,27 @@
                                     <span>مبالغ رأس المال</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/addincome" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>إضافة إيراد</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/otherincome" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>الإيرادات الأخرى</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/discounts" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>الخصومات والالتزامات</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/addcimmitment" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>إضافة التزام</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/covenant" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>العهد</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/addcovenant" routerLinkActive="active"
-                                    *ngIf="user == 'Admin'">
+                                    *ngIf="rbac.can('system.rbac')">
                                     <span>صرف العهد</span>
                                 </a>
                             </mat-nav-list>
@@ -346,7 +394,7 @@
 
                         <!-- ── الأصول الثابتة ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('finance.edit')">
                             <mat-expansion-panel-header>
                                 <mat-icon>business</mat-icon> الأصول الثابتة
                             </mat-expansion-panel-header>
@@ -365,7 +413,7 @@
 
                         <!-- ── القيود اليومية ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('finance.edit')">
                             <mat-expansion-panel-header>
                                 <mat-icon>menu_book</mat-icon> القيود اليومية
                             </mat-expansion-panel-header>
@@ -381,49 +429,53 @@
 
                         <!-- ── تقارير الحسابات ── -->
                         <mat-expansion-panel [class.mat-elevation-z0]="true"
-                            *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                            *ngIf="canReportsSection()">
                             <mat-expansion-panel-header>
                                 <mat-icon>assessment</mat-icon> تقارير الحسابات
                             </mat-expansion-panel-header>
                             <mat-nav-list>
                                 <a mat-list-item routerLink="/dashboard/accounting/trial-balance" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                                    *ngIf="rbac.canAny(RBAC.reportsAccountingWide)">
                                     <span>ميزان المراجعة</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/reports/financialstatement" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                                    *ngIf="rbac.canAny(RBAC.reportsFinance)">
                                     <span>كشف حساب تفصيلي</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/financial/income-list" routerLinkActive="active"
-                                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                                    *ngIf="rbac.canAny(RBAC.reportsAccountingWide)">
                                     <span>قائمة الدخل</span>
                                 </a>
                                 <a mat-list-item routerLink="/dashboard/reports/product-performance" routerLinkActive="active"
-                                *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Financial Accounts'">
+                                *ngIf="rbac.canAny(RBAC.reportsFinance)">
                                 <span>تقرير أداء المنتجات</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/reports/procurement" routerLinkActive="active"
-                                *ngIf="user == 'Admin'">
+                                *ngIf="rbac.canAny(RBAC.reportsProcurement)">
                                 <span>تقرير المشتريات</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/reports/productsales" routerLinkActive="active"
-                                *ngIf="user == 'Admin'">
+                                *ngIf="rbac.canAny(RBAC.reportsProductSales)">
                                 <span>تقرير مبيعات المنتجات</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/categoriesreports" routerLinkActive="active"
-                                *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                                *ngIf="rbac.canAny(RBAC.categoriesReportsHome)">
                                 <span>تقارير الأصناف</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/reports/storage" routerLinkActive="active"
-                                *ngIf="user == 'Admin'">
+                                *ngIf="rbac.canAny(RBAC.reportsWarehouse)">
                                 <span>تقرير المخزون</span>
                             </a>
                             <a mat-list-item routerLink="/dashboard/reports/category" routerLinkActive="active"
-                                *ngIf="user == 'Admin'">
+                                *ngIf="rbac.canAny(RBAC.reportsCategoryProfit)">
                                 <span>تقرير ربحية الصنف</span>
                             </a>
+                            <a mat-list-item routerLink="/dashboard/shipping/shipping-accounts-report" routerLinkActive="active"
+                                *ngIf="rbac.canAny(RBAC.shippingAccountsReport)">
+                                <span>تقارير ذمم الشحن والتحصيل</span>
+                            </a>
                             <a mat-list-item routerLink="/dashboard/reports/shippingcompany" routerLinkActive="active"
-                                *ngIf="user == 'Admin'">
+                                *ngIf="rbac.canAny(RBAC.reportsShippingCompanies)">
                                 <span>تقرير شركات الشحن</span>
                             </a>
                             </mat-nav-list>
@@ -434,72 +486,99 @@
 
                 <!-- ══════ إدارة الشحن ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management' || user == 'Financial Accounts' || user == 'Shipping Management' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Operation Specialist' || user == 'Customer Service' || user == 'Account Management' || user == 'Logistics Specialist'">
+                    *ngIf="showShippingMenuSection()">
                     <mat-expansion-panel-header>
                         <mat-icon>local_shipping</mat-icon>
                         إدارة الشحن
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/shipping/addorder" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Data Entry'">
+                            *ngIf="rbac.can('orders.create')">
                             <span>إضافة طلب</span>
                         </a>
-                        <a mat-list-item routerLink="/dashboard/shipping/listorders" routerLinkActive="active">
+                        <a mat-list-item routerLink="/dashboard/shipping/listorders" routerLinkActive="active"
+                            *ngIf="rbac.can('orders.view')">
                             <span>الطلبات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/shipping/shippingcompany" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Operation Specialist'">
+                            *ngIf="rbac.can('nav.shipping.master')">
                             <span>شركات الشحن والمندوبين</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/shipping/collection-companies" routerLinkActive="active"
+                            *ngIf="rbac.canAny(['nav.shipping.master', 'collection_companies.manage', 'shipping.companies.manage', 'system.rbac'])">
+                            <span>شركات التحصيل والدفع</span>
+                        </a>
                         <a mat-list-item routerLink="/dashboard/shipping/ordersource" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('system.rbac')">
                             <span>مصادر الطلبات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/shipping/shippingway" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('system.rbac')">
                             <span>طرق الشحن</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/shipping/shippingline" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('system.rbac')">
                             <span>خطوط الشحن</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/shipping/shipping-line-statement" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management' || user == 'Account Management' || user == 'Logistics Specialist'">
+                            *ngIf="rbac.can('nav.shipping.master')">
                             <span>بيان خط الشحن</span>
                         </a>
-                        <a mat-list-item routerLink="/dashboard/shopify" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Logistics Specialist'">
-                            <span>تكامل Shopify والشحن</span>
+                        <a mat-list-item routerLink="/dashboard/shipping/shipping-accounts-report" routerLinkActive="active"
+                            *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
+                            <span>ذمم المناديب وشركات الشحن</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/shipping/collection-accounts-report" routerLinkActive="active"
+                            *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
+                            <span>ذمم شركات التحصيل والدفع</span>
                         </a>
                     </mat-nav-list>
+                        <mat-accordion class="sub-accordion shipping-shopify-nested" *ngIf="showShopifySubmenu()">
+                            <mat-expansion-panel [class.mat-elevation-z0]="true">
+                                <mat-expansion-panel-header>
+                                    <mat-icon>storefront</mat-icon>
+                                    تكامل Shopify
+                                </mat-expansion-panel-header>
+                                <mat-nav-list>
+                                    <a mat-list-item routerLink="/dashboard/shopify" routerLinkActive="active"
+                                        *ngIf="canAccessShopifyDashboard()">
+                                        <span>لوحة الطلبات والمنتجات</span>
+                                    </a>
+                                    <a mat-list-item routerLink="/dashboard/system/settings" routerLinkActive="active"
+                                        *ngIf="canAccessShopifySettings()">
+                                        <span>إعدادات المزامنة والاتصال</span>
+                                    </a>
+                                </mat-nav-list>
+                            </mat-expansion-panel>
+                        </mat-accordion>
                 </mat-expansion-panel>
 
                 <!-- ══════ الموارد البشرية ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Operation Management'  || user == 'Financial Accounts'|| user == 'Account Management' || user == 'Logistics Specialist' || user == 'Operation Specialist'">
+                    *ngIf="rbac.canAny(['employees.view', 'employees.create', 'employees.attendance'])">
                     <mat-expansion-panel-header>
                         <mat-icon>badge</mat-icon>
                         HR
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/hr/addemployee" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('employees.create')">
                             <span>إضافة موظف</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/employee" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('employees.create')">
                             <span>الموظفين</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/payroll" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('employees.create')">
                             <span>كشف المرتبات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/reviewabsencess" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Account Management' || user == 'Logistics Specialist' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('employees.attendance')">
                             <span>مراجعة الغيابات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/hr/workinghours" routerLinkActive="active"
-                            *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Financial Accounts'">
+                            *ngIf="rbac.can('employees.create')">
                             <span>كشف الحضور والغياب</span>
                         </a>
                     </mat-nav-list>
@@ -507,7 +586,7 @@
 
                 <!-- ══════ التقارير ══════ -->
                 <!-- <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Account Management' || user == 'Shipping Management' || user == 'Corparates' || user == 'Logistics Specialist'">
+                    *ngIf="rbac.can('orders.view')">
                     <mat-expansion-panel-header>
                         <mat-icon>bar_chart</mat-icon>
                         التقارير
@@ -526,15 +605,15 @@
                     </mat-expansion-panel-header>
                     <mat-nav-list>
                         <a mat-list-item routerLink="/dashboard/permissions/receive" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>إذن استلام</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/receivecheck" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>إيصال استلام شيك</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/receivemoney" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>إيصال استلام نقدية</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/priceoffer1" routerLinkActive="active">
@@ -547,34 +626,34 @@
                             <span>عروض الأسعار</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/offerconditions" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>شروط عروض الأسعار</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/banksacounts" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>الحسابات البنكية</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/descriptions" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>الأوصاف</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/ordercoding" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>تكويد الطلبات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/orderdocument" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>سند تسليم الطلبات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/permissions/orderprint" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.can('nav.receipts.admin')">
                             <span>طباعة فواتير الطلبات</span>
                         </a>
                     </mat-nav-list>
                 </mat-expansion-panel>
 
                 <!-- ══════ إدارة النظام ══════ -->
-                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="user == 'Admin'">
+                <mat-expansion-panel [class.mat-elevation-z0]="true" *ngIf="rbac.can('system.rbac')">
                     <mat-expansion-panel-header>
                         <mat-icon>settings</mat-icon>
                         Admin
@@ -586,14 +665,14 @@
                         <a mat-list-item routerLink="/dashboard/system/users" routerLinkActive="active">
                             <span>المستخدمين</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/system/rbac-roles" routerLinkActive="active">
+                            <span>إدارة الأدوار والصلاحيات</span>
+                        </a>
                         <a mat-list-item routerLink="/dashboard/system/powers" routerLinkActive="active">
-                            <span>الصلاحيات</span>
+                            <span>صلاحيات المستخدمين (كاملة)</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/system/followusers" routerLinkActive="active">
                             <span>تتبع المستخدمين</span>
-                        </a>
-                        <a mat-list-item routerLink="/dashboard/system/settings" routerLinkActive="active">
-                            <span>إعدادات تكامل Shopify</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/admin/adminorder" routerLinkActive="active">
                             <span>الأوردرات</span>
@@ -609,7 +688,7 @@
 
                 <!-- ══════ Corporate Sales ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
-                    *ngIf="user == 'Admin' || user == 'Shipping Management' || user == 'Corparates'">
+                    *ngIf="rbac.can('nav.corporate')">
                     <mat-expansion-panel-header>
                         <mat-icon>corporate_fare</mat-icon>
                         Corporate Sales
@@ -628,7 +707,7 @@
                             <span>Follow Up Leads</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/reports/lead-activity" routerLinkActive="active"
-                            *ngIf="user == 'Admin'">
+                            *ngIf="rbac.canAny(['nav.corporate', 'system.rbac'])">
                             <span>Lead Activity Report</span>
                         </a>
                     </mat-nav-list>

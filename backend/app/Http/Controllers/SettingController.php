@@ -6,6 +6,7 @@ use App\Models\Setting;
 use App\Models\TreeAccount;
 use App\Models\customerCompany;
 use App\Models\Supplier;
+use App\Services\Accounting\AccountLinkingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -48,13 +49,17 @@ class SettingController extends Controller
         try {
             if ($type === 'customer') {
                 if ($subType === 'corporate') {
+                    $linking = app(AccountLinkingService::class);
                     $companies = customerCompany::all();
                     foreach ($companies as $company) {
                         if ($company->tree_account_id) {
                             $this->moveAccount($company->tree_account_id, $parentAccount);
                         } else {
-                            // إنشاء حساب جديد للعميل تحت الحساب الأب المحدث
-                            $account = $this->createChildAccount($parentAccount, $company->name ?? 'عميل ' . $company->id, $parentAccount->type ?? 'asset');
+                            $account = $linking->createChildAccount(
+                                $parentAccount,
+                                $company->name ?? 'عميل ' . $company->id,
+                                $parentAccount->type ?? 'asset'
+                            );
                             $company->tree_account_id = $account->id;
                             $company->save();
                         }

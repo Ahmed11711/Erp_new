@@ -19,8 +19,9 @@
 
  <form #addCat="ngForm" (ngSubmit)="addCategory(addCat)" enctype="multipart/form-data">
 
+  <!-- اسم الصنف، كود الصنف، اللون — في صف واحد -->
   <div class="form-row">
-   <div class="form-group col-md-6">
+   <div class="form-group col-md-4">
     <label for="category_name">اسم الصنف</label>
     <ng-autocomplete name="category_name" [(ngModel)]="category_name" [data]="products" [searchKeyword]="catword"
      required (selected)="productChange($event)" (inputCleared)="resetInp()" [itemTemplate]="itemTemplates"
@@ -35,46 +36,6 @@
      <div [innerHTML]="notFound"></div>
     </ng-template>
    </div>
-  </div>
-
-  <!-- سعر الصنف ورصيد افتتاحي -->
-  <div class="form-row mt-3">
-   <div class="form-group col-md-6">
-    <label for="price">سعر الصنف</label>
-    <input type="number" name="price" ngModel #price="ngModel" class="form-control" id="price" aria-describedby="price"
-     required min="0" />
-    <div class="form-text text-danger" *ngIf="price.touched && price.invalid">
-     <div *ngIf="price.errors?.['required']">يجب ادخال سعر الصنف</div>
-     <div *ngIf="price.errors?.['min']">يجب ادخال سعر صحيح</div>
-    </div>
-   </div>
-
-   <div class="form-group col-md-6">
-    <label for="inital_price">الرصيد الافتتاحي</label>
-    <input type="number" name="inital_price" ngModel #inital_price="ngModel" class="form-control" id="inital_price"
-     aria-describedby="inital_price" required min="0" />
-    <div class="form-text text-danger" *ngIf="inital_price.touched && inital_price.invalid">
-     <div *ngIf="inital_price.errors?.['required']">يجب ادخال رصيد افتتاحي</div>
-     <div *ngIf="inital_price.errors?.['min']">يجب ادخال رصيد افتتاحي صحيح</div>
-    </div>
-   </div>
-  </div>
-
-  <!-- الحد الأدنى للمخزون -->
-  <div class="form-row mt-3">
-   <div class="form-group col-md-6">
-    <label for="min_quantity">الحد الادنى للمخزون</label>
-    <input type="number" name="min_quantity" ngModel #min_quantity="ngModel" class="form-control" id="min_quantity"
-     aria-describedby="min_quantity" required min="0" />
-    <div class="form-text text-danger" *ngIf="min_quantity.touched && min_quantity.invalid">
-     <div *ngIf="min_quantity.errors?.['required']">يجب ادخال الحد الادنى للمخزن</div>
-     <div *ngIf="min_quantity.errors?.['min']">يجب ادخال رقم صحيح</div>
-    </div>
-   </div>
-  </div>
-
-  <!-- كود الصنف، اللون، الوصفة (اختياري) -->
-  <div class="form-row mt-3">
    <div class="form-group col-md-4">
     <label for="item_code">كود الصنف</label>
     <input type="text" name="item_code" ngModel class="form-control" id="item_code" maxlength="64"
@@ -92,13 +53,38 @@
       </span>
     </div>
    </div>
+  </div>
+
+  <!-- سعر الصنف، الرصيد الافتتاحي، الحد الأدنى للمخزون — في صف واحد -->
+  <div class="form-row mt-3">
    <div class="form-group col-md-4">
-    <label for="recipe_id">الوصفة (BOM)</label>
-    <select class="form-control" name="recipe_id" ngModel id="recipe_id">
-     <option value="">بدون وصفة</option>
-     <option *ngFor="let r of recipesData" [value]="r.id">{{ r.recipe_name }}</option>
-    </select>
-    <small class="form-text text-muted">سجّل الوصفة من التصنيع أولاً إن لم تظهر في القائمة.</small>
+    <label for="price">سعر الصنف</label>
+    <input type="number" name="price" ngModel #price="ngModel" class="form-control" id="price" aria-describedby="price"
+     required min="0" />
+    <div class="form-text text-danger" *ngIf="price.touched && price.invalid">
+     <div *ngIf="price.errors?.['required']">يجب ادخال سعر الصنف</div>
+     <div *ngIf="price.errors?.['min']">يجب ادخال سعر صحيح</div>
+    </div>
+   </div>
+
+   <div class="form-group col-md-4">
+    <label for="inital_price">الرصيد الافتتاحي</label>
+    <input type="number" name="inital_price" ngModel #inital_price="ngModel" class="form-control" id="inital_price"
+     aria-describedby="inital_price" required min="0" />
+    <div class="form-text text-danger" *ngIf="inital_price.touched && inital_price.invalid">
+     <div *ngIf="inital_price.errors?.['required']">يجب ادخال رصيد افتتاحي</div>
+     <div *ngIf="inital_price.errors?.['min']">يجب ادخال رصيد افتتاحي صحيح</div>
+    </div>
+   </div>
+
+   <div class="form-group col-md-4">
+    <label for="min_quantity">الحد الادنى للمخزون</label>
+    <input type="number" name="min_quantity" ngModel #min_quantity="ngModel" class="form-control" id="min_quantity"
+     aria-describedby="min_quantity" required min="0" />
+    <div class="form-text text-danger" *ngIf="min_quantity.touched && min_quantity.invalid">
+     <div *ngIf="min_quantity.errors?.['required']">يجب ادخال الحد الادنى للمخزن</div>
+     <div *ngIf="min_quantity.errors?.['min']">يجب ادخال رقم صحيح</div>
+    </div>
    </div>
   </div>
 
@@ -110,13 +96,7 @@
      (change)="onWarehouseChange($event)">
      <option selected disabled value="">اختر المخزن</option>
      <ng-container *ngFor="let elm of stockData">
-      <option *ngIf="(
-                      ((user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist') 
-                        && (elm.name == 'مخزن مواد خام' || elm.name == 'مخزن منتج تحت التشغيل')) 
-                      || 
-                      ((user == 'Admin' || user == 'Data Entry') 
-                        && elm.name == 'مخزن منتج تام')
-                    )"
+      <option *ngIf="canSelectWarehouse(elm.name)"
        [value]="elm.name">
        {{ elm.name }}
       </option>
@@ -149,6 +129,26 @@
     </div>
    </div>
   </div>
+
+  <!-- نوع المنتج والسماح بالبيع -->
+  <!-- <div class="form-row mt-3">
+   <div class="form-group col-md-4">
+    <label for="product_type">نوع المنتج</label>
+    <select class="form-control" name="product_type" ngModel #product_type_ctrl="ngModel" id="product_type">
+     <option value="">تلقائي (حسب المخزن)</option>
+     <option value="raw_material">مادة خام</option>
+     <option value="semi_finished">تحت التشغيل</option>
+     <option value="finished">منتج تام</option>
+    </select>
+    <small class="form-text text-muted">إن تُرك فارغاً يُحدَّد تلقائياً من المخزن المختار.</small>
+   </div>
+   <div class="form-group col-md-4 d-flex align-items-end">
+    <div class="form-check">
+     <input type="checkbox" class="form-check-input" name="allow_wip_sale" ngModel id="allow_wip_sale" />
+     <label class="form-check-label" for="allow_wip_sale">السماح ببيع تحت التشغيل</label>
+    </div>
+   </div>
+  </div> -->
 
   <!-- صورة الصنف -->
   <div class="form-group mt-3">

@@ -9,9 +9,27 @@ WHERE ABS(IFNULL(unit_price, 0)) < 0.0000001
   AND category_price IS NOT NULL;
 
 
-     composer install --no-dev --optimize-autoloader
+      composer install --no-dev --optimize-autoloader
 
-        composer require phpoffice/phpspreadsheet:^5.7
+      composer require phpoffice/phpspreadsheet:^5.7
 
 
-        php artisan erp:reset-inventory-testing --force
+      php artisan erp:reset-inventory-testing --force
+
+
+      php artisan db:seed --class=RbacFoundationSeeder
+      php artisan db:seed --class=RbacFoundationSeeder
+      php artisan db:seed --class=StockDocumentsFoundationSeeder
+
+
+
+      php artisan shopify:fix-category-image-column
+      php artisan optimize:clear
+
+-- لوكال: تأكد أن front-end/src/env/env.ts يشير إلى:
+-- http://localhost/Erp_new/backend/public/api
+-- ثم أعد تشغيل: ng serve
+-- اختبار الإدراج: php scripts/test_category_image_insert.php
+
+-- SQL (لوكال أو سيرفر):
+-- ALTER TABLE categories MODIFY category_image VARCHAR(255) NULL DEFAULT '';

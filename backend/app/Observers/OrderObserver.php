@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Services\Accounting\LedgerJournalService;
 use App\Services\Accounting\SalesOrderAccountingService;
 use App\Services\Accounting\AccountingService;
+use App\Services\Shipping\OrderFinancialStateService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 class OrderObserver
@@ -38,10 +39,12 @@ class OrderObserver
                 $old = (float) ($order->getOriginal('prepaid_amount') ?? 0);
                 $new = (float) $order->prepaid_amount;
                 $diff = round($new - $old, 2);
-                if ($diff > 0.009) {
-                    $this->recordAdditionalPrepaidCollection($order, $diff);
-                } elseif ($diff < -0.009) {
-                    $this->recordPrepaidReductionReversal($order, abs($diff));
+                if (! \App\Services\Orders\OrderEditAccountingService::$suppressPrepaidDeltaJournal) {
+                    if ($diff > 0.009) {
+                        $this->recordAdditionalPrepaidCollection($order, $diff);
+                    } elseif ($diff < -0.009) {
+                        $this->recordPrepaidReductionReversal($order, abs($diff));
+                    }
                 }
 
                 Log::info('OrderObserver: prepaid change', [
@@ -52,11 +55,30 @@ class OrderObserver
                 ]);
             }
 
+            if ($order->wasChanged(['net_total', 'prepaid_amount'])) {
+                DB::afterCommit(function () use ($order) {
+                    $fresh = Order::with('order_details')->find($order->id);
+                    if (! $fresh?->order_details) {
+                        return;
+                    }
+                    try {
+                        app(OrderFinancialStateService::class)->syncFromOrder($fresh);
+                    } catch (\Throwable $e) {
+                        Log::error('OrderObserver: syncFromOrder failed', [
+                            'order_id' => $fresh->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
+            }
+
             if ($order->wasChanged([
                 'total_invoice',
                 'discount',
                 'shipping_revenue',
                 'shipping_cost',
+                'net_total',
+                'prepaid_amount',
                 'customer_name',
                 'customer_phone_1',
                 'customer_type',

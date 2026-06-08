@@ -56,11 +56,11 @@
             <td>{{elm.created_at}}</td>
             <td>{{ paymentPlaceLabel(elm) }}</td>
             <td>{{ paymentSourceName(elm) }}</td>
-            <td>{{elm.expense_type}}</td>
-            <td>{{elm?.kind?.expense_kind}}</td>
+            <td>{{ expenseTypeLabel(elm) }}</td>
+            <td>{{ expenseKindLabel(elm) }}</td>
             <td class="text-start">{{ elm.expens_statement }}</td>
             <td dir="ltr">{{elm.amount | customNumber}}</td>
-            <td class="text-start small text-muted">{{ treeAccountLine(elm.debit_tree_account) }}</td>
+            <td class="text-start small text-muted">{{ debitAccountLabel(elm) }}</td>
             <td class="text-start small text-muted">{{ treeAccountLine(creditTreeFromRow(elm)) }}</td>
             <td class="text-start small">{{ truncateNote(elm.note) }}</td>
             <td>

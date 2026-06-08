@@ -13,6 +13,8 @@ export class PurchaseDetailsComponent implements OnInit{
   data:any[]=[];
   tracking:any[]=[];
   id!:any;
+  /** رابط طباعة موقّع من الخادم */
+  printUrl: string | null = null;
 
 
   constructor(private route:ActivatedRoute , private invoiceService:InvoiceService){
@@ -26,6 +28,7 @@ export class PurchaseDetailsComponent implements OnInit{
       this.invoice = res['invoice'];
       this.data = res['categories'] ?? [];
       this.tracking = res['tracking'] ?? [];
+      this.printUrl = res['print_url'] ?? null;
     });
   }
 
@@ -33,7 +36,15 @@ export class PurchaseDetailsComponent implements OnInit{
     this.invoiceService.getInvoiceById(id).subscribe(res=>{
       this.invoice = res['invoice'];
       this.data = res['categories'];
+      this.printUrl = res['print_url'] ?? null;
     });
+  }
+
+  openPrint(): void {
+    if (!this.printUrl) {
+      return;
+    }
+    window.open(this.printUrl, '_blank', 'noopener,noreferrer');
   }
 
 }

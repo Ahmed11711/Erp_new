@@ -99,4 +99,34 @@ class ShopifyAdminApiClient
 
         return null;
     }
+
+    /**
+     * رسالة خطأ للمطوّر/المشرف مع تلميحات عربية شائعة لـ 401/403.
+     */
+    public static function formatAdminApiFailureMessage(Response $response, string $arabicPrefix): string
+    {
+        $status = $response->status();
+        $json = $response->json();
+        $detail = '';
+        if (is_array($json)) {
+            $errs = $json['errors'] ?? null;
+            if (is_string($errs)) {
+                $detail = trim($errs);
+            } elseif (is_array($errs)) {
+                $detail = json_encode($errs, JSON_UNESCAPED_UNICODE);
+            }
+        }
+        if ($detail === '') {
+            $body = (string) $response->body();
+            $detail = strlen($body) > 500 ? substr($body, 0, 500).'…' : $body;
+        }
+
+        $hint = match ($status) {
+            403 => ' غالباً: نطاقات Admin API للتطبيق لا تسمح بهذا الطلب (مثلاً read_products للمنتجات، read_orders و read_all_orders للطلبات القديمة)، أو أُضيفت الصلاحية بعد إنشاء التوكن؛ من Shopify: الإعدادات ← التطبيقات والقنوات ← تطوير التطبيقات ← تطبيقك ← تكامل Admin API ← فعّل الصلاحيات ثم انسخ **Admin API access token** جديداً وحدّث SHOPIFY_ADMIN_ACCESS_TOKEN في .env ثم php artisan config:clear.',
+            401 => ' التوكن غير مقبول. تحقق من SHOPIFY_ADMIN_ACCESS_TOKEN وأن المتجر في SHOPIFY_SHOP_DOMAIN مطابق (مثل your-store.myshopify.com).',
+            default => '',
+        };
+
+        return $arabicPrefix.' (HTTP '.$status.').'.$hint.' رد Shopify: '.$detail;
+    }
 }

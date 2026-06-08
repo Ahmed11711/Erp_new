@@ -7,30 +7,31 @@ import { ManufacturingConfirmationComponent } from './manufacturing-confirmation
 import { ManufacturingOrdersComponent } from './manufacturing-orders/manufacturing-orders.component';
 import { ManufacturingAdditionsComponent } from './manufacturing-additions/manufacturing-additions.component';
 import { departmentGuard } from '../guards/department.guard';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
+
+const mfg = [...RBAC_ROUTE.manufacturingAll];
 
 const routes: Routes = [
-  {path:'addrecipe' , component:AddRecipeComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  { path: 'addrecipe', component: AddRecipeComponent, canActivate: [departmentGuard], data: { rbacPermissions: mfg } },
+  { path: 'recipes', component: ManufacturingRecipesComponent, canActivate: [departmentGuard], data: { rbacPermissions: mfg } },
+  { path: 'bom', component: ManufacturingBomListComponent, canActivate: [departmentGuard], data: { rbacPermissions: mfg } },
+  {
+    path: 'confirmation',
+    component: ManufacturingConfirmationComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: mfg },
   },
-  {path:'recipes' , component:ManufacturingRecipesComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:'bom' , component:ManufacturingBomListComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:'confirmation' , component:ManufacturingConfirmationComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:'orders' , component:ManufacturingOrdersComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
-  },
-  {path:'additions' , component:ManufacturingAdditionsComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  { path: 'orders', component: ManufacturingOrdersComponent, canActivate: [departmentGuard], data: { rbacPermissions: mfg } },
+  {
+    path: 'additions',
+    component: ManufacturingAdditionsComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: mfg },
   },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class ManufacturingRoutingModule { }
+export class ManufacturingRoutingModule {}

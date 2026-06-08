@@ -1,99 +1,180 @@
 import { DatePipe } from '@angular/common';
-import { Component } from '@angular/core';
-import { ActivatedRoute, Route, Router } from '@angular/router';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { OrderService } from '../services/order.service';
 import { ShippingCompanyService } from '../services/shipping-company.service';
-import { ShippingLinesService } from '../services/shipping-lines.service';
+import { CollectionCompanyService } from '../services/collection-company.service';
 
 @Component({
   selector: 'app-ship-order',
   templateUrl: './ship-order.component.html',
   styleUrls: ['./ship-order.component.css']
 })
-export class ShipOrderComponent {
-lines:any = []
-companies :any = []
-constructor(
-  private order:OrderService,private route:ActivatedRoute, private datePipe:DatePipe, private company:ShippingCompanyService,
-   private router:Router
-  ){}
+export class ShipOrderComponent implements OnInit {
+  lines: any = [];
+  companies: any[] = [];
+  collectionCompanies: any[] = [];
 
-customer_type!:string;
-paymentTypeActive:boolean = false;
-
-completedShip:boolean=false;
-
-  /** لعرض صافي الطلب والدفعة المقدمة عند تقسيم الذمة بين الشحن والتحصيل */
+  customer_type!: string;
+  orderStatus = '';
+  paymentTypeActive = false;
+  completedShip = false;
   orderSnap: any;
 
-  ngOnInit(){
-  const  id  = this.route.snapshot.params['id'];
-  this.order.getOrderById(id).subscribe((res:any)=>{
-    this.orderSnap = res;
-    this.customer_type = res?.customer_type;
-    if (res?.customer_type == 'شركة') {
-      this.paymentTypeActive = true;
-      let status = res?.order_products.every(elm => elm.quantity - elm.shipped_quantity == 0);
-      if (status) {
-        this.completedShip = true;
-        this.router.navigate(['/dashboard/shipping/listorders']);
+  selectedShippingCompanyId: string = '';
+  /** معرّف من جدول collection_companies */
+  selectedCollectionCompanyId: string = '';
+
+  showCollectionSplit = false;
+  manualSplitMode = false;
+  manualShippingAmount: number | null = null;
+  manualCollectionAmount: number | null = null;
+
+  computedShippingAmount = 0;
+  computedCollectionAmount = 0;
+  splitError: string = '';
+
+  constructor(
+    private order: OrderService,
+    private route: ActivatedRoute,
+    private datePipe: DatePipe,
+    private company: ShippingCompanyService,
+    private collectionCompanyService: CollectionCompanyService,
+    private router: Router
+  ) {}
+
+  /** طلب مؤكد أو شحن جزئي + فرد + يوجد مبلغ تحصيل/مقدم */
+  get showCollectionCompanyField(): boolean {
+    if (this.customer_type === 'شركة' || !this.orderSnap) {
+      return false;
+    }
+    if (!['طلب مؤكد', 'شحن جزئي', 'طلب جديد'].includes(this.orderStatus)) {
+      return false;
+    }
+    const net = parseFloat(this.orderSnap.net_total) || 0;
+    const prepaid = parseFloat(this.orderSnap.prepaid_amount) || 0;
+    return net - prepaid > 0.009 || prepaid > 0.009;
+  }
+
+  ngOnInit() {
+    const id = this.route.snapshot.params['id'];
+    this.order.getOrderById(id).subscribe((res: any) => {
+      this.orderSnap = res;
+      this.customer_type = res?.customer_type;
+      this.orderStatus = res?.order_status || '';
+      if (res?.customer_type == 'شركة') {
+        this.paymentTypeActive = true;
+        const status = res?.order_products.every((elm: any) => elm.quantity - elm.shipped_quantity == 0);
+        if (status) {
+          this.completedShip = true;
+          this.router.navigate(['/dashboard/shipping/listorders']);
+        }
       }
+
+      this.lines = res.order_details?.shipping_line;
+      this.recalcSplit();
+    });
+
+    this.company.shippingCompanySelect().subscribe((res: any) => {
+      this.companies = res;
+    });
+    this.collectionCompanyService.select().subscribe((res: any) => {
+      this.collectionCompanies = (res || []).filter((c: any) => c.status !== 'inactive');
+    });
+  }
+  onShippingCompanyChange(): void {
+    this.updateCollectionSplitVisibility();
+    this.recalcSplit();
+  }
+
+  onCollectionCompanyChange(): void {
+    this.updateCollectionSplitVisibility();
+    if (!this.showCollectionSplit) {
+      this.manualSplitMode = false;
+      this.manualShippingAmount = null;
+      this.manualCollectionAmount = null;
+    }
+    this.recalcSplit();
+  }
+
+  private updateCollectionSplitVisibility(): void {
+    const collId = this.selectedCollectionCompanyId;
+    const shipId = this.selectedShippingCompanyId;
+    this.showCollectionSplit = !!(collId && collId !== '' && collId !== shipId);
+  }
+
+  recalcSplit(): void {
+    if (!this.orderSnap) {
+      this.computedShippingAmount = 0;
+      this.computedCollectionAmount = 0;
+      this.splitError = '';
+      return;
     }
 
-    this.lines=res.order_details.shipping_line
-  })
+    const net = parseFloat(this.orderSnap.net_total) || 0;
+    const prepaid = parseFloat(this.orderSnap.prepaid_amount) || 0;
 
-  this.company.shippingCompanySelect().subscribe((res:any)=>{
-    this.companies = res
-  });
-}
-myFilter = (d: Date | null): boolean => {
-  const today = new Date();
-  const selectedDate = d || today;
-  const timeDifference = Math.ceil((selectedDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  // return timeDifference >= 0;
-  return timeDifference >= 0 && timeDifference <= 2;
-};
+    if (this.manualSplitMode && this.manualShippingAmount != null && this.manualCollectionAmount != null) {
+      const ship = this.manualShippingAmount || 0;
+      const coll = this.manualCollectionAmount || 0;
+      this.computedShippingAmount = ship;
+      this.computedCollectionAmount = coll;
+      const sum = Math.round((ship + coll) * 100) / 100;
+      const roundedNet = Math.round(net * 100) / 100;
+      if (Math.abs(sum - roundedNet) > 0.02) {
+        this.splitError = `المجموع (${sum}) ≠ صافي الطلب (${roundedNet})`;
+      } else {
+        this.splitError = '';
+      }
+    } else if (this.showCollectionSplit && prepaid > 0) {
+      this.computedCollectionAmount = Math.round(Math.min(prepaid, net) * 100) / 100;
+      this.computedShippingAmount = Math.round(Math.max(0, net - this.computedCollectionAmount) * 100) / 100;
+      this.splitError = '';
+    } else {
+      this.computedShippingAmount = Math.round(net * 100) / 100;
+      this.computedCollectionAmount = 0;
+      this.splitError = '';
+    }
+  }
 
-date : any
-dateSelected
-OnDateChange(event){
-  const inputDate = new Date(event);
-  this.date = this.datePipe.transform(inputDate, 'yyyy-M-d');
-  this.dateSelected = true;
-}
+  myFilter = (d: Date | null): boolean => {
+    const today = new Date();
+    const selectedDate = d || today;
+    const timeDifference = Math.ceil((selectedDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return timeDifference >= 0 && timeDifference <= 2;
+  };
 
-selectedFile: any;
-imgselect = false;
+  date: any;
+  dateSelected: boolean = false;
+  OnDateChange(event: any) {
+    const inputDate = new Date(event);
+    this.date = this.datePipe.transform(inputDate, 'yyyy-M-d');
+    this.dateSelected = true;
+  }
+
+  selectedFile: any;
+  imgselect = false;
   onFileChanged(event: any) {
     this.selectedFile = event.target.files[0];
     this.imgselect = true;
   }
-  productsArray:any = [];
-  shippStatus:boolean=true;
-  // getshippedquantity(newProduct:any){
-  //   this.shippStatus = newProduct.shippstatus;
 
-  //  if(newProduct.quantity == '' || newProduct.quantity == 0){
-  //   this.productsArray = this.productsArray.filter((product) => product.id !== newProduct.id);
-  //  }else{
-  //   this.productsArray = this.productsArray
-  //   .filter((product) => product.quantity !== '' && product.id !== newProduct.id)
-  //   .concat(newProduct);
-  //  }
-  // }
-  getshippedquantity(data:any){
+  productsArray: any[] = [];
+  shippStatus = true;
+
+  getshippedquantity(data: any) {
     this.shippStatus = data.shippstatus;
-
-    this.productsArray = data.shipProducts.map(elm=>{
-      return {id:elm.id , quantity:elm.requiredQuantity}
-    })
+    this.productsArray = data.shipProducts.map((elm: any) => {
+      return { id: elm.id, quantity: elm.requiredQuantity };
+    });
   }
-  payment!:string;
-  cashType:boolean = false;
-  cashval:boolean = false;
-  cash:number=0;
-  paymentType(e:any){
+
+  payment!: string;
+  cashType = false;
+  cashval = false;
+  cash = 0;
+
+  paymentType(e: any) {
     if (e.target.id == 'paymentType') {
       this.payment = e.target.value;
       if (this.payment == 'أجل' || this.payment == 'نقدي') {
@@ -109,7 +190,7 @@ imgselect = false;
     }
     if (e.target.id == 'cash') {
       this.cash = e.target.value;
-      if (this.cash >0) {
+      if (this.cash > 0) {
         this.cashType = false;
         this.cashval = true;
       } else {
@@ -118,44 +199,41 @@ imgselect = false;
     }
   }
 
-shipOrder(form:any){
-  const formData = new FormData();
-  formData.append('company_id', form.value.company);
-  if (form.value.collection_company) {
-    formData.append('collection_company_id', form.value.collection_company);
-  }
-  if (form.value.shipping_receivable_amount != null && form.value.shipping_receivable_amount !== '') {
-    formData.append('shipping_receivable_amount', String(form.value.shipping_receivable_amount));
-  }
-  if (form.value.collection_receivable_amount != null && form.value.collection_receivable_amount !== '') {
-    formData.append('collection_receivable_amount', String(form.value.collection_receivable_amount));
-  }
-  // formData.append('shipping_line_id', form.value.line);
+  shipOrder(form: any) {
+    const formData = new FormData();
+    formData.append('company_id', this.selectedShippingCompanyId);
 
-
-  formData.append('date', this.date);
-  // formData.append('shipping_image', this.selectedFile, this.selectedFile.name);
-  formData.append('shippment_number', form.value.shippment_number);
-  formData.append('productsToShip', JSON.stringify(this.productsArray));
-  const id = this.route.snapshot.params['id'];
-  // console.log(this.productsArray);
-
-  if (this.customer_type == 'شركة') {
-    formData.append('payment_way', this.payment);
-    if (this.payment == 'نقدي') {
-      let cash = String(this.cash) ;
-      formData.append('cash', cash);
+    if (this.selectedCollectionCompanyId && this.selectedCollectionCompanyId !== '') {
+      formData.append('collection_provider_type', 'collection_company');
+      formData.append('collection_provider_id', this.selectedCollectionCompanyId);
+      const coll = this.collectionCompanies.find((c: any) => String(c.id) === String(this.selectedCollectionCompanyId));
+      if (coll?.linked_shipping_company_id) {
+        formData.append('collection_company_id', String(coll.linked_shipping_company_id));
+      }
     }
-  }
 
-
-  this.order.shipOrder(formData,id).subscribe((res:any)=>{
-    console.log(res);
-
-    if(res.message =="success"){
-      this.router.navigate(['/dashboard/shipping/listorders']);
+    if (this.manualSplitMode && this.manualShippingAmount != null && this.manualCollectionAmount != null) {
+      formData.append('shipping_receivable_amount', String(this.manualShippingAmount));
+      formData.append('collection_receivable_amount', String(this.manualCollectionAmount));
     }
-  });
-}
+
+    formData.append('date', this.date);
+    formData.append('shippment_number', form.value.shippment_number || '');
+    formData.append('productsToShip', JSON.stringify(this.productsArray));
+    const id = this.route.snapshot.params['id'];
+
+    if (this.customer_type == 'شركة') {
+      formData.append('payment_way', this.payment);
+      if (this.payment == 'نقدي') {
+        formData.append('cash', String(this.cash));
+      }
+    }
+
+    this.order.shipOrder(formData, id).subscribe((res: any) => {
+      if (res.message === 'success') {
+        this.router.navigate(['/dashboard/shipping/listorders']);
+      }
+    });
+  }
 }
 

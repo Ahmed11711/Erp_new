@@ -5,6 +5,7 @@ import { CategoryService } from '../categories/services/category.service';
 import { ServiceAccountsService } from '../financial/services/service-accounts.service';
 import { SafeService } from '../accounting/services/safe.service';
 import { BankService } from '../accounting/services/bank.service';
+import { RbacService } from '../core/rbac/rbac.service';
 
 @Component({
   selector: 'app-home',
@@ -22,6 +23,7 @@ export class HomeComponent {
 
   constructor(
     private authService: AuthService,
+    public rbac: RbacService,
     private categoryService: CategoryService,
     private serviceAccountsService: ServiceAccountsService,
     private safeService: SafeService,

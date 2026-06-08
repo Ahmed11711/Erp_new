@@ -1,9 +1,16 @@
 import { Component, OnInit } from '@angular/core';
+import { FormControl } from '@angular/forms';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { BankService } from '../services/bank.service';
 import { TreeAccountService } from '../services/tree-account.service';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
+
+interface AccountOption {
+  id: number;
+  label: string;
+}
 
 @Component({
   selector: 'app-banks',
@@ -13,7 +20,12 @@ import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dial
 export class BanksComponent implements OnInit {
   banks: any[] = [];
   filteredBanks: any[] = [];
-  treeAccounts: any[] = [];
+  accountOptions: AccountOption[] = [];
+  filteredParentAccounts: AccountOption[] = [];
+  filteredCounterAccounts: AccountOption[] = [];
+  parentAccountCtrl = new FormControl<string | AccountOption>('', { nonNullable: true });
+  counterAccountCtrl = new FormControl<string | AccountOption>('', { nonNullable: true });
+  readonly accountAutocompleteCap = 400;
   loading = false;
   saving = false;
   searchTerm = '';
@@ -40,7 +52,18 @@ export class BanksComponent implements OnInit {
   ngOnInit(): void {
     this.getAllBanks();
     this.getTreeAccounts();
+    this.parentAccountCtrl.valueChanges.subscribe(v => {
+      this.applyParentAccountFilter(typeof v === 'string' ? v : '');
+    });
+    this.counterAccountCtrl.valueChanges.subscribe(v => {
+      this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+    });
   }
+
+  displayAccountOption = (value: string | AccountOption | null): string => {
+    if (!value) return '';
+    return typeof value === 'string' ? value : value.label;
+  };
 
   private getEmptyBank() {
     return {
@@ -101,18 +124,141 @@ export class BanksComponent implements OnInit {
   getTreeAccounts(): void {
     this.treeAccountService.getAll().subscribe({
       next: (res) => {
-        if (res.data) {
-          this.treeAccounts = Array.isArray(res.data) ? res.data : [res.data];
-        } else if (Array.isArray(res)) {
-          this.treeAccounts = res;
+        const raw = (res as any)?.data;
+        const arr = Array.isArray(raw) ? raw : raw ? [raw] : Array.isArray(res) ? res : [];
+        const flat = this.flattenAccounts(arr);
+        if (flat.length > 0) {
+          this.setAccountOptions(flat);
+          return;
         }
+        this.treeAccountService.getTree().subscribe({
+          next: (treeRes: any) => {
+            const t = treeRes?.data ?? treeRes;
+            const tArr = Array.isArray(t) ? t : t ? [t] : [];
+            this.setAccountOptions(this.flattenAccounts(tArr));
+          },
+          error: () => this.toast.error('تعذر تحميل شجرة الحسابات')
+        });
       },
       error: () => this.toast.error('تعذر تحميل شجرة الحسابات')
     });
   }
 
+  private setAccountOptions(options: AccountOption[]): void {
+    this.accountOptions = options;
+    this.applyParentAccountFilter('');
+    this.applyCounterAccountFilter('');
+  }
+
+  private flattenAccounts(nodes: any[]): AccountOption[] {
+    const out: AccountOption[] = [];
+    const walk = (list: any[]) => {
+      for (const n of list || []) {
+        if (n?.id != null && n?.name) {
+          const code = n.code != null && n.code !== '' ? String(n.code) : '';
+          out.push({
+            id: Number(n.id),
+            label: code ? `${n.name} — ${code}` : String(n.name)
+          });
+        }
+        if (Array.isArray(n?.children) && n.children.length) {
+          walk(n.children);
+        }
+      }
+    };
+    walk(nodes);
+    return out.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }
+
+  private applyParentAccountFilter(term: string): void {
+    this.filteredParentAccounts = this.filterAccountOptions(term);
+  }
+
+  private applyCounterAccountFilter(term: string): void {
+    this.filteredCounterAccounts = this.filterAccountOptions(term);
+  }
+
+  private filterAccountOptions(term: string): AccountOption[] {
+    const raw = String(term ?? '').trim();
+    const q = raw.toLowerCase();
+    let list = this.accountOptions;
+    if (q) {
+      list = list.filter(a => {
+        if (String(a.id).includes(raw)) return true;
+        return a.label.toLowerCase().includes(q) || a.label.includes(raw);
+      });
+    }
+    return list.slice(0, this.accountAutocompleteCap);
+  }
+
+  onParentAccountFocus(): void {
+    const v = this.parentAccountCtrl.value;
+    this.applyParentAccountFilter(typeof v === 'string' ? v : '');
+  }
+
+  onCounterAccountFocus(): void {
+    const v = this.counterAccountCtrl.value;
+    this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+  }
+
+  onParentAccountSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value as AccountOption;
+    if (!acc?.id) return;
+    this.newBank.parent_account_id = acc.id;
+    this.parentAccountCtrl.setValue(acc, { emitEvent: false });
+    this.applyParentAccountFilter('');
+  }
+
+  onCounterAccountSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value as AccountOption;
+    if (!acc?.id) return;
+    this.newBank.counter_account_id = acc.id;
+    this.counterAccountCtrl.setValue(acc, { emitEvent: false });
+    this.applyCounterAccountFilter('');
+  }
+
+  onParentAccountBlur(): void {
+    setTimeout(() => this.syncAccountCtrlOnBlur(this.parentAccountCtrl, 'parent_account_id'), 150);
+  }
+
+  onCounterAccountBlur(): void {
+    setTimeout(() => this.syncAccountCtrlOnBlur(this.counterAccountCtrl, 'counter_account_id'), 150);
+  }
+
+  private syncAccountCtrlOnBlur(
+    ctrl: FormControl<string | AccountOption | null>,
+    field: 'parent_account_id' | 'counter_account_id'
+  ): void {
+    const v = ctrl.value;
+    if (v && typeof v === 'object') return;
+
+    const str = typeof v === 'string' ? v.trim() : '';
+    if (!str) {
+      this.newBank[field] = null;
+      return;
+    }
+
+    const exact = this.accountOptions.find(a => a.label === str);
+    if (exact) {
+      this.newBank[field] = exact.id;
+      ctrl.setValue(exact, { emitEvent: false });
+      return;
+    }
+
+    this.newBank[field] = null;
+    ctrl.setValue(str, { emitEvent: false });
+  }
+
+  private resetAccountAutocomplete(): void {
+    this.parentAccountCtrl.setValue('', { emitEvent: false });
+    this.counterAccountCtrl.setValue('', { emitEvent: false });
+    this.applyParentAccountFilter('');
+    this.applyCounterAccountFilter('');
+  }
+
   openAddDialog(): void {
     this.newBank = this.getEmptyBank();
+    this.resetAccountAutocomplete();
     this.showAddDialog = true;
   }
 

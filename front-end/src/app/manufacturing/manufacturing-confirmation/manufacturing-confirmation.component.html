@@ -16,9 +16,9 @@
 
     <div class="row">
       <div class="col-md-3">
-        <select id="inputState" class="form-control" (change)="warehouseType($event)">
-          <option>مخزن منتج تحت التشغيل</option>
-          <option>مخزن منتج تام</option>
+        <select id="warehousePick" class="form-control" name="warehousePick" [(ngModel)]="selectedWarehouse" (change)="warehouseType($event)">
+          <option value="مخزن منتج تام">مخزن منتج تام</option>
+          <option value="مخزن منتج تحت التشغيل">مخزن منتج تحت التشغيل</option>
         </select>
       </div>
       <div class="col-md-3">
@@ -41,11 +41,67 @@
         </ng-template>
       </div>
       <div class="col-md-2">
-        <input class="form-control" type="number" min="1" placeholder="الكمية" (keyup)="quantityFun($event)">
+        <input class="form-control" type="number" min="1" step="any" placeholder="الكمية" (keyup)="quantityFun($event)">
+        <small class="text-muted d-block mt-1" *ngIf="selectedWarehouse === 'مخزن منتج تحت التشغيل' && wipKeepUnderProcessing">
+          كمية الدُفعة: يُستهلك الخام من الوصفة مضروباً بهذه الكمية، وتُزاد بهذا الرقم أصناف تحت التشغيل.
+        </small>
+        <small class="text-muted d-block mt-1" *ngIf="selectedWarehouse === 'مخزن منتج تحت التشغيل' && availableStockQty != null && !wipKeepUnderProcessing">
+          متاح للتحويل إلى تام: {{ availableStockQty }}
+        </small>
       </div>
       <div class="col-md-2 text-center">
         <h3>اجمالى التكلفة</h3>
         <h4>{{total}}</h4>
+      </div>
+    </div>
+
+    <div class="row mt-2" *ngIf="selectedWarehouse === 'مخزن منتج تحت التشغيل'">
+      <div class="col-md-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="wipKeepChk"
+                 [(ngModel)]="wipKeepUnderProcessing" name="wipKeepChk"
+                 (change)="onWipKeepToggle()">
+          <label class="form-check-label" for="wipKeepChk">
+            إنتاج وتخزين كمنتج تحت التشغيل فقط — استهلاك المواد الخام من الوصفة وزيادة الرصيد هنا، بدون تحويل إلى منتج تام الآن (يمكن التحويل لاحقاً من نفس الشاشة عند إلغاء التفعيل).
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-3" *ngIf="selectedWarehouse === 'مخزن منتج تحت التشغيل' && wipKeepUnderProcessing">
+      <div class="col-md-12">
+        <p class="small text-muted mb-0">
+          عند التفعيل مع «تم الانتهاء»: يُخصم مخزون المواد الخام ثم يُزاد رصيد صنف تحت التشغيل المختار؛ لا يُطبَّق تحويل إلى مخزن منتج تام.
+        </p>
+      </div>
+    </div>
+
+    <div class="row mt-3" *ngIf="selectedWarehouse === 'مخزن منتج تحت التشغيل' && !wipKeepUnderProcessing">
+      <div class="col-md-12">
+        <label class="d-block small font-weight-bold mb-1">استراتيجية الإغلاق إلى منتج تام</label>
+        <select class="form-control" name="wipMode" [(ngModel)]="wipMode">
+          <option value="auto">تلقائي: إن كانت الكمية = كل الرصيد → تحويل كامل لنفس الصنف؛ وإلا → إنشاء صنف جديد (تام) بنفس الوصفة</option>
+          <option value="full_same">تحويل كامل فقط (يجب أن تساوي الكمية كل الرصيد)</option>
+          <option value="partial_new">دائماً إنشاء صنف جديد في مخزن تام بالكمية المدخلة (نفس الوصفة)</option>
+          <option value="partial_merge">دمج الكمية في صنف منتج تام موجود أدناه</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row mt-2" *ngIf="selectedWarehouse === 'مخزن منتج تحت التشغيل' && !wipKeepUnderProcessing && wipMode === 'partial_merge'">
+      <div class="col-md-6">
+        <label class="small">صنف المنتج التام (الهدف)</label>
+        <ng-autocomplete
+          [data]="mergeProducts"
+          [searchKeyword]="catword"
+          placeholder="اختر صنفاً من مخزن المنتج التام"
+          (selected)="mergeProductSelected($event)"
+          [itemTemplate]="itemTemplatesM"
+          [notFoundTemplate]="notFoundTemplate">
+        </ng-autocomplete>
+        <ng-template #itemTemplatesM let-item>
+          <a [innerHTML]="item.category_name"></a>
+        </ng-template>
       </div>
     </div>
 
@@ -68,15 +124,15 @@
           [searchKeyword]="catword2"
           placeholder="اضافة خاصة للعميل"
           (selected)='moreChange($event)'
-          [itemTemplate]="itemTemplates"
-          [notFoundTemplate]="notFoundTemplate">
+          [itemTemplate]="itemTemplatesMore"
+          [notFoundTemplate]="notFoundTemplateMore">
         </ng-autocomplete>
 
-        <ng-template #itemTemplates let-item>
+        <ng-template #itemTemplatesMore let-item>
           <a [innerHTML]="item.category_name"></a>
         </ng-template>
 
-        <ng-template #notFoundTemplate let-notFound>
+        <ng-template #notFoundTemplateMore let-notFound>
           <div [innerHTML]="notFound"></div>
         </ng-template>
       </div>

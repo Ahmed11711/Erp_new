@@ -39,7 +39,7 @@
             <option value="0">لم يتم القراءة</option>
           </select>
         </div>
-        <div class="col-md-2 form-group" *ngIf="user == 'Admin' || user == 'Data Entry' || user == 'Review Management'">
+        <div class="col-md-2 form-group" *ngIf="rbac.can('notifications.review_filter')">
           <select class="form-control" id="review_status_user" (change)="search($event)">
             <option selected disabled>حالة المراجعة</option>
             <option value="1">تم المراجعة</option>

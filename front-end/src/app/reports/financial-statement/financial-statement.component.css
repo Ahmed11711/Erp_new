@@ -11,3 +11,81 @@ table.report-data-table tfoot .text-success {
 table.report-data-table tfoot .text-danger {
   color: #b91c1c !important;
 }
+
+.report-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.report-export-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.financial-statement-pdf {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+  background: #ffffff;
+  color: #1f2937;
+  padding: 12px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting', sans-serif;
+}
+
+.financial-statement-pdf .pdf-report-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.financial-statement-pdf .pdf-report-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
+.financial-statement-pdf .pdf-arabic-fix,
+.financial-statement-pdf .arabic-cell {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.financial-statement-pdf .numeric-cell {
+  direction: ltr;
+  text-align: center;
+  unicode-bidi: isolate;
+}
+
+.financial-statement-pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.financial-statement-pdf-table th,
+.financial-statement-pdf-table td {
+  border: 1px solid #dbeafe;
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.financial-statement-pdf-table thead th {
+  background: #1e293b;
+  color: #ffffff;
+}
+
+.financial-statement-pdf-table .description-cell {
+  min-width: 220px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.financial-statement-pdf .pdf-summary-row h6 {
+  font-size: 0.95rem;
+}

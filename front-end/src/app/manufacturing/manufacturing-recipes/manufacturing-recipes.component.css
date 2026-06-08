@@ -24,6 +24,13 @@ input[type="number"] {
 
 i { cursor: pointer; }
 
+.recipe-output-banner {
+  padding: 0.85rem 1rem;
+  background: #fff;
+  border: 1px solid #e8dde3;
+  border-radius: 8px;
+}
+
 .mfg-recipe-color-swatch {
   display: inline-block;
   width: 1rem;

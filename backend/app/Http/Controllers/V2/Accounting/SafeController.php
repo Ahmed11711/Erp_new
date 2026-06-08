@@ -8,6 +8,7 @@ use App\Models\SafeTransaction;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\DirectCashTransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -322,7 +323,7 @@ class SafeController extends Controller
     /**
      * Handle Direct Deposit/Withdraw (Receipt/Payment) against a Tree Account
      */
-    public function directTransaction(Request $request)
+    public function directTransaction(Request $request, DirectCashTransactionService $cashService)
     {
         $validator = Validator::make($request->all(), [
             'safe_id' => 'required|exists:safes,id',
@@ -337,84 +338,61 @@ class SafeController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        DB::beginTransaction();
         try {
-            $safe = Safe::find($request->safe_id);
-            $counterAccount = TreeAccount::find($request->counter_account_id);
-            $amount = $request->amount;
-            $type = $request->type;
-            $date = $request->date;
-            $notes = $request->notes;
+            $txn = $cashService->createSafe($validator->validated());
 
-            // Ensure Safe has a linked Tree Account
-            if (!$safe->account_id) {
-                return response()->json(['message' => 'الخزينة غير مرتبطة بحساب شجري'], 422);
-            }
-            $safeAccountId = $safe->account_id;
-
-            // Check Balance for Withdrawal (Payment)
-            if ($type === 'payment' && $safe->balance < $amount) {
-                return response()->json(['message' => 'رصيد الخزينة غير كافي'], 422);
-            }
-
-            // Create Safe Transaction Record
-            SafeTransaction::create([
-                'from_safe_id' => ($type === 'payment') ? $safe->id : null,
-                'to_safe_id' => ($type === 'receipt') ? $safe->id : null,
-                'amount' => $amount,
-                'type' => $type, // ensure 'receipt' and 'payment' are valid enum values or handle accordingly
-                'date' => $date,
-                'notes' => $notes,
-                'user_id' => auth()->id(),
-            ]);
-
-            if ($type === 'receipt') {
-                AccountEntry::create([
-                    'tree_account_id' => $safeAccountId,
-                    'debit' => $amount,
-                    'credit' => 0,
-                    'description' => "إيداع خزينة - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                AccountEntry::create([
-                    'tree_account_id' => $counterAccount->id,
-                    'debit' => 0,
-                    'credit' => $amount,
-                    'description' => "إيداع خزينة - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                $safe->increment('balance', $amount);
-            } else {
-                AccountEntry::create([
-                    'tree_account_id' => $safeAccountId,
-                    'debit' => 0,
-                    'credit' => $amount,
-                    'description' => "صرف خزينة - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                AccountEntry::create([
-                    'tree_account_id' => $counterAccount->id,
-                    'debit' => $amount,
-                    'credit' => 0,
-                    'description' => "صرف خزينة - " . $notes,
-                    'created_at' => $date,
-                    'updated_at' => $date
-                ]);
-                $safe->decrement('balance', $amount);
-            }
-
-            $accService = app(AccountingService::class);
-            $accService->updateAccountHierarchyBalances($safeAccountId);
-            $accService->updateAccountHierarchyBalances($counterAccount->id);
-
-            DB::commit();
-            return response()->json(['message' => 'تمت العملية بنجاح'], 200);
-
+            return response()->json([
+                'message' => 'تمت العملية بنجاح',
+                'data' => $cashService->showSafeDirect($txn->id),
+            ], 201);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            DB::rollBack();
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function listDirectTransactions(Request $request, DirectCashTransactionService $cashService)
+    {
+        $filters = $request->only(['safe_id', 'from_date', 'to_date', 'per_page']);
+
+        return response()->json($cashService->listSafeDirect($filters), 200);
+    }
+
+    public function showDirectTransaction(int $id, DirectCashTransactionService $cashService)
+    {
+        try {
+            return response()->json(['data' => $cashService->showSafeDirect($id)], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
+    }
+
+    public function updateDirectTransaction(Request $request, int $id, DirectCashTransactionService $cashService)
+    {
+        $validator = Validator::make($request->all(), [
+            'safe_id' => 'required|exists:safes,id',
+            'type' => 'required|in:receipt,payment',
+            'counter_account_id' => 'required|exists:tree_accounts,id',
+            'amount' => 'required|numeric|min:0.01',
+            'date' => 'required|date',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $txn = $cashService->updateSafeDirect($id, $validator->validated());
+
+            return response()->json([
+                'message' => 'تم تعديل العملية بنجاح',
+                'data' => $cashService->showSafeDirect($txn->id),
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
             return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
         }
     }

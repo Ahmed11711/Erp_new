@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { ConfirmDialogComponent } from './confirm-dialog/confirm-dialog.component';
+import { RequirePermissionDirective } from './require-permission.directive';
 
 @NgModule({
   declarations: [
@@ -23,6 +24,7 @@ import { ConfirmDialogComponent } from './confirm-dialog/confirm-dialog.componen
     FixedTimePipe,
     AngularEditorComponent,
     ConfirmDialogComponent,
+    RequirePermissionDirective,
   ],
   imports: [
     CommonModule,
@@ -41,6 +43,7 @@ import { ConfirmDialogComponent } from './confirm-dialog/confirm-dialog.componen
     MatDialogModule,
     MatSnackBarModule,
     ConfirmDialogComponent,
+    RequirePermissionDirective,
   ],
 })
 export class SharedModule {}

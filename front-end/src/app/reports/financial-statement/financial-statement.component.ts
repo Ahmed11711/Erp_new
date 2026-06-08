@@ -2,10 +2,12 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import * as XLSX from 'xlsx';
 import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { PdfService } from 'src/app/pdf.service';
 
 @Component({
   selector: 'app-financial-statement',
@@ -23,6 +25,7 @@ export class FinancialStatementComponent implements OnInit {
 
   loading = false;
   errorMessage: string | null = null;
+  lastSearchParams: { date_from?: string | null; date_to?: string | null } | null = null;
 
   // ——— تبويب الشجرة ———
   /** كل عُقد الشجرة (رئيسية وفرعية) لاختيار كشف الحساب */
@@ -74,6 +77,7 @@ export class FinancialStatementComponent implements OnInit {
     private safeService: SafeService,
     private bankService: BankService,
     private serviceAccountsService: ServiceAccountsService,
+    private pdfService: PdfService,
     private route: ActivatedRoute,
     private router: Router
   ) {
@@ -89,6 +93,8 @@ export class FinancialStatementComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.stripTrailingQuestionMarkOnly();
+
     this.route.queryParamMap.subscribe(() => {
       this.applyRouteFromQuery();
     });
@@ -131,19 +137,175 @@ export class FinancialStatementComponent implements OnInit {
     }
     this.activeTab = tab;
     this.clearReportOnly();
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { tab },
-      queryParamsHandling: 'merge',
-      replaceUrl: true
-    });
+  }
+
+  /** يزيل ? من شريط العنوان عندما لا توجد query params (مثلاً financialstatement?) */
+  private stripTrailingQuestionMarkOnly(): void {
+    if (this.route.snapshot.queryParamMap.keys.length > 0) {
+      return;
+    }
+    const clean = this.router.url.split('?')[0];
+    if (clean && clean !== this.router.url) {
+      this.router.navigateByUrl(clean, { replaceUrl: true });
+    }
   }
 
   private clearReportOnly(): void {
     this.data = [];
     this.details = null;
     this.totals = null;
+    this.lastSearchParams = null;
     this.errorMessage = null;
+  }
+
+  get canExport(): boolean {
+    return !!this.details && !this.loading;
+  }
+
+  exportToPdf(): void {
+    if (!this.canExport || !this.details) {
+      return;
+    }
+
+    void this.pdfService.generateAccountStatementPdf(
+      {
+        fileName: this.buildExportFileName(),
+        accountCode: String(this.details.account?.code ?? ''),
+        accountName: String(this.details.account?.name ?? ''),
+        dateFrom: this.lastSearchParams?.date_from ?? null,
+        dateTo: this.lastSearchParams?.date_to ?? null,
+        consolidated: this.details.consolidated === true,
+        accountsInScope: this.details.accounts_in_scope,
+        openingBalance: this.details.opening_balance ?? 0,
+        totalDebit: this.totals?.debit ?? 0,
+        totalCredit: this.totals?.credit ?? 0,
+        closingBalance: this.details.closing_balance ?? 0,
+        entries: this.data.map((item) => ({
+          entryDate: item.entry_date || item.created_at,
+          createdAt: item.created_at,
+          description: item.description ?? '',
+          debit: item.debit ?? 0,
+          credit: item.credit ?? 0,
+          runningBalance: item.running_balance ?? 0,
+          subAccountCode: item.account?.code,
+          subAccountName: item.account?.name,
+        })),
+      },
+      'download'
+    );
+  }
+
+  exportToExcel(): void {
+    if (!this.canExport || !this.details) {
+      return;
+    }
+
+    const consolidated = this.details.consolidated === true;
+    const rows: unknown[][] = [
+      ['كشف حساب تفصيلي'],
+      [`الحساب: (${this.details.account?.code ?? ''}) ${this.details.account?.name ?? ''}`],
+      [
+        `من تاريخ: ${this.lastSearchParams?.date_from ?? ''}`,
+        `إلى تاريخ: ${this.lastSearchParams?.date_to ?? ''}`
+      ]
+    ];
+
+    if (consolidated) {
+      rows.push([`عرض مجمّع — ${this.details.accounts_in_scope ?? 0} حساب في النطاق`]);
+    }
+
+    rows.push(
+      [],
+      ['الرصيد الافتتاحي', this.details.opening_balance ?? 0],
+      ['إجمالي مدين (وارد)', this.totals?.debit ?? 0],
+      ['إجمالي دائن (صادر)', this.totals?.credit ?? 0],
+      ['الرصيد الحالي', this.details.closing_balance ?? 0],
+      []
+    );
+
+    const headers = ['التاريخ', 'الوقت'];
+    if (consolidated) {
+      headers.push('الحساب الفرعي');
+    }
+    headers.push('البيان / الشرح', 'مدين', 'دائن', 'الرصيد المتحرك');
+    rows.push(headers);
+
+    for (const item of this.data) {
+      const datePart = this.formatExportDatePart(item.entry_date || item.created_at);
+      const timePart = this.formatExportTimePart(item.created_at);
+      const row: unknown[] = [datePart, timePart];
+      if (consolidated) {
+        row.push(`${item.account?.code ?? ''} — ${item.account?.name ?? ''}`);
+      }
+      row.push(
+        item.description ?? '',
+        item.debit > 0 ? item.debit : '',
+        item.credit > 0 ? item.credit : '',
+        item.running_balance ?? ''
+      );
+      rows.push(row);
+    }
+
+    const totalRow: unknown[] = ['', ''];
+    if (consolidated) {
+      totalRow.push('');
+    }
+    totalRow.push(
+      'الإجمالي',
+      this.totals?.debit ?? 0,
+      this.totals?.credit ?? 0,
+      this.details.closing_balance ?? 0
+    );
+    rows.push(totalRow);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = headers.map(() => ({ width: 18 }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'كشف حساب');
+    if (!wb.Workbook) {
+      wb.Workbook = { Views: [{}] };
+    }
+    if (!wb.Workbook.Views) {
+      wb.Workbook.Views = [{}];
+    }
+    wb.Workbook.Views[0].RTL = true;
+
+    XLSX.writeFile(wb, `${this.buildExportFileName()}.xlsx`);
+  }
+
+  private buildExportFileName(): string {
+    const code = this.details?.account?.code ?? 'account';
+    const from = this.lastSearchParams?.date_from ?? 'from';
+    const to = this.lastSearchParams?.date_to ?? 'to';
+    return `كشف_حساب_${code}_${from}_${to}`;
+  }
+
+  private formatExportDatePart(value: unknown): string {
+    if (!value) {
+      return '';
+    }
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) {
+      return String(value);
+    }
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  private formatExportTimePart(value: unknown): string {
+    if (!value) {
+      return '';
+    }
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) {
+      return '';
+    }
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${mins}`;
   }
 
   /** ?tab=ledger|cash & ?preset=safes|banks|service */
@@ -352,6 +514,11 @@ export class FinancialStatementComponent implements OnInit {
     if (params.date_to) {
       httpParams.date_to = params.date_to;
     }
+
+    this.lastSearchParams = {
+      date_from: params.date_from,
+      date_to: params.date_to
+    };
 
     this.accountingReportService.getAccountStatement(httpParams).subscribe({
       next: (res: any) => {

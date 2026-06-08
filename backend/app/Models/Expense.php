@@ -53,4 +53,18 @@ class Expense extends Model
         return $this->belongsTo(ExpenseKind::class);
     }
 
+    public function lines()
+    {
+        return $this->hasMany(ExpenseLine::class)->orderBy('sort_order');
+    }
+
+    public function isSplit(): bool
+    {
+        if ($this->relationLoaded('lines')) {
+            return $this->lines->count() > 1;
+        }
+
+        return $this->lines()->count() > 1;
+    }
+
 }

@@ -2,11 +2,14 @@
 
 namespace App\Services\Accounting;
 
+use App\Models\CollectionCompany;
 use App\Models\OrderSource;
 use App\Models\Setting;
+use App\Models\ShippingCompany;
 use App\Models\TreeAccount;
 use App\Models\customerCompany;
 use App\Models\Supplier;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -30,8 +33,24 @@ class AccountLinkingService
     public function getCustomerCorporateParent(): ?TreeAccount
     {
         $parentId = Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
+        if ($parentId) {
+            $fromSetting = TreeAccount::find($parentId);
+            if ($fromSetting) {
+                return $fromSetting;
+            }
+        }
 
-        return $parentId ? TreeAccount::find($parentId) : null;
+        $byBucket = TreeAccount::query()
+            ->where('type', 'asset')
+            ->where('name', self::BUCKET_CORPORATE)
+            ->orderByRaw("CASE WHEN code = '1000235' OR code = 1000235 THEN 0 ELSE 1 END")
+            ->orderBy('level')
+            ->first();
+        if ($byBucket) {
+            return $byBucket;
+        }
+
+        return $this->ensureReceivableBucket(self::BUCKET_CORPORATE);
     }
 
     /**
@@ -98,6 +117,372 @@ class AccountLinkingService
     }
 
     /**
+     * مزامنة اسم حساب الشجرة مع اسم الشركة بعد التعديل.
+     */
+    public function syncCustomerCompanyTreeAccountName(customerCompany $company): void
+    {
+        if (!$company->tree_account_id) {
+            return;
+        }
+
+        $account = TreeAccount::find($company->tree_account_id);
+        $desiredName = trim($company->name ?? '');
+        if (!$account || $desiredName === '') {
+            return;
+        }
+
+        if (trim($account->name) !== $desiredName) {
+            $account->name = $desiredName;
+            $account->save();
+        }
+    }
+
+    /**
+     * ربط جميع عملاء الشركات غير المربوطين بحسابات تحت «عملاء شركات».
+     *
+     * @return array{success:bool,message:string,linked:int,failed:int,total:int,failed_items:array<int,array{id:int,name:string}>,parent:array{id:int,name:string,code:string}|null}
+     */
+    public function linkAllUnlinkedCustomerCompanies(): array
+    {
+        $parent = $this->getCustomerCorporateParent();
+        if (!$parent) {
+            return [
+                'success' => false,
+                'message' => 'تعذر العثور على حساب تجميعي «عملاء شركات» في شجرة الحسابات.',
+                'linked' => 0,
+                'failed' => 0,
+                'total' => 0,
+                'failed_items' => [],
+                'parent' => null,
+            ];
+        }
+
+        $companies = customerCompany::query()
+            ->whereNull('tree_account_id')
+            ->orderBy('id')
+            ->get();
+
+        $linked = 0;
+        $failedItems = [];
+
+        foreach ($companies as $company) {
+            $account = $this->ensureCustomerCompanyAccount($company);
+            if ($account) {
+                $linked++;
+            } else {
+                $failedItems[] = [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                ];
+            }
+        }
+
+        $failed = count($failedItems);
+        $total = $companies->count();
+
+        return [
+            'success' => $failed === 0,
+            'message' => $total === 0
+                ? 'جميع عملاء الشركات مربوطون بالفعل.'
+                : "تم ربط {$linked} من {$total} شركة.",
+            'linked' => $linked,
+            'failed' => $failed,
+            'total' => $total,
+            'failed_items' => $failedItems,
+            'parent' => [
+                'id' => $parent->id,
+                'name' => $parent->name,
+                'code' => (string) $parent->code,
+            ],
+        ];
+    }
+
+    /**
+     * الحساب الأب لذمم شركات الشحن والمناديب (أصول).
+     */
+    public function getShippingReceivableParent(): ?TreeAccount
+    {
+        return $this->resolveShippingReceivableParent();
+    }
+
+    /**
+     * الحساب الأب لشركات التحصيل (أصول).
+     */
+    public function getCollectionCompaniesParent(): ?TreeAccount
+    {
+        return $this->resolveCollectionCompaniesParent();
+    }
+
+    /**
+     * إنشاء أو الحصول على حساب ذمم (أصول) لشركة شحن أو مندوب.
+     */
+    public function ensureShippingCompanyAccount(ShippingCompany $company): ?TreeAccount
+    {
+        if ($company->receivable_tree_account_id) {
+            $existing = TreeAccount::find($company->receivable_tree_account_id);
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        $parent = $this->resolveShippingReceivableParent();
+        if (!$parent) {
+            Log::error('AccountLinkingService: cannot resolve parent for shipping company tree account', [
+                'shipping_company_id' => $company->id,
+            ]);
+
+            return null;
+        }
+
+        $name = trim((string) ($company->name ?? '')) !== ''
+            ? $company->name
+            : ('شركة شحن ' . $company->id);
+
+        $account = $this->createChildAccount($parent, $name, 'asset');
+        $company->receivable_tree_account_id = $account->id;
+        $company->save();
+
+        return $account;
+    }
+
+    /**
+     * مزامنة اسم حساب الذمم مع اسم شركة الشحن/المندوب بعد التعديل.
+     */
+    public function syncShippingCompanyTreeAccountName(ShippingCompany $company): void
+    {
+        if (!$company->receivable_tree_account_id) {
+            return;
+        }
+
+        $account = TreeAccount::find($company->receivable_tree_account_id);
+        $desiredName = trim($company->name ?? '');
+        if (!$account || $desiredName === '') {
+            return;
+        }
+
+        if (trim($account->name) !== $desiredName) {
+            $account->name = $desiredName;
+            $account->save();
+        }
+    }
+
+    /**
+     * ربط جميع شركات الشحن والمناديب غير المربوطين بحسابات تحت «شركات الشحن والمناديب».
+     *
+     * @return array{success:bool,message:string,linked:int,failed:int,total:int,failed_items:array<int,array{id:int,name:string}>,parent:array{id:int,name:string,code:string}|null}
+     */
+    public function linkAllUnlinkedShippingCompanies(): array
+    {
+        $parent = $this->resolveShippingReceivableParent();
+        if (!$parent) {
+            return [
+                'success' => false,
+                'message' => 'تعذر العثور على حساب تجميعي «شركات الشحن والمناديب» في شجرة الحسابات.',
+                'linked' => 0,
+                'failed' => 0,
+                'total' => 0,
+                'failed_items' => [],
+                'parent' => null,
+            ];
+        }
+
+        $companies = ShippingCompany::query()
+            ->whereNull('receivable_tree_account_id')
+            ->orderBy('id')
+            ->get();
+
+        $linked = 0;
+        $failedItems = [];
+
+        foreach ($companies as $company) {
+            $account = $this->ensureShippingCompanyAccount($company);
+            if ($account) {
+                $linked++;
+            } else {
+                $failedItems[] = [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                ];
+            }
+        }
+
+        $failed = count($failedItems);
+        $total = $companies->count();
+
+        return [
+            'success' => $failed === 0,
+            'message' => $total === 0
+                ? 'جميع شركات الشحن والمناديب مربوطون بالفعل.'
+                : "تم ربط {$linked} من {$total} شركة/مندوب.",
+            'linked' => $linked,
+            'failed' => $failed,
+            'total' => $total,
+            'failed_items' => $failedItems,
+            'parent' => [
+                'id' => $parent->id,
+                'name' => $parent->name,
+                'code' => (string) $parent->code,
+            ],
+        ];
+    }
+
+    /**
+     * مزامنة اسم حساب الذمم مع اسم شركة التحصيل بعد التعديل.
+     */
+    public function syncCollectionCompanyTreeAccountName(CollectionCompany $company): void
+    {
+        if (!$company->receivable_tree_account_id) {
+            return;
+        }
+
+        $account = TreeAccount::find($company->receivable_tree_account_id);
+        $desiredName = trim($company->name ?? '');
+        if (!$account || $desiredName === '') {
+            return;
+        }
+
+        if (trim($account->name) !== $desiredName) {
+            $account->name = $desiredName;
+            $account->save();
+        }
+    }
+
+    /**
+     * ربط جميع شركات التحصيل غير المربوطين بحسابات تحت «شركات التحصيل».
+     *
+     * @return array{success:bool,message:string,linked:int,failed:int,total:int,failed_items:array<int,array{id:int,name:string}>,parent:array{id:int,name:string,code:string}|null}
+     */
+    public function linkAllUnlinkedCollectionCompanies(): array
+    {
+        $parent = $this->resolveCollectionCompaniesParent();
+        if (!$parent) {
+            return [
+                'success' => false,
+                'message' => 'تعذر العثور على حساب تجميعي «شركات التحصيل» في شجرة الحسابات.',
+                'linked' => 0,
+                'failed' => 0,
+                'total' => 0,
+                'failed_items' => [],
+                'parent' => null,
+            ];
+        }
+
+        $companies = CollectionCompany::query()
+            ->whereNull('receivable_tree_account_id')
+            ->orderBy('id')
+            ->get();
+
+        $linked = 0;
+        $failedItems = [];
+
+        foreach ($companies as $company) {
+            $account = $this->ensureCollectionCompanyAccount($company);
+            if ($account) {
+                $linked++;
+            } else {
+                $failedItems[] = [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                ];
+            }
+        }
+
+        $failed = count($failedItems);
+        $total = $companies->count();
+
+        return [
+            'success' => $failed === 0,
+            'message' => $total === 0
+                ? 'جميع شركات التحصيل مربوطة بالفعل.'
+                : "تم ربط {$linked} من {$total} شركة تحصيل.",
+            'linked' => $linked,
+            'failed' => $failed,
+            'total' => $total,
+            'failed_items' => $failedItems,
+            'parent' => [
+                'id' => $parent->id,
+                'name' => $parent->name,
+                'code' => (string) $parent->code,
+            ],
+        ];
+    }
+
+    /**
+     * إنشاء أو الحصول على حساب ذمم (أصول) لشركة تحصيل إلكتروني (Paymob / valU / Sympl …).
+     * المبلغ المحصّل إلكترونياً يُسجَّل مديونية على هذا الحساب حتى تُسدّده الشركة للنظام.
+     */
+    public function ensureCollectionCompanyAccount(CollectionCompany $company): ?TreeAccount
+    {
+        if ($company->receivable_tree_account_id) {
+            $existing = TreeAccount::find($company->receivable_tree_account_id);
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        $parent = $this->resolveCollectionCompaniesParent();
+        if (!$parent) {
+            Log::error('AccountLinkingService: cannot resolve parent for collection company tree account', [
+                'collection_company_id' => $company->id,
+            ]);
+
+            return null;
+        }
+
+        $name = trim((string) ($company->name ?? '')) !== ''
+            ? $company->name
+            : ('شركة تحصيل ' . $company->id);
+
+        $account = $this->createChildAccount($parent, $name, 'asset');
+        $company->receivable_tree_account_id = $account->id;
+        $company->save();
+
+        return $account;
+    }
+
+    /**
+     * الحساب الأب لذمم شركات الشحن والمناديب: من الإعدادات إن وُجد، وإلا حساب تجميعي تحت المدينون.
+     */
+    private function resolveShippingReceivableParent(): ?TreeAccount
+    {
+        $settingKey = (string) config('shipping_receivable.parent_account_setting_key', 'shipping_receivable_parent_account_id');
+        if ($settingKey !== '') {
+            $parentId = Setting::where('key', $settingKey)->value('value');
+            if ($parentId) {
+                $fromSetting = TreeAccount::find($parentId);
+                if ($fromSetting) {
+                    return $fromSetting;
+                }
+            }
+        }
+
+        $bucketName = (string) config('shipping_receivable.parent_account_name', 'شركات الشحن والمناديب');
+
+        return $this->ensureReceivableBucket($bucketName);
+    }
+
+    /**
+     * الحساب الأب لشركات التحصيل: من الإعدادات إن وُجد، وإلا حساب تجميعي تحت المدينون.
+     */
+    private function resolveCollectionCompaniesParent(): ?TreeAccount
+    {
+        $settingKey = (string) config('shopify_collection.parent_account_setting_key', 'collection_companies_parent_account_id');
+        if ($settingKey !== '') {
+            $parentId = Setting::where('key', $settingKey)->value('value');
+            if ($parentId) {
+                $fromSetting = TreeAccount::find($parentId);
+                if ($fromSetting) {
+                    return $fromSetting;
+                }
+            }
+        }
+
+        $bucketName = (string) config('shopify_collection.parent_account_name', 'شركات التحصيل');
+
+        return $this->ensureReceivableBucket($bucketName);
+    }
+
+    /**
      * إنشاء أو الحصول على حساب شجرة لمورد
      */
     public function ensureSupplierAccount(Supplier $supplier): ?TreeAccount
@@ -133,19 +518,27 @@ class AccountLinkingService
      */
     public function createChildAccount(TreeAccount $parent, string $name, string $type): TreeAccount
     {
-        $lastChildCode = TreeAccount::where('parent_id', $parent->id)->max('code');
-        $newCode = $lastChildCode ? $lastChildCode + 1 : ($parent->code * 10 + 1);
+        return DB::transaction(function () use ($parent, $name, $type) {
+            $parent = TreeAccount::query()->whereKey($parent->id)->lockForUpdate()->firstOrFail();
+            $lastChild = TreeAccount::queryLastChildUnderParentLocked($parent);
+            $resolved = TreeAccount::resolveNextChildCodeAndLevel($parent, $lastChild);
+            $code = $resolved['code'];
 
-        return TreeAccount::create([
-            'name' => $name,
-            'parent_id' => $parent->id,
-            'code' => $newCode,
-            'type' => $type ?? $parent->type,
-            'balance' => 0,
-            'debit_balance' => 0,
-            'credit_balance' => 0,
-            'level' => $parent->level + 1,
-        ]);
+            while (TreeAccount::where('code', $code)->exists()) {
+                $code = (string) ((int) preg_replace('/\D/', '', $code) + 1);
+            }
+
+            return TreeAccount::create([
+                'name' => $name,
+                'parent_id' => $parent->id,
+                'code' => $code,
+                'type' => $type ?? $parent->type,
+                'balance' => 0,
+                'debit_balance' => 0,
+                'credit_balance' => 0,
+                'level' => $resolved['level'],
+            ]);
+        });
     }
 
     /**
@@ -340,9 +733,10 @@ class AccountLinkingService
             ->where('parent_id', $currentAssets->id)
             ->where(function ($q) {
                 $q->where('name', 'المدينون')
+                    ->orWhere('name', 'العملاء')
                     ->orWhere('name', 'like', '%مدينون%');
             })
-            ->orderByRaw("CASE WHEN name = 'المدينون' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN name = 'المدينون' THEN 0 WHEN name = 'العملاء' THEN 1 ELSE 2 END")
             ->first();
     }
 
@@ -393,12 +787,21 @@ class AccountLinkingService
     private function fallbackCustomerParentByLegacyCodes(string $kind): ?TreeAccount
     {
         if ($kind === 'corporate') {
-            $byCode = TreeAccount::where('code', 104)->where('level', 3)->first();
-            if ($byCode) {
-                return $byCode;
+            foreach (['1000235', 1000235] as $code) {
+                $byCode = TreeAccount::where('code', $code)->first();
+                if ($byCode) {
+                    return $byCode;
+                }
             }
-        } else {
-            $byCode = TreeAccount::where('code', 100025)->first();
+
+            return TreeAccount::query()
+                ->where('type', 'asset')
+                ->where('name', self::BUCKET_CORPORATE)
+                ->first();
+        }
+
+        foreach (['1000234', 1000234, '100025', 100025] as $code) {
+            $byCode = TreeAccount::where('code', $code)->first();
             if ($byCode) {
                 return $byCode;
             }

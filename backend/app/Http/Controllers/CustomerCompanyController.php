@@ -12,19 +12,100 @@ use App\Models\AccountEntry;
 use Illuminate\Http\Request;
 use App\Models\customerCompany;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\V2\TreeAccount\AddAssetController;
+use App\Services\Accounting\AccountLinkingService;
 
 
 class CustomerCompanyController extends Controller
 {
-    
-    public function __construct(public AddAssetController $addAsset)
+    public function __construct(public AccountLinkingService $accountLinkingService)
     {
     }
     public function index()
     {
-        $companies = customerCompany::all();
+        $companies = customerCompany::query()
+            ->with('treeAccount:id,code,name')
+            ->orderByDesc('id')
+            ->get();
+
         return response()->json($companies);
+    }
+
+    /**
+     * عدد عملاء الشركات غير المربوطين بحسابات الشجرة.
+     */
+    public function unlinkedSummary()
+    {
+        $unlinkedCount = customerCompany::query()->whereNull('tree_account_id')->count();
+        $parent = $this->accountLinkingService->getCustomerCorporateParent();
+
+        return response()->json([
+            'unlinked_count' => $unlinkedCount,
+            'parent_account' => $parent ? [
+                'id' => $parent->id,
+                'name' => $parent->name,
+                'code' => (string) $parent->code,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * ربط جميع عملاء الشركات غير المربوطين دفعة واحدة.
+     */
+    public function linkUnlinked()
+    {
+        $result = $this->accountLinkingService->linkAllUnlinkedCustomerCompanies();
+
+        if (!$result['parent']) {
+            return response()->json([
+                'message' => $result['message'],
+            ], 422);
+        }
+
+        $status = $result['failed'] > 0 ? 207 : 200;
+
+        return response()->json($result, $status);
+    }
+
+    /**
+     * ربط عميل شركة واحد بحساب في شجرة الحسابات.
+     */
+    public function linkAccount($id)
+    {
+        $company = customerCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
+
+        if ($company->tree_account_id) {
+            $account = TreeAccount::find($company->tree_account_id);
+
+            return response()->json([
+                'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
+                'tree_account_id' => $company->tree_account_id,
+                'tree_account' => $account ? [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'code' => (string) $account->code,
+                ] : null,
+            ]);
+        }
+
+        $account = $this->accountLinkingService->ensureCustomerCompanyAccount($company);
+        if (!$account) {
+            return response()->json([
+                'message' => 'تعذر إنشاء حساب للشركة. راجع حساب «عملاء شركات» في شجرة الحسابات.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'success',
+            'tree_account_id' => $account->id,
+            'tree_account' => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ],
+        ]);
     }
 
     /**
@@ -47,7 +128,7 @@ class CustomerCompanyController extends Controller
     {
         $request->validate([
             'name' => 'required|unique:customer_companies,name',
-            'phone1' => 'required|unique:customer_companies,phone1',
+            'phone1' => 'required',
             'governorate' => 'required',
             'address' => 'required',
         ]);
@@ -65,16 +146,18 @@ class CustomerCompanyController extends Controller
             'address' => $request->address,
         ]);
 
-        // جلب الحساب الأب من الإعدادات وربط العميل به في شجرة الحسابات
-        $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
-        $account = $this->addAsset->Addcustomer($request->name, 'شركة', $parentAccountId);
-
-        if ($account) {
-            $company->tree_account_id = $account->id;
-            $company->save();
+        // ربط تلقائي بحساب فرعي تحت «عملاء شركات» في شجرة الحسابات
+        $account = $this->accountLinkingService->ensureCustomerCompanyAccount($company);
+        if (!$account) {
+            return response()->json([
+                'message' => 'تم إنشاء الشركة لكن تعذر إنشاء حسابها في شجرة الحسابات. راجع حساب «عملاء شركات» أو إعدادات الربط المحاسبي.',
+            ], 422);
         }
 
-        return response()->json(['message' => 'success'], 200);
+        return response()->json([
+            'message' => 'success',
+            'tree_account_id' => $account->id,
+        ], 200);
     }
 
     /**
@@ -101,14 +184,51 @@ class CustomerCompanyController extends Controller
 
     /**
      * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\Models\customerCompany  $customerCompany
-     * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, customerCompany $customerCompany)
+    public function update(Request $request, $id)
     {
-        //
+        $company = customerCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
+
+        $request->validate([
+            'name' => 'required|unique:customer_companies,name,' . $id,
+            'phone1' => 'required',
+            'governorate' => 'required',
+            'address' => 'required',
+        ]);
+
+        $company->update([
+            'name' => $request->name,
+            'phone1' => $request->phone1,
+            'phone2' => $request->phone2,
+            'phone3' => $request->phone3,
+            'phone4' => $request->phone4,
+            'tel' => $request->tel,
+            'governorate' => $request->governorate,
+            'city' => $request->city,
+            'address' => $request->address,
+        ]);
+
+        $account = $this->accountLinkingService->ensureCustomerCompanyAccount($company);
+        if (!$account) {
+            return response()->json([
+                'message' => 'تم حفظ بيانات الشركة لكن تعذر ربطها بحساب في شجرة الحسابات.',
+            ], 422);
+        }
+
+        $this->accountLinkingService->syncCustomerCompanyTreeAccountName($company);
+
+        return response()->json([
+            'message' => 'success',
+            'tree_account_id' => $account->id,
+            'tree_account' => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ],
+        ]);
     }
 
     /**
@@ -125,12 +245,15 @@ class CustomerCompanyController extends Controller
     public function search(Request $request){
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
-        $search = customerCompany::query();
+        $search = customerCompany::query()->with('treeAccount:id,code,name');
         if($request->has('name')){
             $search->where('name', 'like' ,  '%'.$request->name.'%');
         }
         if($request->has('phone')){
             $search->where('phone1','like' , $request->phone.'%');
+        }
+        if ($request->boolean('unlinked_only')) {
+            $search->whereNull('tree_account_id');
         }
 
         $search = $search->orderBy('id' , 'desc')->paginate($itemsPerPage);

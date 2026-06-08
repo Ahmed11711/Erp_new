@@ -4,10 +4,17 @@
       <app-time></app-time>
     </div>
     <div class="col-5">
-      <h1 class="header text-center mx-auto my-4">تفاصيل الفاتورة رقم ( {{ 'PO'+id || '' }} )</h1>
+      <h1 class="header text-center mx-auto my-4">
+        تفاصيل الفاتورة
+        <span *ngIf="invoice?.invoice_no || invoice?.invoice_number">
+          — {{ invoice?.invoice_no || invoice?.invoice_number }}
+        </span>
+      </h1>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+    <div class="col-3 d-flex align-items-center justify-content-end gap-2 flex-wrap">
+      <button *ngIf="printUrl" type="button" class="btn btn-outline-primary btn-sm" (click)="openPrint()">
+        <i class="fa fa-print" aria-hidden="true"></i> طباعة الفاتورة
+      </button>
     </div>
   </div>
 
@@ -15,7 +22,22 @@
 </div>
 <div class="container-fluid text-center">
   <div class="row">
-    <div class="form-group col-md-2">
+      <div class="form-group col-md-2">
+          <p>الرقم التسلسلي</p>
+          <h3 dir="ltr">{{ id || '—' }}</h3>
+      </div>
+
+      <div class="form-group col-md-2">
+          <p>رقم المستند الداخلي</p>
+          <h3>{{ invoice?.invoice_no || invoice?.invoice_number || '—' }}</h3>
+      </div>
+
+      <div class="form-group col-md-2" *ngIf="invoice?.external_invoice_no">
+        <p>رقم فاتورة المورد</p>
+        <h3>{{ invoice?.external_invoice_no }}</h3>
+      </div>
+
+      <div class="form-group col-md-2">
           <p >حالة الشراء</p>
           <h3>{{ invoice?.invoice_type || '' }}</h3>
       </div>

@@ -287,9 +287,25 @@ class WhatsAppMessageController extends Controller
     public function getCustomers(Request $request)
     {
         try {
-            $query = Customer::with(['assignedAgent', 'messages' => function ($query) {
-                $query->latest()->limit(1);
-            }])
+            // Subqueries أسرع من eager-load messages لكل صف (مهم لـ «تحميل المزيد» على الموبايل).
+            $latestMessage = Message::query()
+                ->select('content')
+                ->whereColumn('messages.customer_id', 'customers.id')
+                ->orderByDesc('messages.created_at')
+                ->orderByDesc('messages.id')
+                ->limit(1);
+
+            $latestType = Message::query()
+                ->select('type')
+                ->whereColumn('messages.customer_id', 'customers.id')
+                ->orderByDesc('messages.created_at')
+                ->orderByDesc('messages.id')
+                ->limit(1);
+
+            $query = Customer::query()
+                ->select('customers.*')
+                ->selectSub($latestMessage, 'last_message_content')
+                ->selectSub($latestType, 'last_message_type')
                 ->withCount('messages')
                 ->withMax('messages', 'created_at')
                 // Newest activity first: last message time; customers with no messages sink to the bottom.
@@ -334,13 +350,20 @@ class WhatsAppMessageController extends Controller
                 });
             }
 
-            $customers = $query->paginate($request->get('per_page', 20));
+            $perPage = min(max((int) $request->get('per_page', 30), 10), 50);
+            $customers = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
                 'data' => $customers,
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('whatsapp.getCustomers failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'success' => false,
                 'error' => 'Failed to fetch customers',

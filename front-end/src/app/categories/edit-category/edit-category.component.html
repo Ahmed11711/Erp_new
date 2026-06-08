@@ -13,48 +13,15 @@
 <div class="container content mt-4 pb-5">
   <form [formGroup]="form" (ngSubmit)="submitform()">
 
-    <!-- اسم الصنف -->
+    <!-- اسم الصنف، كود الصنف، اللون — في صف واحد -->
     <div class="form-row">
-      <div class="form-group col-md-6">
+      <div class="form-group col-md-4">
         <label for="category_name">اسم الصنف</label>
         <input type="text" class="form-control" id="category_name" formControlName="category_name" />
         <div class="form-text text-danger" *ngIf="form.get('category_name')?.touched && form.get('category_name')?.invalid">
           <span *ngIf="form.get('category_name')?.errors?.['required']">مطلوب</span>
         </div>
       </div>
-    </div>
-
-    <!-- سعر الصنف والرصيد الافتتاحي -->
-    <div class="form-row mt-3">
-      <div class="form-group col-md-6">
-        <label for="category_price">سعر الصنف</label>
-        <input type="number" class="form-control" id="category_price" formControlName="category_price" min="0" />
-        <div class="form-text text-danger" *ngIf="form.get('category_price')?.touched && form.get('category_price')?.invalid">
-          <span *ngIf="form.get('category_price')?.errors?.['required']">مطلوب</span>
-        </div>
-      </div>
-      <div class="form-group col-md-6">
-        <label for="initial_balance">الرصيد الافتتاحي</label>
-        <input type="number" class="form-control" id="initial_balance" formControlName="initial_balance" min="0" />
-        <div class="form-text text-danger" *ngIf="form.get('initial_balance')?.touched && form.get('initial_balance')?.invalid">
-          <span *ngIf="form.get('initial_balance')?.errors?.['required']">مطلوب</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- الحد الأدنى -->
-    <div class="form-row mt-3">
-      <div class="form-group col-md-6">
-        <label for="minimum_quantity">الحد الأدنى للمخزون</label>
-        <input type="number" class="form-control" id="minimum_quantity" formControlName="minimum_quantity" min="0" />
-        <div class="form-text text-danger" *ngIf="form.get('minimum_quantity')?.touched && form.get('minimum_quantity')?.invalid">
-          <span *ngIf="form.get('minimum_quantity')?.errors?.['required']">مطلوب</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- كود الصنف، اللون، الوصفة -->
-    <div class="form-row mt-3">
       <div class="form-group col-md-4">
         <label for="item_code">كود الصنف</label>
         <input type="text" class="form-control" id="item_code" formControlName="item_code" maxlength="64" placeholder="اختياري" />
@@ -71,13 +38,30 @@
           </span>
         </div>
       </div>
+    </div>
+
+    <!-- سعر الصنف، الرصيد الافتتاحي، الحد الأدنى للمخزون — في صف واحد -->
+    <div class="form-row mt-3">
       <div class="form-group col-md-4">
-        <label for="recipe_id">الوصفة (BOM)</label>
-        <select class="form-control" id="recipe_id" formControlName="recipe_id">
-          <option [ngValue]="null">بدون وصفة</option>
-          <option *ngFor="let r of recipesData" [ngValue]="r.id">{{ r.recipe_name }}</option>
-        </select>
-        <small class="form-text text-muted">سجّل الوصفة من التصنيع أولاً إن لم تظهر.</small>
+        <label for="category_price">سعر الصنف</label>
+        <input type="number" class="form-control" id="category_price" formControlName="category_price" min="0" />
+        <div class="form-text text-danger" *ngIf="form.get('category_price')?.touched && form.get('category_price')?.invalid">
+          <span *ngIf="form.get('category_price')?.errors?.['required']">مطلوب</span>
+        </div>
+      </div>
+      <div class="form-group col-md-4">
+        <label for="initial_balance">الرصيد الافتتاحي</label>
+        <input type="number" class="form-control" id="initial_balance" formControlName="initial_balance" min="0" />
+        <div class="form-text text-danger" *ngIf="form.get('initial_balance')?.touched && form.get('initial_balance')?.invalid">
+          <span *ngIf="form.get('initial_balance')?.errors?.['required']">مطلوب</span>
+        </div>
+      </div>
+      <div class="form-group col-md-4">
+        <label for="minimum_quantity">الحد الأدنى للمخزون</label>
+        <input type="number" class="form-control" id="minimum_quantity" formControlName="minimum_quantity" min="0" />
+        <div class="form-text text-danger" *ngIf="form.get('minimum_quantity')?.touched && form.get('minimum_quantity')?.invalid">
+          <span *ngIf="form.get('minimum_quantity')?.errors?.['required']">مطلوب</span>
+        </div>
       </div>
     </div>
 
@@ -89,11 +73,7 @@
           <option [ngValue]="null" disabled>اختر المخزن</option>
           <ng-container *ngFor="let elm of stockData">
             <option
-              *ngIf="
-                ((user == 'Admin' || user == 'Account Management' || user == 'Logistics Specialist') &&
-                  (elm.name == 'مخزن مواد خام' || elm.name == 'مخزن منتج تحت التشغيل')) ||
-                ((user == 'Admin' || user == 'Data Entry') && elm.name == 'مخزن منتج تام')
-              "
+              *ngIf="canSelectWarehouse(elm.name)"
               [ngValue]="elm.name">
               {{ elm.name }}
             </option>
@@ -115,6 +95,26 @@
         </select>
       </div>
     </div>
+
+    <!-- نوع المنتج والسماح بالبيع -->
+    <!-- <div class="form-row mt-3">
+      <div class="form-group col-md-4">
+        <label for="product_type">نوع المنتج</label>
+        <select class="form-control" id="product_type" formControlName="product_type">
+          <option [ngValue]="null">تلقائي (حسب المخزن)</option>
+          <option value="raw_material">مادة خام</option>
+          <option value="semi_finished">تحت التشغيل</option>
+          <option value="finished">منتج تام</option>
+        </select>
+        <small class="form-text text-muted">إن تُرك فارغاً يُحدَّد تلقائياً من المخزن المختار.</small>
+      </div>
+      <div class="form-group col-md-4 d-flex align-items-end">
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" id="allow_wip_sale" formControlName="allow_wip_sale" />
+          <label class="form-check-label" for="allow_wip_sale">السماح ببيع تحت التشغيل</label>
+        </div>
+      </div>
+    </div> -->
 
     <!-- صورة الصنف -->
     <div class="form-group mt-3">

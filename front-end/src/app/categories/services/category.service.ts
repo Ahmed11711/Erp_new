@@ -63,6 +63,16 @@ export class CategoryService {
   return this.http.get(`${environment.Url}/categories/warehousedetails?itemsPerPage=${items}&page=${page}`, { params: search })
  }
 
+ warehouseInventoryReport(items: number, page: number, params: Record<string, string | number | undefined | null>) {
+  const clean: Record<string, string> = { itemsPerPage: String(items), page: String(page) };
+  Object.entries(params).forEach(([k, v]) => {
+   if (v !== undefined && v !== null && v !== '') {
+    clean[k] = String(v);
+   }
+  });
+  return this.http.get(`${environment.Url}/reports/warehouse-inventory`, { params: clean });
+ }
+
  warehousebalance() {
   return this.http.get(`${environment.Url}/categories/warehouse_balance`)
  }
@@ -111,6 +121,11 @@ export class CategoryService {
   return this.http.patch(`${environment.Url}/categories/${id}/average-unit-cost`, {
    average_unit_cost: averageUnitCost,
   });
+ }
+
+ /** ترقية صنف من تحت التشغيل (WIP) إلى منتج تام مع حركة مخزون وقيد محاسبي. */
+ promoteToFinished(id: number) {
+  return this.http.post(`${environment.Url}/categories/${id}/promote-to-finished`, {});
  }
 
 }

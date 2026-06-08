@@ -4,6 +4,7 @@ import { AuthService } from 'src/app/auth/auth.service';
 import { UserService } from 'src/app/manage-system/services/user.service';
 import { NotificationService } from 'src/app/notification/service/notification.service';
 import { FilterOrderService } from 'src/app/shipping/services/filter-order.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 
 @Component({
   selector: 'app-recieved-notification',
@@ -26,7 +27,8 @@ export class RecievedNotificationComponent {
   userdata:any[]=[];
 
   constructor(private notificationService:NotificationService , private userService:UserService , private router:Router,
-    private orderFilter :FilterOrderService, private authService:AuthService ) { }
+    private orderFilter :FilterOrderService, private authService:AuthService,
+    public rbac: RbacService ) { }
 
   ngOnInit(){
     this.user = this.authService.getUser();
@@ -153,6 +155,7 @@ export class RecievedNotificationComponent {
     this.orderFilter.shipping_line_id = '';
     this.orderFilter.private_order = '';
     this.orderFilter.collectType = '';
+    this.orderFilter.category_id = null;
 
     this.router.navigate(['/dashboard/shipping/listorders']);
     this.orderFilter.triggerSearchFn();

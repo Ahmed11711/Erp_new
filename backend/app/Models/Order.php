@@ -4,12 +4,23 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Order extends Model
 {
  use HasFactory;
 
  protected $guarded = [];
+
+ protected $casts = [
+  'shopify_reviewed_at' => 'datetime',
+  'shopify_needs_product_review' => 'boolean',
+ ];
+
+ public function shopifyReviewer()
+ {
+  return $this->belongsTo(User::class, 'shopify_reviewed_by_user_id');
+ }
 
  public function order_products()
  {
@@ -58,6 +69,61 @@ class Order extends Model
  public function bank()
  {
   return $this->belongsTo(Bank::class);
+ }
+
+ /**
+  * عند إغلاق كل سطور shipping_company_details (is_done) دون تحديث الطلب (مثلاً بعد قبض سند)،
+  * تُحدَّث حالة الطلب إلى «تم التحصيل» وتُعبأ collection_date عند الحاجة.
+  */
+ public static function reconcileCollectionStatusIfAllShippingLinesClosed(int $orderId): bool
+ {
+  $order = self::with('order_details')->find($orderId);
+  if (! $order) {
+   return false;
+  }
+  if ($order->order_status === 'تم التحصيل') {
+   return false;
+  }
+  if (! in_array($order->order_status, ['تم شحن', 'تم التسليم', 'شحن جزئي'], true)) {
+   return false;
+  }
+  if (! $order->order_details) {
+   return false;
+  }
+  if (! shippingCompanyDetails::where('order_id', $orderId)->exists()) {
+   return false;
+  }
+  if (shippingCompanyDetails::where('order_id', $orderId)->where('is_done', 0)->exists()) {
+   return false;
+  }
+
+  DB::transaction(function () use ($orderId) {
+   $o = self::with('order_details')->lockForUpdate()->find($orderId);
+   if (! $o || $o->order_status === 'تم التحصيل') {
+    return;
+   }
+   if (! shippingCompanyDetails::where('order_id', $orderId)->exists()) {
+    return;
+   }
+   if (shippingCompanyDetails::where('order_id', $orderId)->where('is_done', 0)->exists()) {
+    return;
+   }
+   if (! in_array($o->order_status, ['تم شحن', 'تم التسليم', 'شحن جزئي'], true)) {
+    return;
+   }
+   $od = $o->order_details;
+   if ($od) {
+    if (! $od->collection_date) {
+     $od->collection_date = now()->format('Y-m-d');
+    }
+    $od->status_date = now()->format('Y-m-d');
+    $od->save();
+   }
+   $o->order_status = 'تم التحصيل';
+   $o->save();
+  });
+
+  return true;
  }
 
  // ['id=>Order Number

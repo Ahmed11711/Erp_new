@@ -50,6 +50,14 @@ class SendOrderToShippingJob implements ShouldQueue
             return;
         }
 
+        if ($order->shopify_needs_product_review) {
+            Log::warning('SendOrderToShippingJob skipped: order needs product review (unmatched Shopify products)', [
+                'order_id' => $this->orderId,
+            ]);
+
+            return;
+        }
+
         $lineItems = [];
         foreach ($order->order_products as $op) {
             $sku = $op->category ? (string) ($op->category->ref ?? '') : '';

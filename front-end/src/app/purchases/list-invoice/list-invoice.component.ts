@@ -19,6 +19,8 @@ export class ListInvoiceComponent {
   invoices : any[] = [];
   recieveDate!:string
   status!:string
+  purchaseIdSearch = '';
+  private purchaseIdSearchTimer: ReturnType<typeof setTimeout> | undefined;
 
   length = 50;
   pageSize = 15;
@@ -114,7 +116,17 @@ export class ListInvoiceComponent {
     this.search(arguments);
   }
 
-  param = {};
+  onPurchaseIdSearchChange(): void {
+    if (this.purchaseIdSearchTimer) {
+      clearTimeout(this.purchaseIdSearchTimer);
+    }
+    this.purchaseIdSearchTimer = setTimeout(() => {
+      this.page = 0;
+      this.search(arguments);
+    }, 400);
+  }
+
+  param: Record<string, string | number> = {};
   search(event:any){
     // const param = {};
 
@@ -132,6 +144,13 @@ export class ListInvoiceComponent {
 
     if (this.supplierId && this.supplierId !=0) {
       this.param['supplier_id']=this.supplierId;
+    }
+
+    const idTerm = String(this.purchaseIdSearch ?? '').trim();
+    if (idTerm) {
+      this.param['purchase_id'] = idTerm;
+    } else if ('purchase_id' in this.param) {
+      delete this.param.purchase_id;
     }
 
     this.invoice.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{

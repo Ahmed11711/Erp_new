@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Documents\PurchasePrintController;
+use App\Http\Controllers\Documents\StockTransactionPrintController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -49,6 +51,19 @@ Route::get('/images/whatsapp-meta-default.png', function () {
         'Cache-Control' => 'public, max-age=86400',
     ]);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Signed document print routes (open from SPA / PDF print dialog).
+|--------------------------------------------------------------------------
+*/
+Route::get('/documents/purchases/{purchase}/print', [PurchasePrintController::class, 'show'])
+    ->middleware('signed')
+    ->name('documents.purchases.print');
+
+Route::get('/documents/stock-transactions/{stockTransaction}/print', [StockTransactionPrintController::class, 'show'])
+    ->middleware('signed')
+    ->name('documents.stock-transactions.print');
 
 // Route::get('/', function () {
 //     return view('welcome');

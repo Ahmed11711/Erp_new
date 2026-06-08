@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { FormGroup, FormControl, Validators, FormArray } from '@angular/forms';
 import { ExpenseKindService } from '../services/expense-kind.service';
 import { ExpenseService } from '../services/expense.service';
 import { PaymentSourcesService } from 'src/app/accounting/services/payment-sources.service';
@@ -16,7 +16,6 @@ export class AddExpenseComponent implements OnInit{
   safesData:any[]=[];
   banksData:any[]=[];
   serviceAccountsData:any[]=[];
-  /** كل فئات المصروف من الـ API (تحتوي expense_type + expense_kind) */
   allExpenseKinds: any[] = [];
   dateFrom: string = new Date().toISOString().slice(0, 10);
   minDate!: string;
@@ -50,11 +49,10 @@ export class AddExpenseComponent implements OnInit{
   ngOnInit(): void {
     this.form.patchValue({
       payment_type: 'safe',
-      expense_type: null,
-      kind_id: null,
       created_at: this.dateFrom,
     });
     this.paymentType = 'safe';
+    this.addSplitLine();
 
     this.expenseKindService.data().subscribe((result) => {
       this.allExpenseKinds = Array.isArray(result) ? result : [];
@@ -66,6 +64,29 @@ export class AddExpenseComponent implements OnInit{
     });
   }
 
+  get splitLines(): FormArray {
+    return this.form.get('lines') as FormArray;
+  }
+
+  createSplitLineGroup(): FormGroup {
+    return new FormGroup({
+      expense_type: new FormControl(null, Validators.required),
+      kind_id: new FormControl(null, Validators.required),
+      amount: new FormControl(null, [Validators.required, Validators.min(0.01)]),
+    });
+  }
+
+  addSplitLine(): void {
+    this.splitLines.push(this.createSplitLineGroup());
+  }
+
+  removeSplitLine(index: number): void {
+    if (this.splitLines.length <= 1) {
+      return;
+    }
+    this.splitLines.removeAt(index);
+  }
+
   onPaymentTypeChange(): void {
     this.paymentType = this.form.get('payment_type')?.value || 'safe';
     this.form.patchValue({
@@ -75,17 +96,31 @@ export class AddExpenseComponent implements OnInit{
     });
   }
 
-  /** فئات المصروف المطابقة لنوع المصروف المختار (المجموعة الرئيسية) */
-  get filteredExpenseKinds(): any[] {
-    const t = this.form?.get('expense_type')?.value;
-    if (!t) {
+  kindsForType(expenseType: string | null): any[] {
+    if (!expenseType) {
       return [];
     }
-    return this.allExpenseKinds.filter((k) => k.expense_type === t);
+    return this.allExpenseKinds.filter((k) => k.expense_type === expenseType);
   }
 
-  onExpenseTypeChange(): void {
-    this.form.patchValue({ kind_id: null });
+  onLineExpenseTypeChange(index: number): void {
+    const row = this.splitLines.at(index) as FormGroup;
+    row.patchValue({ kind_id: null });
+  }
+
+  get linesTotal(): number {
+    return this.splitLines.controls.reduce((sum, ctrl) => {
+      const v = parseFloat((ctrl as FormGroup).get('amount')?.value);
+      return sum + (isNaN(v) ? 0 : v);
+    }, 0);
+  }
+
+  get amountMismatch(): boolean {
+    const total = parseFloat(this.form.get('amount')?.value);
+    if (isNaN(total) || total <= 0) {
+      return false;
+    }
+    return Math.abs(this.linesTotal - total) > 0.009;
   }
 
   form:FormGroup = new FormGroup({
@@ -93,13 +128,12 @@ export class AddExpenseComponent implements OnInit{
     'safe_id' : new FormControl(null),
     'bank_id' : new FormControl(null),
     'service_account_id' : new FormControl(null),
-    'expense_type' : new FormControl(null, [Validators.required]),
-    'kind_id' : new FormControl(null, [Validators.required]),
     'expens_statement' : new FormControl(null, [Validators.required]),
-    'amount' : new FormControl(null, [Validators.required]),
+    'amount' : new FormControl(null, [Validators.required, Validators.min(0.01)]),
     'note' : new FormControl(null, [Validators.required]),
     'created_at' : new FormControl(null, [Validators.required]),
     'expense_image' : new FormControl(null),
+    'lines': new FormArray([]),
   })
 
   imgtext:string="صورة "
@@ -128,36 +162,58 @@ export class AddExpenseComponent implements OnInit{
     return false;
   }
 
+  get splitLinesValid(): boolean {
+    return this.splitLines.length > 0 && this.splitLines.valid;
+  }
+
+  get canSubmit(): boolean {
+    return this.isSourceSelected
+      && this.form.valid
+      && this.splitLinesValid
+      && !this.amountMismatch
+      && this.linesTotal > 0;
+  }
+
   submitform(){
-    if(this.form.valid && this.isSourceSelected){
-      let data = this.form.value;
-      const formData = new FormData();
-      formData.append('payment_type', data.payment_type || 'safe');
-      formData.append('expense_type', data.expense_type);
-      formData.append('kind_id', data.kind_id);
-      formData.append('expens_statement', data.expens_statement);
-      formData.append('amount', data.amount);
-      formData.append('note', data.note);
-      formData.append('address', data.expens_statement || '');
-      formData.append('created_at', `${data.created_at} ${this.time}`);
-
-      if (data.payment_type === 'safe' && data.safe_id) {
-        formData.append('safe_id', data.safe_id);
-      } else if (data.payment_type === 'bank' && data.bank_id) {
-        formData.append('bank_id', data.bank_id);
-      } else if (data.payment_type === 'service_account' && data.service_account_id) {
-        formData.append('service_account_id', data.service_account_id);
-      }
-
-      if (this.selectedFile) {
-        formData.append('expense_image', this.selectedFile, this.selectedFile.name);
-      }
-
-      this.expenseService.add(formData).subscribe(result=>{
-        if (result) {
-          this.route.navigate(['/dashboard/financial/expenses']);
-        }
-      })
+    if (!this.canSubmit) {
+      this.errormessage = true;
+      this.form.markAllAsTouched();
+      this.splitLines.markAllAsTouched();
+      return;
     }
+
+    const data = this.form.value;
+    const lines = (data.lines || []).map((row: any) => ({
+      expense_type: row.expense_type,
+      kind_id: Number(row.kind_id),
+      amount: Number(row.amount),
+    }));
+
+    const formData = new FormData();
+    formData.append('payment_type', data.payment_type || 'safe');
+    formData.append('expens_statement', data.expens_statement);
+    formData.append('amount', String(data.amount));
+    formData.append('note', data.note);
+    formData.append('address', data.expens_statement || '');
+    formData.append('created_at', `${data.created_at} ${this.time}`);
+    formData.append('lines', JSON.stringify(lines));
+
+    if (data.payment_type === 'safe' && data.safe_id) {
+      formData.append('safe_id', data.safe_id);
+    } else if (data.payment_type === 'bank' && data.bank_id) {
+      formData.append('bank_id', data.bank_id);
+    } else if (data.payment_type === 'service_account' && data.service_account_id) {
+      formData.append('service_account_id', data.service_account_id);
+    }
+
+    if (this.selectedFile) {
+      formData.append('expense_image', this.selectedFile, this.selectedFile.name);
+    }
+
+    this.expenseService.add(formData).subscribe(result=>{
+      if (result) {
+        this.route.navigate(['/dashboard/financial/expenses']);
+      }
+    });
   }
 }

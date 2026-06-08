@@ -1,5 +1,8 @@
-<h1 mat-dialog-title>اضافة شركة جديدة</h1>
+<h1 mat-dialog-title>{{ isEdit ? 'تعديل شركة عميل' : 'اضافة شركة جديدة' }}</h1>
 <div mat-dialog-content>
+  <p *ngIf="isEdit && data?.company && !data.company.tree_account_id" class="text-warning small text-center mb-2">
+    هذه الشركة غير مربوطة بحساب — سيتم إنشاء حساب لها تلقائياً عند الحفظ.
+  </p>
   <div class="alert alert-danger text-center m-auto" *ngIf="errormessage">
     <p>{{existName}}</p>
     <p>{{existPhone}}</p>
@@ -78,7 +81,7 @@
           class="error mb-0 text-danger">مطلوب</p>
     </div>
     <div class="d-flex justify-content-center ">
-      <button class="btn btn-success" [disabled]="form.invalid">اضف</button>
+      <button class="btn btn-success" [disabled]="form.invalid">{{ isEdit ? 'حفظ' : 'اضف' }}</button>
       <a mat-button (click)="onCloseClick()" class="btn btn-danger mx-2">الغاء </a>
 
     </div>

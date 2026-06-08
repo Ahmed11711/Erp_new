@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\Bank\BankResource;
 use App\Services\TreeAccount\AddRecordedService;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\BankOperationalLedgerService;
 
 class BanksController extends Controller
 {
@@ -242,130 +243,132 @@ class BanksController extends Controller
 
     public function depositBank(Request $request, $id)
     {
-        $bank = Bank::find($id);
-        $ref = 'D1';
-        $lastRef = DB::table('bank_details')->where('type', 'ايداع')->latest()->first();
-        if ($lastRef) {
-            $lastRefNumber = (int)substr($lastRef->ref, 1);
-            $ref = 'D' . ($lastRefNumber + 1);
-        }
-        DB::table('bank_details')->insert([
-            'bank_id' => $id,
-            'details' => $request->reason,
-            'ref' => $ref ,
-            'type' => 'ايداع',
-            'amount' => (double)$request->amount,
-            'balance_before' => $bank->balance,
-            'balance_after' => $bank->balance + $request->amount,
-            'date' => Carbon::now()->format('Y-m-d'),
-            'created_at' => now(),
-            'user_id'=> auth()->user()->id
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'reason' => 'required|string',
+            'counter_account_id' => 'required|exists:tree_accounts,id',
         ]);
 
-        $bank->balance = $bank->balance + $request->amount;
-        $bank->save();
-        return response()->json('success' , 200);
+        $bank = Bank::findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            app(BankOperationalLedgerService::class)->deposit(
+                $bank,
+                (float) $request->amount,
+                (int) $request->counter_account_id,
+                $request->reason
+            );
+            DB::commit();
+
+            return response()->json('success', 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     public function editBankBalance(Request $request, $id)
     {
-        $bank = Bank::find($id);
-        $ref = 'E1';
-        $lastRef = DB::table('bank_details')->where('type', 'تعديل')->latest()->first();
-        if ($lastRef) {
-            $lastRefNumber = (int)substr($lastRef->ref, 1);
-            $ref = 'E' . ($lastRefNumber + 1);
-        }
-        DB::table('bank_details')->insert([
-            'bank_id' => $id,
-            'details' => $request->reason,
-            'ref' => $ref ,
-            'type' => 'تعديل',
-            'amount' => (double)$request->amount-$bank->balance,
-            'balance_before' => $bank->balance,
-            'balance_after' => $request->amount,
-            'date' => Carbon::now()->format('Y-m-d'),
-            'created_at' => now(),
-            'user_id'=> auth()->user()->id
+        $request->validate([
+            'amount' => 'required|numeric|min:0',
+            'reason' => 'required|string',
+            'counter_account_id' => 'required|exists:tree_accounts,id',
         ]);
 
-        $bank->balance = $request->amount;
-        $bank->save();
-        return response()->json('success' , 200);
+        $bank = Bank::findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            app(BankOperationalLedgerService::class)->adjustToTargetBalance(
+                $bank,
+                (float) $request->amount,
+                (int) $request->counter_account_id,
+                $request->reason
+            );
+            DB::commit();
+
+            return response()->json('success', 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     public function withDrawBank(Request $request, $id)
     {
-        $bank = Bank::find($id);
-        $ref = 'W1';
-        $lastRef = DB::table('bank_details')->where('type', 'سحب')->latest()->first();
-        if ($lastRef) {
-            $lastRefNumber = (int)substr($lastRef->ref, 1);
-            $ref = 'W' . ($lastRefNumber + 1);
-        }
-        DB::table('bank_details')->insert([
-            'bank_id' => $id,
-            'details' => $request->reason,
-            'ref' => $ref ,
-            'type' => 'سحب',
-            'amount' => (double)$request->amount,
-            'balance_before' => $bank->balance,
-            'balance_after' => $bank->balance - $request->amount,
-            'date' => Carbon::now()->format('Y-m-d'),
-            'created_at' => now(),
-            'user_id'=> auth()->user()->id
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'reason' => 'required|string',
+            'counter_account_id' => 'required|exists:tree_accounts,id',
         ]);
 
-        $bank->balance = $bank->balance - $request->amount;
-        $bank->save();
-        return response()->json('success' , 200);
+        $bank = Bank::findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            app(BankOperationalLedgerService::class)->withdraw(
+                $bank,
+                (float) $request->amount,
+                (int) $request->counter_account_id,
+                $request->reason
+            );
+            DB::commit();
+
+            return response()->json('success', 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
     }
 
     public function transferMoney(Request $request)
     {
+        $request->validate([
+            'bankFrom' => 'required|exists:banks,id',
+            'bankTo' => 'required|exists:banks,id|different:bankFrom',
+            'amount' => 'required|numeric|min:0.01',
+            'reason' => 'required|string',
+        ]);
 
-        $bankFrom = $request->bankFrom;
-        $bankTo = $request->bankTo;
-        $amount = $request->amount;
-        $reason = $request->reason;
-        $bankFromData = Bank::find($bankFrom);
-        $bankToData = Bank::find($bankTo);
-        $ref = 'T1';
-        $lastRef = DB::table('bank_details')->where('type', 'تحويل')->latest()->first();
-        if ($lastRef) {
-            $lastRefNumber = (int)substr($lastRef->ref, 1);
-            $ref = 'T' . ($lastRefNumber + 1);
+        $bankFromData = Bank::findOrFail($request->bankFrom);
+        $bankToData = Bank::findOrFail($request->bankTo);
+
+        DB::beginTransaction();
+        try {
+            app(BankOperationalLedgerService::class)->transfer(
+                $bankFromData,
+                $bankToData,
+                (float) $request->amount,
+                $request->reason
+            );
+            DB::commit();
+
+            return response()->json('success', 200);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
         }
-        DB::table('bank_details')->insert([
-            'bank_id' => $bankFrom,
-            'details' => 'تحويل الي '.$bankToData->name.' - '.$reason,
-            'ref' => $ref ,
-            'type' => 'تحويل',
-            'amount' => (double)$amount,
-            'balance_before' => $bankFromData->balance,
-            'balance_after' => $bankFromData->balance - $amount,
-            'date' => Carbon::now()->format('Y-m-d'),
-            'created_at' => now(),
-            'user_id'=> auth()->user()->id
-        ]);
-        DB::table('bank_details')->insert([
-            'bank_id' => $bankTo,
-            'details' => ' استلام من '.$bankFromData->name.' - '.$reason,
-            'ref' => $ref ,
-            'type' => 'تحويل',
-            'amount' => (double)$amount,
-            'balance_before' => $bankToData->balance,
-            'balance_after' => $bankToData->balance + $amount,
-            'date' => Carbon::now()->format('Y-m-d'),
-            'created_at' => now(),
-            'user_id'=> auth()->user()->id
-        ]);
-
-        $bankFromData->balance = $bankFromData->balance - $amount;
-        $bankToData->balance = $bankToData->balance + $amount;
-        $bankFromData->save();
-        $bankToData->save();
-        return response()->json('success' , 200);
     }
 
 }
