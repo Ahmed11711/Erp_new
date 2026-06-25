@@ -14,6 +14,7 @@ export class ShippingAccountsReportComponent implements OnInit {
   statement: any = null;
   statementAggregates: any = null;
   statementDetails: any = null;
+  purchaseFreight: any[] = [];
   settlementData: any[] = [];
   settlementTotals: any = {};
 
@@ -25,6 +26,9 @@ export class ShippingAccountsReportComponent implements OnInit {
   isDoneFilter: string = '';
 
   loading = false;
+
+  /** order_id → collectible amount */
+  selectedOrders = new Map<number, number>();
 
   constructor(
     private orderService: OrderService,
@@ -68,6 +72,8 @@ export class ShippingAccountsReportComponent implements OnInit {
   openStatement(company: any) {
     this.selectedCompany = company;
     this.activeTab = 'statement';
+    this.isDoneFilter = '0';
+    this.clearSelection();
     this.loadStatement();
   }
 
@@ -84,6 +90,7 @@ export class ShippingAccountsReportComponent implements OnInit {
       this.statement = res.company;
       this.statementAggregates = res.aggregates;
       this.statementDetails = res.details;
+      this.purchaseFreight = res.purchase_freight || [];
     });
   }
 
@@ -111,6 +118,64 @@ export class ShippingAccountsReportComponent implements OnInit {
   backToSummary() {
     this.activeTab = 'summary';
     this.selectedCompany = null;
+    this.clearSelection();
+  }
+
+  rowCollectibleAmount(d: any): number {
+    if (d?.collectible_amount != null && !isNaN(Number(d.collectible_amount))) {
+      return Math.round(Number(d.collectible_amount) * 100) / 100;
+    }
+    const v = parseFloat(String(d?.amount ?? 0));
+    return !isNaN(v) ? Math.round(Math.abs(v) * 100) / 100 : 0;
+  }
+
+  isCollectibleRow(d: any): boolean {
+    if (d?.collectible === true) return true;
+    if (d?.collectible === false) return false;
+    return !d?.is_done && (d?.status === 'تم شحن' || d?.status === 'تم التسليم');
+  }
+
+  isRowSelected(d: any): boolean {
+    const oid = Number(d?.order_id);
+    return oid > 0 && this.selectedOrders.has(oid);
+  }
+
+  toggleRow(d: any): void {
+    const oid = Number(d?.order_id);
+    if (!oid || !this.isCollectibleRow(d)) return;
+    if (this.selectedOrders.has(oid)) {
+      this.selectedOrders.delete(oid);
+    } else {
+      this.selectedOrders.set(oid, this.rowCollectibleAmount(d));
+    }
+  }
+
+  selectAllPendingOnPage(): void {
+    const rows = this.statementDetails?.data || [];
+    for (const d of rows) {
+      if (!this.isCollectibleRow(d)) continue;
+      const oid = Number(d.order_id);
+      if (oid > 0) this.selectedOrders.set(oid, this.rowCollectibleAmount(d));
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedOrders.clear();
+  }
+
+  get selectedOrderIds(): number[] {
+    return Array.from(this.selectedOrders.keys());
+  }
+
+  get selectedTotal(): number {
+    let sum = 0;
+    this.selectedOrders.forEach((amt) => (sum += amt));
+    return Math.round(sum * 100) / 100;
+  }
+
+  cashQueryReceiptSelected(): Record<string, string | number> | null {
+    if (!this.selectedCompany || this.selectedOrderIds.length === 0) return null;
+    return this.cashQueryReceipt(this.selectedCompany, this.selectedTotal, this.selectedOrderIds);
   }
 
   /** روابط قبض/دفع من التقرير → شاشة السندات مع تعبئة مبدئية */
@@ -143,6 +208,8 @@ export class ShippingAccountsReportComponent implements OnInit {
 
   cashQueryPayment(company: { id: number; name?: string }, suggestedAmount?: number | null) {
     const q: Record<string, string | number> = {
+      party: 'shipping_company',
+      type: 'payment',
       shipping_company_id: company.id,
       note: `صرف — ${company.name || company.id} (من تقرير ذمم الشحن)`,
     };

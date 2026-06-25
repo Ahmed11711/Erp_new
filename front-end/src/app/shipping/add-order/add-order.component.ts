@@ -208,7 +208,7 @@ export class AddOrderComponent implements OnInit {
     'vat': new FormControl(null),
     'maintenance_cost': new FormControl(null),
     'special_details': new FormControl(null),
-    'payment_type': new FormControl('bank'), // Default to bank
+    'payment_type': new FormControl('pending'),
     'safe_id': new FormControl(null),
     'service_account_id': new FormControl(null),
   })
@@ -231,12 +231,13 @@ export class AddOrderComponent implements OnInit {
 
       const formData = new FormData();
       formData.append('customer_name', data.customer_name);
-      formData.append('payment_type', data.payment_type);
-      if (data.payment_type === 'bank') {
+      const paymentType = data.prepaid_amount > 0 ? (data.payment_type || 'pending') : 'none';
+      formData.append('payment_type', paymentType);
+      if (paymentType === 'bank' && data.bank) {
         formData.append('bank', data.bank);
-      } else if (data.payment_type === 'safe') {
+      } else if (paymentType === 'safe' && data.safe_id) {
         formData.append('safe_id', data.safe_id);
-      } else if (data.payment_type === 'service_account') {
+      } else if (paymentType === 'service_account' && data.service_account_id) {
         formData.append('service_account_id', data.service_account_id);
       }
       formData.append('customer_type', data.customer_type);
@@ -417,6 +418,7 @@ export class AddOrderComponent implements OnInit {
     this.discount = 0;
     this.maintenanceAmount = 0;
     this.shipping_cost = 0;
+    this.form.patchValue({ payment_type: 'pending' });
     this.calc(arguments);
   }
 

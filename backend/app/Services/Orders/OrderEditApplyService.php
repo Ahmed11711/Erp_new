@@ -31,6 +31,7 @@ class OrderEditApplyService
         'net_total' => 'الصافي',
         'vat' => 'القيمة المضافة',
         'bank_id' => 'البنك',
+        'prepaid_payment_type' => 'مصدر دفع المبلغ المدفوع',
         'collect_note' => 'ملحوظة التحصيل',
         'order_image' => 'صورة الإيصال',
     ];

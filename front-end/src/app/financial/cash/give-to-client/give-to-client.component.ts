@@ -2,6 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { PaymentSourcesService, PaymentSourceItem } from '../../../accounting/services/payment-sources.service';
 import { VoucherService } from '../../../accounting/services/voucher.service';
 import { ToastService } from '../../../shared/toast/toast.service';
+import {
+  buildClientVoucherFields,
+  CashClientOptionsResponse,
+} from '../cash-client-selection';
 
 @Component({
     selector: 'app-cash-give-to-client',
@@ -15,7 +19,9 @@ export class CashGiveToClientComponent implements OnInit {
     safes: PaymentSourceItem[] = [];
     banks: PaymentSourceItem[] = [];
     serviceAccounts: PaymentSourceItem[] = [];
-    clients: any[] = [];
+    clientOptions: CashClientOptionsResponse = { companies: [], individuals: [] };
+    selectedClientKey: string | null = null;
+    clientSearch = '';
 
     voucher: any = {
         date: new Date().toISOString().split('T')[0],
@@ -42,8 +48,25 @@ export class CashGiveToClientComponent implements OnInit {
             },
             error: () => this.toast.error('تعذر تحميل مصادر الدفع')
         });
-        this.voucherService.getClients().subscribe((res: any) => {
-            this.clients = res.data || res;
+        this.voucherService.getClientOptions().subscribe({
+            next: (res) => {
+                this.clientOptions = {
+                    companies: res?.companies || [],
+                    individuals: res?.individuals || [],
+                };
+            },
+            error: () => this.toast.error('تعذر تحميل قائمة العملاء'),
+        });
+    }
+
+    onClientSearchChange(): void {
+        this.voucherService.getClientOptions(this.clientSearch).subscribe({
+            next: (res) => {
+                this.clientOptions = {
+                    companies: res?.companies || [],
+                    individuals: res?.individuals || [],
+                };
+            },
         });
     }
 
@@ -71,7 +94,7 @@ export class CashGiveToClientComponent implements OnInit {
             this.toast.warning('اختر خزينة أو بنك أو حساب خدمي مرتبطاً بحساب شجري');
             return;
         }
-        if (!this.voucher.client_id) {
+        if (!this.selectedClientKey) {
             this.toast.warning('اختر العميل');
             return;
         }
@@ -80,7 +103,12 @@ export class CashGiveToClientComponent implements OnInit {
             return;
         }
 
-        this.voucherService.createVoucher(this.voucher).subscribe({
+        const clientFields = buildClientVoucherFields(this.selectedClientKey, this.clientOptions);
+
+        this.voucherService.createVoucher({
+            ...this.voucher,
+            ...clientFields,
+        }).subscribe({
             next: () => {
                 this.toast.success('تم الحفظ بنجاح');
                 this.voucher = {
@@ -92,6 +120,7 @@ export class CashGiveToClientComponent implements OnInit {
                     amount: 0,
                     notes: ''
                 };
+                this.selectedClientKey = null;
                 this.selectedSourceId = null;
             },
             error: (err) => {

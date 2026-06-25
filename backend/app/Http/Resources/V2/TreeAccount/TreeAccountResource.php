@@ -59,6 +59,20 @@ class TreeAccountResource extends JsonResource
                 });
             }),
             'detail_type' => $this->detail_type,
+            'created_by' => $this->created_by,
+            'updated_by' => $this->updated_by,
+            'created_by_user' => $this->whenLoaded('createdByUser', function () {
+                return $this->createdByUser ? [
+                    'id' => $this->createdByUser->id,
+                    'name' => $this->createdByUser->name,
+                ] : null;
+            }),
+            'updated_by_user' => $this->whenLoaded('updatedByUser', function () {
+                return $this->updatedByUser ? [
+                    'id' => $this->updatedByUser->id,
+                    'name' => $this->updatedByUser->name,
+                ] : null;
+            }),
             'created_at' => $this->created_at->format('Y-m-d H:i') ?? null,
             'updated_at' => $this->updated_at->format('Y-m-d H:i') ?? null,
         ];

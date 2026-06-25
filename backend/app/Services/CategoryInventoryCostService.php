@@ -136,9 +136,9 @@ class CategoryInventoryCostService
             if (! $acc) {
                 continue;
             }
-            $total = is_object($line)
+            $total = abs(is_object($line)
                 ? (float) ($line->total ?? 0)
-                : (float) ($line['total'] ?? 0);
+                : (float) ($line['total'] ?? 0));
             $map[$acc->id] = ($map[$acc->id] ?? 0) + $total;
         }
 

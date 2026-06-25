@@ -9,6 +9,7 @@ use App\Models\DailyEntryItem;
 use App\Models\Purchase;
 use App\Models\Safe;
 use App\Models\ServiceAccount;
+use App\Models\ShippingCompany;
 use App\Models\Supplier;
 use App\Models\TreeAccount;
 /**
@@ -80,6 +81,37 @@ class InventoryGlPostingService
         );
         $this->accountingService->updateAccountHierarchyBalances($inventory->id);
         $this->accountingService->updateAccountHierarchyBalances($supplierAccId);
+    }
+
+    /**
+     * قيد السداد: مدين المورد (تخفيض ذمة) / دائن النقدية.
+     */
+    public function postPurchasePaymentGl(Purchase $purchase, Supplier $supplier, float $amount, ?int $userId = null): void
+    {
+        if ($amount <= 0.00001) {
+            return;
+        }
+        $cashOrBankId = $this->resolvePurchasePaymentCreditTreeId($purchase);
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (! $cashOrBankId || ! $supplierAccId) {
+            return;
+        }
+
+        $desc = 'سداد مشتريات — '.$purchase->invoice_number;
+        $this->postTwoLineDailyEntry(
+            $desc,
+            $supplierAccId,
+            $amount,
+            0,
+            $cashOrBankId,
+            0,
+            $amount,
+            'سداد ذمة مورد',
+            'صرف من خزينة/بنك',
+            $userId
+        );
+        $this->accountingService->updateAccountHierarchyBalances($supplierAccId);
+        $this->accountingService->updateAccountHierarchyBalances($cashOrBankId);
     }
 
     /**
@@ -605,6 +637,9 @@ class InventoryGlPostingService
         }
 
         $freightIn = TreeAccount::resolveFreightInExpenseAccount();
+        if ($freightInAmount > 0.00001 && ! $freightIn) {
+            $freightIn = TreeAccount::ensureFreightInExpenseAccount();
+        }
 
         $lines = [];
         foreach ($clean as $accId => $amt) {
@@ -621,6 +656,178 @@ class InventoryGlPostingService
         foreach ($lines as $ln) {
             $this->accountingService->updateAccountHierarchyBalances($ln['id']);
         }
+    }
+
+    /**
+     * استلام مشتريات — شحن التوريد يُقيد على مندوب/شركة الشحن إن وُجد.
+     *
+     * @param  array<int, float>  $inventoryDebitAmountsByTreeAccountId
+     */
+    public function postPurchaseReceiptSplitByAccountsWithFreightPayable(
+        array $inventoryDebitAmountsByTreeAccountId,
+        float $freightInAmount,
+        Supplier $supplier,
+        ?ShippingCompany $shippingCompany,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $freightInAmount = max(0, $freightInAmount);
+        $clean = [];
+        foreach ($inventoryDebitAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $inventoryTotal = array_sum($clean);
+        if ($inventoryTotal <= 0.00001 && $freightInAmount <= 0.00001) {
+            return;
+        }
+
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (! $supplierAccId) {
+            return;
+        }
+
+        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
+        if ($freightInAmount > 0.00001 && ! $freightIn) {
+            $freightIn = TreeAccount::ensureFreightInExpenseAccount();
+        }
+
+        $shippingPayableId = $this->resolveShippingPayableTreeId($shippingCompany);
+
+        $lines = [];
+        foreach ($clean as $accId => $amt) {
+            $lines[] = ['id' => $accId, 'debit' => $amt, 'credit' => 0.0, 'note' => 'استلام مخزون — تكلفة بضاعة'];
+        }
+        if ($freightInAmount > 0.00001 && $freightIn) {
+            $lines[] = ['id' => $freightIn->id, 'debit' => $freightInAmount, 'credit' => 0.0, 'note' => 'شحن مشتريات'];
+        }
+        if ($inventoryTotal > 0.00001) {
+            $lines[] = ['id' => $supplierAccId, 'debit' => 0.0, 'credit' => $inventoryTotal, 'note' => 'ذمة مورد — قيمة البضاعة'];
+        }
+        if ($freightInAmount > 0.00001) {
+            $freightCreditId = $shippingPayableId ?: $supplierAccId;
+            $freightNote = $shippingPayableId ? 'ذمة مندوب/شركة شحن — شحن التوريد' : 'ذمة مورد — شحن التوريد';
+            $lines[] = ['id' => $freightCreditId, 'debit' => 0.0, 'credit' => $freightInAmount, 'note' => $freightNote];
+        }
+
+        $this->postBalancedJournal($description, $lines, $userId);
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances($ln['id']);
+        }
+    }
+
+    /**
+     * @param  array<int, float>  $inventoryCreditAmountsByTreeAccountId
+     */
+    public function reversePurchaseReceiptSplitByAccountsWithFreightPayable(
+        array $inventoryCreditAmountsByTreeAccountId,
+        float $freightInAmount,
+        Supplier $supplier,
+        ?ShippingCompany $shippingCompany,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $freightInAmount = max(0, $freightInAmount);
+        $clean = [];
+        foreach ($inventoryCreditAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $inventoryTotal = array_sum($clean);
+        if ($inventoryTotal <= 0.00001 && $freightInAmount <= 0.00001) {
+            return;
+        }
+
+        $supplierAccId = $this->ensureSupplierTreeAccountId($supplier);
+        if (! $supplierAccId) {
+            return;
+        }
+
+        $freightIn = TreeAccount::resolveFreightInExpenseAccount();
+        if ($freightInAmount > 0.00001 && ! $freightIn) {
+            $freightIn = TreeAccount::ensureFreightInExpenseAccount();
+        }
+
+        $shippingPayableId = $this->resolveShippingPayableTreeId($shippingCompany);
+
+        $lines = [];
+        foreach ($clean as $accId => $amt) {
+            $lines[] = ['id' => $accId, 'debit' => 0.0, 'credit' => $amt, 'note' => 'عكس استلام مخزون'];
+        }
+        if ($freightInAmount > 0.00001 && $freightIn) {
+            $lines[] = ['id' => $freightIn->id, 'debit' => 0.0, 'credit' => $freightInAmount, 'note' => 'عكس شحن مشتريات'];
+        }
+        if ($inventoryTotal > 0.00001) {
+            $lines[] = ['id' => $supplierAccId, 'debit' => $inventoryTotal, 'credit' => 0.0, 'note' => 'تخفيض ذمة مورد — بضاعة'];
+        }
+        if ($freightInAmount > 0.00001) {
+            $freightDebitId = $shippingPayableId ?: $supplierAccId;
+            $lines[] = ['id' => $freightDebitId, 'debit' => $freightInAmount, 'credit' => 0.0, 'note' => 'عكس ذمة شحن'];
+        }
+
+        $this->postBalancedJournal($description, $lines, $userId);
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances($ln['id']);
+        }
+    }
+
+    /**
+     * @param  array<int, float>  $inventoryDebitAmountsByTreeAccountId
+     */
+    public function reverseSalesReturnInventoryRestoreByWarehouse(
+        array $inventoryDebitAmountsByTreeAccountId,
+        string $description,
+        ?int $userId = null
+    ): void {
+        $cogs = TreeAccount::resolveCogsAccount();
+        if (! $cogs) {
+            return;
+        }
+
+        $clean = [];
+        foreach ($inventoryDebitAmountsByTreeAccountId as $tid => $amt) {
+            $a = max(0, (float) $amt);
+            if ($a > 0.00001) {
+                $clean[(int) $tid] = ($clean[(int) $tid] ?? 0) + $a;
+            }
+        }
+
+        $sum = array_sum($clean);
+        if ($sum <= 0.00001) {
+            return;
+        }
+
+        $lines = [];
+        foreach ($clean as $accId => $amt) {
+            $lines[] = ['id' => $accId, 'debit' => 0.0, 'credit' => $amt, 'note' => 'عكس إرجاع مخزون — مرتجع مبيعات'];
+        }
+        $lines[] = ['id' => $cogs->id, 'debit' => $sum, 'credit' => 0.0, 'note' => 'عكس تكلفة مبيعات'];
+
+        $this->postBalancedJournal($description, $lines, $userId);
+        foreach ($lines as $ln) {
+            $this->accountingService->updateAccountHierarchyBalances($ln['id']);
+        }
+    }
+
+    private function resolveShippingPayableTreeId(?ShippingCompany $company): ?int
+    {
+        if (! $company) {
+            return null;
+        }
+
+        if ($company->tree_account_id) {
+            return (int) $company->tree_account_id;
+        }
+
+        $account = app(AccountLinkingService::class)->ensureShippingCompanyFreightPayableAccount($company);
+
+        return $account?->id ? (int) $account->id : null;
     }
 
     /**

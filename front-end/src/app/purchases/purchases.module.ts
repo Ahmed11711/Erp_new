@@ -17,6 +17,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { SharedModule } from '../shared/shared.module';
 import { PurchaseDetailsComponent } from './purchase-details/purchase-details.component';
 // import { FormsModule } from '@angular/forms';
@@ -43,6 +44,7 @@ import { PurchaseDetailsComponent } from './purchase-details/purchase-details.co
     MatMenuModule,
     MatIconModule,
     MatSelectModule,
+    MatCheckboxModule,
     SharedModule
   ],
   providers: [DatePipe],

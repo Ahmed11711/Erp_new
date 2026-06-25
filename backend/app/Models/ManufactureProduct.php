@@ -15,6 +15,11 @@ class ManufactureProduct extends Model
         'total_price',
     ];
 
+    protected $casts = [
+        'quantity' => 'float',
+        'total_price' => 'float',
+    ];
+
     public function manufacture()
     {
         return $this->belongsTo(Manufacture::class, 'manufacture_id');

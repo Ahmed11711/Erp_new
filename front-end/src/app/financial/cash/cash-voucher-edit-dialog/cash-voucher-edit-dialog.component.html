@@ -1,0 +1,77 @@
+<h2 mat-dialog-title dir="rtl">تعديل سند نقدي #{{ data.voucherId }}</h2>
+
+<mat-dialog-content dir="rtl">
+  <div *ngIf="loading" class="cash-voucher-edit__loading">جاري التحميل...</div>
+  <div *ngIf="!loading && loadError" class="alert alert-danger">{{ loadError }}</div>
+
+  <div *ngIf="!loading && !loadError" class="cash-voucher-edit__form">
+    <div class="alert alert-info small">
+      يُعاد ترحيل القيود المحاسبية والأرصدة التشغيلية بعد الحفظ. الجهة ({{ partyTypeLabel }}) ثابتة: <strong>{{ partyLabel }}</strong>
+    </div>
+
+    <div class="row g-2">
+      <div class="col-md-6" *ngIf="supportsPaymentDirection">
+        <label class="form-label">نوع الحركة</label>
+        <select class="form-control" [(ngModel)]="fundDirection">
+          <option ngValue="receipt">قبض</option>
+          <option ngValue="payment">صرف</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">مكان الدفع / الإيداع</label>
+        <select class="form-control" [(ngModel)]="paymentPlace" (ngModelChange)="onPlaceChange()">
+          <option ngValue="safe">خزنة</option>
+          <option ngValue="bank">بنك</option>
+          <option ngValue="service_account">حساب خدمي</option>
+        </select>
+      </div>
+
+      <div class="col-md-6" *ngIf="paymentPlace === 'safe'">
+        <label class="form-label">الخزينة</label>
+        <select class="form-control" [(ngModel)]="selectedSourceId">
+          <option [ngValue]="null" disabled>— اختر الخزينة —</option>
+          <option *ngFor="let s of safes" [ngValue]="s.id">{{ sourceLabel(s) }}</option>
+        </select>
+      </div>
+      <div class="col-md-6" *ngIf="paymentPlace === 'bank'">
+        <label class="form-label">البنك</label>
+        <select class="form-control" [(ngModel)]="selectedSourceId">
+          <option [ngValue]="null" disabled>— اختر البنك —</option>
+          <option *ngFor="let b of banks" [ngValue]="b.id">{{ sourceLabel(b) }}</option>
+        </select>
+      </div>
+      <div class="col-md-6" *ngIf="paymentPlace === 'service_account'">
+        <label class="form-label">الحساب الخدمي</label>
+        <select class="form-control" [(ngModel)]="selectedSourceId">
+          <option [ngValue]="null" disabled>— اختر الحساب —</option>
+          <option *ngFor="let a of serviceAccounts" [ngValue]="a.id">{{ sourceLabel(a) }}</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">المبلغ</label>
+        <input type="number" class="form-control" [(ngModel)]="form.amount" min="0.01" step="0.01" dir="ltr">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">التاريخ</label>
+        <input type="date" class="form-control" [(ngModel)]="form.date" dir="ltr">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">رقم مرجعي</label>
+        <input type="text" class="form-control" [(ngModel)]="form.reference_number">
+      </div>
+      <div class="col-md-12">
+        <label class="form-label">ملاحظات</label>
+        <textarea class="form-control" [(ngModel)]="form.notes" rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end" dir="rtl">
+  <button mat-button type="button" (click)="close()" [disabled]="saving">إلغاء</button>
+  <button mat-raised-button color="primary" type="button" (click)="save()" [disabled]="loading || saving || !!loadError">
+    {{ saving ? 'جاري الحفظ...' : 'حفظ التعديل' }}
+  </button>
+</mat-dialog-actions>

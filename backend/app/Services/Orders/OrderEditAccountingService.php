@@ -12,7 +12,6 @@ use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\SalesOrderAccountingService;
 use App\Services\CategoryInventoryCostService;
 use App\Services\Shipping\OrderFinancialStateService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -85,9 +84,18 @@ class OrderEditAccountingService
                 $paymentType,
                 $paymentSourceId
             );
+        } elseif ($this->prepaidPaymentSourceAllocated($before, $fresh)) {
+            $this->applyPrepaidOperationalBalanceDiff(
+                $fresh,
+                0,
+                (float) $fresh->prepaid_amount,
+                $userId,
+                $paymentType ?? $fresh->prepaid_payment_type,
+                $paymentSourceId
+            );
         }
 
-        if (($before['order_status'] ?? '') === 'تم شحن') {
+        if (in_array($before['order_status'] ?? '', ['تم شحن', 'تم التسليم'], true)) {
             $this->reconcileShippedCogs($fresh, $before['products'] ?? [], $userId);
         }
     }
@@ -108,6 +116,7 @@ class OrderEditAccountingService
         return [
             'prepaid_amount' => (float) ($order->prepaid_amount ?? 0),
             'bank_id' => $order->bank_id,
+            'prepaid_payment_type' => $order->prepaid_payment_type,
             'order_status' => (string) $order->order_status,
             'order_type' => (string) $order->order_type,
             'total_invoice' => (float) ($order->total_invoice ?? 0),
@@ -217,6 +226,23 @@ class OrderEditAccountingService
         }
     }
 
+    /**
+     * @param  array{prepaid_payment_type?: string|null, bank_id?: mixed}  $before
+     */
+    private function prepaidPaymentSourceAllocated(array $before, Order $order): bool
+    {
+        $prepaid = (float) ($order->prepaid_amount ?? 0);
+        if ($prepaid <= 0.0001) {
+            return false;
+        }
+
+        $beforeType = (string) ($before['prepaid_payment_type'] ?? '');
+        $nowType = (string) ($order->prepaid_payment_type ?? '');
+
+        return in_array($beforeType, ['', 'pending', 'none'], true)
+            && ! in_array($nowType, ['', 'pending', 'none'], true);
+    }
+
     private function applyPrepaidOperationalBalanceDiff(
         Order $order,
         float $oldPrepaid,
@@ -236,11 +262,21 @@ class OrderEditAccountingService
         $createdAt = now();
 
         $paymentType = $paymentType ?? 'bank';
+        $ledger = app(\App\Services\Accounting\OrderPaymentSourceLedgerService::class);
 
         if ($paymentType === 'safe' && $paymentSourceId) {
             $safe = Safe::find($paymentSourceId);
             if ($safe) {
-                $this->adjustSafeBalance($safe, $diff, $order->id, $userId, $details, $ref, $type, $createdAt);
+                $ledger->recordSafeMovement(
+                    $safe,
+                    $diff,
+                    $order,
+                    $details,
+                    $ref,
+                    $type,
+                    $userId,
+                    $createdAt->toDateString(),
+                );
             }
 
             return;
@@ -249,7 +285,16 @@ class OrderEditAccountingService
         if ($paymentType === 'service_account' && $paymentSourceId) {
             $svc = ServiceAccount::find($paymentSourceId);
             if ($svc) {
-                $svc->update(['balance' => (float) $svc->balance + $diff]);
+                $ledger->recordServiceAccountMovement(
+                    $svc,
+                    $diff,
+                    $order,
+                    $details,
+                    $ref,
+                    $type,
+                    $userId,
+                    $createdAt->toDateString(),
+                );
             }
 
             return;
@@ -259,47 +304,18 @@ class OrderEditAccountingService
         if ($bankId !== null && $bankId !== '' && $bankId !== 'null') {
             $bank = Bank::find($bankId);
             if ($bank) {
-                $this->adjustBankBalance((int) $bank->id, $diff, $order->id, $userId, $details, $ref, $type, $createdAt);
+                $ledger->recordBankMovement(
+                    $bank,
+                    $diff,
+                    $order,
+                    $details,
+                    $ref,
+                    $type,
+                    $userId,
+                    $createdAt->toDateString(),
+                );
             }
         }
-    }
-
-    private function adjustBankBalance(int $bankId, float $amount, int $orderId, int $userId, string $details, string $ref, string $type, $createdAt): void
-    {
-        $bank = DB::table('banks')->where('id', $bankId)->first();
-        if (! $bank) {
-            return;
-        }
-
-        $currentBalance = (float) $bank->balance;
-        $newBalance = $currentBalance + $amount;
-
-        DB::table('banks')->where('id', $bankId)->update(['balance' => $newBalance]);
-        DB::table('bank_details')->insert([
-            'bank_id' => $bankId,
-            'details' => $details,
-            'ref' => $ref,
-            'type' => $type,
-            'amount' => $amount,
-            'balance_before' => $currentBalance,
-            'balance_after' => $newBalance,
-            'date' => date('Y-m-d'),
-            'created_at' => $createdAt,
-            'user_id' => $userId,
-        ]);
-    }
-
-    private function adjustSafeBalance(Safe $safe, float $amount, int $orderId, int $userId, string $details, string $ref, string $type, $createdAt): void
-    {
-        app(\App\Services\Accounting\SafeOperationalLedgerService::class)->recordOperationalMovement(
-            $safe,
-            $amount,
-            trim($details . ' — طلب #' . $orderId),
-            $ref,
-            $type,
-            $userId,
-            \Carbon\Carbon::parse($createdAt)->toDateString()
-        );
     }
 
     /**

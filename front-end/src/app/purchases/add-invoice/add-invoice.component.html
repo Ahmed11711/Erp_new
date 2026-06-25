@@ -1,173 +1,189 @@
 <div class="purchase-invoice-page container-fluid px-3 px-md-4">
   <div class="pi-page-head">
     <h1 class="pi-title">{{ !invoiceId ? 'إضافة فاتورة مشتريات' : 'تعديل فاتورة مشتريات' }}</h1>
-    <div class="d-flex align-items-center">
-      <app-time></app-time>
-    </div>
+    <app-time></app-time>
   </div>
 
-<div class="container-fluid content px-0">
-    <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
-      {{ errorMessage }}
-      <button type="button" class="btn-close" (click)="errorMessage = ''"></button>
-    </div>
-    <form #invoices="ngForm" (ngSubmit)="addInvoice(invoices)" novalidate>
-      <div class="pi-card pi-card-autocomplete">
-        <div class="pi-card-header">البيانات الأساسية</div>
-        <div class="pi-card-body pi-card-body-overflow-visible">
-      <div class="form-row align-items-end pi-row-basic-line1">
-        <div class="form-group col-lg-2 col-md-4 mb-3 mb-lg-0" *ngIf="invoiceId">
+  <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{ errorMessage }}
+    <button type="button" class="btn-close" (click)="errorMessage = ''"></button>
+  </div>
+
+  <form #invoices="ngForm" (ngSubmit)="addInvoice(invoices)" novalidate>
+    <!-- البيانات الأساسية -->
+    <div class="pi-card pi-card-autocomplete pi-card-layer-basic">
+      <div class="pi-card-header">البيانات الأساسية</div>
+      <div class="pi-card-body pi-card-body-overflow-visible">
+        <div class="form-group pi-serial-field" *ngIf="invoiceId">
           <label for="purchase_serial_id">الرقم التسلسلي</label>
           <input id="purchase_serial_id" type="text" class="form-control" readonly
-            [value]="purchaseSerialId" dir="ltr" tabindex="-1" aria-readonly="true">
+            [value]="purchaseSerialId" dir="ltr" tabindex="-1">
         </div>
 
-        <div class="form-group col-lg-4 col-md-6 mb-3 mb-lg-0">
+        <div class="pi-field-grid pi-field-grid-basic">
+          <div class="form-group pi-status-field">
             <label for="status">حالة الشراء</label>
-            <select id="status" class="form-control" (change)="changeStatus($event)">
-              <option selected disabled value="">اختر الحالة</option>
-              <option value="تم الاستلام">تم الاستلام</option>
-              <option value="مرتجع">مرتجع</option>
-            </select>
+            <mat-select id="status" class="pi-status-select"
+              [(ngModel)]="status" name="purchaseStatus"
+              placeholder="اختر الحالة"
+              panelClass="pi-status-select-panel"
+              (selectionChange)="changeStatus($event.value)">
+              <mat-option *ngFor="let opt of purchaseStatusOptions" [value]="opt">{{ opt }}</mat-option>
+            </mat-select>
           </div>
 
-          <div class="form-group col-lg-4 col-md-6 mb-3 mb-lg-0">
+          <div class="form-group pi-ac-field pi-ac-field-supplier">
             <label for="supplier">المورد</label>
-            <div class="ng-autocomplete">
-              <ng-autocomplete id="supplier"
+            <div class="ng-autocomplete pi-ac-wrap">
+              <ng-autocomplete *ngIf="supplierFieldReady" id="supplier"
                 [data]="suppliers"
                 [searchKeyword]="keyword"
                 [minQueryLength]="0"
+                [initialValue]="supplierInitialValue"
                 placeholder="اختر المورد"
-                (selected)='supEvent($event)'
+                (selected)="supEvent($event)"
+                (inputChanged)="onSupplierInputChanged($event)"
+                (closed)="syncSupplierSelection()"
                 (inputCleared)="resetSup()"
                 [itemTemplate]="itemTemplate"
                 [notFoundTemplate]="notFoundTemplate">
               </ng-autocomplete>
-
               <ng-template #itemTemplate let-item>
-              <a [innerHTML]="item.supplier_name"></a>
+                <a [innerHTML]="item.supplier_name"></a>
               </ng-template>
-
               <ng-template #notFoundTemplate let-notFound>
-              <div [innerHTML]="notFound"></div>
+                <div [innerHTML]="notFound"></div>
               </ng-template>
             </div>
           </div>
 
-          <div class="form-group col-lg-4 col-md-12 mb-0 pi-datepicker-wrap">
-            <label for="receipt_date" class="pi-label-strong">تاريخ الاستلام</label>
-            <mat-form-field class="example-full-width w-100" appearance="outline">
-                <mat-label>اختر التاريخ</mat-label>
-                <input id="receipt_date" matInput [matDatepickerFilter]="myFilter" [matDatepicker]="picker"
-                (dateInput)="OnDateChange($event.value)">
-                <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
-                <mat-datepicker #picker></mat-datepicker>
-              </mat-form-field>
-          </div>
-      </div>
-
-      <div class="form-row align-items-start pi-row-invoice-file mt-3">
-        <div class="form-group col-lg-4 col-md-6 mb-0">
-          <label for="custom_invoice_no" class="pi-label-strong">رقم الفاتورة الداخلي <span class="pi-optional">(اختياري)</span></label>
-          <input id="custom_invoice_no" type="text" class="form-control pi-input-emphasis" name="customInvoiceNo"
-            [(ngModel)]="customInvoiceNo" maxlength="64"
-            [placeholder]="invoiceId ? 'فارغ = الإبقاء على الرقم الحالي للفاتورة' : 'فارغ = ترقيم تلقائي مثل PUR-1001'">
-          <small class="pi-hint">{{ invoiceId ? 'اتركه فارغاً للإبقاء على نفس الرقم؛ أو غيّره لفاتورة داخلية جديدة (فريد).' : 'رقم فريد؛ إن تركته فارغاً يُولَّد الرقم تلقائياً' }}</small>
-        </div>
-
-        <div class="form-group col-lg-4 col-md-6 mb-0">
-          <label for="external_invoice_no" class="pi-label-strong">رقم فاتورة المورد <span class="pi-optional">(ورقي — اختياري)</span></label>
-          <input id="external_invoice_no" type="text" class="form-control pi-input-emphasis" name="externalInvoiceNo"
-            [(ngModel)]="externalInvoiceNo" maxlength="120"
-            placeholder="">
-        </div>
-
-        <div class="form-group col-lg-4 col-md-12 mb-0">
-          <label class="pi-label-strong pi-file-field-label d-block">إرفاق صورة الفاتورة <span class="pi-optional">(اختياري)</span></label>
-          <div class="pi-file-row pi-file-row-inline">
-            <label class="pi-file-label mb-0">
-              <span>اختيار ملف</span>
-              <input type="file" (change)="chooseImg($event)" name="uploadFile" accept="image/*" #uploadFile="ngModel" ngModel>
-            </label>
-            <span class="pi-file-name">{{ selectedImg?.name || 'لم يُختَر ملف' }}</span>
-          </div>
-        </div>
-      </div>
-        </div>
-      </div>
-
-      <div class="pi-card pi-card-autocomplete">
-        <div class="pi-card-header">إضافة بنود الفاتورة</div>
-        <div class="pi-card-body pb-0 pi-card-body-overflow-visible">
-      <div class="form-row align-items-end add-line-items-row">
-        <div class="form-group col-md-3 mb-3">
-          <label class="add-line-label">اسم الصنف</label>
-            <div class="ng-autocomplete">
-                <ng-autocomplete
-                  [data]="categories"
-                  [searchKeyword]="catword"
-                  [minQueryLength]="0"
-                  placeholder="اختر الصنف"
-                  (selected)='selectEvent($event)'
-                  (inputCleared)="resetInp()"
-                  [itemTemplate]="itemTemplates"
-                  [notFoundTemplate]="notFoundCatTemplate">
-                </ng-autocomplete>
-
-                <ng-template #itemTemplates let-item>
-                <a [innerHTML]="item.category_name"></a>
-                </ng-template>
-
-                <ng-template #notFoundCatTemplate let-notFound>
+          <div class="form-group pi-ac-field pi-ac-field-shipping">
+            <label for="shipping_rep">شركة الشحن / المندوب <span class="pi-optional">(اختياري)</span></label>
+            <div class="ng-autocomplete pi-ac-wrap">
+              <ng-autocomplete *ngIf="shippingRepFieldReady" id="shipping_rep"
+                [data]="shippingReps"
+                [searchKeyword]="shippingRepKeyword"
+                [minQueryLength]="0"
+                [initialValue]="shippingRepInitialValue"
+                placeholder="اختر شركة الشحن أو المندوب"
+                (selected)="shippingRepEvent($event)"
+                (inputChanged)="onShippingRepInputChanged($event)"
+                (closed)="syncShippingRepSelection()"
+                (inputCleared)="resetShippingRep()"
+                [itemTemplate]="shippingRepTemplate"
+                [notFoundTemplate]="notFoundShippingRepTemplate">
+              </ng-autocomplete>
+              <ng-template #shippingRepTemplate let-item>
+                <a class="pi-shipping-party-option">
+                  <span class="pi-shipping-party-name" [innerHTML]="item.name"></span>
+                  <span class="pi-shipping-party-type" [class.pi-shipping-party-type--company]="item.type === 'شركة'">
+                    {{ shippingPartyTypeLabel(item.type) }}
+                  </span>
+                </a>
+              </ng-template>
+              <ng-template #notFoundShippingRepTemplate let-notFound>
                 <div [innerHTML]="notFound"></div>
-                </ng-template>
-                </div>
-        </div>
-        <div class="form-group col-md-3 mb-3">
-          <label class="add-line-label" for="purchase_line_price">السعر</label>
-      <input
-        type="number"
-        name="price"
-        ngModel
-        #price="ngModel"
-        class="form-control"
-        id="purchase_line_price"
-        required
-        min="0"
-        placeholder="السعر"
-        [(ngModel)]="productprice"
-      />
+              </ng-template>
+            </div>
+          </div>
 
-        </div>
-        <div class="form-group col-md-3 mb-3">
-          <label class="add-line-label" for="purchase_line_quantity">الكمية</label>
-      <input
-        type="number"
-        name="quantity"
-        ngModel
-        #quantity="ngModel"
-        class="form-control"
-        id="purchase_line_quantity"
-        required
-        min="0"
-        placeholder="الكمية"
-        [(ngModel)]="productQuantity"
-      />
-        </div>
-        <div class="form-group col-md-3 mb-3">
-          <label class="add-line-label add-line-label-actions">&nbsp;</label>
-            <button type="button" (click)="addToTabel()" [disabled]="!productQuantity|| !productprice || !productSelected" class="btn btn-pi-add">إضافة للجدول</button>
+          <div class="form-group pi-date-field">
+            <label for="receipt_date">تاريخ الاستلام</label>
+            <input id="receipt_date" type="date" class="form-control pi-date-input"
+              name="receiptDate"
+              [min]="minReceiptDate" [max]="maxReceiptDate"
+              [ngModel]="toDateInputValue(date)"
+              (ngModelChange)="onReceiptDateModelChange($event)">
+          </div>
         </div>
 
-    </div>
+        <div class="pi-field-grid pi-field-grid-divider">
+          <div class="form-group">
+            <label for="custom_invoice_no">رقم الفاتورة الداخلي <span class="pi-optional">(اختياري)</span></label>
+            <input id="custom_invoice_no" type="text" class="form-control" name="customInvoiceNo"
+              [(ngModel)]="customInvoiceNo" maxlength="64"
+              [placeholder]="invoiceId ? 'فارغ = الإبقاء على الرقم الحالي' : 'فارغ = ترقيم تلقائي PUR-1001'">
+            <small class="pi-hint">{{ invoiceId ? 'اتركه فارغاً للإبقاء على نفس الرقم.' : 'اتركه فارغاً للترقيم التلقائي.' }}</small>
+          </div>
+
+          <div class="form-group">
+            <label for="external_invoice_no">رقم فاتورة المورد <span class="pi-optional">(اختياري)</span></label>
+            <input id="external_invoice_no" type="text" class="form-control" name="externalInvoiceNo"
+              [(ngModel)]="externalInvoiceNo" maxlength="120">
+          </div>
+
+          <div class="form-group">
+            <label>إرفاق صورة الفاتورة <span class="pi-optional">(اختياري)</span></label>
+            <div class="pi-file-inline">
+              <label class="pi-file-label">
+                <span>اختيار ملف</span>
+                <input type="file" (change)="chooseImg($event)" name="uploadFile" accept="image/*" #uploadFile="ngModel" ngModel>
+              </label>
+              <span class="pi-file-name">{{ selectedImg?.name || 'لم يُختَر ملف' }}</span>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
 
-    <div class="pi-card pi-table-wrap pi-table-card-front">
-        <div class="pi-card-header">بنود الفاتورة</div>
-        <div class="pi-card-body p-0">
-        <div class="table-responsive pi-table-responsive">
+    <!-- إضافة بنود -->
+    <div class="pi-card pi-card-autocomplete pi-card-layer-lines">
+      <div class="pi-card-header">إضافة بنود الفاتورة</div>
+      <div class="pi-card-body pi-card-body-overflow-visible">
+        <div class="pi-add-line">
+          <div class="form-group pi-ac-field">
+            <label>اسم الصنف</label>
+            <div class="ng-autocomplete pi-ac-wrap">
+              <ng-autocomplete
+                [data]="categories"
+                [searchKeyword]="catword"
+                [minQueryLength]="0"
+                placeholder="اختر الصنف"
+                [selectedValueRender]="selectedCategoryLabel"
+                (selected)="selectEvent($event)"
+                (inputCleared)="resetInp()"
+                [itemTemplate]="itemTemplates"
+                [notFoundTemplate]="notFoundCatTemplate">
+              </ng-autocomplete>
+              <ng-template #itemTemplates let-item>
+                <div class="pi-category-option">
+                  <span class="pi-category-option__name" [innerHTML]="item.category_name"></span>
+                  <span class="pi-category-option__code text-muted" dir="ltr" *ngIf="item.item_code">{{ item.item_code }}</span>
+                  <span class="pi-category-option__swatch" *ngIf="item.color" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
+                  <span class="pi-category-option__meta text-muted" dir="ltr">
+                    متوسط: {{ averageUnitCost(item) | customNumber }}
+                  </span>
+                </div>
+              </ng-template>
+              <ng-template #notFoundCatTemplate let-notFound>
+                <div [innerHTML]="notFound"></div>
+              </ng-template>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="purchase_line_price">السعر</label>
+            <input type="number" name="price" ngModel #price="ngModel" class="form-control"
+              id="purchase_line_price" required min="0" placeholder="0" [(ngModel)]="productprice">
+          </div>
+          <div class="form-group">
+            <label for="purchase_line_quantity">الكمية</label>
+            <input type="number" name="quantity" ngModel #quantity="ngModel" class="form-control"
+              id="purchase_line_quantity" required min="0" placeholder="0" [(ngModel)]="productQuantity">
+          </div>
+          <div class="form-group pi-add-line-btn">
+            <label>&nbsp;</label>
+            <button type="button" (click)="addToTabel()"
+              [disabled]="!productQuantity || !productprice || !productSelected"
+              class="btn btn-pi-add w-100">إضافة للجدول</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- جدول البنود -->
+    <div class="pi-card pi-table-wrap pi-card-layer-table">
+      <div class="pi-card-header">بنود الفاتورة</div>
+      <div class="table-responsive">
         <table class="table pi-table mb-0">
           <thead>
             <tr>
@@ -177,158 +193,152 @@
               <th scope="col">الكمية</th>
               <th scope="col">السعر</th>
               <th scope="col">الإجمالي</th>
-              <th scope="col">خيارات</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
             <tr *ngIf="products.length === 0" class="pi-empty-row">
-              <td colspan="7" class="pi-table-empty-msg">لا توجد بنود بعد — أضف صنفاً من الأعلى ثم اضغط «إضافة للجدول»</td>
+              <td colspan="7" class="pi-table-empty-msg">لا توجد بنود — أضف صنفاً من الأعلى</td>
             </tr>
             <tr *ngFor="let item of products; let i = index">
-              <th scope="row">{{i+1}}</th>
-              <td>{{item.product_name}}</td>
-              <td>{{item.product_unit}}</td>
+              <th scope="row">{{ i + 1 }}</th>
+              <td>{{ item.product_name }}</td>
+              <td>{{ item.product_unit }}</td>
               <td dir="ltr" class="pi-qty-cell">
-                <span *ngIf="!invoiceId">
-                  {{item.product_quantity}}
-                </span>
-                <span *ngIf="invoiceId">
-                  <input min="1" class="form-control form-control-sm" type="number" [value]="item.product_quantity" (keyup)="changeQuantity($event , i)" (change)="changeQuantity($event , i)">
-                </span>
+                <span *ngIf="!invoiceId">{{ item.product_quantity }}</span>
+                <input *ngIf="invoiceId" min="1" class="form-control form-control-sm" type="number"
+                  [value]="item.product_quantity" (keyup)="changeQuantity($event, i)" (change)="changeQuantity($event, i)">
               </td>
-              <td>{{item.product_price | customNumber}}</td>
-              <td dir="ltr">{{item.total | customNumber}}</td>
-              <td><button type="button" (click)="reomveProduct(i)" class="btn-pi-remove" title="حذف السطر">حذف</button></td>
-              <!-- <td>{{item}}</td> -->
-              <!-- <td><i class="fa fa-trash" aria-hidden="true"></i></td> -->
+              <td>{{ item.product_price | customNumber }}</td>
+              <td dir="ltr">{{ item.total | customNumber }}</td>
+              <td>
+                <button type="button" (click)="reomveProduct(i)" class="btn-pi-remove" title="حذف">حذف</button>
+              </td>
             </tr>
           </tbody>
         </table>
-        </div>
-        </div>
+      </div>
     </div>
 
-        <div class="pi-card" *ngIf="paidamount > 0">
-          <div class="pi-card-body">
-        <div class="form-group row mb-0">
-          <div class="form-group col-md-3">
-            <label>طريقة الدفع</label>
-            <select id="payment_type" class="form-control" name="payment_type" [(ngModel)]="paymentType" (change)="paymentTypeChange()">
+    <!-- طريقة الدفع -->
+    <div class="pi-card" *ngIf="paidamount > 0">
+      <div class="pi-card-header">طريقة الدفع</div>
+      <div class="pi-card-body">
+        <div class="pi-field-grid">
+          <div class="form-group">
+            <label for="payment_type">طريقة الدفع</label>
+            <select id="payment_type" class="form-control" name="payment_type"
+              [(ngModel)]="paymentType" (change)="paymentTypeChange()">
               <option value="bank">بنك</option>
               <option value="safe">خزينة</option>
               <option value="service_account">حساب خدمي</option>
             </select>
           </div>
-          <div class="form-group col-md-3" *ngIf="paymentType === 'bank'">
-            <label>البنك</label>
+          <div class="form-group" *ngIf="paymentType === 'bank'">
+            <label for="bank">البنك</label>
             <select id="bank" class="form-control" name="bank" [(ngModel)]="bankId" #bank="ngModel">
               <option [ngValue]="null" disabled>اختر البنك</option>
-              <option *ngFor="let item of banks" [ngValue]="item.id">{{item.name}}</option>
+              <option *ngFor="let item of banks" [ngValue]="item.id">{{ item.name }}</option>
             </select>
           </div>
-          <div class="form-group col-md-3" *ngIf="paymentType === 'safe'">
-            <label>الخزينة</label>
+          <div class="form-group" *ngIf="paymentType === 'safe'">
+            <label for="safe">الخزينة</label>
             <select id="safe" class="form-control" name="safe_id" [(ngModel)]="safeId" #safe="ngModel">
               <option [ngValue]="null" disabled>اختر الخزينة</option>
-              <option *ngFor="let item of safes" [ngValue]="item.id">{{item.name}}</option>
+              <option *ngFor="let item of safes" [ngValue]="item.id">{{ item.name }}</option>
             </select>
           </div>
-          <div class="form-group col-md-3" *ngIf="paymentType === 'service_account'">
-            <label>الحساب الخدمي</label>
-            <select id="service_account" class="form-control" name="service_account_id" [(ngModel)]="serviceAccountId" #svc="ngModel">
-              <option [ngValue]="null" disabled>اختر الحساب الخدمي</option>
-              <option *ngFor="let item of serviceAccounts" [ngValue]="item.id">{{item.name}}</option>
+          <div class="form-group" *ngIf="paymentType === 'service_account'">
+            <label for="service_account">الحساب الخدمي</label>
+            <select id="service_account" class="form-control" name="service_account_id"
+              [(ngModel)]="serviceAccountId" #svc="ngModel">
+              <option [ngValue]="null" disabled>اختر الحساب</option>
+              <option *ngFor="let item of serviceAccounts" [ngValue]="item.id">{{ item.name }}</option>
             </select>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- الملخص المالي -->
+    <div class="pi-card">
+      <div class="pi-card-header">الملخص المالي</div>
+      <div class="pi-card-body">
+        <div class="pi-summary-grid">
+          <div class="form-group">
+            <label>{{ isLegacyPurchaseReturn() ? 'المبلغ المرتجع' : 'المبلغ المدفوع' }}</label>
+            <input type="number" name="paid" ngModel #paid="ngModel" class="form-control" required
+              placeholder="0" [(ngModel)]="paidamount" (change)="calc()" (keyup)="calc()"
+              min="0" max="{{ producttotal + transportcost }}" autocomplete="off">
+            <div *ngIf="paid.invalid && (paid.dirty || paid.touched)" class="form-text text-danger">
+              <div *ngIf="paid.errors?.['required'] && !isLegacyPurchaseReturn()">أدخل المبلغ المدفوع</div>
+              <div *ngIf="paid.errors?.['max'] && !isLegacyPurchaseReturn()">المبلغ أكبر من المطلوب</div>
+              <div *ngIf="paid.errors?.['min'] && !isLegacyPurchaseReturn()">المبلغ أقل من المطلوب</div>
+            </div>
           </div>
-        </div>
-        <div class="form-row pi-summary align-items-end">
-            <div class="form-group col-md-3">
-              <label for="">{{status === 'مرتجع' ? 'المبلغ المرتجع' : 'المبلغ المدفوع'}}</label>
-                <input
-                  type="number"
-                  name="paid"
-                  ngModel
-                  #paid="ngModel"
-                  class="form-control"
-                  required
-                  placeholder="المبلغ المدفوع"
-                  [(ngModel)]="paidamount"
-                  (change)="calc()"
-                  (keyup)="calc()"
-                  min="0"
-                  max="{{producttotal+transportcost}}"
-                  autocomplete="off"
-                  />
-
-                  <div
-                  *ngIf="paid.invalid && (paid.dirty || paid.touched)"
-                  class="form-text text-danger"
-                >
-                  <div *ngIf="paid.errors?.['required'] && status === 'تم الاستلام'">
-                    من فضلك ادخل المبلغ المدفوع
-                  </div>
-                  <div *ngIf="paid.errors?.['max']  && status === 'تم الاستلام'">
-                    المبلغ المدفوع اكبر من المبلغ المطلوب
-                  </div>
-                  <div *ngIf="paid.errors?.['min']  && status === 'تم الاستلام'">
-                    المبلغ المدفوع اقل من المبلغ المطلوب
-                  </div>
-                </div>
-
-                  </div>
-
-                  <div class="form-group col-md-3">
-                    <label for=""> مصاريف الشحن</label>
-                    <input
-                      type="number"
-                      step="any"
-                      name="transport"
-                      ngModel
-                      #transport="ngModel"
-                      class="form-control"
-                      required
-                      placeholder=" مصاريف الشحن"
-                      [(ngModel)]="transportcost"
-                      (change)="calc()"
-                      (keyup)="calc()"
-                      />
-                      </div>
-
-                      <div class="form-group col-md-3">
-                        <label for="">المتبقي</label>
-                        <p dir="ltr" class="pi-due" [innerHTML]="dueamount  | customNumber"></p>
-                      </div>
-
-        </div>
-
-        <div class="card mb-3 pi-cost-card">
-          <div class="card-header">تفكيك التكلفة (محاسبي)</div>
-          <div class="card-body row">
-            <div class="col-md-4">
-              <strong>تكلفة البضاعة (مخزون)</strong>
-              <p dir="ltr" class="mb-0">{{ producttotal | number:'1.2-2' }}</p>
-            </div>
-            <div class="col-md-4">
-              <strong>شحن التوريد (مصروف منفصل)</strong>
-              <p dir="ltr" class="mb-0">{{ transportcost | number:'1.2-2' }}</p>
-            </div>
-            <div class="col-md-4">
-              <strong>إجمالي الفاتورة</strong>
-              <p dir="ltr" class="mb-0">{{ totalInvice | number:'1.2-2' }}</p>
-            </div>
+          <div class="form-group">
+            <label>مصاريف الشحن</label>
+            <input type="number" step="any" name="transport" ngModel #transport="ngModel"
+              class="form-control" required placeholder="0" [(ngModel)]="transportcost"
+              (change)="calc()" (keyup)="calc()">
+          </div>
+          <div class="form-group">
+            <label>المتبقي</label>
+            <p dir="ltr" class="pi-due" [innerHTML]="dueamount | customNumber"></p>
           </div>
         </div>
 
+        <div class="pi-cost-row">
+          <div class="pi-cost-item">
+            <strong>تكلفة البضاعة</strong>
+            <p dir="ltr">{{ producttotal | number:'1.2-2' }}</p>
+          </div>
+          <div class="pi-cost-item">
+            <strong>شحن التوريد</strong>
+            <p dir="ltr">{{ transportcost | number:'1.2-2' }}</p>
+          </div>
+          <div class="pi-cost-item">
+            <strong>إجمالي الفاتورة</strong>
+            <p dir="ltr">{{ totalInvice | number:'1.2-2' }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
+    <div class="pi-card pi-card-layer-tracking" *ngIf="invoiceId && editTracking?.length">
+      <div class="pi-card-header">سجل التعديلات والملاحظات</div>
+      <div class="table-responsive">
+        <table class="table pi-table mb-0">
+          <thead>
+            <tr>
+              <th>الإجراء</th>
+              <th>التاريخ</th>
+              <th>المستخدم</th>
+              <th>ملاحظات التعديل</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of editTracking">
+              <td>{{ item?.action }}</td>
+              <td dir="ltr">{{ item?.created_at | date:'yyyy-MM-dd HH:mm' }}</td>
+              <td>{{ item?.user?.name || '—' }}</td>
+              <td class="pi-tracking-details">{{ item?.details || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-      <button type="submit" [disabled]="isSubmitting || !date || !suplierSelected || !dateSelected || products.length==0 || !status || !hasValidPaymentSource()"
+    <div class="pi-form-actions">
+      <p *ngIf="!canSubmitInvoice() && submitBlockedReason()" class="pi-submit-hint text-danger mb-2">
+        {{ submitBlockedReason() }}
+      </p>
+      <button type="submit"
+        [disabled]="!canSubmitInvoice()"
         class="btn btn-pi-submit">
-        <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true"></span>
+        <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm ms-1" role="status"></span>
         {{ isSubmitting ? 'جاري الحفظ...' : (!invoiceId ? 'حفظ الفاتورة' : 'تحديث الفاتورة') }}
       </button>
-    </form>
-
-</div>
+    </div>
+  </form>
 </div>

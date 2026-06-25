@@ -56,6 +56,18 @@ hr{
   unicode-bidi: embed;
 }
 
+.quote-ltr {
+  direction: ltr;
+  text-align: left;
+  min-width: 12rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.client-fields h4 {
+  margin-bottom: 0.5rem;
+  white-space: nowrap;
+}
+
 /* PDF-specific Arabic text handling */
 .pdf-arabic-fix {
   direction: rtl !important;
@@ -103,15 +115,20 @@ hr{
     color: black !important;
   }
 }
-.quote::placeholder{
-  color: white;
-  font-size: 1.3rem;
+.quote-ltr::placeholder {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 input[type="date"]{
   background-color: transparent;
   color: white;
   border: none;
+}
+
+.client-fields small,
+.bg-main h4 small {
+  opacity: 0.85;
+  font-size: 0.85em;
 }
 
 .section2 hr{

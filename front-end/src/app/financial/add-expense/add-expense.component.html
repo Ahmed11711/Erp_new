@@ -1,6 +1,6 @@
 <div class="expense-form-page container-fluid px-3 px-md-4">
   <div class="exp-page-head">
-    <h1 class="exp-title">اضافة مصروف</h1>
+    <h1 class="exp-title">{{ isEditMode ? 'تعديل مصروف' : 'اضافة مصروف' }}</h1>
     <div class="d-flex align-items-center">
       <app-time></app-time>
     </div>
@@ -169,13 +169,21 @@
       </div>
     </div>
 
-    <div class="alert alert-danger exp-alert" *ngIf="errormessage && !canSubmit">
+    <div class="alert alert-danger exp-alert" *ngIf="submitError">
+      {{ submitError }}
+    </div>
+
+    <div class="alert alert-danger exp-alert" *ngIf="errormessage && !canSubmit && !submitError">
       تحقق من الحقول ومن تطابق مجموع البنود مع المبلغ الإجمالي
+    </div>
+
+    <div class="alert alert-info exp-alert" *ngIf="loadingExpense">
+      جاري تحميل بيانات المصروف...
     </div>
 
     <div class="exp-actions">
       <button [disabled]="!canSubmit" type="submit" class="btn exp-btn-submit">
-        <i class="fa fa-check"></i> صرف
+        <i class="fa fa-check"></i> {{ isEditMode ? 'حفظ التعديل' : 'صرف' }}
       </button>
     </div>
 

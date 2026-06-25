@@ -1,8 +1,9 @@
 <div class="supplier-pay-dialog">
   <div class="supplier-pay-dialog__hero">
     <div class="supplier-pay-dialog__hero-text">
-      <h2 mat-dialog-title class="supplier-pay-dialog__title">سداد حساب المورد</h2>
+      <h2 mat-dialog-title class="supplier-pay-dialog__title">{{ data.dialogTitle || 'سداد حساب المورد' }}</h2>
       <p class="supplier-pay-dialog__supplier-name">{{ data.supplier.supplier_name }}</p>
+      <p class="supplier-pay-dialog__subtitle" *ngIf="data.subtitle">{{ data.subtitle }}</p>
     </div>
     <div class="supplier-pay-dialog__balance-wrap" dir="ltr">
       <span class="supplier-pay-dialog__balance-label">الرصيد</span>
@@ -11,7 +12,10 @@
   </div>
 
   <div class="supplier-pay-dialog__hint">
-    اختر نوع المصدر أولاً، ثم الحساب، ثم أدخل المبلغ.
+    {{ data.hint || 'اختر نوع المصدر أولاً، ثم الحساب، ثم أدخل المبلغ.' }}
+    <span *ngIf="data.maxAmount != null && data.maxAmount > 0" class="supplier-pay-dialog__due">
+      — المتبقي للسداد: {{ data.maxAmount | number:'1.2-2' }} ج
+    </span>
   </div>
 
   <div mat-dialog-content class="supplier-pay-dialog__content">
@@ -109,11 +113,12 @@
           id="amount_supplier"
           dir="ltr"
           type="number"
-          min="0"
+          min="0.01"
+          [max]="data.maxAmount != null && data.maxAmount > 0 ? data.maxAmount : null"
           step="0.01"
           name="amount"
           placeholder="0"
-          ngModel
+          [(ngModel)]="payAmount"
           #amount="ngModel"
           class="form-control supplier-pay-dialog__input-amount"
           required />
@@ -126,8 +131,8 @@
         <button
           type="submit"
           class="btn supplier-pay-dialog__btn-submit"
-          [disabled]="!canSubmit || amount.invalid || amount.value < 1">
-          تأكيد السداد
+          [disabled]="submitting || !canSubmit || amount.invalid || !payAmount || payAmount <= 0">
+          {{ submitting ? 'جاري السداد...' : 'تأكيد السداد' }}
         </button>
       </div>
     </form>

@@ -26,6 +26,7 @@ import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { EditOrderComponent } from './edit-order/edit-order.component';
 
 import {MatButtonModule} from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormField } from '@angular/material/form-field';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -40,6 +41,7 @@ import { CustomerCompanyDetailsComponent } from './customer-company-details/cust
 import { DialogNotificationNoteComponent } from './dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from './dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from './dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { DialogOrderRollbackComponent } from './dialog-order-rollback/dialog-order-rollback.component';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CustomerCompanyBalanceComponent } from './customer-company-balance/customer-company-balance.component';
 import { DialogCollectFromCustomerCompanyComponent } from './dialog-collect-from-customer-company/dialog-collect-from-customer-company.component';
@@ -77,6 +79,7 @@ import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review
     DialogNotificationNoteComponent,
     DialogOrderNotificationComponent,
     DialogCancelRefuseOrderComponent,
+    DialogOrderRollbackComponent,
     CustomerCompanyBalanceComponent,
     DialogCollectFromCustomerCompanyComponent,
     PrintInvoiceComponent,
@@ -110,6 +113,7 @@ import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review
     NgxPaginationModule,
     MatPaginatorModule,
     MatTooltipModule,
+    MatCheckboxModule,
     FullCalendarModule,
     WhatsAppModule
   ],

@@ -281,7 +281,19 @@ class FullCommerceCycleTest extends TestCase
         $collect->assertOk();
 
         $order->refresh();
-        $this->assertSame('تم التحصيل', $order->order_status);
+        $this->assertSame('تم شحن', $order->order_status, 'COD collected; collection-company receivable still open');
+
+        $paymobRow = shippingCompanyDetails::where('order_id', $orderId)
+            ->where('shipping_company_id', $paymob->id)
+            ->first();
+        $this->assertNotNull($paymobRow);
+        $this->assertSame(0, (int) $paymobRow->is_done, 'Collection-company line stays open until voucher settlement');
+
+        $bostaRow = shippingCompanyDetails::where('order_id', $orderId)
+            ->where('shipping_company_id', $bosta->id)
+            ->first();
+        $this->assertNotNull($bostaRow);
+        $this->assertSame(1, (int) $bostaRow->is_done, 'Shipping COD line should be collected');
 
         $entries = AccountEntry::where('order_id', $orderId)->get();
         if ($entries->isNotEmpty()) {

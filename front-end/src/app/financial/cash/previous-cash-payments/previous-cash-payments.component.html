@@ -1,0 +1,174 @@
+<div class="prev-payments container-fluid" dir="rtl">
+
+  <!-- Header -->
+  <header class="prev-payments__header">
+    <h1 class="prev-payments__title">الدفعات السابقة</h1>
+    <p class="prev-payments__subtitle">عرض وتصفية جميع سندات القبض والصرف والمصروفات — عملاء، موردين، شركات شحن، ومصروفات</p>
+  </header>
+
+  <!-- Party Filter Chips -->
+  <div class="prev-payments__chips">
+    <button
+      *ngFor="let f of partyFilters"
+      class="chip"
+      [class.chip--active]="filters.partyFilter === f.key"
+      (click)="setPartyFilter(f.key)"
+    >
+      <i [class]="f.icon"></i>
+      <span>{{ f.label }}</span>
+    </button>
+  </div>
+
+  <!-- Toolbar: Search + Date + Type -->
+  <div class="prev-payments__toolbar">
+    <div class="toolbar__search">
+      <i class="fas fa-search toolbar__search-icon"></i>
+      <input
+        type="text"
+        class="toolbar__search-input"
+        placeholder="بحث بالاسم أو رقم المرجع أو البيان ..."
+        [ngModel]="filters.search"
+        (ngModelChange)="onSearchInput($event)"
+      />
+    </div>
+
+    <div class="toolbar__dates">
+      <div class="toolbar__date-field">
+        <label>من</label>
+        <input type="date" [(ngModel)]="filters.dateFrom" (change)="onDateChange()" />
+      </div>
+      <div class="toolbar__date-field">
+        <label>إلى</label>
+        <input type="date" [(ngModel)]="filters.dateTo" (change)="onDateChange()" />
+      </div>
+      <button
+        class="toolbar__clear-dates"
+        *ngIf="filters.dateFrom || filters.dateTo"
+        (click)="clearDates()"
+        title="مسح التواريخ"
+      >
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="toolbar__type-toggle" *ngIf="showTypeFilter">
+      <button
+        *ngFor="let t of typeFilters"
+        class="type-btn"
+        [class.type-btn--active]="filters.typeFilter === t.key"
+        (click)="setTypeFilter(t.key)"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Results Count -->
+  <div class="prev-payments__meta" *ngIf="!loading">
+    <span>إجمالي النتائج: <strong>{{ totalRecords }}</strong></span>
+  </div>
+
+  <!-- Loading -->
+  <div class="prev-payments__loading" *ngIf="loading">
+    <div class="spinner"></div>
+    <span>جاري التحميل ...</span>
+  </div>
+
+  <!-- Table -->
+  <div class="prev-payments__table-wrap" *ngIf="!loading">
+    <table class="prev-table">
+      <thead>
+        <tr>
+          <th class="col-id">#</th>
+          <th>التاريخ</th>
+          <th>النوع</th>
+          <th>الطرف / البيان</th>
+          <th>التصنيف</th>
+          <th class="col-amount">المبلغ</th>
+          <th>الحساب</th>
+          <th>رقم المرجع</th>
+          <th>الملاحظات</th>
+          <th>بواسطة</th>
+          <th *ngIf="canEditCash" class="col-actions">إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows">
+          <td class="col-id">
+            <a *ngIf="row.expenseDetailUrl" [routerLink]="row.expenseDetailUrl" class="row-link">{{ row.id }}</a>
+            <span *ngIf="!row.expenseDetailUrl">{{ row.id }}</span>
+          </td>
+          <td class="col-date">{{ row.date }}</td>
+          <td>
+            <span class="badge" [ngClass]="getVoucherTypeClass(row.type)">
+              {{ getVoucherTypeLabel(row.type) }}
+            </span>
+          </td>
+          <td class="col-party">{{ row.partyName }}</td>
+          <td>
+            <span class="badge" [ngClass]="getPartyBadgeClass(row.partyType)">
+              {{ getPartyTypeLabel(row.partyType) }}
+            </span>
+          </td>
+          <td class="col-amount">{{ row.amount | number:'1.2-2' }}</td>
+          <td>{{ row.accountName }}</td>
+          <td>{{ row.reference }}</td>
+          <td class="col-notes">{{ row.notes }}</td>
+          <td>{{ row.userName }}</td>
+          <td *ngIf="canEditCash" class="col-actions">
+            <button
+              *ngIf="row.source === 'voucher'"
+              type="button"
+              class="row-edit-btn"
+              title="تعديل السند"
+              (click)="editVoucher(row)"
+            >
+              <i class="fas fa-edit"></i>
+              تعديل
+            </button>
+            <a
+              *ngIf="row.source === 'expense'"
+              class="row-edit-btn row-edit-btn--link"
+              [routerLink]="expenseEditUrl(row)"
+              title="تعديل المصروف"
+            >
+              <i class="fas fa-edit"></i>
+              تعديل
+            </a>
+          </td>
+        </tr>
+        <tr *ngIf="rows.length === 0">
+          <td [attr.colspan]="canEditCash ? 11 : 10" class="prev-table__empty">
+            <i class="fas fa-inbox"></i>
+            <span>لا توجد نتائج مطابقة</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <nav class="prev-payments__pagination" *ngIf="!loading && totalPages > 1">
+    <button class="page-btn" [disabled]="currentPage <= 1" (click)="goToPage(1)">
+      <i class="fas fa-angle-double-right"></i>
+    </button>
+    <button class="page-btn" [disabled]="currentPage <= 1" (click)="goToPage(currentPage - 1)">
+      <i class="fas fa-angle-right"></i>
+    </button>
+    <button
+      *ngFor="let p of paginationPages"
+      class="page-btn"
+      [class.page-btn--active]="p === currentPage"
+      (click)="goToPage(p)"
+    >
+      {{ p }}
+    </button>
+    <button class="page-btn" [disabled]="currentPage >= totalPages" (click)="goToPage(currentPage + 1)">
+      <i class="fas fa-angle-left"></i>
+    </button>
+    <button class="page-btn" [disabled]="currentPage >= totalPages" (click)="goToPage(totalPages)">
+      <i class="fas fa-angle-double-left"></i>
+    </button>
+  </nav>
+
+</div>

@@ -66,4 +66,12 @@ export class BankService {
     updateDirectTransaction(id: number, data: any): Observable<any> {
         return this.http.put<any>(`${this.apiUrl}/direct-transactions/${id}`, data);
     }
+
+    getAssignedUsers(bankId: number): Observable<any> {
+        return this.http.get<any>(`${this.apiUrl}/${bankId}/users`);
+    }
+
+    syncAssignedUsers(bankId: number, userIds: number[]): Observable<any> {
+        return this.http.put<any>(`${this.apiUrl}/${bankId}/users`, { user_ids: userIds });
+    }
 }

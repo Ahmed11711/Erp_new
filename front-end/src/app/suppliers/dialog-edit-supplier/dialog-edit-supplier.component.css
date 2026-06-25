@@ -1,0 +1,23 @@
+.supplier-edit-dialog__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.supplier-edit-dialog__content {
+  min-width: min(420px, 95vw);
+  padding-top: 0.5rem;
+}
+
+.supplier-edit-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.clr {
+  background-color: #82225e !important;
+  border-color: #82225e !important;
+}

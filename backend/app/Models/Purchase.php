@@ -21,6 +21,7 @@ class Purchase extends Model
         'printable_status',
         'notes',
         'supplier_id',
+        'shipping_company_id',
         'supplierpay_id',
         'invoice_type',
         'receipt_date',
@@ -44,6 +45,11 @@ class Purchase extends Model
 
     public function supplier(){
         return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function shippingCompany()
+    {
+        return $this->belongsTo(ShippingCompany::class, 'shipping_company_id');
     }
 
     public function tracking(){
@@ -75,5 +81,15 @@ class Purchase extends Model
     {
         return $this->hasOne(StockTransaction::class, 'reference_id')
             ->where('reference_type', 'purchase');
+    }
+
+    /**
+     * فواتير غير محذوفة (status = 1 تعني إلغاء/حذف منطقي).
+     */
+    public function scopeNotDeleted($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('status')->orWhere('status', '!=', '1');
+        });
     }
 }

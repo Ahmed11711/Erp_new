@@ -252,4 +252,121 @@ export class CollectionCompaniesComponent implements OnInit {
       });
     });
   }
+
+  // --- Reconciliation ---
+  reconcilePanel = false;
+  reconcileCompanyId: number | null = null;
+  reconcileCompanyName = '';
+  reconcileDateFrom = '';
+  reconcileDateTo = '';
+  reconcileLoading = false;
+  reconcileRunning = false;
+  reconcileOrderCount: number | null = null;
+  reconcileOrders: any[] = [];
+  reconcileResult: any = null;
+
+  openReconcilePanel(company: any): void {
+    this.reconcilePanel = true;
+    this.reconcileCompanyId = company.id;
+    this.reconcileCompanyName = company.name;
+    this.reconcileDateFrom = '';
+    this.reconcileDateTo = '';
+    this.reconcileOrderCount = null;
+    this.reconcileOrders = [];
+    this.reconcileResult = null;
+    this.reconcileLoading = false;
+    this.reconcileRunning = false;
+    setTimeout(() => {
+      document.querySelector('.reconcile-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
+
+  closeReconcilePanel(): void {
+    this.reconcilePanel = false;
+    this.reconcileCompanyId = null;
+  }
+
+  onReconcileDateChange(): void {
+    this.reconcileOrderCount = null;
+    this.reconcileOrders = [];
+    this.reconcileResult = null;
+  }
+
+  loadReconcileOrders(): void {
+    if (!this.reconcileCompanyId || !this.reconcileDateFrom || !this.reconcileDateTo) return;
+    this.reconcileLoading = true;
+    this.reconcileResult = null;
+
+    this.api.reconcileOrders(this.reconcileCompanyId, this.reconcileDateFrom, this.reconcileDateTo).subscribe({
+      next: (res: any) => {
+        this.reconcileLoading = false;
+        const orders = res?.orders || [];
+        this.reconcileOrders = orders.map((o: any) => ({ ...o, selected: true }));
+        this.reconcileOrderCount = orders.length;
+      },
+      error: (err: any) => {
+        this.reconcileLoading = false;
+        Swal.fire('خطأ', err?.error?.message || 'فشل تحميل الطلبات', 'error');
+      },
+    });
+  }
+
+  selectAllReconcileOrders(): void {
+    this.reconcileOrders.forEach(o => o.selected = true);
+  }
+
+  deselectAllReconcileOrders(): void {
+    this.reconcileOrders.forEach(o => o.selected = false);
+  }
+
+  selectedReconcileCount(): number {
+    return this.reconcileOrders.filter(o => o.selected).length;
+  }
+
+  executeReconcile(): void {
+    if (!this.reconcileCompanyId || !this.reconcileDateFrom || !this.reconcileDateTo) return;
+
+    const selectedIds = this.reconcileOrders.filter(o => o.selected).map(o => o.id);
+    const allSelected = selectedIds.length === this.reconcileOrders.length;
+    const orderIds = allSelected ? undefined : selectedIds;
+
+    const count = allSelected ? this.reconcileOrders.length : selectedIds.length;
+    if (count === 0 && this.reconcileOrders.length > 0) {
+      Swal.fire('تنبيه', 'اختر طلبات أولاً', 'warning');
+      return;
+    }
+
+    Swal.fire({
+      title: 'إعادة حساب المديونيات',
+      text: `سيتم إعادة حساب مديونيات «${this.reconcileCompanyName}» لعدد ${count || 'جميع'} طلب. المتابعة؟`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'متابعة',
+      cancelButtonText: 'إلغاء',
+    }).then((r) => {
+      if (!r.isConfirmed) return;
+
+      this.reconcileRunning = true;
+      this.reconcileResult = null;
+
+      this.api.reconcileReceivables(
+        this.reconcileCompanyId!,
+        this.reconcileDateFrom,
+        this.reconcileDateTo,
+        orderIds
+      ).subscribe({
+        next: (res: any) => {
+          this.reconcileRunning = false;
+          this.reconcileResult = res;
+          if (res?.success) {
+            this.load();
+          }
+        },
+        error: (err: any) => {
+          this.reconcileRunning = false;
+          this.reconcileResult = { success: false, message: err?.error?.message || 'فشلت العملية' };
+        },
+      });
+    });
+  }
 }

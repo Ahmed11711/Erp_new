@@ -13,6 +13,8 @@ class OffersController extends Controller
     private const OFFER_ATTRIBUTES = [
         'offer',
         'quote',
+        'contact_person',
+        'client_phone',
         'dateFrom',
         'dateTo',
         'subtotal',
@@ -90,6 +92,16 @@ class OffersController extends Controller
         ]);
 
         $payload = $request->only(self::OFFER_ATTRIBUTES);
+
+        foreach (['contact_person', 'client_phone'] as $optionalField) {
+            if (array_key_exists($optionalField, $payload) && trim((string) $payload[$optionalField]) === '') {
+                $payload[$optionalField] = null;
+            }
+        }
+
+        if (array_key_exists('quote', $payload) && trim((string) $payload['quote']) === '') {
+            $payload['quote'] = '';
+        }
 
         if ($request->has('id')) {
             $data = Offers::findOrFail($request->id);

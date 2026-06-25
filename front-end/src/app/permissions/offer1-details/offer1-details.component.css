@@ -91,6 +91,11 @@ h3{
 h4{
   font-family:'Montserrat SemiBold' !important;
 }
+
+.quote-client-info h4 {
+  font-size: 0.85rem !important;
+  line-height: 1.35;
+}
 .bank{
   margin: 0 !important;
   border: none !important;

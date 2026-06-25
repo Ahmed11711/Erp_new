@@ -24,9 +24,36 @@
      (click)="openInventoryGlSync()" [disabled]="syncingInventoryGl">
      {{ syncingInventoryGl ? 'جاري…' : 'تسوية المخزون في الحسابات' }}
     </button>
-    <span (click)="exportTableToExcel()" class="bg-main p-1" style="cursor: pointer; border-radius: 5px;">
-     <!-- SVG هنا -->
-    </span>
+    <!-- <button type="button" class="btn btn-outline-danger btn-sm"
+     *ngIf="user == 'Admin'"
+     (click)="openDuplicateManager()">
+     معالجة الأصناف المكررة
+    </button>
+    <button type="button" class="btn btn-primary btn-sm"
+     *ngIf="selectedCount > 0"
+     (click)="mergeSelected()">
+     دمج المحدد ({{ selectedCount }}) في صنف واحد
+    </button> -->
+    <button type="button" class="btn btn-danger btn-sm"
+     *ngIf="user == 'Admin' && selectedCount > 0"
+     (click)="forceDeleteSelected()">
+     حذف المحدد ({{ selectedCount }}) نهائياً
+    </button>
+    <button type="button" class="btn btn-outline-danger btn-sm"
+     *ngIf="user == 'Admin'"
+     (click)="forceDeleteWarehouse()">
+     حذف كل أصناف المخزن
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm"
+     *ngIf="selectedCount > 0"
+     (click)="clearSelection()">
+     إلغاء التحديد
+    </button>
+    <button type="button" class="btn btn-outline-success btn-sm"
+     (click)="exportItemsToExcel()" [disabled]="exportingExcel">
+     <i class="fa-solid fa-file-excel me-1"></i>
+     {{ exportingExcel ? 'جاري التصدير…' : 'تصدير Excel' }}
+    </button>
    </div>
   </div>
  </div>
@@ -68,6 +95,10 @@
     <table class="table table-bordered table-hover" id="capture">
      <thead class="thead-dark">
       <tr>
+       <th>
+        <input type="checkbox" [checked]="allDisplayedSelected" (change)="toggleSelectAll($event)"
+         title="تحديد كل الأصناف المعروضة">
+       </th>
        <th>#</th>
        <th>اسم الصنف</th>
        <th>كود الصنف</th>
@@ -84,6 +115,10 @@
      </thead>
      <tbody>
       <tr *ngFor="let item of categories; let i = index">
+       <td>
+        <input type="checkbox" *ngIf="canShowRowActions(item)" [checked]="isSelected(item)"
+         (change)="toggleSelection(item, $event)">
+       </td>
        <th>{{ i + 1 }}</th>
        <td>{{ item.category_name }}</td>
        <td dir="ltr">{{ item.item_code || '—' }}</td>
@@ -115,15 +150,10 @@
        </td>
 
        <td>
-        <ng-container
-         *ngIf="user == 'Admin' || (user =='Data Entry' && item.warehouse == 'مخزن منتج تام') || ((user =='Account Management' || user == 'Logistics Specialist') && item.warehouse != 'مخزن منتج تام')">
-         <ng-container *ngIf="['مخزن مواد خام', 'مخزن منتج تحت التشغيل', 'مخزن منتج تام'].includes(item.warehouse)">
-          <button class="btn" mat-icon-button [matMenuTriggerFor]="categoryActionsMenu"
-           [matMenuTriggerData]="{ item: item }" aria-label="menu">
-           <mat-icon>more_vert</mat-icon>
-          </button>
-         </ng-container>
-        </ng-container>
+        <button *ngIf="canShowRowActions(item)" class="btn" mat-icon-button
+         [matMenuTriggerFor]="categoryActionsMenu" [matMenuTriggerData]="{ item: item }" aria-label="menu">
+         <mat-icon>more_vert</mat-icon>
+        </button>
        </td>
       </tr>
      </tbody>
@@ -145,8 +175,14 @@
      <!-- <button mat-menu-item type="button" *ngIf="item.warehouse === 'مخزن منتج تحت التشغيل'" (click)="promoteToFinished(item)">
       <span>ترقية لمنتج تام</span>
      </button> -->
+     <!-- <button mat-menu-item type="button" (click)="mergeIntoAnother(item)">
+      <span>دمج في صنف آخر</span>
+     </button> -->
      <button mat-menu-item type="button" (click)="deleteCategory(item.id)">
       <span>حذف</span>
+     </button>
+     <button mat-menu-item type="button" *ngIf="user == 'Admin'" (click)="forceDeleteSingle(item)">
+      <span class="text-danger">حذف قسري (مع كل الارتباطات)</span>
      </button>
     </ng-template>
    </mat-menu>

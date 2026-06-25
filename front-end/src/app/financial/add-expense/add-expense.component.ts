@@ -3,7 +3,7 @@ import { FormGroup, FormControl, Validators, FormArray } from '@angular/forms';
 import { ExpenseKindService } from '../services/expense-kind.service';
 import { ExpenseService } from '../services/expense.service';
 import { PaymentSourcesService } from 'src/app/accounting/services/payment-sources.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
   selector: 'app-add-expense',
@@ -13,6 +13,7 @@ import { Router } from '@angular/router';
 export class AddExpenseComponent implements OnInit{
 
   errormessage:boolean=false;
+  submitError = '';
   safesData:any[]=[];
   banksData:any[]=[];
   serviceAccountsData:any[]=[];
@@ -22,12 +23,16 @@ export class AddExpenseComponent implements OnInit{
   maxDate!: string;
   time!:string;
   paymentType: 'safe' | 'bank' | 'service_account' = 'safe';
+  isEditMode = false;
+  expenseId: number | null = null;
+  loadingExpense = false;
 
   constructor(
     private expenseKindService: ExpenseKindService,
     private paymentSourcesService: PaymentSourcesService,
     private expenseService: ExpenseService,
-    private route: Router
+    private route: Router,
+    private activatedRoute: ActivatedRoute,
   ){
     const today = new Date();
     const threeDaysBefore = new Date(today);
@@ -47,21 +52,106 @@ export class AddExpenseComponent implements OnInit{
   }
 
   ngOnInit(): void {
+    const idParam = this.activatedRoute.snapshot.paramMap.get('id');
+    this.isEditMode = !!idParam;
+    this.expenseId = idParam ? Number(idParam) : null;
+
     this.form.patchValue({
       payment_type: 'safe',
       created_at: this.dateFrom,
     });
     this.paymentType = 'safe';
-    this.addSplitLine();
+
+    if (!this.isEditMode) {
+      this.addSplitLine();
+    }
 
     this.expenseKindService.data().subscribe((result) => {
       this.allExpenseKinds = Array.isArray(result) ? result : [];
     });
+
     this.paymentSourcesService.getPaymentSources().subscribe((res: any) => {
       this.safesData = res.safes || [];
       this.banksData = res.banks || [];
       this.serviceAccountsData = res.service_accounts || [];
+
+      if (this.isEditMode && this.expenseId) {
+        this.loadExpenseForEdit(this.expenseId);
+      }
     });
+  }
+
+  private loadExpenseForEdit(id: number): void {
+    this.loadingExpense = true;
+    this.expenseService.getByID(id).subscribe({
+      next: (res) => {
+        this.loadingExpense = false;
+        if (!res || Number(res.status) === 1 || Number(res.amount) < 0) {
+          this.route.navigate(['/dashboard/financial/expenses']);
+          return;
+        }
+
+        const pt = this.resolvePaymentType(res);
+        this.paymentType = pt;
+
+        let createdDate = this.dateFrom;
+        if (res.created_at) {
+          const raw = String(res.created_at);
+          createdDate = raw.includes('T') ? raw.slice(0, 10) : raw.slice(0, 10);
+        }
+        if (createdDate < this.minDate) {
+          this.minDate = createdDate;
+        }
+
+        this.form.patchValue({
+          payment_type: pt,
+          safe_id: res.safe_id ?? null,
+          bank_id: res.bank_id ?? null,
+          service_account_id: res.service_account_id ?? null,
+          expens_statement: res.expens_statement,
+          amount: res.amount,
+          note: res.note,
+          created_at: createdDate,
+        });
+
+        while (this.splitLines.length) {
+          this.splitLines.removeAt(0);
+        }
+
+        const sourceLines = Array.isArray(res.lines) && res.lines.length > 0
+          ? res.lines
+          : [{
+              expense_type: res.expense_type,
+              kind_id: res.kind_id,
+              amount: res.amount,
+            }];
+
+        for (const line of sourceLines) {
+          this.splitLines.push(new FormGroup({
+            expense_type: new FormControl(line.expense_type, Validators.required),
+            kind_id: new FormControl(Number(line.kind_id), Validators.required),
+            amount: new FormControl(Number(line.amount), [Validators.required, Validators.min(0.01)]),
+          }));
+        }
+      },
+      error: () => {
+        this.loadingExpense = false;
+        this.route.navigate(['/dashboard/financial/expenses']);
+      },
+    });
+  }
+
+  private resolvePaymentType(row: any): 'safe' | 'bank' | 'service_account' {
+    if (row?.payment_type === 'safe' || row?.payment_type === 'bank' || row?.payment_type === 'service_account') {
+      return row.payment_type;
+    }
+    if (row?.safe_id) {
+      return 'safe';
+    }
+    if (row?.service_account_id) {
+      return 'service_account';
+    }
+    return 'bank';
   }
 
   get splitLines(): FormArray {
@@ -167,21 +257,15 @@ export class AddExpenseComponent implements OnInit{
   }
 
   get canSubmit(): boolean {
-    return this.isSourceSelected
+    return !this.loadingExpense
+      && this.isSourceSelected
       && this.form.valid
       && this.splitLinesValid
       && !this.amountMismatch
       && this.linesTotal > 0;
   }
 
-  submitform(){
-    if (!this.canSubmit) {
-      this.errormessage = true;
-      this.form.markAllAsTouched();
-      this.splitLines.markAllAsTouched();
-      return;
-    }
-
+  private buildFormData(): FormData {
     const data = this.form.value;
     const lines = (data.lines || []).map((row: any) => ({
       expense_type: row.expense_type,
@@ -210,10 +294,33 @@ export class AddExpenseComponent implements OnInit{
       formData.append('expense_image', this.selectedFile, this.selectedFile.name);
     }
 
-    this.expenseService.add(formData).subscribe(result=>{
-      if (result) {
-        this.route.navigate(['/dashboard/financial/expenses']);
-      }
+    return formData;
+  }
+
+  submitform(){
+    if (!this.canSubmit) {
+      this.errormessage = true;
+      this.form.markAllAsTouched();
+      this.splitLines.markAllAsTouched();
+      return;
+    }
+
+    this.submitError = '';
+    const formData = this.buildFormData();
+    const request$ = this.isEditMode && this.expenseId
+      ? this.expenseService.edit(this.expenseId, formData)
+      : this.expenseService.add(formData);
+
+    request$.subscribe({
+      next: (result) => {
+        if (result) {
+          this.route.navigate(['/dashboard/financial/expenses']);
+        }
+      },
+      error: (err) => {
+        this.submitError = err?.error?.message || 'تعذر حفظ المصروف';
+        this.errormessage = true;
+      },
     });
   }
 }

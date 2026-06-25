@@ -221,12 +221,17 @@
          <button mat-menu-item *ngIf="item.order_status=='تم الاستلام'" (click)="maintain(item.id)">
           <span>  تم الصيانة</span>
         </button>
-        <button mat-menu-item *ngIf="item.order_status=='تم شحن'" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
+        <button mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم' || item.order_status=='شحن جزئي') && (item.order_type !='طلب صيانة' || item.order_details?.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
           <span> تحصيل الطلب</span>
         </button>
-        <button mat-menu-item *ngIf="item.order_status=='تم شحن'" (click)="changeOrderStatus(item.customer_type,item.id,'سبب الرفض','refused')">
-          <span> رفض استلام</span>
-        </button>
+        <ng-container *ngIf="canRefuseOrderMenu()">
+          <button mat-menu-item *ngIf="canRefuseOrder(item) && isIndividualCustomer(item)" (click)="refuseOrder(item.customer_type,item.id)">
+            <span> رفض استلام</span>
+          </button>
+          <button mat-menu-item *ngIf="canRefuseOrder(item) && isCompanyCustomer(item)" (click)="changeOrderStatus(item.customer_type,item.id,'رفض استلام','refused',item)">
+            <span> رفض استلام</span>
+          </button>
+        </ng-container>
         <button mat-menu-item *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' " (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel')">
         <span>الغاء الطلب</span>
         </button>

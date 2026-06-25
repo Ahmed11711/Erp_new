@@ -12,7 +12,18 @@ import { ShippingLinesService } from '../services/shipping-lines.service';
 import { ShippingWayService } from '../services/shipping-way.service';
 import { ActivatedRoute } from '@angular/router';
 import { BanksService } from 'src/app/financial/services/banks.service';
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { CollectionCompanyService } from '../services/collection-company.service';
 import { collectRenewPrepaidParams } from '../utils/order-renew-prepaid.flow';
+import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import {
+  isCompanyCustomerType,
+  isIndividualCustomerType,
+  isRefuseEligibleOrderStatus,
+} from '../utils/order-refuse.utils';
 
 @Component({
   selector: 'app-customer-company-details',
@@ -40,18 +51,35 @@ export class CustomerCompanyDetailsComponent {
 
   company_id!:number;
   banks: { id: number; name: string }[] = [];
+  safes: { id: number; name: string }[] = [];
+  serviceAccounts: { id: number; name: string }[] = [];
+  collectionCompanies: { id: number; name: string }[] = [];
+  user!: string;
 
     constructor(private orderSource:OrderSourceService ,private shippingWay: ShippingWayService , private datePipe:DatePipe,
       private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
       private filterService:FilterOrderService , private shippingLine:ShippingLinesService, private route:ActivatedRoute,
-      private bankService: BanksService
+      private bankService: BanksService, private safeService: SafeService,
+      private serviceAccountsService: ServiceAccountsService,
+      private collectionCompanyService: CollectionCompanyService,
+      private authService: AuthService, private rbac: RbacService,
       ) {
 
     }
 
     ngOnInit(): void {
+      this.user = this.authService.getUser();
       this.company_id = this.route.snapshot.params['id'];
       this.bankService.bankSelect().subscribe((res: any) => (this.banks = res || []));
+      this.safeService.getAll().subscribe((res: any) => {
+        this.safes = res?.data ?? res ?? [];
+      });
+      this.serviceAccountsService.index().subscribe((res: any) => {
+        this.serviceAccounts = res ?? [];
+      });
+      this.collectionCompanyService.select().subscribe((res: any) => {
+        this.collectionCompanies = res ?? [];
+      });
       console.log(this.company_id);
 
       this.filter(arguments);
@@ -214,6 +242,40 @@ export class CustomerCompanyDetailsComponent {
     }
   }
 
+  canRefuseOrderMenu(): boolean {
+    const allowed = new Set([
+      'Admin',
+      'Shipping Management',
+      'Operation Management',
+      'Finance and operations management',
+      'Operation Specialist',
+      'Logistics Specialist',
+      'Data Entry',
+      'Review Management',
+    ]);
+    return allowed.has(this.user) || this.rbac.can('orders.change_status');
+  }
+
+  canRefuseOrder(item: any): boolean {
+    return isRefuseEligibleOrderStatus(item?.order_status);
+  }
+
+  isCompanyCustomer(item: any): boolean {
+    return isCompanyCustomerType(item?.customer_type);
+  }
+
+  isIndividualCustomer(item: any): boolean {
+    return isIndividualCustomerType(item?.customer_type);
+  }
+
+  refuseOrder(type: string, id: number): void {
+    const dialogRef = this.dialog.open(DialogCancelRefuseOrderComponent, {
+      width: '25%',
+      data: { data: { id, action: 'refused', type }, refreshData: () => this.filter(arguments) },
+    });
+    dialogRef.afterClosed().subscribe(() => {});
+  }
+
 
   changeOrderStatus(type:string,id:number,title:string,action:string, orderItem?: any){
     if (type =='شركة' && (action=='cancel' || action=='refused')) {
@@ -262,7 +324,12 @@ export class CustomerCompanyDetailsComponent {
             const runChange = async () => {
               const param: Record<string, string | number> = {};
               if (action === 'renew' && orderItem) {
-                const renewParams = await collectRenewPrepaidParams(orderItem, this.banks);
+                const renewParams = await collectRenewPrepaidParams(orderItem, {
+                  banks: this.banks,
+                  safes: this.safes,
+                  serviceAccounts: this.serviceAccounts,
+                  collectionCompanies: this.collectionCompanies,
+                });
                 if (renewParams === null) {
                   return;
                 }

@@ -113,7 +113,7 @@
 
     <div class="row">
       <div class="col-md-3">
-        <select id="inputState" class="form-control" [(ngModel)]="status">
+        <select id="inputState" class="form-control" [(ngModel)]="status" (change)="onStatusChange()">
           <option>تم الانتهاء</option>
           <option>في التصنيع</option>
         </select>
@@ -152,8 +152,180 @@
   </div>
 
 
+  <div class="container-fluid mt-4 mb-4" *ngIf="product_id">
+    <div class="consumption-panel w-75 m-auto">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+        <div>
+          <h5 class="mb-1">مواد الخام المطلوب خصمها</h5>
+          <small class="text-muted" *ngIf="consumptionApplies">
+            يمكنك تعديل الكمية أو استبدال المادة، ثم حفظ التعديل على الوصفة الأصلية أو استخدامه لهذا الأمر فقط.
+          </small>
+        </div>
+        <div class="consumption-actions" *ngIf="consumptionApplies && consumptionLines.length">
+          <button
+            type="button"
+            class="btn btn-sm consumption-save-recipe-btn"
+            *ngIf="hasCustomizedConsumption"
+            [disabled]="updatingRecipe || consumptionPreviewPending"
+            (click)="saveRecipeFromConsumption()"
+          >
+            {{ updatingRecipe ? 'جاري الحفظ…' : 'حفظ على الوصفة' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-light consumption-reset-btn"
+            (click)="resetAllConsumptionLines()"
+          >
+            إعادة الكميات الافتراضية
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="consumptionPreviewPending" class="text-muted py-3">جاري حساب المواد…</div>
+      <div *ngIf="consumptionPreviewError" class="alert alert-danger">{{ consumptionPreviewError }}</div>
+
+      <div *ngIf="!consumptionPreviewPending && consumptionMessage && !consumptionApplies" class="alert alert-info">
+        {{ consumptionMessage }}
+      </div>
+
+      <div *ngIf="consumptionApplies && !consumptionPreviewPending" class="table-responsive">
+        <table class="table table-bordered consumption-table mb-2">
+          <thead>
+            <tr>
+              <th>المادة</th>
+              <th>استبدال بـ</th>
+              <th>المخزن</th>
+              <th>لكل وحدة</th>
+              <th>الافتراضي</th>
+              <th>الكمية المخصومة</th>
+              <th>المتاح</th>
+              <th>تكلفة الوحدة</th>
+              <th>الإجمالي</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let line of consumptionLines"
+              [class.table-warning]="!line.sufficient"
+              [class.table-info]="line.is_customized && line.sufficient"
+              [class.table-primary]="line.is_substituted && line.sufficient"
+            >
+              <td class="text-right consumption-material-cell">
+                <div>{{ line.item_name }}</div>
+                <small class="text-muted d-block" *ngIf="line.is_substituted && line.default_item_name">
+                  بديل عن: {{ line.default_item_name }}
+                </small>
+              </td>
+              <td class="consumption-substitute-cell">
+                <ng-autocomplete
+                  [data]="substituteMaterialOptions"
+                  [searchKeyword]="catwordSubstitute"
+                  placeholder="ابحث عن بديل…"
+                  (selected)="onSubstituteMaterial(line, $event)"
+                  [itemTemplate]="substituteItemTpl"
+                  [notFoundTemplate]="substituteNotFoundTpl"
+                >
+                </ng-autocomplete>
+              </td>
+              <td>{{ line.warehouse }}</td>
+              <td>{{ line.bom_unit_qty }}</td>
+              <td>{{ line.default_quantity }}</td>
+              <td style="min-width: 110px;">
+                <input
+                  type="number"
+                  class="form-control form-control-sm consumption-qty-input"
+                  min="0"
+                  step="any"
+                  [value]="line.quantity"
+                  (input)="onConsumptionQtyChange(line, $any($event.target).value)"
+                />
+              </td>
+              <td [class.text-danger]="!line.sufficient">{{ line.available_quantity }}</td>
+              <td>{{ line.unit_cost }}</td>
+              <td>{{ line.line_cost }}</td>
+              <td>
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm p-0"
+                  *ngIf="line.is_customized"
+                  (click)="resetConsumptionLine(line)"
+                  title="إعادة للوصفة الافتراضية"
+                >
+                  ↺
+                </button>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="font-weight-bold">
+              <td colspan="8" class="text-left">إجمالي تكلفة المواد الخام</td>
+              <td colspan="2">{{ consumptionTotalCost }}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div
+          class="consumption-cost-compare"
+          *ngIf="hasCustomizedConsumption && consumptionTotalCost > 0"
+        >
+          <div class="consumption-cost-compare__row">
+            <span>تكلفة الوصفة المحفوظة (× {{ quantity }}):</span>
+            <strong>{{ recipeBasedTotal }}</strong>
+          </div>
+          <div class="consumption-cost-compare__row">
+            <span>تكلفة المواد الفعلية بعد التعديل:</span>
+            <strong>{{ consumptionTotalCost }}</strong>
+          </div>
+          <div class="consumption-cost-compare__row" [class.text-danger]="consumptionCostDifference > 0" [class.text-success]="consumptionCostDifference < 0">
+            <span>الفرق:</span>
+            <strong>{{ consumptionCostDifference > 0 ? '+' : '' }}{{ consumptionCostDifference }}</strong>
+          </div>
+          <p class="consumption-cost-compare__hint small text-muted mb-2">
+            الخام يُخصم بالتكلفة الفعلية من الجدول. «اجمالى التكلفة» أعلى الصفحة يحدد تكلفة المنتج المُضاف للمخزن — يفضّل مطابقته للمواد الفعلية في هذا الأمر.
+          </p>
+          <button
+            type="button"
+            class="btn btn-sm consumption-apply-cost-btn"
+            *ngIf="Math.abs(consumptionCostDifference) > 0.0001"
+            (click)="applyActualMaterialCost()"
+          >
+            اعتماد تكلفة المواد الفعلية للأمر
+          </button>
+        </div>
+
+        <ng-template #substituteItemTpl let-item>
+          <a [innerHTML]="item.category_name"></a>
+        </ng-template>
+        <ng-template #substituteNotFoundTpl let-notFound>
+          <div [innerHTML]="notFound"></div>
+        </ng-template>
+
+        <div *ngIf="!consumptionAllSufficient" class="alert alert-warning py-2 mb-0">
+          بعض المواد رصيدها غير كافٍ للكميات المحددة.
+        </div>
+
+        <div class="form-check mt-3" *ngIf="hasCustomizedConsumption">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="updateRecipeOnConfirm"
+            [(ngModel)]="updateRecipeOnConfirm"
+            name="updateRecipeOnConfirm"
+          />
+          <label class="form-check-label" for="updateRecipeOnConfirm">
+            تحديث الوصفة الأصلية أيضاً عند التأكيد
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <div class="text-center mt-5">
-    <button class="btn" (click)="submit()">تاكيد</button>
+    <button class="btn" (click)="submit()" [disabled]="isSubmitting || consumptionPreviewPending">
+      {{ isSubmitting ? 'جاري التأكيد…' : 'تاكيد' }}
+    </button>
   </div>
 
 </div>

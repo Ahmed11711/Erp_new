@@ -1,0 +1,48 @@
+<div class="proc-page">
+  <header class="proc-header">
+    <h1>التشغيل الخارجي</h1>
+    <p class="sub">صرف المواد للمطابع ومعالجي التجهيز — استلام — فواتير — ذمم</p>
+  </header>
+
+  <div class="kpi-grid" *ngIf="!loading">
+    <div class="kpi-card">
+      <span class="kpi-label">أوامر مفتوحة</span>
+      <strong class="kpi-value">{{ kpis.open_orders || 0 }}</strong>
+    </div>
+    <div class="kpi-card warn">
+      <span class="kpi-label">كمية لدى المعالجين</span>
+      <strong class="kpi-value">{{ kpis.qty_at_vendor | number:'1.0-2' }}</strong>
+    </div>
+    <div class="kpi-card danger">
+      <span class="kpi-label">ذمم مستحقة</span>
+      <strong class="kpi-value">{{ kpis.outstanding_ap | number:'1.2-2' }} ج</strong>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">فواتير متأخرة</span>
+      <strong class="kpi-value">{{ kpis.overdue_invoices || 0 }}</strong>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2>مواد حالياً خارج المخزن (لدى المعالج)</h2>
+    <table class="proc-table" *ngIf="materials.length; else emptyMat">
+      <thead>
+        <tr>
+          <th>أمر</th>
+          <th>المعالج</th>
+          <th>الكمية</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let m of materials">
+          <td>{{ m.order?.order_number || m.processing_order_id }}</td>
+          <td>{{ m.supplier?.supplier_name }}</td>
+          <td>{{ m.qty_at_vendor | number:'1.0-4' }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <ng-template #emptyMat>
+      <p class="muted">لا توجد مواد لدى معالجين حالياً.</p>
+    </ng-template>
+  </section>
+</div>

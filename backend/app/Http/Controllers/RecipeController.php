@@ -12,6 +12,7 @@ use App\Models\StockMovement;
 use App\Models\ProductionOrder;
 use App\Enums\ProductionOrderStatus;
 use App\Exceptions\Manufacturing\ProductAlreadyCompletedException;
+use App\Services\Manufacturing\ManufactureRecipeSyncService;
 use App\Services\Manufacturing\RecipeStructureValidator;
 use App\Services\Items\CostCalculationService;
 use App\Services\Items\InventoryService;
@@ -42,6 +43,7 @@ class RecipeController extends Controller
     public function __construct(
         private CostCalculationService $costService,
         private InventoryService $inventoryService,
+        private ManufactureRecipeSyncService $manufactureRecipeSync,
     ) {
     }
 
@@ -68,9 +70,11 @@ class RecipeController extends Controller
         ])->findOrFail($id);
 
         $breakdown = $this->costService->breakdownForRecipe($recipe);
+        $recipePayload = $recipe->toArray();
+        $recipePayload['bom_locked'] = $this->recipeLockedByCompletedProduction((int) $recipe->id);
 
         return response()->json([
-            'recipe'    => $recipe,
+            'recipe'    => $recipePayload,
             'breakdown' => $breakdown,
         ]);
     }
@@ -154,6 +158,14 @@ class RecipeController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
+        if (
+            ! has_permission('manufacturing.edit_recipe')
+            && ! has_permission('categories.manage')
+            && ! has_permission('system.rbac')
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $recipe = Recipe::findOrFail($id);
 
         $data = $request->validate([
@@ -240,6 +252,12 @@ class RecipeController extends Controller
                     RecipeStructureValidator::assertValidForRecipe(
                         $recipe->fresh(['ingredients.item']),
                         (int) $outputId
+                    );
+                }
+
+                if (isset($data['ingredients'])) {
+                    $this->manufactureRecipeSync->syncLegacyManufactureLinesFromRecipe(
+                        $recipe->fresh(['ingredients'])
                     );
                 }
             });

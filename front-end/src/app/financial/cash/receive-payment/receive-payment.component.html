@@ -1,23 +1,40 @@
 <div class="container-fluid receive-payment" dir="rtl">
   <div class="card">
     <div class="card-header">
-      <h3 class="mb-0">{{ fundDirection === 'payment' && party === 'shipping_company' ? 'صرف نقدي (دفع) لشركة شحن / مندوب' : 'استلام نقدي (قبض)' }}</h3>
+      <h3 class="mb-0">
+        <ng-container *ngIf="fundDirection === 'payment' && party === 'shipping_company'">صرف نقدي (دفع) لشركة شحن / مندوب</ng-container>
+        <ng-container *ngIf="fundDirection === 'payment' && party === 'collection_company'">صرف نقدي (دفع) لشركة تحصيل</ng-container>
+        <ng-container *ngIf="fundDirection === 'receipt' || (fundDirection === 'payment' && party !== 'shipping_company' && party !== 'collection_company')">استلام نقدي (قبض)</ng-container>
+      </h3>
       <p class="text-muted small mb-0 mt-1">
-        <ng-container *ngIf="party !== 'shipping_company' || fundDirection === 'receipt'">
-          اختر الجهة (عميل، مورد، شركة شحن أو مندوب) ثم مكان الإيداع: خزنة، بنك، أو حساب خدمي
+        <ng-container *ngIf="party !== 'shipping_company' && party !== 'collection_company' || fundDirection === 'receipt'">
+          اختر الجهة ثم مصدر النقد: <strong>خزينة</strong> أو <strong>بنك</strong> أو <strong>حساب خدمي</strong> — يُحدَّث الرصيد التشغيلي وحساب الشجرة معاً
         </ng-container>
         <ng-container *ngIf="party === 'shipping_company' && fundDirection === 'payment'">
           دفع مستحقات أو تسوية لصالح شركة الشحن أو المندوب من خزنة، بنك، أو حساب خدمي (يُخفّض حساب الذمم المرتبط بهم)
         </ng-container>
+        <ng-container *ngIf="party === 'collection_company' && fundDirection === 'payment'">
+          دفع مستحقات أو تسوية لصالح شركة التحصيل من خزنة، بنك، أو حساب خدمي (يُخفّض حساب الذمم على شجرة الحسابات)
+        </ng-container>
       </p>
     </div>
     <div class="card-body">
+      <div class="alert alert-warning mb-3" *ngIf="settledOrderIds.length && fundDirection === 'receipt' && party === 'shipping_company'">
+        <strong>تسوية طلبات محددة:</strong> {{ settledOrderIds.length }} طلب —
+        المبلغ يجب أن يطابق مجموع ذمم هذه الطلبات بالضبط.
+        <span class="d-block small text-muted mt-1">عند الحفظ: تُغلق الطلبات وتُسجَّل «تم التحصيل» مع القيد المحاسبي على حساب الذمم.</span>
+      </div>
+      <div class="alert alert-info mb-3" *ngIf="settledOrderIds.length && fundDirection === 'receipt' && party === 'collection_company'">
+        <strong>تحصيل من طلبات محددة:</strong> {{ settledOrderIds.length }} طلب —
+        يمكنك قبض جزء من المبلغ (حتى مجموع ذمم الطلبات المحددة).
+        <span class="d-block small text-muted mt-1">يُخصَم المبلغ من «مطلوب تحصيله» ويُحدَّث رصيد الشجرة. الطلبات تُغلق بالكامل فقط عند سداد ذمتها كاملة.</span>
+      </div>
       <div class="row">
-        <div class="col-md-6 form-group" *ngIf="party === 'shipping_company'">
+        <div class="col-md-6 form-group" *ngIf="party === 'shipping_company' || party === 'collection_company'">
           <label>نوع الحركة</label>
           <select class="form-control" [(ngModel)]="fundDirection" (ngModelChange)="onFundDirectionChange()">
-            <option ngValue="receipt">قبض — استلام أموال من المندوب/شركة الشحن</option>
-            <option ngValue="payment">صرف — دفع لمندوب / شركة الشحن</option>
+            <option ngValue="receipt">قبض — استلام أموال</option>
+            <option ngValue="payment">صرف — دفع مستحقات</option>
           </select>
         </div>
         <div class="col-md-6 form-group">
@@ -26,10 +43,11 @@
             <option ngValue="client">عميل</option>
             <option ngValue="supplier">مورد</option>
             <option ngValue="shipping_company">شركة شحن / مندوب</option>
+            <option ngValue="collection_company">شركة تحصيل</option>
           </select>
         </div>
         <div class="col-md-6 form-group">
-          <label>{{ fundDirection === 'payment' && party === 'shipping_company' ? 'مصدر السداد (خزنة / بنك / خدمي)' : 'مكان الإيداع' }}</label>
+          <label>{{ fundDirection === 'payment' && (party === 'shipping_company' || party === 'collection_company') ? 'مصدر السداد (خزنة / بنك / خدمي)' : 'مكان الإيداع' }}</label>
           <select class="form-control" [(ngModel)]="paymentPlace" (ngModelChange)="onPlaceChange()">
             <option ngValue="safe">خزنة</option>
             <option ngValue="bank">بنك</option>
@@ -42,7 +60,7 @@
           <select class="form-control" [(ngModel)]="selectedSourceId">
             <option [ngValue]="null" disabled>— اختر الخزينة —</option>
             <option *ngFor="let s of safes" [ngValue]="s.id">
-              {{ s.name }} — رصيد: {{ s.balance | number:'1.2-2' }}
+              {{ sourceLabel(s) }}
             </option>
           </select>
         </div>
@@ -51,7 +69,7 @@
           <select class="form-control" [(ngModel)]="selectedSourceId">
             <option [ngValue]="null" disabled>— اختر البنك —</option>
             <option *ngFor="let b of banks" [ngValue]="b.id">
-              {{ b.name }} — رصيد: {{ b.balance | number:'1.2-2' }}
+              {{ sourceLabel(b) }}
             </option>
           </select>
         </div>
@@ -60,16 +78,32 @@
           <select class="form-control" [(ngModel)]="selectedSourceId">
             <option [ngValue]="null" disabled>— اختر الحساب الخدمي —</option>
             <option *ngFor="let a of serviceAccounts" [ngValue]="a.id">
-              {{ a.name }} — رصيد: {{ a.balance | number:'1.2-2' }}
+              {{ sourceLabel(a) }}
             </option>
           </select>
         </div>
 
         <div class="col-md-6 form-group" *ngIf="party === 'client'">
           <label>العميل</label>
-          <select class="form-control" [(ngModel)]="voucher.client_id">
+          <input
+            type="text"
+            class="form-control mb-2"
+            placeholder="بحث بالاسم أو الموبايل..."
+            [(ngModel)]="clientSearch"
+            (ngModelChange)="onClientSearchChange()"
+          />
+          <select class="form-control" [(ngModel)]="selectedClientKey">
             <option [ngValue]="null" disabled>— اختر العميل —</option>
-            <option *ngFor="let c of clients" [ngValue]="c.id">{{ c.name || c.company_name }}</option>
+            <optgroup label="عملاء الشركات">
+              <option *ngFor="let c of clientOptions.companies" [ngValue]="'company:' + c.id">
+                {{ c.label }}
+              </option>
+            </optgroup>
+            <optgroup label="عملاء الأفراد">
+              <option *ngFor="let p of clientOptions.individuals" [ngValue]="'individual:' + p.phone">
+                {{ p.label }}
+              </option>
+            </optgroup>
           </select>
         </div>
         <div class="col-md-6 form-group" *ngIf="party === 'supplier'">
@@ -84,6 +118,13 @@
           <select class="form-control" [(ngModel)]="voucher.shipping_company_id">
             <option [ngValue]="null" disabled>— اختر من القائمة —</option>
             <option *ngFor="let s of shippingPartners" [ngValue]="s.id">{{ s.name }} — {{ s.type }}</option>
+          </select>
+        </div>
+        <div class="col-md-6 form-group" *ngIf="party === 'collection_company'">
+          <label>شركة التحصيل</label>
+          <select class="form-control" [(ngModel)]="voucher.collection_company_id">
+            <option [ngValue]="null" disabled>— اختر شركة التحصيل —</option>
+            <option *ngFor="let c of collectionCompanies" [ngValue]="c.id">{{ c.name }}</option>
           </select>
         </div>
 
@@ -103,7 +144,7 @@
     </div>
     <div class="card-footer">
       <button type="button" class="btn btn-primary" (click)="save()">
-        {{ fundDirection === 'payment' && party === 'shipping_company' ? 'حفظ الصرف' : 'حفظ القبض' }}
+        {{ fundDirection === 'payment' && (party === 'shipping_company' || party === 'collection_company') ? 'حفظ الصرف' : 'حفظ القبض' }}
       </button>
     </div>
   </div>

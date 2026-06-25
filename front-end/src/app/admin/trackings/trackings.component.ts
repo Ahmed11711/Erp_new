@@ -1,5 +1,4 @@
-import { HttpClient } from '@angular/common/http';
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl } from '@angular/forms';
 import { UserService } from 'src/app/manage-system/services/user.service';
 import { OrderService } from 'src/app/shipping/services/order.service';
@@ -10,20 +9,31 @@ import Swal from 'sweetalert2';
   templateUrl: './trackings.component.html',
   styleUrls: ['./trackings.component.css']
 })
-export class TrackingsComponent {
+export class TrackingsComponent implements OnInit {
 
-  dataList:any[]=[];
-  userdata:any[]=[];
+  dataList: any[] = [];
+  userdata: any[] = [];
+  selectedTrackingId: number | null = null;
+  loadError = '';
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
-  pageSizeOptions = [15,50,100];
+  pageSizeOptions = [15, 50, 100];
 
-  constructor(private OrderService:OrderService, private http:HttpClient, private userService:UserService){}
+  constructor(
+    private OrderService: OrderService,
+    private userService: UserService,
+  ) {}
+
+  form: FormGroup = new FormGroup({
+    created_at: new FormControl(''),
+    user_id: new FormControl('0'),
+  });
 
   ngOnInit(): void {
     this.form.valueChanges.subscribe(() => {
+      this.page = 0;
       this.getData();
     });
 
@@ -33,67 +43,83 @@ export class TrackingsComponent {
     const day = today.getDate();
     this.form.patchValue({
       created_at: `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`,
-    })
+    }, { emitEvent: false });
+
     this.getData();
     this.getUsers();
-    this.geTrackingsAction();
   }
 
-
-  getUsers(){
-    this.userService.compactDirectory().subscribe((res:any)=> {
+  getUsers() {
+    this.userService.compactDirectory().subscribe((res: any) => {
       this.userdata = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
     });
   }
 
-  form:FormGroup = new FormGroup({
-    created_at: new FormControl('0'),
-    user_id: new FormControl('0'),
-  });
+  private buildParams(): Record<string, string | number> {
+    const params: Record<string, string | number> = {
+      itemsPerPage: this.pageSize,
+      page: this.page + 1,
+    };
 
-
-  getData(){
-    let params = {
-      itemsPerPage:this.pageSize,page:this.page+1,...this.form.value
+    const createdAt = String(this.form.value.created_at ?? '').trim();
+    if (createdAt && createdAt !== '0') {
+      params.created_at = createdAt;
     }
-    this.OrderService.getTrackings(params).subscribe((res:any)=>{
-      this.dataList = res.data;
-      this.length=res.total;
-      this.pageSize=res.per_page;
-    });
 
+    const userId = Number(this.form.value.user_id ?? 0);
+    if (userId > 0) {
+      params.user_id = userId;
+    }
+
+    return params;
   }
 
-  undo(id){
+  getData() {
+    this.loadError = '';
+    this.OrderService.getTrackings(this.buildParams()).subscribe({
+      next: (res: any) => {
+        this.dataList = Array.isArray(res?.data) ? res.data : [];
+        this.length = Number(res?.total ?? 0);
+        this.pageSize = Number(res?.per_page ?? this.pageSize);
+      },
+      error: (err) => {
+        this.dataList = [];
+        this.length = 0;
+        this.loadError = err?.error?.message || 'تعذّر تحميل سجل التتبع.';
+      },
+    });
+  }
+
+  undo(id: number) {
     this.OrderService.undo(id).subscribe({
-      next : (res) => {
-        if (res) {
-          Swal.fire({
-            icon:'success',
-            showConfirmButton: false,
-            timer : 1500
-          })
-          this.getData();
-        }
-        console.log(res);
-
-      }
-    })
-  }
-
-  geTrackingsAction(){
-    this.OrderService.getActions().subscribe((res:any)=>{
-      console.log(res);
-
+      next: () => {
+        Swal.fire({
+          icon: 'success',
+          showConfirmButton: false,
+          timer: 1500,
+        });
+        this.getData();
+      },
+      error: (err) => {
+        Swal.fire({
+          icon: 'error',
+          title: err?.error?.message || 'تعذّر تنفيذ التراجع.',
+          showConfirmButton: false,
+          timer: 2000,
+        });
+      },
     });
-
   }
 
+  canUndo(elm: any): boolean {
+    const action = String(elm?.action ?? '').trim();
+    const currentStatus = String(elm?.order?.order_status ?? '').trim();
+    return !!action && currentStatus === action;
+  }
 
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
     this.getData();
   }
-
 }

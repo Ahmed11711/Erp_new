@@ -18,13 +18,14 @@ use Illuminate\Support\Facades\DB;
 use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\LandedCostService;
 use App\Services\CategoryInventoryCostService;
-use App\Services\Inventory\InventoryMovementLedgerService;
-use App\Enums\InventoryMovementType;
-use App\Models\Category;
 use App\Models\TransactionType;
 use App\Services\Documents\DocumentNumberService;
 use App\Services\Stock\PurchaseStockDocumentService;
-use App\Services\Stock\StockMovementJournalService;
+use App\Enums\PurchaseInvoiceKind;
+use App\Services\Purchases\PurchaseInvoiceAccountingService;
+use App\Services\Purchases\PurchaseEditAuditService;
+use App\Services\Purchases\PurchaseDeletionService;
+use App\Services\Purchases\PurchaseInvoiceTypeResolver;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Validator;
@@ -34,16 +35,19 @@ class PurchasesController extends Controller
 
     public function index()
     {
-        $purchases = Purchase::with(['supplier' => function ($query) {
-            $query->select('id', 'supplier_name');
-        }])->get();
+        $purchases = Purchase::query()
+            ->notDeleted()
+            ->with([
+            'supplier' => fn ($query) => $query->select('id', 'supplier_name'),
+            'shippingCompany:id,name,type',
+        ])->get();
         return response()->json($purchases, 200);
     }
 
     public function search(Request $request){
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
-        $search = Purchase::query()->whereNull('ref');
+        $search = Purchase::query()->whereNull('ref')->notDeleted();
         if($request->has('receipt_date')){
             $search->where('receipt_date', $request->receipt_date);
         }
@@ -54,7 +58,11 @@ class PurchasesController extends Controller
             $search->whereDate('receipt_date', '<=', $request->date_to);
         }
         if($request->has('invoice_type')){
-            $search->where('invoice_type', $request->invoice_type);
+            $type = $request->invoice_type;
+            $search->where(function ($q) use ($type) {
+                $q->where('invoice_type', $type)
+                    ->orWhereHas('updatedPurchase', fn ($uq) => $uq->where('invoice_type', $type));
+            });
         }
         if($request->has('supplier_id')){
             $search->where('supplier_id', $request->supplier_id);
@@ -97,7 +105,8 @@ class PurchasesController extends Controller
         ]);
         $search = $search->with([
             'supplier:id,supplier_name',
-            'updatedPurchase'
+            'shippingCompany:id,name,type',
+            'updatedPurchase.shippingCompany:id,name,type',
         ])->orderBy('id', 'desc')->paginate($itemsPerPage);
         return response()->json($search, 200);
     }
@@ -106,16 +115,27 @@ class PurchasesController extends Controller
     {
 
         if($request->query('foredit') == 'true'){
-            $invoice = Purchase::where('id', $id)->whereNull('ref')
-            ->with(['bank:id,name', 'safe:id,name', 'serviceAccount:id,name', 'supplier:id,supplier_name'])
-            ->first();
-
-            if (!$invoice) {
+            $row = Purchase::query()->find($id);
+            if (! $row) {
                 return response()->json(['error' => 'Invoice not found'], 404);
             }
 
-            $latestPurchase = Purchase::where('ref', $id)
-                ->with(['bank:id,name', 'safe:id,name', 'serviceAccount:id,name', 'supplier:id,supplier_name'])
+            $mainId = $row->ref ? (int) $row->ref : (int) $row->id;
+            $invoice = Purchase::query()
+                ->where(function ($q) use ($mainId, $id) {
+                    $q->where('id', $mainId)->orWhere('id', $id);
+                })
+                ->whereNull('ref')
+                ->with(['bank:id,name', 'safe:id,name', 'serviceAccount:id,name', 'supplier:id,supplier_name', 'shippingCompany:id,name,type'])
+                ->first();
+
+            if (! $invoice) {
+                $invoice = Purchase::query()->find($mainId);
+            }
+
+            $latestPurchase = Purchase::query()
+                ->where('ref', $mainId)
+                ->with(['bank:id,name', 'safe:id,name', 'serviceAccount:id,name', 'supplier:id,supplier_name', 'shippingCompany:id,name,type'])
                 ->latest('id')
                 ->first();
 
@@ -123,12 +143,24 @@ class PurchasesController extends Controller
                 $categories = DB::table('invoice_categories')->where('purchase_id', $latestPurchase->id)->get();
                 $invoice = $latestPurchase;
             } else {
-                $categories = DB::table('invoice_categories')->where('purchase_id', $id)->get();
+                $categories = DB::table('invoice_categories')->where('purchase_id', $invoice->id)->get();
+            }
+
+            if ($invoice && ! $invoice->supplier && $invoice->supplier_id) {
+                $invoice->setRelation('supplier', Supplier::query()->select('id', 'supplier_name')->find($invoice->supplier_id));
+            }
+
+            if ($invoice && ! $invoice->shippingCompany && $invoice->shipping_company_id) {
+                $invoice->setRelation(
+                    'shippingCompany',
+                    \App\Models\ShippingCompany::query()->select('id', 'name', 'type')->find($invoice->shipping_company_id)
+                );
             }
 
             return response()->json([
                 'invoice' => $invoice,
                 'categories' => $categories,
+                'tracking' => $this->loadPurchaseTracking($mainId),
                 'print_url' => URL::temporarySignedRoute(
                     'documents.purchases.print',
                     now()->addHours(48),
@@ -138,7 +170,7 @@ class PurchasesController extends Controller
         }
 
         $purchase = Purchase::where('id', $id)
-            ->with(['bank:id,name', 'safe:id,name', 'supplier:id,supplier_name'])
+            ->with(['bank:id,name', 'safe:id,name', 'supplier:id,supplier_name', 'shippingCompany:id,name,type'])
             ->first();
 
         if (!$purchase) {
@@ -148,15 +180,22 @@ class PurchasesController extends Controller
         // Lines are stored on the latest revision row (ref -> main id); the main row often has no invoice_categories after an edit.
         $mainId = $purchase->ref ? (int) $purchase->ref : (int) $purchase->id;
         $latestRevision = Purchase::where('ref', $mainId)
-            ->with(['bank:id,name', 'safe:id,name', 'supplier:id,supplier_name'])
+            ->with(['bank:id,name', 'safe:id,name', 'supplier:id,supplier_name', 'shippingCompany:id,name,type'])
             ->latest('id')
             ->first();
 
         $invoice = $latestRevision ?: $purchase;
 
+        if (! $invoice->shippingCompany && $invoice->shipping_company_id) {
+            $invoice->setRelation(
+                'shippingCompany',
+                \App\Models\ShippingCompany::query()->select('id', 'name', 'type')->find($invoice->shipping_company_id)
+            );
+        }
+
         $categories = DB::table('invoice_categories')->where('purchase_id', $invoice->id)->get();
 
-        $tracking = PurchasesTracking::where('invoice_id', $mainId)->with(['user:id,name'])->get();
+        $tracking = $this->loadPurchaseTracking($mainId);
 
         $data = [
             'invoice' => $invoice,
@@ -180,7 +219,7 @@ class PurchasesController extends Controller
         // return $request;
 
         $rules = [
-            'supplier_id' => 'required',
+            'supplier_id' => 'required|integer|exists:suppliers,id',
             'invoice_type' => 'required',
             'receipt_date' => 'required',
             'total_price' => 'required',
@@ -195,6 +234,7 @@ class PurchasesController extends Controller
             'products.*.product_price' => 'required|numeric',
             'products.*.total' => 'required|numeric',
             'products.*.price_edited' => 'required|boolean',
+            'shipping_company_id' => 'nullable|exists:shipping_companies,id',
         ];
         $paymentType = $request->payment_type ?? 'bank';
         if ($request->has('invoiceId')) {
@@ -235,6 +275,14 @@ class PurchasesController extends Controller
             }
         }
         $data = $request->all();
+        if (array_key_exists('supplier_id', $data)) {
+            $rawSupplierId = $data['supplier_id'];
+            if ($rawSupplierId === '' || $rawSupplierId === 'undefined' || $rawSupplierId === 'null' || ! is_numeric($rawSupplierId)) {
+                $data['supplier_id'] = null;
+            } else {
+                $data['supplier_id'] = (int) $rawSupplierId;
+            }
+        }
         if (isset($data['products']) && is_string($data['products'])) {
             $decodedProducts = json_decode($data['products'], true);
             if (is_array($decodedProducts)) {
@@ -259,99 +307,85 @@ class PurchasesController extends Controller
 
         $old_paid_amount = 0;
         $old_due_amount = 0;
-        $ref = null;
+        $oldGrandTotal = 0.0;
+        $oldInvice = null;
+        $oldSupplier = null;
+        $oldCategories = collect();
+        $oldKind = null;
+        $mainInvoice = null;
         $status = null;
-        if($request->has('invoiceId')){
+        $typeResolver = app(PurchaseInvoiceTypeResolver::class);
+        $purchaseAccounting = app(PurchaseInvoiceAccountingService::class);
+        $glService = app(InventoryGlPostingService::class);
+
+        if ($request->has('invoiceId')) {
             $mainInvoice = Purchase::find($request->input('invoiceId'));
 
-            $oldInvice = Purchase::where('invoice_number' , $mainInvoice->invoice_number)->latest('id')->first();
+            $oldInvice = Purchase::where('invoice_number', $mainInvoice->invoice_number)->latest('id')->first();
 
             $oldCategories = DB::table('invoice_categories')->where('purchase_id', $oldInvice->id)->get();
-            foreach($oldCategories as $product){
-                $qty = (float) $product->product_quantity;
-                $lineTotal = (float) $product->total;
-                $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
+            $oldKind = $typeResolver->kind($oldInvice->invoice_type);
+            $old_paid_amount = (float) $oldInvice->paid_amount;
+            $old_due_amount = (float) $oldInvice->due_amount;
+            $oldSupplier = Supplier::find($oldInvice->supplier_id);
 
-                $revCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
-                if (! $revCatId) {
-                    throw new \Exception('تعذر ربط الصنف عند عكس التعديل: ' . $product->product_name);
-                }
-
-                $ledger = app(InventoryMovementLedgerService::class);
-                $ledger->recordOutbound(
-                    Category::query()->findOrFail($revCatId),
-                    InventoryMovementType::PurchaseReceiptReversal,
-                    $qty,
-                    $effectiveUnit,
-                    $lineTotal,
-                    true,
-                    'purchase_invoice_edit_reversal',
-                    (int) $oldInvice->id,
-                    'عكس سطر مشتريات عند تعديل الفاتورة',
-                    null,
-                    auth()->user()->name ?? null
-                );
-
-                $movementJournal = app(StockMovementJournalService::class);
-                $afterQty = (float) Category::query()->where('id', $revCatId)->value('quantity');
-                $beforeQty = $afterQty + $qty;
-                $revStockId = Category::query()->where('id', $revCatId)->value('stock_id');
-                $movementJournal->record(
-                    (int) $revCatId,
-                    $revStockId ? (int) $revStockId : null,
-                    'out',
-                    $qty,
-                    InventoryMovementType::PurchaseReceiptReversal->value,
-                    $beforeQty,
-                    $afterQty,
-                    'purchase',
-                    (int) $oldInvice->id,
-                    null,
-                    $effectiveUnit,
-                    $lineTotal,
-                );
-
-                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($revCatId);
-
-                DB::table('categories_balance')->insert([
-                    'invoice_number' => $oldInvice->invoice_number,
-                    'category_id' => $revCatId,
-                    'type' => 'تعديل فواتير مشتريات',
-                    'quantity' => $qty * -1,
-                    'balance_before' => DB::table('categories')->where('id', $revCatId)->value('quantity') - ($qty * -1),
-                    'balance_after' => DB::table('categories')->where('id', $revCatId)->value('quantity'),
-                    'price' => $effectiveUnit * -1,
-                    'total_price' => $lineTotal * -1,
-                    'unit_cost' => $effectiveUnit,
-                    'cost_total' => $lineTotal * -1,
-                    'by' => auth()->user()->name,
-                    'created_at' =>now()
-                ]
-                );
-
-
-                DB::table('warehouse_ratings')->insert([
-                    'category_id' => $revCatId,
-                    'price' => $effectiveUnit * -1,
-                    'quantity' => $qty * -1,
-                    'ref' => $oldInvice->invoice_number,
-                    'invoice_id' => $oldInvice->id,
-                    'fixed_quantity' => $qty * -1,
-                    'created_at' =>now()
-                ]);
+            $oldLinesSum = 0.0;
+            foreach ($oldCategories as $oc) {
+                $oldLinesSum += abs((float) $oc->total);
             }
-            $old_paid_amount = $oldInvice->paid_amount;
-            $old_due_amount = $oldInvice->due_amount;
+            $oldShip = (float) ($oldInvice->shipping_total ?? $oldInvice->transport_cost);
+            $oldProduct = (float) ($oldInvice->product_total ?? $oldLinesSum);
+            $oldGrandTotal = (float) ($oldInvice->grand_total ?? ($oldProduct + $oldShip));
+
+            $oldInvMap = CategoryInventoryCostService::aggregatePurchaseLineTotalsByInventoryTreeAccount($oldCategories);
+            if ($oldProduct > 0.00001 && count($oldInvMap) === 0 && $oldKind !== PurchaseInvoiceKind::Amanat) {
+                $fb = TreeAccount::resolveInventoryAccount();
+                if ($fb) {
+                    $oldInvMap[$fb->id] = $oldProduct;
+                }
+            }
+
+            if ($oldSupplier) {
+                $purchaseAccounting->reverseGlForPurchase(
+                    $oldInvice,
+                    $oldSupplier,
+                    $oldInvMap,
+                    $oldShip,
+                    $oldProduct,
+                    $oldKind,
+                    auth()->id(),
+                    'تعديل'
+                );
+            }
+
+            if ($old_paid_amount > 0.00001 && $oldSupplier) {
+                if ($oldKind === PurchaseInvoiceKind::PurchaseReturn) {
+                    $glService->postPurchasePaymentGl($oldInvice, $oldSupplier, $old_paid_amount, auth()->id());
+                } elseif ($typeResolver->affectsSupplierBalance($oldKind)) {
+                    $glService->reversePurchasePaymentGl($oldInvice, $oldSupplier, $old_paid_amount, auth()->id());
+                }
+            }
+
+            if ($old_paid_amount > 0.00001) {
+                if ($oldKind === PurchaseInvoiceKind::PurchaseReturn) {
+                    $this->deductPurchasePaymentSource($oldInvice, $old_paid_amount);
+                } else {
+                    $this->refundPurchasePayment($oldInvice, $old_paid_amount);
+                }
+            }
+
             $status = '0';
         }
+        $invoiceKind = $typeResolver->kind((string) request('invoice_type'));
+        $productsPreview = $this->decodeProductsPayload($request);
         $linesSumPreview = 0;
-        $productsPreview = json_decode($request->products, true) ?: [];
         foreach ($productsPreview as $product) {
             $linesSumPreview += (float) $product['total'];
         }
         $transportPreview = (float) request('transport_cost');
         $purchaseData = [
-            'supplier_id' => request('supplier_id'),
+            'supplier_id' => (int) request('supplier_id'),
+            'shipping_company_id' => request('shipping_company_id') ?: null,
             'invoice_type' => request('invoice_type'),
             'receipt_date' => request('receipt_date'),
             'total_price' => request('total_price'),
@@ -389,13 +423,10 @@ class PurchasesController extends Controller
             $mainInvoice->status = '0';
             $mainInvoice->edits = $mainInvoice->edits + 1;
             $mainInvoice->receipt_date = $purchase->receipt_date;
+            $mainInvoice->invoice_type = $purchase->invoice_type;
+            $mainInvoice->supplier_id = $purchase->supplier_id;
+            $mainInvoice->shipping_company_id = $purchase->shipping_company_id;
             $mainInvoice->save();
-            PurchasesTracking::create([
-                'invoice_id' => $mainInvoice->id,
-                'invoice_number' => $purchase->id,
-                'action' => 'تعديل فاتورة',
-                'user_id' => auth()->id(),
-            ]);
             $purchase->ref = $mainInvoice->id;
             $customEdit = trim((string) $request->input('custom_invoice_no', ''));
             if ($customEdit !== '') {
@@ -421,7 +452,7 @@ class PurchasesController extends Controller
                 $purchase->invoice_no = $custom;
                 $purchase->invoice_number = $custom;
             } else {
-                $purchaseType = TransactionType::query()->where('code', 'PURCHASE_ADD')->firstOrFail();
+                $purchaseType = TransactionType::query()->where('code', $typeResolver->stockTransactionCode($invoiceKind))->firstOrFail();
                 $purchase->invoice_no = app(DocumentNumberService::class)->generate((int) $purchaseType->id);
                 $purchase->invoice_number = $purchase->invoice_no;
             }
@@ -430,158 +461,66 @@ class PurchasesController extends Controller
         $purchase->notes = $request->input('notes');
         $purchase->printable_status = $purchase->printable_status ?: 'draft';
         $purchase->save();
-        $products = $request->products;
-        $products = json_decode($products, true);
-        $linesSum = 0;
-        $inventoryGlByAccount = [];
-        foreach($products as $product){
-            $qty = (float) $product['product_quantity'];
-            $lineTotal = (float) $product['total'];
-            $linesSum += $lineTotal;
-            $declaredUnit = (float) $product['product_price'];
-            $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, $declaredUnit);
-
-            $newCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product['product_name']);
-            if (! $newCatId) {
-                throw new \Exception('تعذر ربط الصنف بالمخزن (مخزن مواد خام): ' . $product['product_name']);
-            }
-
-            $invAcc = TreeAccount::resolveInventoryAccountForCategoryId((int) $newCatId);
-            if ($invAcc) {
-                $inventoryGlByAccount[$invAcc->id] = ($inventoryGlByAccount[$invAcc->id] ?? 0) + $lineTotal;
-            }
-
-            DB::table('invoice_categories')->insert([
-                'purchase_id' => $purchase->id,
-                'category_id' => $newCatId,
-                'product_name' => $product['product_name'],
-                'product_quantity' => $product['product_quantity'],
-                'product_unit' => $product['product_unit'],
-                'product_price' => $product['product_price'],
-                'total' => $product['total'],
-                'price_edited' => $product['price_edited'],
-            ]);
-
-            $ledger = app(InventoryMovementLedgerService::class);
-            $ledger->recordInbound(
-                Category::query()->findOrFail($newCatId),
-                InventoryMovementType::PurchaseReceipt,
-                $qty,
-                $effectiveUnit,
-                $lineTotal,
-                true,
-                'purchase',
-                (int) $purchase->id,
-                'استلام مشتريات — فاتورة ' . $purchase->invoice_number,
-                null,
-                auth()->user()->name ?? null
+        $products = $this->decodeProductsPayload($request);
+        if ($request->has('invoiceId')) {
+            $lineResult = $purchaseAccounting->reconcileProductLinesOnEdit(
+                $purchase,
+                $oldCategories,
+                $oldKind,
+                $products,
+                $invoiceKind
             );
-
-            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($newCatId);
-            $avgUnit = CategoryInventoryCostService::resolveReferenceUnitCost($newCatId);
-
-            DB::table('categories_balance')->insert([
-                'invoice_number' => $purchase->invoice_number,
-                'category_id' => $newCatId,
-                'type' => 'فواتير مشتريات',
-                'quantity' => $qty,
-                'balance_before' => DB::table('categories')->where('id', $newCatId)->value('quantity') - $qty,
-                'balance_after' => DB::table('categories')->where('id', $newCatId)->value('quantity'),
-                'price' => $effectiveUnit,
-                'total_price' => $lineTotal,
-                'unit_cost' => $avgUnit,
-                'cost_total' => $lineTotal,
-                'by' => auth()->user()->name,
-                'created_at' =>now()
-            ]
-            );
-
-
-            DB::table('warehouse_ratings')->insert([
-                'category_id' => $newCatId,
-                'price' => $effectiveUnit,
-                'quantity' => $qty,
-                'ref' => $purchase->invoice_number,
-                'invoice_id' => $purchase->id,
-                'fixed_quantity' => $qty,
-                'created_at' =>now()
-            ]);
+        } else {
+            $lineResult = $purchaseAccounting->applyProductLines($purchase, $products, $invoiceKind);
         }
-        if ($linesSum > 0.00001 && count($inventoryGlByAccount) === 0) {
+        $linesSum = $lineResult['lines_sum'];
+        $inventoryGlByAccount = $lineResult['inventory_gl'];
+
+        if (abs($linesSum) > 0.00001 && count($inventoryGlByAccount) === 0 && $invoiceKind !== PurchaseInvoiceKind::Amanat) {
             $fallbackInv = TreeAccount::resolveInventoryAccount();
             if ($fallbackInv) {
-                $inventoryGlByAccount[$fallbackInv->id] = $linesSum;
+                $inventoryGlByAccount[$fallbackInv->id] = abs($linesSum);
             }
         }
 
         $supplier = Supplier::find($purchase->supplier_id);
-        $supplier->last_balance = $supplier->balance;
-        $supplier->balance += $purchase->due_amount - $old_due_amount;
-        $supplier->save();
-
-
-        DB::table('supplier_balance')->insert([
-            'invoice_id' => $purchase->id,
-            'balance_before' => $supplier->last_balance,
-            'balance_after' => $supplier->balance,
-            'user_id'=> auth()->user()->id
-        ]);
-
-        /** @var InventoryGlPostingService $glService */
-        $glService = app(InventoryGlPostingService::class);
         $transport = (float) $request->transport_cost;
-        $newReceiptAmount = $linesSum + $transport;
+        $newReceiptAmount = abs($linesSum) + $transport;
 
-        $purchase->product_total = $linesSum;
+        $purchase->product_total = abs($linesSum);
         $purchase->shipping_total = $transport;
         $purchase->grand_total = $newReceiptAmount;
         $purchase->save();
 
-        if ($request->has('invoiceId')) {
-            $oldSupplier = Supplier::find($oldInvice->supplier_id);
-            $oldLinesSum = 0;
-            foreach ($oldCategories as $oc) {
-                $oldLinesSum += (float) $oc->total;
-            }
-            $oldShip = (float) ($oldInvice->shipping_total ?? $oldInvice->transport_cost);
-            $oldProduct = (float) ($oldInvice->product_total ?? $oldLinesSum);
-            if (($oldProduct + $oldShip) > 0.00001 && $oldSupplier) {
-                $oldInvMap = CategoryInventoryCostService::aggregatePurchaseLineTotalsByInventoryTreeAccount($oldCategories);
-                if ($oldProduct > 0.00001 && count($oldInvMap) === 0) {
-                    $fb = TreeAccount::resolveInventoryAccount();
-                    if ($fb) {
-                        $oldInvMap[$fb->id] = $oldProduct;
-                    }
-                }
-                $glService->reversePurchaseReceiptSplitByAccounts(
-                    $oldInvMap,
-                    $oldShip,
-                    $oldSupplier,
-                    'عكس استلام مخزون — تعديل فاتورة ' . $oldInvice->invoice_number,
-                    auth()->id()
-                );
-            }
-            if ($old_paid_amount > 0.00001 && $oldSupplier) {
-                $glService->reversePurchasePaymentGl($oldInvice, $oldSupplier, (float) $old_paid_amount, auth()->id());
-            }
-        }
+        $purchaseAccounting->adjustSupplierBalances(
+            $supplier,
+            $invoiceKind,
+            (float) $purchase->due_amount,
+            $newReceiptAmount,
+            (int) $purchase->id,
+            $oldSupplier,
+            (float) $old_due_amount,
+            $oldKind,
+            (float) $oldGrandTotal,
+        );
 
-        if ($request->has('invoiceId') && $old_paid_amount > 0) {
-            $this->refundPurchasePayment($oldInvice, $old_paid_amount);
-        }
+        $purchaseAccounting->postGlForPurchase(
+            $purchase,
+            $supplier,
+            $inventoryGlByAccount,
+            $transport,
+            abs($linesSum),
+            $invoiceKind,
+            auth()->id()
+        );
 
-        if ($newReceiptAmount > 0.00001) {
-            $glService->postPurchaseReceiptSplitByAccounts(
-                $inventoryGlByAccount,
-                $transport,
-                $supplier,
-                'استلام مشتريات — فاتورة ' . $purchase->invoice_number,
-                auth()->id()
-            );
-        }
-
-        if ((double)$request->paid_amount > 0) {
-            $this->processPurchasePayment($purchase, $supplier, (double)$request->paid_amount, $paymentType, $request, $oldInvice ?? null);
+        if ((double) $request->paid_amount > 0) {
+            $paid = abs((double) $request->paid_amount);
+            if ($invoiceKind === PurchaseInvoiceKind::PurchaseReceipt) {
+                $this->processPurchasePayment($purchase, $supplier, $paid, $paymentType, $request, $oldInvice ?? null);
+            } elseif ($invoiceKind === PurchaseInvoiceKind::PurchaseReturn) {
+                $this->processPurchaseRefundReceived($purchase, $supplier, $paid, $paymentType, $request);
+            }
         }
 
         if (!($request->has('invoiceId'))) {
@@ -595,8 +534,37 @@ class PurchasesController extends Controller
 
         app(PurchaseStockDocumentService::class)->syncPurchaseDocument($purchase->fresh());
 
+        if ($request->has('invoiceId') && $mainInvoice && $oldInvice) {
+            $actorName = auth()->user()->name ?? null;
+            $editDetails = app(PurchaseEditAuditService::class)->buildEditDetails(
+                $oldInvice,
+                $purchase->fresh(),
+                $oldCategories,
+                $products,
+                $oldKind,
+                $invoiceKind,
+                $lineResult['stock_warnings'] ?? [],
+                $actorName,
+                now()->format('Y-m-d H:i'),
+            );
+
+            PurchasesTracking::create([
+                'invoice_id' => $mainInvoice->id,
+                'invoice_number' => $purchase->id,
+                'action' => 'تعديل فاتورة',
+                'details' => $editDetails,
+                'user_id' => auth()->id(),
+            ]);
+        }
+
         DB::commit();
-        return response()->json(['success' => true], 200);
+
+        $response = ['success' => true];
+        if (! empty($lineResult['stock_warnings'] ?? [])) {
+            $response['warnings'] = $lineResult['stock_warnings'];
+        }
+
+        return response()->json($response, 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 422);
@@ -612,24 +580,18 @@ class PurchasesController extends Controller
         if ($oldInvice) {
             $details .= ' من تعديل فاتور رقم ' . $oldInvice->invoice_number;
         }
-        $creditTreeId = null;
-        $sourceName = '';
 
         if ($paymentType === 'safe' && $request->safe_id) {
             $safe = Safe::find($request->safe_id);
             if (!$safe || !$safe->account_id) {
                 throw new \Exception('الخزينة غير مرتبطة بحساب في شجرة الحسابات');
             }
-            $creditTreeId = $safe->account_id;
-            $sourceName = $safe->name;
             $safe->decrement('balance', $amount);
         } elseif ($paymentType === 'service_account' && $request->service_account_id) {
             $svc = ServiceAccount::find($request->service_account_id);
             if (!$svc || !$svc->account_id) {
                 throw new \Exception('الحساب الخدمي غير مرتبط بحساب في شجرة الحسابات');
             }
-            $creditTreeId = $svc->account_id;
-            $sourceName = $svc->name;
             $svc->decrement('balance', $amount);
         } else {
             $bankId = $request->bank_id;
@@ -651,59 +613,95 @@ class PurchasesController extends Controller
                 'created_at' => now(),
                 'user_id' => auth()->user()->id,
             ]);
-            if ($bank->asset_id) {
-                $creditTreeId = $bank->asset_id;
-                $sourceName = $bank->name;
+        }
+
+        app(InventoryGlPostingService::class)->postPurchasePaymentGl(
+            $purchase->fresh(),
+            $supplier,
+            (float) $amount,
+            auth()->id()
+        );
+    }
+
+    /**
+     * Refund received from supplier on purchase return: increase bank/safe and Dr cash / Cr AP.
+     */
+    private function processPurchaseRefundReceived($purchase, $supplier, $amount, $paymentType, $request): void
+    {
+        if ($amount <= 0.00001) {
+            return;
+        }
+
+        if ($paymentType === 'safe' && $request->safe_id) {
+            $safe = Safe::find($request->safe_id);
+            if (! $safe || ! $safe->account_id) {
+                throw new \Exception('الخزينة غير مرتبطة بحساب في شجرة الحسابات');
             }
+            $safe->increment('balance', $amount);
+        } elseif ($paymentType === 'service_account' && $request->service_account_id) {
+            $svc = ServiceAccount::find($request->service_account_id);
+            if (! $svc || ! $svc->account_id) {
+                throw new \Exception('الحساب الخدمي غير مرتبط بحساب في شجرة الحسابات');
+            }
+            $svc->increment('balance', $amount);
+        } else {
+            $bankId = $request->bank_id;
+            $bank = Bank::find($bankId);
+            if (! $bank) {
+                throw new \Exception('البنك غير موجود');
+            }
+            $balanceBefore = (float) $bank->balance;
+            $bank->increment('balance', $amount);
+            DB::table('bank_details')->insert([
+                'bank_id' => $bankId,
+                'details' => ' استرداد من المورد '.$supplier->supplier_name,
+                'ref' => $purchase->invoice_number,
+                'type' => 'مرتجع مشتريات',
+                'amount' => $amount,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $bank->fresh()->balance,
+                'date' => date('Y-m-d'),
+                'created_at' => now(),
+                'user_id' => auth()->user()->id,
+            ]);
         }
 
-        $supplierTreeId = $supplier->tree_account_id;
-        if (!$supplierTreeId) {
-            $account = app(\App\Services\Accounting\AccountLinkingService::class)->ensureSupplierAccount($supplier);
-            $supplierTreeId = $account?->id;
-        }
+        app(InventoryGlPostingService::class)->reversePurchasePaymentGl(
+            $purchase,
+            $supplier,
+            $amount,
+            auth()->id()
+        );
+    }
 
-        if ($supplierTreeId && $creditTreeId) {
-            $maxNum = DailyEntry::lockForUpdate()->max(DB::raw('CAST(entry_number AS UNSIGNED)'));
-            $entryNumber = ($maxNum ?? 0) + 1;
-            $dailyEntry = DailyEntry::create([
-                'date' => now(),
-                'entry_number' => str_pad($entryNumber, 6, '0', STR_PAD_LEFT),
-                'description' => 'فاتورة مشتريات - ' . $supplier->supplier_name . ' - ' . $sourceName,
-                'user_id' => auth()->id(),
-            ]);
-            DailyEntryItem::create([
-                'daily_entry_id' => $dailyEntry->id,
-                'account_id' => $supplierTreeId,
-                'debit' => $amount,
-                'credit' => 0,
-                'notes' => 'سداد ذمة مورد (تخفيض التزام — مدين حساب خصوم)',
-            ]);
-            DailyEntryItem::create([
-                'daily_entry_id' => $dailyEntry->id,
-                'account_id' => $creditTreeId,
-                'debit' => 0,
-                'credit' => $amount,
-                'notes' => 'نقصان (صرف من ' . $sourceName . ')',
-            ]);
-            AccountEntry::create([
-                'tree_account_id' => $supplierTreeId,
-                'debit' => $amount,
-                'credit' => 0,
-                'description' => 'فاتورة مشتريات - ' . $supplier->supplier_name,
-                'daily_entry_id' => $dailyEntry->id,
-            ]);
-            AccountEntry::create([
-                'tree_account_id' => $creditTreeId,
-                'debit' => 0,
-                'credit' => $amount,
-                'description' => 'فاتورة مشتريات - صرف من ' . $sourceName,
-                'daily_entry_id' => $dailyEntry->id,
-            ]);
-            // تحديث الحساب والحسابات الأب في الشجرة
-            $accService = app(\App\Services\Accounting\AccountingService::class);
-            $accService->updateAccountHierarchyBalances($supplierTreeId);
-            $accService->updateAccountHierarchyBalances($creditTreeId);
+    /**
+     * Deduct payment source balance (undo refund received on purchase return edit/delete).
+     */
+    private function deductPurchasePaymentSource($purchase, $amount): void
+    {
+        $pt = $purchase->payment_type ?? 'bank';
+        if ($pt === 'safe' && $purchase->safe_id) {
+            Safe::where('id', $purchase->safe_id)->decrement('balance', $amount);
+        } elseif ($pt === 'service_account' && $purchase->service_account_id) {
+            ServiceAccount::where('id', $purchase->service_account_id)->decrement('balance', $amount);
+        } elseif ($purchase->bank_id) {
+            $bank = Bank::find($purchase->bank_id);
+            if ($bank) {
+                $balanceBefore = (float) $bank->balance;
+                $bank->decrement('balance', $amount);
+                DB::table('bank_details')->insert([
+                    'bank_id' => $purchase->bank_id,
+                    'details' => ' عكس استرداد مرتجع مشتريات رقم '.$purchase->invoice_number,
+                    'ref' => $purchase->invoice_number,
+                    'type' => 'مرتجع مشتريات',
+                    'amount' => $amount * -1,
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $bank->fresh()->balance,
+                    'date' => date('Y-m-d'),
+                    'created_at' => now(),
+                    'user_id' => auth()->user()->id,
+                ]);
+            }
         }
     }
 
@@ -743,161 +741,46 @@ class PurchasesController extends Controller
 
 
 
-    public function destroy($id)
+    public function destroy($id, PurchaseDeletionService $deletionService)
     {
-        $mainInvoice = Purchase::find($id);
-        $purchase = Purchase::where('invoice_number' , $mainInvoice->invoice_number)->with(['bank:id,name', 'safe:id,name', 'serviceAccount:id,name', 'supplier:id,supplier_name'])->latest('id')->first();
-        if (auth()->user()->department != 'Admin') {
-            $isExist = Approvals::where('column_values' , $purchase)->first();
-            if($isExist){
-                return response()->json($isExist, 422);
-            }
-            $appData = [
-                'type' => 'delete',
-                'table_name' => 'purchases',
-                'column_values' => $purchase,
-                'details' => $purchase,
-                'user_id' => auth()->user()->id,
-            ];
-            $approval = Approvals::create($appData);
-            return response()->json($approval, 201);
-        }
-        DB::beginTransaction();
         try {
-        $oldCategories = DB::table('invoice_categories')->where('purchase_id', $purchase->id)->get();
-        $linesSumDelete = 0;
-        foreach($oldCategories as $product){
-            $qty = (float) $product->product_quantity;
-            $lineTotal = (float) $product->total;
-            $linesSumDelete += $lineTotal;
-            $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
+            if (auth()->user()->department != 'Admin') {
+                $approval = $deletionService->requestApproval((int) $id, (int) auth()->id());
 
-            $delCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
-            if (! $delCatId) {
-                throw new \Exception('تعذر ربط الصنف عند الحذف: ' . $product->product_name);
+                return response()->json($approval, 201);
             }
 
-            $ledger = app(InventoryMovementLedgerService::class);
-            $ledger->recordOutbound(
-                Category::query()->findOrFail($delCatId),
-                InventoryMovementType::PurchaseReceiptReversal,
-                $qty,
-                $effectiveUnit,
-                $lineTotal,
-                true,
-                'purchase_delete',
-                (int) $purchase->id,
-                'حذف فاتورة مشتريات',
-                null,
-                auth()->user()->name ?? null
-            );
+            $deletionService->delete((int) $id, (int) auth()->id());
 
-            $movementJournal = app(StockMovementJournalService::class);
-            $afterQty = (float) Category::query()->where('id', $delCatId)->value('quantity');
-            $beforeQty = $afterQty + $qty;
-            $delStockId = Category::query()->where('id', $delCatId)->value('stock_id');
-            $movementJournal->record(
-                (int) $delCatId,
-                $delStockId ? (int) $delStockId : null,
-                'out',
-                $qty,
-                InventoryMovementType::PurchaseReceiptReversal->value,
-                $beforeQty,
-                $afterQty,
-                'purchase',
-                (int) $purchase->id,
-                null,
-                $effectiveUnit,
-                $lineTotal,
-            );
-
-            CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($delCatId);
-
-            DB::table('categories_balance')->insert([
-                'invoice_number' => $purchase->invoice_number,
-                'category_id' => $delCatId,
-                'type' => 'حذف فواتير مشتريات',
-                'quantity' => $qty * -1,
-                'balance_before' => DB::table('categories')->where('id', $delCatId)->value('quantity') - ($qty * -1),
-                'balance_after' => DB::table('categories')->where('id', $delCatId)->value('quantity'),
-                'price' => $effectiveUnit * -1,
-                'total_price' => $lineTotal * -1,
-                'unit_cost' => $effectiveUnit,
-                'cost_total' => $lineTotal * -1,
-                'by' => auth()->user()->name,
-                'created_at' =>now()
-            ]
-            );
-
-
-            DB::table('warehouse_ratings')->insert([
-                'category_id' => $delCatId,
-                'price' => $effectiveUnit * -1,
-                'quantity' => $qty * -1,
-                'ref' => $purchase->invoice_number,
-                'invoice_id' => $purchase->id,
-                'fixed_quantity' => $qty * -1,
-                'created_at' =>now()
-            ]);
-        }
-
-        $mainPurchase = Purchase::find($id);
-        $mainPurchase->status = '1';
-        $mainPurchase->save();
-
-        PurchasesTracking::create([
-            'invoice_id' => $mainPurchase->id,
-            'invoice_number' => $purchase->id,
-            'action' => 'حذف فاتورة',
-            'user_id' => auth()->id(),
-        ]);
-
-        $supplier = Supplier::find($purchase->supplier_id);
-        $supplier->last_balance = $supplier->balance;
-        $supplier->balance -= $purchase->due_amount;
-        $supplier->save();
-
-        DB::table('supplier_balance')->insert([
-            'invoice_id' => $purchase->id,
-            'balance_before' => $supplier->last_balance,
-            'balance_after' => $supplier->balance,
-            'user_id'=> auth()->user()->id
-        ]);
-
-        $glService = app(InventoryGlPostingService::class);
-        $delShip = (float) ($purchase->shipping_total ?? $purchase->transport_cost);
-        $delProduct = (float) ($purchase->product_total ?? $linesSumDelete);
-        $receiptDelete = $delProduct + $delShip;
-        if ($receiptDelete > 0.00001 && $supplier) {
-            $delInvMap = CategoryInventoryCostService::aggregatePurchaseLineTotalsByInventoryTreeAccount($oldCategories);
-            if ($delProduct > 0.00001 && count($delInvMap) === 0) {
-                $fb = TreeAccount::resolveInventoryAccount();
-                if ($fb) {
-                    $delInvMap[$fb->id] = $delProduct;
-                }
-            }
-            $glService->reversePurchaseReceiptSplitByAccounts(
-                $delInvMap,
-                $delShip,
-                $supplier,
-                'عكس استلام مخزون — حذف فاتورة ' . $purchase->invoice_number,
-                auth()->id()
-            );
-        }
-        if ((double) $purchase->paid_amount > 0.00001 && $supplier) {
-            $glService->reversePurchasePaymentGl($purchase, $supplier, (double) $purchase->paid_amount, auth()->id());
-        }
-
-        if ((double)$purchase->paid_amount > 0) {
-            $this->refundPurchasePayment($purchase, (double)$purchase->paid_amount);
-        }
-
-        DB::commit();
-        return response()->json(['success' => true], 200);
+            return response()->json(['success' => true], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    public function destroyMany(Request $request, PurchaseDeletionService $deletionService)
+    {
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:purchases,id',
+        ]);
+
+        $isAdmin = auth()->user()->department === 'Admin';
+        $results = $deletionService->deleteMany(
+            $request->input('ids'),
+            (int) auth()->id(),
+            $isAdmin
+        );
+
+        $hasSuccess = $results['deleted'] !== [] || $results['pending'] !== [];
+        $status = $hasSuccess ? 200 : 422;
+
+        return response()->json([
+            'success' => $hasSuccess,
+            'results' => $results,
+        ], $status);
     }
 
     /**
@@ -916,5 +799,32 @@ class PurchasesController extends Controller
         $main->save();
 
         return response()->json(['success' => true, 'invoice' => $main], 200);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function decodeProductsPayload(Request $request): array
+    {
+        $products = $request->input('products');
+        if (is_array($products)) {
+            return $products;
+        }
+        if (is_string($products)) {
+            $decoded = json_decode($products, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    private function loadPurchaseTracking(int $mainInvoiceId)
+    {
+        return PurchasesTracking::query()
+            ->where('invoice_id', $mainInvoiceId)
+            ->with(['user:id,name'])
+            ->orderByDesc('created_at')
+            ->get();
     }
 }

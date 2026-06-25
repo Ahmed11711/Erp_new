@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -11,31 +12,64 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('shipping_company_details', function (Blueprint $table) {
-            $table->dropForeign(['order_id']);
-        });
+        if (! Schema::hasTable('shipping_company_details')) {
+            return;
+        }
+
+        if (Schema::hasColumn('shipping_company_details', 'voucher_id')) {
+            return;
+        }
+
+        $this->dropForeignKeyIfExists('shipping_company_details', 'order_id');
 
         Schema::table('shipping_company_details', function (Blueprint $table) {
             $table->unsignedBigInteger('order_id')->nullable()->change();
-            $table->foreign('order_id')->references('id')->on('orders')->nullOnDelete();
+        });
+
+        Schema::table('shipping_company_details', function (Blueprint $table) {
             $table->foreignId('voucher_id')->nullable()->after('order_id')->constrained('vouchers')->nullOnDelete();
         });
     }
 
     public function down(): void
     {
+        if (! Schema::hasTable('shipping_company_details') || ! Schema::hasColumn('shipping_company_details', 'voucher_id')) {
+            return;
+        }
+
+        $this->dropForeignKeyIfExists('shipping_company_details', 'voucher_id');
+
         Schema::table('shipping_company_details', function (Blueprint $table) {
-            $table->dropForeign(['voucher_id']);
             $table->dropColumn('voucher_id');
         });
 
-        Schema::table('shipping_company_details', function (Blueprint $table) {
-            $table->dropForeign(['order_id']);
-        });
+        $this->dropForeignKeyIfExists('shipping_company_details', 'order_id');
 
         Schema::table('shipping_company_details', function (Blueprint $table) {
             $table->unsignedBigInteger('order_id')->nullable(false)->change();
-            $table->foreign('order_id')->references('id')->on('orders');
+        });
+    }
+
+    private function foreignKeyExists(string $table, string $column): bool
+    {
+        $constraint = "{$table}_{$column}_foreign";
+
+        return DB::table('information_schema.TABLE_CONSTRAINTS')
+            ->where('TABLE_SCHEMA', DB::raw('DATABASE()'))
+            ->where('TABLE_NAME', $table)
+            ->where('CONSTRAINT_NAME', $constraint)
+            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
+            ->exists();
+    }
+
+    private function dropForeignKeyIfExists(string $table, string $column): void
+    {
+        if (! $this->foreignKeyExists($table, $column)) {
+            return;
+        }
+
+        Schema::table($table, function (Blueprint $table) use ($column) {
+            $table->dropForeign([$column]);
         });
     }
 };

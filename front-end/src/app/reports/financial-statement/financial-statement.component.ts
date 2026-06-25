@@ -184,6 +184,7 @@ export class FinancialStatementComponent implements OnInit {
           entryDate: item.entry_date || item.created_at,
           createdAt: item.created_at,
           description: item.description ?? '',
+          userName: item.user_name ?? '',
           debit: item.debit ?? 0,
           credit: item.credit ?? 0,
           runningBalance: item.running_balance ?? 0,
@@ -227,7 +228,7 @@ export class FinancialStatementComponent implements OnInit {
     if (consolidated) {
       headers.push('الحساب الفرعي');
     }
-    headers.push('البيان / الشرح', 'مدين', 'دائن', 'الرصيد المتحرك');
+    headers.push('البيان / الشرح', 'المستخدم', 'مدين', 'دائن', 'الرصيد المتحرك');
     rows.push(headers);
 
     for (const item of this.data) {
@@ -239,6 +240,7 @@ export class FinancialStatementComponent implements OnInit {
       }
       row.push(
         item.description ?? '',
+        item.user_name ?? '',
         item.debit > 0 ? item.debit : '',
         item.credit > 0 ? item.credit : '',
         item.running_balance ?? ''

@@ -14,16 +14,16 @@ class PurchasePrintController extends Controller
 {
     public function show(int $purchase)
     {
-        $mainRow = Purchase::query()->with(['supplier:id,supplier_name'])->findOrFail($purchase);
+        $mainRow = Purchase::query()->with(['supplier:id,supplier_name', 'shippingCompany:id,name,type'])->findOrFail($purchase);
         $mainId = $mainRow->ref ? (int) $mainRow->ref : (int) $mainRow->id;
 
         $latest = Purchase::query()
             ->where('ref', $mainId)
-            ->with(['supplier:id,supplier_name'])
+            ->with(['supplier:id,supplier_name', 'shippingCompany:id,name,type'])
             ->latest('id')
             ->first();
 
-        $invoice = $latest ?: Purchase::query()->with(['supplier:id,supplier_name'])->findOrFail($mainId);
+        $invoice = $latest ?: Purchase::query()->with(['supplier:id,supplier_name', 'shippingCompany:id,name,type'])->findOrFail($mainId);
 
         $lines = DB::table('invoice_categories')->where('purchase_id', $invoice->id)->orderBy('id')->get();
 

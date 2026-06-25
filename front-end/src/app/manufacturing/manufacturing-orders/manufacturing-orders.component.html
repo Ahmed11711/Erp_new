@@ -14,30 +14,29 @@
 
   <div class="container mt-5">
 
-    <div class="row">
-      <div class="col-md-5">
+    <div class="row align-items-center justify-content-center">
+      <div class="col-md-8 col-lg-6">
+        <div class="search-toolbar">
+          <div class="search-field">
+            <ng-autocomplete
+              [data]="products"
+              [searchKeyword]="catword"
+              placeholder="البحث"
+              (selected)='productChange($event)'
+              (inputCleared)='filterData($event)'
+              [itemTemplate]="itemTemplates"
+              [notFoundTemplate]="notFoundTemplate">
+            </ng-autocomplete>
 
-      </div>
-      <div class="col-md-3">
-        <ng-autocomplete
-          [data]="products"
-          [searchKeyword]="catword"
-          placeholder="البحث"
-          (selected)='productChange($event)'
-          (inputCleared)='filterData($event)'
-          [itemTemplate]="itemTemplates"
-          [notFoundTemplate]="notFoundTemplate">
-        </ng-autocomplete>
+            <ng-template #itemTemplates let-item>
+              <a [innerHTML]="item.category_name"></a>
+            </ng-template>
 
-        <ng-template #itemTemplates let-item>
-          <a [innerHTML]="item.category_name"></a>
-        </ng-template>
-
-        <ng-template #notFoundTemplate let-notFound>
-          <div [innerHTML]="notFound"></div>
-        </ng-template>
-      </div>
-      <div class="col-md-2">
+            <ng-template #notFoundTemplate let-notFound>
+              <div [innerHTML]="notFound"></div>
+            </ng-template>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -59,17 +58,29 @@
         </mat-form-field>
       </div>
 
-      <div class="col-md-3">
-        <select id="inputState" class="form-control" [(ngModel)]="status" (change)="filterData('')">
-          <option selected disabled>حاله التصنيع</option>
-          <option>تم الانتهاء</option>
-          <option>في التصنيع</option>
-        </select>
+      <div class="col-md-6">
+        <div class="filter-toolbar d-flex align-items-center">
+          <select id="inputState" class="form-control flex-grow-1" [(ngModel)]="status" (change)="filterData('')">
+            <option selected disabled>حاله التصنيع</option>
+            <option>تم الانتهاء</option>
+            <option>في التصنيع</option>
+          </select>
+          <button
+            *ngIf="canDeleteOrder()"
+            type="button"
+            class="btn btn-outline-secondary deleted-log-btn flex-shrink-0"
+            (click)="openDeletedLog()"
+          >
+            عرض سجل الأوامر المحذوفة
+            <span *ngIf="deletedData.length">({{ deletedData.length }})</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="container-fluid text-center mt-5">
+    <div *ngIf="deleteError" class="alert alert-danger w-75 m-auto">{{ deleteError }}</div>
     <table class="table w-75 m-auto">
       <thead class="bg-dark text-white">
         <th>تاريخ الطلب</th>
@@ -100,18 +111,89 @@
             <td>{{ elm.quantity }}</td>
             <td>{{ elm.total }}</td>
             <td>{{ elm.user?.name }}</td>
-            <td *ngIf="elm.status === 'في التصنيع'">
-              <button type="button" (click)="finish(elm.id)" class="btn btn-outline-dark">تم الانتهاء</button>
+            <td class="text-nowrap">
+              <button
+                *ngIf="elm.status === 'في التصنيع'"
+                type="button"
+                (click)="finish(elm.id)"
+                class="btn btn-outline-dark btn-sm mr-1"
+              >تم الانتهاء</button>
+              <button
+                *ngIf="canDeleteOrder()"
+                type="button"
+                (click)="deleteOrder(elm)"
+                class="btn btn-outline-danger btn-sm"
+                [disabled]="deletingId === elm.id"
+              >
+                {{ deletingId === elm.id ? 'جاري الحذف…' : 'حذف' }}
+              </button>
+              <span *ngIf="elm.status !== 'في التصنيع' && !canDeleteOrder()">-</span>
             </td>
-            <td *ngIf="elm.status !== 'في التصنيع'">-</td>
           </tr>
         </ng-container>
       </tbody>
     </table>
   </div>
-  <hr>
-  <!-- <div class="text-center">
-    <button class="btn">المزيد</button>
-  </div> -->
+
+  <div
+    *ngIf="canDeleteOrder() && showDeletedLog"
+    class="deleted-log-backdrop"
+    (click)="closeDeletedLog()"
+  ></div>
+  <aside
+    *ngIf="canDeleteOrder() && showDeletedLog"
+    class="deleted-log-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="deletedLogTitle"
+  >
+    <header class="deleted-log-modal__header">
+      <h2 id="deletedLogTitle" class="deleted-log-modal__title">سجل الأوامر المحذوفة</h2>
+      <button
+        type="button"
+        class="deleted-log-modal__close"
+        (click)="closeDeletedLog()"
+        aria-label="إغلاق"
+      >✕</button>
+    </header>
+
+    <div class="deleted-log-modal__body">
+      <div *ngIf="deletedError" class="alert alert-danger">{{ deletedError }}</div>
+      <div class="table-responsive">
+        <table class="table table-sm deleted-log-table mb-0">
+          <thead>
+            <tr>
+              <th>رقم الأمر</th>
+              <th>تاريخ الطلب</th>
+              <th>حالة الأمر</th>
+              <th>اسم المنتج</th>
+              <th>الكمية</th>
+              <th>أُنشئ بواسطة</th>
+              <th>تاريخ الحذف</th>
+              <th>حُذف بواسطة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="deletedPending">
+              <td colspan="8" class="text-center">جاري التحميل…</td>
+            </tr>
+            <tr *ngIf="!deletedPending && !deletedError && deletedData.length === 0">
+              <td colspan="8" class="text-center">لا توجد أوامر محذوفة.</td>
+            </tr>
+            <tr *ngFor="let row of deletedData">
+              <td>{{ row.id }}</td>
+              <td>{{ row.date }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.product?.category_name }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.user?.name }}</td>
+              <td>{{ formatDeletedAt(row.deleted_at) }}</td>
+              <td>{{ row.deletedByUser?.name ?? row.deleted_by_user?.name ?? '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
 
 </div>

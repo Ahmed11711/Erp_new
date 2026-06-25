@@ -7,8 +7,12 @@
  */
 return [
     'ship_collect' => [
-        'departments' => ['Admin', 'Operation Management', 'Operation Specialist', 'Logistics Specialist'],
+        'departments' => ['Admin', 'Operation Management', 'Operation Specialist', 'Logistics Specialist', 'Shipping Management'],
         'permissions' => ['orders.change_status', 'orders.assign_driver', 'orders.view'],
+    ],
+    'order_rollback' => [
+        'departments' => ['Admin', 'Operation Management', 'Operation Specialist', 'Logistics Specialist', 'Shipping Management'],
+        'permissions' => ['orders.change_status', 'orders.assign_driver', 'orders.view', 'system.rbac'],
     ],
     'part_shipment' => [
         'departments' => ['Admin', 'Operation Management'],
@@ -35,7 +39,7 @@ return [
         'permissions' => ['orders.change_status', 'orders.view'],
     ],
     'refuse_maintain' => [
-        'departments' => ['Admin', 'Operation Management', 'Operation Specialist', 'Logistics Specialist', 'Shipping Management'],
+        'departments' => ['Admin', 'Operation Management', 'Finance and operations management', 'Operation Specialist', 'Logistics Specialist', 'Shipping Management', 'Data Entry', 'Review Management'],
         'permissions' => ['orders.change_status', 'orders.view'],
     ],
     'postpone_order' => [

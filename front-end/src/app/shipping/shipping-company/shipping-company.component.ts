@@ -6,6 +6,7 @@ import { ShippingCompanyService } from '../services/shipping-company.service';
 import { AuthService } from 'src/app/auth/auth.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
 import { TreeAccountService } from 'src/app/accounting/services/tree-account.service';
+import Swal from 'sweetalert2';
 
 export interface ReceivableAccountOption {
   id: number;
@@ -399,13 +400,151 @@ export class ShippingCompanyComponent implements OnInit {
     this.errorMessage = 'تعذر الحفظ. تحقق من البيانات.';
   }
 
-  deleteData(id:number){
-    this.shippingCompany.deleteLine(id).subscribe(result=>{
-      if (result === "deleted") {
-        this.getData();
+  deleteData(company: { id: number; name?: string; type?: string }): void {
+    const label = company.type === 'مندوب' ? 'المندوب' : 'شركة الشحن';
+
+    Swal.fire({
+      title: `حذف ${label}؟`,
+      text: company.name ? `«${company.name}»` : undefined,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'نعم',
+      cancelButtonText: 'إلغاء',
+    }).then((r) => {
+      if (!r.isConfirmed) {
+        return;
       }
 
-    })
+      this.shippingCompany.deleteLine(company.id).subscribe({
+        next: (result) => {
+          if (result === 'deleted') {
+            this.loadUnlinkedSummary();
+            this.getData();
+            Swal.fire({
+              icon: 'success',
+              title: 'تم الحذف بنجاح',
+              timer: 2500,
+              showConfirmButton: false,
+            });
+          }
+        },
+        error: (e) => Swal.fire({
+          icon: 'error',
+          title: 'فشل الحذف',
+          text: e?.error?.message || 'تعذر حذف المندوب/شركة الشحن',
+        }),
+      });
+    });
+  }
+
+  // --- Reconciliation ---
+  reconcilePanel = false;
+  reconcileCompanyId: number | null = null;
+  reconcileCompanyName = '';
+  reconcileDateFrom = '';
+  reconcileDateTo = '';
+  reconcileLoading = false;
+  reconcileRunning = false;
+  reconcileOrderCount: number | null = null;
+  reconcileOrders: any[] = [];
+  reconcileResult: any = null;
+
+  openReconcilePanel(company: any): void {
+    this.reconcilePanel = true;
+    this.reconcileCompanyId = company.id;
+    this.reconcileCompanyName = company.name;
+    this.reconcileDateFrom = '';
+    this.reconcileDateTo = '';
+    this.reconcileOrderCount = null;
+    this.reconcileOrders = [];
+    this.reconcileResult = null;
+    this.reconcileLoading = false;
+    this.reconcileRunning = false;
+    setTimeout(() => {
+      document.querySelector('.reconcile-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
+
+  closeReconcilePanel(): void {
+    this.reconcilePanel = false;
+    this.reconcileCompanyId = null;
+  }
+
+  onReconcileDateChange(): void {
+    this.reconcileOrderCount = null;
+    this.reconcileOrders = [];
+    this.reconcileResult = null;
+  }
+
+  loadReconcileOrders(): void {
+    if (!this.reconcileCompanyId || !this.reconcileDateFrom || !this.reconcileDateTo) return;
+    this.reconcileLoading = true;
+    this.reconcileResult = null;
+
+    this.shippingCompany.reconcileOrders(this.reconcileCompanyId, this.reconcileDateFrom, this.reconcileDateTo).subscribe({
+      next: (res: any) => {
+        this.reconcileLoading = false;
+        const orders = res?.orders || [];
+        this.reconcileOrders = orders.map((o: any) => ({ ...o, selected: true }));
+        this.reconcileOrderCount = orders.length;
+      },
+      error: (err: any) => {
+        this.reconcileLoading = false;
+        this.snackBar.open(err?.error?.message || 'فشل تحميل الطلبات', 'إغلاق', { duration: 5000 });
+      },
+    });
+  }
+
+  selectAllReconcileOrders(): void {
+    this.reconcileOrders.forEach(o => o.selected = true);
+  }
+
+  deselectAllReconcileOrders(): void {
+    this.reconcileOrders.forEach(o => o.selected = false);
+  }
+
+  selectedReconcileCount(): number {
+    return this.reconcileOrders.filter(o => o.selected).length;
+  }
+
+  executeReconcile(): void {
+    if (!this.reconcileCompanyId || !this.reconcileDateFrom || !this.reconcileDateTo) return;
+
+    const selectedIds = this.reconcileOrders.filter(o => o.selected).map(o => o.id);
+    const allSelected = selectedIds.length === this.reconcileOrders.length;
+    const orderIds = allSelected ? undefined : selectedIds;
+
+    const count = allSelected ? this.reconcileOrders.length : selectedIds.length;
+    if (count === 0 && this.reconcileOrders.length > 0) {
+      this.snackBar.open('اختر طلبات أولاً', 'إغلاق', { duration: 3000 });
+      return;
+    }
+
+    if (!confirm(`سيتم إعادة حساب مديونيات «${this.reconcileCompanyName}» لعدد ${count || 'جميع'} طلب. المتابعة؟`)) {
+      return;
+    }
+
+    this.reconcileRunning = true;
+    this.reconcileResult = null;
+
+    this.shippingCompany.reconcileReceivables(
+      this.reconcileCompanyId,
+      this.reconcileDateFrom,
+      this.reconcileDateTo,
+      orderIds
+    ).subscribe({
+      next: (res: any) => {
+        this.reconcileRunning = false;
+        this.reconcileResult = res;
+        if (res?.success) {
+          this.getData();
+        }
+      },
+      error: (err: any) => {
+        this.reconcileRunning = false;
+        this.reconcileResult = { success: false, message: err?.error?.message || 'فشلت العملية' };
+      },
+    });
   }
 
   editId!:number;

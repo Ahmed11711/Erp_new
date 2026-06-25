@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Services\Orders\OrderCancellationAccountingService;
 use App\Services\Shopify\ShopifyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -55,6 +56,8 @@ class ShippingPartnerWebhookController extends Controller
 
         if (str_contains($normalized, 'fail') || str_contains($normalized, 'cancel')) {
             $order->shopify_fulfillment_status = 'cancelled';
+            $userId = (int) (auth()->id() ?? config('services.shopify.tracking_user_id') ?? 1);
+            app(OrderCancellationAccountingService::class)->handleCancellation($order, $userId);
             $order->order_status = 'ملغي';
             $order->save();
             $ok = $shopify->cancelLocalOrderOnShopify($order->fresh());

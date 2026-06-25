@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { ManufacturingService } from '../services/manufacturing.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 
 @Component({
   selector: 'app-manufacturing-orders',
@@ -15,15 +16,29 @@ export class ManufacturingOrdersComponent implements OnInit {
   /** Cleared after first HTTP response (success or error). */
   listPending = true;
   listError: string | null = null;
+  deleteError: string | null = null;
+  deletingId: number | null = null;
+
+  deletedData: any[] = [];
+  deletedPending = false;
+  deletedError: string | null = null;
+  showDeletedLog = false;
 
   private _name: string = '';
   status: string = 'حاله التصنيع';
   private _date: any;
 
-  constructor(private datePipe: DatePipe, private manufacturingService: ManufacturingService) {}
+  constructor(
+    private datePipe: DatePipe,
+    private manufacturingService: ManufacturingService,
+    readonly rbac: RbacService,
+  ) {}
 
   ngOnInit(): void {
     this.getData();
+    if (this.canDeleteOrder()) {
+      this.loadDeletedLog();
+    }
   }
 
   getData(): void {
@@ -53,6 +68,41 @@ export class ManufacturingOrdersComponent implements OnInit {
         this.listPending = false;
       },
     });
+  }
+
+  loadDeletedLog(): void {
+    if (!this.canDeleteOrder()) {
+      return;
+    }
+    this.deletedPending = true;
+    this.deletedError = null;
+    this.manufacturingService.confirmedDeleted().subscribe({
+      next: (rows) => {
+        this.deletedData = Array.isArray(rows) ? rows : [];
+        this.deletedPending = false;
+      },
+      error: () => {
+        this.deletedData = [];
+        this.deletedError = 'تعذر تحميل سجل الأوامر المحذوفة.';
+        this.deletedPending = false;
+      },
+    });
+  }
+
+  openDeletedLog(): void {
+    this.showDeletedLog = true;
+    this.loadDeletedLog();
+  }
+
+  closeDeletedLog(): void {
+    this.showDeletedLog = false;
+  }
+
+  formatDeletedAt(value: string | null | undefined): string {
+    if (!value) {
+      return '-';
+    }
+    return this.datePipe.transform(value, 'yyyy-MM-dd HH:mm') ?? value;
   }
 
   get name(): string {
@@ -120,5 +170,37 @@ export class ManufacturingOrdersComponent implements OnInit {
         this.getData();
       }
     })
+  }
+
+  canDeleteOrder(): boolean {
+    return this.rbac.can('manufacturing.delete_order') || this.rbac.can('system.rbac');
+  }
+
+  deleteOrder(elm: { id: number; product?: { category_name?: string } }): void {
+    if (!this.canDeleteOrder() || this.deletingId != null) {
+      return;
+    }
+
+    const label = elm.product?.category_name ?? `#${elm.id}`;
+    const ok = window.confirm(
+      `هل تريد حذف أمر التصنيع «${label}»؟\n\nسيتم عكس جميع حركات المخزون كأن الأمر لم يُنفَّذ.`
+    );
+    if (!ok) {
+      return;
+    }
+
+    this.deleteError = null;
+    this.deletingId = elm.id;
+    this.manufacturingService.deleteConfirmedOrder(elm.id).subscribe({
+      next: () => {
+        this.deletingId = null;
+        this.getData();
+        this.openDeletedLog();
+      },
+      error: (err) => {
+        this.deletingId = null;
+        this.deleteError = err?.error?.message ?? 'تعذر حذف أمر التصنيع.';
+      },
+    });
   }
 }

@@ -66,6 +66,10 @@
             <strong>{{ $invoice->supplier->supplier_name ?? '—' }}</strong>
         </div>
         <div>
+            <span>مندوب الشحن</span>
+            <strong>{{ $invoice->shippingCompany->name ?? '—' }}</strong>
+        </div>
+        <div>
             <span>نوع الفاتورة</span>
             <strong>{{ $invoice->invoice_type }}</strong>
         </div>

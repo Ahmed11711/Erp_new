@@ -10,6 +10,7 @@ use App\Models\Stock;
 use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Inventory\InventoryMovementLedgerService;
 use App\Models\TreeAccount;
+use App\Services\Items\RecipeSheetImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,29 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
  */
 class InventoryExcelImportController extends Controller
 {
+    /** @var list<string> */
+    private const STANDARD_WAREHOUSES = [
+        'مخزن مواد خام',
+        'مخزن منتج تحت التشغيل',
+        'مخزن منتج تام',
+        'مخزن صيانة',
+        'مخزن تالف',
+    ];
+
+    private function resolveDefaultWarehouse(?string $requested, string $fallback = 'مخزن مواد خام'): string
+    {
+        $warehouse = trim((string) ($requested ?? ''));
+        if ($warehouse === '') {
+            return $fallback;
+        }
+
+        if (! in_array($warehouse, self::STANDARD_WAREHOUSES, true)) {
+            throw new \InvalidArgumentException('المخزن المحدد غير معروف: '.$warehouse);
+        }
+
+        return $warehouse;
+    }
+
     /**
      * أول سطر غير فارغ: يُفضّل TAB أو الفاصلة المنقوطة (Excel العربي) أو الفاصلة.
      */
@@ -217,7 +241,14 @@ class InventoryExcelImportController extends Controller
     {
         $request->validate([
             'file' => 'required|file|mimes:xlsx,xls,csv,txt',
+            'default_warehouse' => 'nullable|string|max:255',
         ]);
+
+        try {
+            $defaultWarehouse = $this->resolveDefaultWarehouse($request->input('default_warehouse'));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         $path = $request->file('file')->getRealPath();
         $sheet = $this->loadSpreadsheet($path)->getActiveSheet();
@@ -247,7 +278,7 @@ class InventoryExcelImportController extends Controller
                 $warehouseCol = $this->columnIndex($idx, ['warehouse', 'المخزن', 'مخزن']);
                 $warehouse = $warehouseCol !== null ? trim((string) ($line[$warehouseCol] ?? '')) : '';
                 if ($warehouse === '') {
-                    $warehouse = 'مخزن مواد خام';
+                    $warehouse = $defaultWarehouse;
                 }
                 $productionId = $this->resolveProductionIdFromLine($line, $idx, $defaultProductionId);
                 $measurementCol = $this->columnIndex($idx, ['measurement_id', 'وحدة القياس', 'رقم الوحدة']);
@@ -323,6 +354,56 @@ class InventoryExcelImportController extends Controller
         }
 
         return response()->json(['created' => $created, 'updated' => $updated], 200);
+    }
+
+    /**
+     * Import category rows from the recipe-style Excel sheet (اسم الصنف / الخامات / الكمية …)
+     * without creating recipes. All rows go to the warehouse chosen in the request.
+     */
+    public function importRecipeSheetItems(Request $request, RecipeSheetImportService $import): JsonResponse
+    {
+        $data = $request->validate([
+            'file' => ['required', 'file', 'max:20480', 'mimes:xlsx,xls,csv'],
+            'warehouse' => ['required', 'string', 'max:255'],
+            'sheet' => ['nullable', 'string', 'max:255'],
+            'include_products' => ['sometimes', 'boolean'],
+            'include_materials' => ['sometimes', 'boolean'],
+        ]);
+
+        try {
+            $warehouse = $this->resolveDefaultWarehouse($data['warehouse'], '');
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        if ($warehouse === '') {
+            return response()->json(['message' => 'يجب تحديد المخزن.'], 422);
+        }
+
+        $uploaded = $request->file('file');
+        $path = $uploaded->getRealPath();
+        if ($path === false || ! is_readable($path)) {
+            return response()->json(['message' => 'تعذّر قراءة الملف المرفوع.'], 422);
+        }
+
+        try {
+            $result = $import->importItemsOnly(
+                absolutePath: $path,
+                warehouse: $warehouse,
+                sheetName: $data['sheet'] ?? null,
+                includeProducts: $request->boolean('include_products', true),
+                includeMaterials: $request->boolean('include_materials', true),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'تعذّر استيراد الأصناف: '.$e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'تم استيراد الأصناف من شيت Excel',
+            ...$result->toArray(),
+        ]);
     }
 
     /**

@@ -1,66 +1,232 @@
-
-.header{
-background-color: black;
-color: white;
-text-align: center;
-font-size: 2rem;
-border-radius: 7px;
-padding: 10px 20px;
-width: fit-content;
+.purchase-details-page {
+  --pp-brand: #82225e;
+  --pp-border: #e2e8f0;
+  --pp-bg: #f8fafc;
+  --pp-text: #0f172a;
+  --pp-muted: #64748b;
+  --pp-radius: 10px;
+  max-width: 1200px;
+  padding-bottom: 2rem;
+  color: var(--pp-text);
 }
 
-
-thead{
-font-size: 1.5rem;
+.pp-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 0 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--pp-border);
 }
 
-.btn-add{
-border: #82225e solid thin !important;
-font-size: 1.8rem;
-padding: 0.1rem 1.5rem !important;
-border-radius: 2rem;
+.pp-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--pp-text);
 }
 
-select , select:focus{
-background-color: #82225e;
-color: white;
-font-size: 1.3rem;
+.pp-doc-no {
+  color: var(--pp-brand);
+  font-weight: 700;
 }
 
-input{
-font-size: 1.2rem;
+.pp-head-end {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
-i{
-cursor: pointer;
+.pp-print-btn {
+  white-space: nowrap;
 }
 
-.submit , .submit:hover{
-background-color: black !important;
-font-size: 1.8rem;
-padding: 0.5rem 2rem !important;
-color: white;
+.pp-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
-
-.fa-solid{
-cursor: auto;
+.pp-meta-card {
+  background: #fff;
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius);
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 72px;
 }
 
-P{
-  font-size: 1.8rem;
-  background-color: #82225e;
-  color: white;
-  border-radius: 10px;
-  padding: 5px 1rem;
-  width: fit-content;
-  margin: 10px auto;
+.pp-meta-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pp-muted);
+  text-transform: none;
 }
 
-h3{
-  font-size: 1.3rem;
+.pp-meta-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--pp-text);
+  word-break: break-word;
 }
 
-td{
-  font-size: 1.3rem !important;
+.pp-card {
+  background: #fff;
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.pp-card-header {
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pp-brand);
+  background: var(--pp-bg);
+  border-bottom: 1px solid var(--pp-border);
+}
+
+.pp-table-wrap {
+  overflow-x: auto;
+}
+
+.pp-table {
+  width: 100%;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.pp-table thead th {
+  background: #1e293b;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.65rem 0.5rem;
+  white-space: nowrap;
+  border: none;
+}
+
+.pp-table tbody td {
+  padding: 0.6rem 0.5rem;
+  vertical-align: middle;
+  border-color: var(--pp-border);
+}
+
+.pp-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.pp-product-name {
+  font-weight: 600;
+  text-align: right;
+}
+
+.pp-line-total {
+  font-weight: 700;
+  color: var(--pp-brand);
+}
+
+.pp-edited-yes {
+  color: #15803d;
+  font-size: 1rem;
+}
+
+.pp-edited-no {
+  color: #cbd5e1;
+}
+
+.pp-empty {
+  color: var(--pp-muted);
+  padding: 1.25rem !important;
+}
+
+.pp-bottom-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.pp-totals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.pp-total-item {
+  background: var(--pp-bg);
+  border: 1px solid var(--pp-border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pp-total-item--wide {
+  grid-column: 1 / -1;
+}
+
+.pp-total-label {
+  font-size: 0.75rem;
+  color: var(--pp-muted);
+  font-weight: 600;
+}
+
+.pp-total-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--pp-text);
+}
+
+.pp-total-value--paid {
+  color: #15803d;
+}
+
+.pp-total-value--due {
+  color: #b45309;
+}
+
+.pp-tracking-table thead th {
+  background: #334155;
+}
+
+.pp-tracking-row {
+  cursor: pointer;
+}
+
+.pp-tracking-row:hover {
+  background: #eff6ff;
+}
+
+.pp-tracking-details {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.875rem;
+  color: #334155;
+  min-width: 220px;
+  max-width: 520px;
+}
+
+@media (max-width: 991px) {
+  .pp-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 576px) {
+  .pp-meta-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pp-totals-grid {
+    grid-template-columns: 1fr;
+  }
 }

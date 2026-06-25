@@ -15,6 +15,19 @@
 </div>
 
 <div class="container">
+    <div class="form-row justify-content-center mb-3">
+      <div class="form-group col-md-6">
+        <select
+          class="form-control"
+          [value]="warehouse"
+          (change)="onWarehouseChange($event)"
+          aria-label="اختر المخزن">
+          <option value="">— اختر المخزن —</option>
+          <option *ngFor="let name of warehouseOptions" [value]="name">{{ name }}</option>
+        </select>
+      </div>
+    </div>
+    <p *ngIf="!warehouse" class="alert alert-warning text-right">اختر مخزناً لعرض الأصناف.</p>
     <form>
         <div class="form-row justify-content-center">
           <div class="form-group col-md-6">
@@ -39,7 +52,7 @@
 </div>
 
 
-<div class="container-fluid table-responsive text-center py-2">
+<div class="container-fluid table-responsive text-center py-2" *ngIf="warehouse">
     <table class="table table-bordered table-hover">
       <thead class="thead-dark">
         <tr>

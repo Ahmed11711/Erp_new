@@ -59,3 +59,19 @@ td{
   position: relative;
   z-index: 0;
 }
+
+.reconcile-panel {
+  direction: rtl;
+}
+
+.reconcile-panel .form-label {
+  font-size: 1.2rem;
+}
+
+.reconcile-panel .form-check-label {
+  font-size: 1.1rem;
+}
+
+.reconcile-orders-list {
+  background: #fafafa;
+}

@@ -3,7 +3,6 @@ import { Component, Inject } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { DialogPayMoneyForSupplierComponent } from 'src/app/suppliers/dialog-pay-money-for-supplier/dialog-pay-money-for-supplier.component';
-import { CompaniesService } from '../services/companies.service';
 import { OrderService } from '../services/order.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import Swal from 'sweetalert2';
@@ -20,14 +19,16 @@ export class DialogCancelRefuseOrderComponent {
   selectedBank:boolean=false;
   amount!:number;
   receivedOrder:any='هل تم استلام المنتج من شركة الشحن؟';
+  submitting = false;
+
   constructor(public dialogRef: MatDialogRef<DialogPayMoneyForSupplierComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
-    private order:OrderService , private bankService:BanksService,
+    private order:OrderService ,
+    private bankService:BanksService,
     private http:HttpClient
   ) {}
 
   ngOnInit(){
-    console.log(this.data)
     if (this.data?.data?.action == "refused") {
       this.title = 'رفض استلام'
     } else {
@@ -39,8 +40,6 @@ export class DialogCancelRefuseOrderComponent {
       'bank':'الخزينة',
       'receivedOrder':'هل تم استلام المنتج من شركة الشحن؟'
     })
-
-
   }
 
   form:FormGroup = new FormGroup({
@@ -58,86 +57,83 @@ export class DialogCancelRefuseOrderComponent {
     this.selectedBank = true;
   }
 
-  submitform(){
-    if (this.form.valid) {
-      let data = this.form.value
-      console.log(data);
-
-      const formData = new FormData();
-      formData.append('reason', data.reason);
-      formData.append('amount', data.amount);
-      formData.append('bank', data.bank);
-
-      console.log(this.form.value);
-
-      const id = this.data?.data.id;
-      const action = this.data?.data.action;
-      const reason =this.form.value.reason;
-      const amount =this.form.value.amount || 0;
-      const bank =this.form.value.bank;
-      Swal.fire({
-        title: 'هل تم استلام المنتج',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'تم الاستلام',
-        cancelButtonText: 'لم يتم الاستلام',
-      }).then((result) => {
-        let receviedOrder;
-        if (result.isConfirmed) {
-          receviedOrder = true;
-          this.order.refuseOrder(id,reason,amount,bank,true,'').subscribe((result:any)=>{
-            if (result) {
-              this.data.refreshData();
-              Swal.fire({
-                icon : 'success',
-                timer:3000,
-                showConfirmButton:false,
-                titleText: 'تم ارسال اشعار للادمن',
-                position: 'bottom-end',
-                toast: true,
-                timerProgressBar: true,
-              });
-            };
-          })
-        } else if (result.isDismissed) {
-          receviedOrder = false;
-          Swal.fire({
-            icon:'info',
-            input: 'text',
-            inputPlaceholder: 'السبب',
-            showCancelButton: true,
-            inputValidator: (value) => {
-              if (!value) {
-                return 'يجب ادخال ملاحظة'
-              }
-              if (value !== '') {
-                this.order.refuseOrder(id,reason,amount,bank,false,value).subscribe((result:any)=>{
-                  if (result) {
-                    this.data.refreshData();
-                    Swal.fire({
-                      icon : 'success',
-                      timer:3000,
-                      showConfirmButton:false,
-                      titleText: 'تم ارسال اشعار للادمن',
-                      position: 'bottom-end',
-                      toast: true,
-                      timerProgressBar: true,
-                    });
-                  };
-                });
-              }
-              return undefined
-            }
-          })
-        }
-
-        this.onCloseClick();
-
-
-      })
-
+  private completeRefuse(
+    id: number,
+    reason: string,
+    amount: number,
+    bank: string | number,
+    received: boolean,
+    reasoncat: string
+  ): void {
+    if (this.submitting) {
+      return;
     }
+    this.submitting = true;
+    this.order.refuseOrder(id, reason, amount, bank, received, reasoncat).subscribe({
+      next: () => {
+        this.submitting = false;
+        this.data.refreshData();
+        this.onCloseClick();
+        Swal.fire({
+          icon : 'success',
+          timer:3000,
+          showConfirmButton:false,
+          titleText: 'تم تسجيل رفض الاستلام',
+          position: 'bottom-end',
+          toast: true,
+          timerProgressBar: true,
+        });
+      },
+      error: (err) => {
+        this.submitting = false;
+        Swal.fire({
+          icon: 'error',
+          title: err?.error?.message || 'تعذر تنفيذ رفض الاستلام',
+        });
+      }
+    });
   }
 
+  submitform(){
+    if (!this.form.valid || this.submitting) {
+      return;
+    }
 
+    const id = this.data?.data.id;
+    const reason = this.form.value.reason;
+    const amount = this.form.value.amount || 0;
+    const bank = this.form.value.bank;
+
+    Swal.fire({
+      title: 'هل تم استلام المنتج',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'تم الاستلام',
+      cancelButtonText: 'لم يتم الاستلام',
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.completeRefuse(id, reason, amount, bank, true, '');
+        return;
+      }
+
+      if (result.dismiss === Swal.DismissReason.cancel) {
+        Swal.fire({
+          icon:'info',
+          input: 'text',
+          inputPlaceholder: 'السبب',
+          showCancelButton: true,
+          inputValidator: (value) => {
+            if (!value) {
+              return 'يجب ادخال ملاحظة';
+            }
+            return undefined;
+          }
+        }).then((noteResult) => {
+          if (noteResult.isConfirmed && noteResult.value) {
+            this.completeRefuse(id, reason, amount, bank, false, noteResult.value);
+          }
+        });
+      }
+    });
+  }
 }

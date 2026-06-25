@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { environment } from 'src/env/env';
-import { TreeAccount, TreeAccountResponse } from '../interfaces/tree-account.interface';
+import { TreeAccount, TreeAccountAuditEntry, TreeAccountResponse } from '../interfaces/tree-account.interface';
 import { Observable } from 'rxjs';
 
 @Injectable({
@@ -38,6 +38,12 @@ export class TreeAccountService {
 
   delete(id: number): Observable<{ success: boolean; status: number; message: string; data: null }> {
     return this.http.delete<{ success: boolean; status: number; message: string; data: null }>(`${environment.Url}/tree_accounts/${id}`);
+  }
+
+  getAudits(id: number): Observable<{ success: boolean; status: number; message: string; data: TreeAccountAuditEntry[] }> {
+    return this.http.get<{ success: boolean; status: number; message: string; data: TreeAccountAuditEntry[] }>(
+      `${environment.Url}/tree_accounts/${id}/audits`
+    );
   }
 }
 

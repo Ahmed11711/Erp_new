@@ -13,8 +13,8 @@
   <div class="container">
     <p class="text-muted small mb-2">
       كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري).
-      <strong>حساب الشجرة (مدين):</strong> جميع حسابات المصروف تحت حساب الأب
-      <strong>{{ cashOutParentName }}</strong> — يُنشأ حساب فرعي تلقائياً باسم الفئة عند الحفظ إذا اخترت «تلقائي».
+      <strong>حساب الشجرة (مدين):</strong> ابحث واختر أي حساب من شجرة الحسابات كاملة،
+      أو اترك الحقل فارغاً / اختر «تلقائي» لإنشاء حساب فرعي تحت <strong>{{ cashOutParentName }}</strong>.
     </p>
     <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
 
@@ -41,12 +41,23 @@
         </div>
         <div class="form-group">
           <label class="form-label">حساب الشجرة للقيد المدين <span class="text-muted">(اختياري)</span></label>
-          <select class="form-control" formControlName="tree_account_id">
-            <option [ngValue]="null">— تلقائي (حساب فرعي تحت {{ cashOutParentName }}) —</option>
-            <option *ngFor="let acc of expenseLeafAccounts" [ngValue]="acc.id">
-              {{ acc.code }} — {{ acc.name }}
-            </option>
-          </select>
+          <input class="form-control expense-kind-account-input"
+            [formControl]="formAccountCtrl"
+            [matAutocomplete]="formAccAuto"
+            (focus)="onFormAccountFocus()"
+            (blur)="onFormAccountBlur()"
+            placeholder="ابحث بالرمز أو الاسم — فارغ = تلقائي"
+            autocomplete="off" />
+          <mat-autocomplete #formAccAuto="matAutocomplete"
+            panelClass="expense-kind-autocomplete-panel"
+            [displayWith]="displayAccountOption"
+            (optionSelected)="onFormAccountSelected($event)"
+            [autoActiveFirstOption]="true">
+            <mat-option [value]="autoSentinel">{{ autoAccountLabel() }}</mat-option>
+            <mat-option *ngFor="let acc of filteredFormAccounts" [value]="acc">
+              {{ accountOptionLabel(acc) }}
+            </mat-option>
+          </mat-autocomplete>
         </div>
         <div class="text-center my-3">
           <button [disabled]="form.invalid" *ngIf="addbtn" type="submit" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
@@ -97,13 +108,23 @@
             </select>
           </td>
           <td>
-            <select class="form-control form-control-sm" [(ngModel)]="elm.tree_account_id"
-              [ngModelOptions]="{standalone: true}" [name]="'a'+elm.id">
-              <option [ngValue]="null">— تلقائي (تحت {{ cashOutParentName }}) —</option>
-              <option *ngFor="let acc of expenseLeafAccounts" [ngValue]="acc.id">
-                {{ acc.code }} — {{ acc.name }}
-              </option>
-            </select>
+            <input class="form-control form-control-sm expense-kind-account-input"
+              [formControl]="getRowAccountCtrl(elm)"
+              [matAutocomplete]="rowAccAuto"
+              (focus)="onRowAccountFocus(elm)"
+              (blur)="onRowAccountBlur(elm)"
+              placeholder="ابحث بالرمز أو الاسم"
+              autocomplete="off" />
+            <mat-autocomplete #rowAccAuto="matAutocomplete"
+              panelClass="expense-kind-autocomplete-panel"
+              [displayWith]="displayAccountOption"
+              (optionSelected)="onRowAccountSelected(elm, $event)"
+              [autoActiveFirstOption]="true">
+              <mat-option [value]="autoSentinel">{{ autoAccountLabel() }}</mat-option>
+              <mat-option *ngFor="let acc of getRowFilteredAccounts(elm)" [value]="acc">
+                {{ accountOptionLabel(acc) }}
+              </mat-option>
+            </mat-autocomplete>
           </td>
           <td class="text-nowrap">
             <button type="button" class="btn btn-sm btn-primary mr-1" (click)="saveRow(elm)"

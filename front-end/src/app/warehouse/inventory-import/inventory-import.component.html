@@ -269,18 +269,66 @@
     <div class="card shadow-sm">
       <div class="card-body">
         <h2 class="h5">استيراد / تحديث الأصناف (بدون كميات مخزون)</h2>
-        <p class="small text-muted mb-2">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">نوع الملف</label>
+          <div class="d-flex flex-wrap gap-3">
+            <label class="d-flex align-items-center gap-2 mb-0">
+              <input type="radio" name="itemsImportMode" value="recipe-sheet" [(ngModel)]="itemsImportMode" />
+              <span>شيت الأصناف (Excel) — اسم الصنف / الخامات / الكمية</span>
+            </label>
+            <label class="d-flex align-items-center gap-2 mb-0">
+              <input type="radio" name="itemsImportMode" value="simple" [(ngModel)]="itemsImportMode" />
+              <span>ملف أصناف بسيط (CSV)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="itemsWarehouse">المخزن</label>
+          <select id="itemsWarehouse" class="form-select" [(ngModel)]="itemsWarehouse" required>
+            <option *ngFor="let wh of warehouseOptions" [value]="wh">{{ wh }}</option>
+          </select>
+          <p class="small text-muted mb-0 mt-1">
+            <ng-container *ngIf="itemsImportMode === 'recipe-sheet'">
+              كل الأصناف المستخرجة من الشيت (المنتجات والخامات) تُسجَّل في هذا المخزن.
+            </ng-container>
+            <ng-container *ngIf="itemsImportMode === 'simple'">
+              يُستخدم كمخزن افتراضي إذا لم يُذكر عمود «المخزن» في الملف.
+            </ng-container>
+          </p>
+        </div>
+
+        <div class="mb-3" *ngIf="itemsImportMode === 'recipe-sheet'">
+          <label class="form-label fw-semibold">ما الذي تريد استيراده من الشيت؟</label>
+          <div class="d-flex flex-wrap gap-3">
+            <label class="d-flex align-items-center gap-2 mb-0">
+              <input type="checkbox" [(ngModel)]="includeRecipeProducts" />
+              <span>أسماء الأصناف (عمود اسم الصنف)</span>
+            </label>
+            <label class="d-flex align-items-center gap-2 mb-0">
+              <input type="checkbox" [(ngModel)]="includeRecipeMaterials" />
+              <span>الخامات (مواد التشغيل)</span>
+            </label>
+          </div>
+        </div>
+
+        <p class="small text-muted mb-2" *ngIf="itemsImportMode === 'simple'">
           إلزامي: <strong>اسم الصنف</strong>، <strong>سعر التكلفة</strong>.
           اختياري: <strong>المخزن</strong>، <strong>رقم الوحدة</strong>، <strong>فرع الانتاج</strong>، <strong>كود الصنف</strong>، <strong>اللون</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
         </p>
-        <p class="small mb-2">
+        <p class="small text-muted mb-2" *ngIf="itemsImportMode === 'recipe-sheet'">
+          نفس تنسيق شيت التكلفة: <strong>اسم الصنف</strong>، <strong>الخامات</strong>، <strong>الكمية</strong>،
+          <strong>الوحدة</strong>، <strong>السعر</strong> — بدون إنشاء وصفات.
+        </p>
+        <p class="small mb-2" *ngIf="itemsImportMode === 'simple'">
           <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/items-sample.csv" download="نموذج-أصناف.csv">
             <i class="fa-solid fa-download me-1"></i> تحميل نموذج CSV
           </a>
         </p>
         <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('items', $event)" class="form-control mb-2" />
-        <button type="button" class="btn btn-primary" [disabled]="!itemsFile || loadingItems" (click)="uploadItems()">
-          {{ loadingItems ? 'جاري الرفع...' : 'رفع ملف الأصناف' }}
+        <button type="button" class="btn btn-primary" [disabled]="!itemsFile || !itemsWarehouse || loadingItems || (itemsImportMode === 'recipe-sheet' && !includeRecipeProducts && !includeRecipeMaterials)" (click)="uploadItems()">
+          {{ loadingItems ? 'جاري الرفع...' : (itemsImportMode === 'recipe-sheet' ? 'استيراد الأصناف من الشيت' : 'رفع ملف الأصناف') }}
         </button>
         <p *ngIf="messageItems" class="text-success mt-2 mb-0">{{ messageItems }}</p>
         <p *ngIf="errorItems" class="text-danger mt-2 mb-0">{{ errorItems }}</p>

@@ -643,14 +643,14 @@ class RecipeSheetImportService
             $manufacture = $existing;
             $result->manufacturesUpdated++;
         } elseif ($existing) {
-            // Product already has a manufacture recipe (from a previous import or
-            // manual confirmOrder). Keep it — don't duplicate or overwrite.
-            Log::info('[recipe-import] manufacture already exists, reusing', [
+            $existing->total = round($totalCost, 2);
+            $existing->save();
+            $manufacture = $existing;
+            $result->manufacturesUpdated++;
+            Log::info('[recipe-import] manufacture already exists, refreshing BOM lines', [
                 'manufacture_id' => $existing->id,
                 'product_id' => $product->id,
             ]);
-
-            return (int) $existing->id;
         } else {
             $manufacture = Manufacture::create([
                 'product_id' => $product->id,
@@ -696,6 +696,244 @@ class RecipeSheetImportService
         }
 
         return (int) $manufacture->id;
+    }
+
+    /**
+     * Import / update category rows from a recipe-style Excel sheet without creating recipes.
+     * All items are placed in the warehouse chosen by the user.
+     *
+     * @param  bool  $includeProducts  Recipe header names (اسم الصنف)
+     * @param  bool  $includeMaterials  Ingredient rows (الخامات)
+     */
+    public function importItemsOnly(
+        string $absolutePath,
+        string $warehouse,
+        ?string $sheetName = null,
+        bool $includeProducts = true,
+        bool $includeMaterials = true,
+    ): RecipeSheetItemsImportResult {
+        $warehouse = trim($warehouse);
+        if ($warehouse === '') {
+            throw new \InvalidArgumentException('يجب تحديد المخزن.');
+        }
+
+        $parsed = $this->parse($absolutePath, $sheetName);
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $warnings = [];
+
+        DB::beginTransaction();
+        try {
+            if ($includeProducts) {
+                foreach ($parsed->recipes as $recipe) {
+                    $sellPrice = isset($recipe['sell_price']) ? (float) $recipe['sell_price'] : 0.0;
+                    $cost = isset($recipe['total_direct_cost']) ? (float) $recipe['total_direct_cost'] : $sellPrice;
+                    if ($cost <= 0 && $sellPrice > 0) {
+                        $cost = $sellPrice;
+                    }
+                    if ($sellPrice <= 0 && $cost > 0) {
+                        $sellPrice = $cost;
+                    }
+
+                    $outcome = $this->upsertSheetItemInWarehouse(
+                        name: (string) $recipe['recipe_name'],
+                        normalizedName: (string) $recipe['normalized_name'],
+                        warehouse: $warehouse,
+                        unitText: null,
+                        cost: $cost,
+                        sellPrice: $sellPrice,
+                        color: null,
+                        supportsColor: false,
+                    );
+                    $this->tallyImportOutcome($outcome, $created, $updated, $skipped);
+                }
+            }
+
+            if ($includeMaterials) {
+                $seen = [];
+                foreach ($parsed->recipes as $recipe) {
+                    foreach ($recipe['ingredients'] as $ing) {
+                        $key = $this->ingredientMaterializationKey($ing);
+                        if (isset($seen[$key])) {
+                            continue;
+                        }
+                        $seen[$key] = true;
+
+                        $color = ! empty($ing['supports_color']) ? null : ($ing['color'] ?? null);
+                        $price = isset($ing['unit_cost']) ? (float) $ing['unit_cost'] : 0.0;
+
+                        $outcome = $this->upsertSheetItemInWarehouse(
+                            name: (string) $ing['item_name'],
+                            normalizedName: (string) $ing['normalized_name'],
+                            warehouse: $warehouse,
+                            unitText: $ing['unit'] ?? null,
+                            cost: $price,
+                            sellPrice: $price,
+                            color: $color,
+                            supportsColor: ! empty($ing['supports_color']),
+                        );
+                        $this->tallyImportOutcome($outcome, $created, $updated, $skipped);
+                    }
+                }
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        return new RecipeSheetItemsImportResult($created, $updated, $skipped, $warnings);
+    }
+
+    /**
+     * @return 'created'|'updated'|'skipped'
+     */
+    private function upsertSheetItemInWarehouse(
+        string $name,
+        string $normalizedName,
+        string $warehouse,
+        ?string $unitText,
+        float $cost,
+        float $sellPrice,
+        ?string $color,
+        bool $supportsColor,
+    ): string {
+        $existing = $this->findExistingItemInWarehouse($warehouse, $normalizedName, $color, $supportsColor);
+
+        if ($existing !== null) {
+            $updates = [];
+            if ($cost > 0 && (float) $existing->unit_price !== $cost) {
+                $updates['unit_price'] = $cost;
+            }
+            if ($sellPrice > 0 && (float) $existing->category_price !== $sellPrice) {
+                $updates['category_price'] = $sellPrice;
+            }
+            if ($color !== null && $color !== '' && empty($existing->color)) {
+                $updates['color'] = $color;
+            }
+            if ($supportsColor && ! $existing->supports_color) {
+                $updates['supports_color'] = true;
+            }
+            if ($unitText !== null && $unitText !== '') {
+                $measurementId = $this->resolveMeasurementIdForWarehouse($warehouse, $unitText, config('items_import.new_item', []));
+                if ((int) $existing->measurement_id !== $measurementId) {
+                    $updates['measurement_id'] = $measurementId;
+                }
+            }
+            $stockId = $this->resolveStockIdForWarehouse($warehouse);
+            if ((int) $existing->stock_id !== $stockId) {
+                $updates['stock_id'] = $stockId;
+            }
+
+            if ($updates !== []) {
+                $existing->update($updates);
+
+                return 'updated';
+            }
+
+            return 'skipped';
+        }
+
+        if ($supportsColor) {
+            $this->createItem(
+                name: $name,
+                warehouse: $warehouse,
+                unitText: $unitText,
+                price: $cost > 0 ? $cost : ($sellPrice > 0 ? $sellPrice : null),
+                recipeId: null,
+                color: $color,
+                supportsColor: true,
+            );
+        } elseif ($cost > 0 || $sellPrice > 0) {
+            $this->createItemWithSeparatePrices(
+                name: $name,
+                warehouse: $warehouse,
+                cost: max(0, $cost),
+                sellPrice: max(0, $sellPrice > 0 ? $sellPrice : $cost),
+                recipeId: null,
+                color: $color,
+            );
+        } else {
+            $this->createItem(
+                name: $name,
+                warehouse: $warehouse,
+                unitText: $unitText,
+                price: null,
+                recipeId: null,
+                color: $color,
+                supportsColor: false,
+            );
+        }
+
+        return 'created';
+    }
+
+    private function findExistingItemInWarehouse(
+        string $warehouse,
+        string $normalizedName,
+        ?string $color,
+        bool $supportsColor,
+    ): ?Item {
+        if ($normalizedName === '') {
+            return null;
+        }
+
+        $group = [];
+        Item::query()
+            ->select(['id', 'category_name', 'category_price', 'unit_price', 'color', 'supports_color', 'measurement_id', 'stock_id'])
+            ->where('warehouse', $warehouse)
+            ->orderBy('id')
+            ->chunk(2000, function ($rows) use (&$group, $normalizedName) {
+                foreach ($rows as $row) {
+                    if ($this->normalizeName((string) $row->category_name) !== $normalizedName) {
+                        continue;
+                    }
+                    $group[] = [
+                        'id' => (int) $row->id,
+                        'category_name' => (string) $row->category_name,
+                        'category_price' => $row->category_price !== null ? (float) $row->category_price : null,
+                        'unit_price' => $row->unit_price !== null ? (float) $row->unit_price : null,
+                        'color' => $row->color !== null ? (string) $row->color : null,
+                        'normalized_color' => $this->normalizeName((string) ($row->color ?? '')),
+                        'color_claimed' => trim((string) ($row->color ?? '')) !== '',
+                        'supports_color' => (bool) $row->supports_color,
+                        'parent_item_id' => null,
+                        'color_id' => null,
+                        'measurement_id' => (int) $row->measurement_id,
+                        'stock_id' => (int) $row->stock_id,
+                    ];
+                }
+            });
+
+        if ($group === []) {
+            return null;
+        }
+
+        $reserved = [];
+        if ($supportsColor) {
+            $matched = $this->matchSupportsColorBaseItem($group);
+        } else {
+            $matched = $this->matchItemFromColorGroup($group, $color, $reserved);
+        }
+
+        if ($matched === null) {
+            return null;
+        }
+
+        return Item::query()->find($matched['id']);
+    }
+
+    private function tallyImportOutcome(string $outcome, int &$created, int &$updated, int &$skipped): void
+    {
+        if ($outcome === 'created') {
+            $created++;
+        } elseif ($outcome === 'updated') {
+            $updated++;
+        } else {
+            $skipped++;
+        }
     }
 
     // ==========================================================================

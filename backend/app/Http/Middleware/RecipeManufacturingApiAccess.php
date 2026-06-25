@@ -25,8 +25,9 @@ class RecipeManufacturingApiAccess
     ];
 
     private const WRITE_PERMISSIONS = [
-        'manufacturing.view',
+        'manufacturing.edit_recipe',
         'categories.manage',
+        'system.rbac',
     ];
 
     public function handle(Request $request, Closure $next): Response

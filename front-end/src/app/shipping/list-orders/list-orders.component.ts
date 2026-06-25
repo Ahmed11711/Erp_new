@@ -15,8 +15,12 @@ import { UserService } from 'src/app/manage-system/services/user.service';
 import { DialogNotificationNoteComponent } from '../dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from '../dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { DialogOrderRollbackComponent } from '../dialog-order-rollback/dialog-order-rollback.component';
 import { DialogWhatsAppMessageComponent } from 'src/app/whatsapp/components/dialog-whatsapp-message/dialog-whatsapp-message.component';
 import { BanksService } from 'src/app/financial/services/banks.service';
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { CollectionCompanyService } from '../services/collection-company.service';
 import { AuthService } from 'src/app/auth/auth.service';
 import { WhatsAppService } from 'src/app/whatsapp/services/whatsapp.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
@@ -25,7 +29,14 @@ import { Subject, firstValueFrom, takeUntil } from 'rxjs';
 import {
   collectRenewPrepaidParams,
   promptReturnPrepaidAmount,
+  requiresManualPrepaidRefundSelection,
 } from '../utils/order-renew-prepaid.flow';
+import {
+  isCompanyCustomerType,
+  isIndividualCustomerType,
+  isRefuseEligibleOrderStatus,
+} from '../utils/order-refuse.utils';
+import { canShowCollectOrderMenu as isCollectOrderMenuVisible } from '../utils/order-collect-eligibility.utils';
 
 @Component({
   selector: 'app-list-orders',
@@ -57,7 +68,6 @@ export class ListOrdersComponent implements OnDestroy {
     return this.rbac.canAny([...RBAC_ROUTE.shopifyOrderReview]);
   }
 
-  /** تأجيل الطلب: أقسام التشغيل/الشحن أو صلاحية orders.change_status */
   canPostponeOrder(): boolean {
     const allowed = new Set([
       'admin',
@@ -86,9 +96,10 @@ export class ListOrdersComponent implements OnDestroy {
     return editableTypes.includes(item?.order_type) && editableStatuses.includes(item?.order_status);
   }
 
-  /** تحصيل متغير للطلبات المشحونة */
+  /** تحصيل متغير للطلبات المشحونة أو المسلَّمة */
   canEditShippedOrder(item: any): boolean {
-    return this.rbac.can('orders.edit') && item?.order_status === 'تم شحن';
+    return this.rbac.can('orders.edit')
+      && (item?.order_status === 'تم شحن' || item?.order_status === 'تم التسليم');
   }
 
   shopifyReviewTooltip(item: any): string {
@@ -107,14 +118,36 @@ export class ListOrdersComponent implements OnDestroy {
     });
   }
 
-  /** Shopify وغيره: «فرد» / «افراد» / individual */
+  /** Shopify وغيره: «فرد» / «افراد» / individual — وأي نوع غير «شركة». */
   isIndividualCustomer(item: any): boolean {
-    const t = String(item?.customer_type ?? '').trim().toLowerCase();
-    return t === 'افراد' || t === 'فرد' || t === 'individual' || t === 'أفراد';
+    return isIndividualCustomerType(item?.customer_type);
   }
 
   isCompanyCustomer(item: any): boolean {
-    return String(item?.customer_type ?? '').trim() === 'شركة';
+    return isCompanyCustomerType(item?.customer_type);
+  }
+
+  canRefuseOrderMenu(): boolean {
+    const allowed = new Set([
+      'Admin',
+      'Shipping Management',
+      'Operation Management',
+      'Finance and operations management',
+      'Operation Specialist',
+      'Logistics Specialist',
+      'Data Entry',
+      'Review Management',
+    ]);
+    return allowed.has(this.user) || this.rbac.can('orders.change_status');
+  }
+
+  /** رفض استلام: متاح لكل الحالات باستثناء المحصّل / الملغي / المرفوض / الأرشيف. */
+  canRefuseOrder(item: any): boolean {
+    return isRefuseEligibleOrderStatus(item?.order_status);
+  }
+
+  canShowCollectOrderMenu(item: any): boolean {
+    return isCollectOrderMenuVisible(item);
   }
 
   canShipOrder(item: any): boolean {
@@ -145,6 +178,9 @@ export class ListOrdersComponent implements OnDestroy {
   canAssignWhatsAppNumbers = false;
   orders :any = [];
   banks :any = [];
+  safes: any[] = [];
+  serviceAccounts: any[] = [];
+  collectionCompanies: any[] = [];
   currentPageData :any = [];
   companies :any = [];
   location:any[]=[];
@@ -170,6 +206,9 @@ export class ListOrdersComponent implements OnDestroy {
     private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
     private filterService:FilterOrderService , private shippingLine:ShippingLinesService,
     private userService:UserService ,private renderer: Renderer2 ,private el: ElementRef, private bankService:BanksService,
+    private safeService: SafeService,
+    private serviceAccountsService: ServiceAccountsService,
+    private collectionCompanyService: CollectionCompanyService,
     private authService:AuthService, private router: Router,
     private whatsappService: WhatsAppService,
     private rbac: RbacService,
@@ -212,6 +251,15 @@ export class ListOrdersComponent implements OnDestroy {
     });
 
     this.bankService.bankSelect().subscribe(res=>this.banks=res);
+    this.safeService.getAll().subscribe((res: any) => {
+      this.safes = res?.data ?? res ?? [];
+    });
+    this.serviceAccountsService.index().subscribe((res: any) => {
+      this.serviceAccounts = res ?? [];
+    });
+    this.collectionCompanyService.select().subscribe((res: any) => {
+      this.collectionCompanies = res ?? [];
+    });
     this.orderSource.data().subscribe(reuslt=>this.orderSources = reuslt);
     this.shippingWay.data().subscribe(result=>this.shippingWays = result);
     this.shippingLine.dataLines().subscribe(result=>this.shippingLines = result);
@@ -540,31 +588,66 @@ export class ListOrdersComponent implements OnDestroy {
   }
 
   confirmDelivery(orderId: number) {
-    Swal.fire({
-      title: 'تأكيد التسليم',
-      text: 'هل تم تسليم الطلب للعميل؟ ستنتقل المديونية من العميل إلى شركة الشحن/المندوب.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'نعم، تم التسليم',
-      cancelButtonText: 'إلغاء',
-      input: 'text',
-      inputPlaceholder: 'ملاحظة (اختياري)',
-      inputValidator: () => undefined
-    }).then((result) => {
-      if (result.isConfirmed) {
-        this.order.deliverOrder(orderId, { note: result.value || '' }).subscribe(
-          (res: any) => {
-            if (res.message === 'success') {
-              Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
-              location.reload();
-            }
-          },
-          (err) => {
-            Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
+    this.order.checkDeliveryTransfer(orderId).subscribe(
+      (check) => {
+        const msg = check.needs_transfer
+          ? 'هل تم تسليم الطلب للعميل؟ ستنتقل المديونية من العميل إلى شركة الشحن/المندوب.'
+          : 'هل تم تسليم الطلب للعميل؟';
+
+        Swal.fire({
+          title: 'تأكيد التسليم',
+          text: msg,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'نعم، تم التسليم',
+          cancelButtonText: 'إلغاء',
+          input: 'text',
+          inputPlaceholder: 'ملاحظة (اختياري)',
+          inputValidator: () => undefined
+        }).then((result) => {
+          if (result.isConfirmed) {
+            this.order.deliverOrder(orderId, { note: result.value || '' }).subscribe(
+              (res: any) => {
+                if (res.message === 'success') {
+                  Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
+                  location.reload();
+                }
+              },
+              (err) => {
+                Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
+              }
+            );
           }
-        );
+        });
+      },
+      () => {
+        Swal.fire({
+          title: 'تأكيد التسليم',
+          text: 'هل تم تسليم الطلب للعميل؟',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'نعم، تم التسليم',
+          cancelButtonText: 'إلغاء',
+          input: 'text',
+          inputPlaceholder: 'ملاحظة (اختياري)',
+          inputValidator: () => undefined
+        }).then((result) => {
+          if (result.isConfirmed) {
+            this.order.deliverOrder(orderId, { note: result.value || '' }).subscribe(
+              (res: any) => {
+                if (res.message === 'success') {
+                  Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
+                  location.reload();
+                }
+              },
+              (err) => {
+                Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
+              }
+            );
+          }
+        });
       }
-    });
+    );
   }
 
   reviewFn(){
@@ -894,6 +977,33 @@ export class ListOrdersComponent implements OnDestroy {
     });
   }
 
+  canRollbackOrder(item: { order_status?: string }): boolean {
+    const status = item?.order_status ?? '';
+    return status === 'تم التسليم' || status === 'تم التحصيل' || status === 'تم الاستلام';
+  }
+
+  canShowRollbackMenu(): boolean {
+    const dept = String(this.user || '').trim();
+    return dept === 'Admin'
+      || dept === 'Operation Management'
+      || dept === 'Operation Specialist'
+      || dept === 'Logistics Specialist'
+      || dept === 'Shipping Management'
+      || this.rbac.canAny(['orders.change_status', 'orders.assign_driver']);
+  }
+
+  reopenOrder(item: { id: number; order_status?: string }): void {
+    this.dialog.open(DialogOrderRollbackComponent, {
+      width: '520px',
+      maxWidth: '95vw',
+      data: {
+        orderId: item.id,
+        currentStatus: item.order_status ?? '',
+        refreshData: () => this.reloadOrdersList(),
+      },
+    });
+  }
+
   postponeReceipt(type:string,id:number){
     Swal.fire({
       title: `${id} تأجيل استلام طلب رقم `,
@@ -913,6 +1023,39 @@ export class ListOrdersComponent implements OnDestroy {
     });
   }
 
+
+  private reloadOrdersList(): void {
+    this.filter(undefined as unknown as Event);
+  }
+
+  private statusChangeHandlers(): {
+    next: (res: unknown) => void;
+    error: (err: { error?: { message?: string } }) => void;
+  } {
+    return {
+      next: (res) => {
+        if (res) {
+          this.reloadOrdersList();
+          Swal.fire({
+            icon: 'success',
+            timer: 3000,
+            showConfirmButton: false,
+            titleText: 'تم ارسال اشعار للادمن',
+            position: 'bottom-end',
+            toast: true,
+            timerProgressBar: true,
+          });
+        }
+      },
+      error: (err) => {
+        Swal.fire({
+          icon: 'error',
+          title: 'لم يتم تنفيذ الإجراء',
+          text: err?.error?.message || 'حدث خطأ أثناء تحديث حالة الطلب',
+        });
+      },
+    };
+  }
 
   async changeOrderStatus(type:string,id:number,title:string,action:string,order:any){
     if (type =='شركة' && (action=='cancel' || action=='refused')) {
@@ -937,20 +1080,7 @@ export class ListOrdersComponent implements OnDestroy {
               }
 
               if (action=='cancel' && order.prepaid_amount >= amount) {
-                this.order.chngeStatus(id, action, value , amount,0,0).subscribe(res => {
-                  if (res) {
-                    this.filter(arguments);
-                    Swal.fire({
-                      icon : 'success',
-                      timer:3000,
-                      showConfirmButton:false,
-                      titleText: 'تم ارسال اشعار للادمن',
-                      position: 'bottom-end',
-                      toast: true,
-                      timerProgressBar: true,
-                    });
-                  };
-                });
+                this.order.chngeStatus(id, action, value , amount,0,0).subscribe(this.statusChangeHandlers());
                 return;
               }
 
@@ -983,21 +1113,7 @@ export class ListOrdersComponent implements OnDestroy {
                       console.log('in');
                       if (selectedBankId) {
                         bank = selectedBankId;
-                        this.order.chngeStatus(id, action, value , amount,bank,0).subscribe(res => {
-                          console.log(res);
-                          if (res) {
-                            this.filter(arguments);
-                            Swal.fire({
-                              icon : 'success',
-                              timer:3000,
-                              showConfirmButton:false,
-                              titleText: 'تم ارسال اشعار للادمن',
-                              position: 'bottom-end',
-                              toast: true,
-                              timerProgressBar: true,
-                            });
-                          };
-                        });
+                        this.order.chngeStatus(id, action, value , amount,bank,0).subscribe(this.statusChangeHandlers());
 
                       } else{
                         Swal.fire({
@@ -1009,21 +1125,7 @@ export class ListOrdersComponent implements OnDestroy {
                   });
 
                 } else if (result.dismiss == "cancel") {
-                    this.order.chngeStatus(id, action, value , amount,0,0).subscribe(res => {
-                      console.log(res);
-                      if (res) {
-                        this.filter(arguments);
-                        Swal.fire({
-                          icon : 'success',
-                          timer:3000,
-                          showConfirmButton:false,
-                          titleText: 'تم ارسال اشعار للادمن',
-                          position: 'bottom-end',
-                          toast: true,
-                          timerProgressBar: true,
-                        });
-                      };
-                    });
+                    this.order.chngeStatus(id, action, value , amount,0,0).subscribe(this.statusChangeHandlers());
                 }
 
                 return undefined;
@@ -1050,50 +1152,46 @@ export class ListOrdersComponent implements OnDestroy {
         input: 'text',
         inputPlaceholder: 'السبب',
         showCancelButton: true,
-        inputValidator: async (value) => {
+        inputValidator: (value) => {
           if (!value) {
-            return 'يجب ادخال ملاحظة'
+            return 'يجب ادخال ملاحظة';
           }
-          if (value !== '') {
-            let param = {}
-            if (action=='cancel' && order.prepaid_amount > 0) {
-              let returnPaidMoney = await this.returnPrepaidAmount(order)
-              if (Object.keys(returnPaidMoney).length === 0) {
-                return undefined;
-              }
-              param['moneyReturnedStatus'] = returnPaidMoney['returnedStatus'];
-              if (returnPaidMoney['returnedStatus'] === 'approved') {
-                param['moneyReturnedBank'] = returnPaidMoney['returnedBank'];
-              }
-            }
-
-            if (action=='renew') {
-              const renewParams = await collectRenewPrepaidParams(order, this.banks);
-              if (renewParams === null) {
-                return undefined;
-              }
-              Object.assign(param, renewParams);
-            }
-
-            this.order.chngeStatus(id,action,value,0,0,0,param).subscribe(res=>{
-              if (res) {
-                this.filter(arguments);
-                Swal.fire({
-                  icon : 'success',
-                  timer:3000,
-                  showConfirmButton:false,
-                  titleText: 'تم ارسال اشعار للادمن',
-                  position: 'bottom-end',
-                  toast: true,
-                  timerProgressBar: true,
-                });
-              };
-            }
-            )
-          }
-          return undefined
+          return null;
+        },
+      }).then(async (result) => {
+        if (!result.isConfirmed || !result.value) {
+          return;
         }
-      })
+
+        const note = result.value;
+        const param: Record<string, string | number> = {};
+
+        if (action === 'cancel' && order.prepaid_amount > 0 && requiresManualPrepaidRefundSelection(order)) {
+          const returnPaidMoney = await this.returnPrepaidAmount(order);
+          if (Object.keys(returnPaidMoney).length === 0) {
+            return;
+          }
+          param['moneyReturnedStatus'] = returnPaidMoney['returnedStatus'] as string;
+          if (returnPaidMoney['returnedStatus'] === 'approved' && returnPaidMoney['returnedBank'] != null) {
+            param['moneyReturnedBank'] = returnPaidMoney['returnedBank'];
+          }
+        }
+
+        if (action === 'renew') {
+          const renewParams = await collectRenewPrepaidParams(order, {
+            banks: this.banks,
+            safes: this.safes,
+            serviceAccounts: this.serviceAccounts,
+            collectionCompanies: this.collectionCompanies,
+          });
+          if (renewParams === null) {
+            return;
+          }
+          Object.assign(param, renewParams);
+        }
+
+        this.order.chngeStatus(id, action, note, 0, 0, 0, param).subscribe(this.statusChangeHandlers());
+      });
     }
   }
 

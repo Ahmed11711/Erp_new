@@ -15,7 +15,6 @@ import { CovenantComponent } from './covenant/covenant.component';
 import { AddCovenantComponent } from './add-covenant/add-covenant.component';
 import { ExpenseDetailsComponent } from './expense-details/expense-details.component';
 import { BankDetailsComponent } from './bank-details/bank-details.component';
-import { EditexpenseComponent } from './editexpense/editexpense.component';
 import { PendingComponent } from './pending/pending.component';
 import { departmentGuard } from '../guards/department.guard';
 import { RBAC_ROUTE } from '../guards/rbac-route-data';
@@ -50,7 +49,7 @@ const routes: Routes = [
   },
   { path: 'banks', component: ListBanksComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },
   { path: 'addexpense', component: AddExpenseComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },
-  { path: 'editexpense/:id', component: EditexpenseComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },
+  { path: 'editexpense/:id', component: AddExpenseComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },
   { path: 'expenses', component: ExpensesComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },
   { path: 'expenseskind', component: ExpensesKindComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },
   { path: 'banks-movements', component: BanksMovementsComponent, canActivate: [departmentGuard], data: { rbacPermissions: fin } },

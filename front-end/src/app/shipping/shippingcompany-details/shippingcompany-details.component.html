@@ -140,8 +140,8 @@
             </ng-container>
           </td>
           <td dir="ltr"><span *ngIf="elm.old_amount">{{elm?.old_amount | customNumber}} - </span>{{elm?.amount | customNumber}} </td>
-          <td *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management'  || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="menuVisibleForRow(elm)">
+          <td *ngIf="canShowShippingActionsMenu()">
+            <span [matMenuTriggerFor]="menu" style="cursor: pointer;" *ngIf="menuVisibleForRow(elm) || canRefuseFromRow(elm)">
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu" >
@@ -149,14 +149,11 @@
                 <span> تحصيل الطلب</span>
               </button>
 
-              <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm?.order?.order_status=='تم شحن') && elm?.order?.customer_type=='افراد'" (click)="refuseOrder(elm?.order?.customer_type, elm.order_id)">
+              <ng-container *ngIf="canRefuseOrderMenu()">
+                <button mat-menu-item *ngIf="canRefuseFromRow(elm) && isIndividualCustomer(elm?.order)" (click)="refuseOrder(elm?.order?.customer_type, elm.order_id)">
                   <span> رفض استلام</span>
                 </button>
-              </ng-container>
-
-              <ng-container *ngIf="user == 'Admin'  || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button mat-menu-item *ngIf="(elm.status=='تم شحن' && elm?.order?.order_status=='تم شحن') && elm?.order?.customer_type=='شركة'" (click)="changeOrderStatus(elm?.order?.customer_type,elm.order_id,'رفض استلام','refused')">
+                <button mat-menu-item *ngIf="canRefuseFromRow(elm) && isCompanyCustomer(elm?.order)" (click)="changeOrderStatus(elm?.order?.customer_type,elm.order_id,'رفض استلام','refused')">
                   <span> رفض استلام</span>
                 </button>
               </ng-container>

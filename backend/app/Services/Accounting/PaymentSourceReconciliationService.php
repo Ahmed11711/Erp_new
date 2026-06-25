@@ -20,6 +20,7 @@ class PaymentSourceReconciliationService
         private readonly BankOperationalLedgerService $bankLedger,
         private readonly SafeOperationalLedgerService $safeLedger,
         private readonly AccountingService $accountingService,
+        private readonly ManualBalanceAdjustmentService $manualAdjustment,
     ) {}
 
     public function glBalanceForTreeAccount(int $treeAccountId): float
@@ -291,5 +292,77 @@ class PaymentSourceReconciliationService
             'service_account' => 'حساب خدمي',
             default => $type,
         };
+    }
+
+    /**
+     * ضبط الرصيد الفعلي (تشغيلي + GL) عبر قيد يومي افتتاحي/تسوية.
+     *
+     * @return array{
+     *   daily_entry_id: int,
+     *   previous_gl: float,
+     *   previous_operational: float,
+     *   target_balance: float,
+     *   delta_gl: float,
+     *   operational_after: float
+     * }
+     */
+    public function setTargetBalance(
+        string $type,
+        int $id,
+        float $targetBalance,
+        TreeAccount $counterAccount,
+        string $dateYmd,
+        string $reason,
+        int $userId
+    ): array {
+        $row = $this->findRow($type, $id);
+        if (! $row['tree_account_id']) {
+            throw new \InvalidArgumentException('المصدر غير مرتبط بحساب في شجرة الحسابات.');
+        }
+
+        $treeAccount = TreeAccount::findOrFail((int) $row['tree_account_id']);
+        $targetBalance = round($targetBalance, 2);
+        $operationalBefore = $row['operational'];
+
+        return DB::transaction(function () use (
+            $type,
+            $id,
+            $treeAccount,
+            $counterAccount,
+            $targetBalance,
+            $dateYmd,
+            $reason,
+            $userId,
+            $operationalBefore
+        ) {
+            $glResult = $this->manualAdjustment->adjustToTarget(
+                $treeAccount,
+                $targetBalance,
+                $counterAccount,
+                $reason,
+                $dateYmd,
+                $userId
+            );
+
+            $opsResult = $this->syncOperationalToGl($type, $id, $reason);
+
+            return [
+                'daily_entry_id' => (int) $glResult['daily_entry']->id,
+                'previous_gl' => $glResult['previous_net'],
+                'previous_operational' => $operationalBefore,
+                'target_balance' => $targetBalance,
+                'delta_gl' => $glResult['delta'],
+                'operational_after' => $opsResult['after'],
+            ];
+        });
+    }
+
+    public function suggestCounterAccounts(): \Illuminate\Support\Collection
+    {
+        return TreeAccount::query()
+            ->whereIn('type', ['equity', 'liability'])
+            ->whereDoesntHave('children')
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'type']);
     }
 }

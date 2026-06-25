@@ -1,9 +1,10 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import {Location} from '@angular/common';
 import Swal from 'sweetalert2';
 import { Subscription } from 'rxjs';
+import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-rows';
 @Component({
   selector: 'app-cat',
   templateUrl: './cat.component.html',
@@ -12,6 +13,7 @@ import { Subscription } from 'rxjs';
 export class CatComponent implements OnInit, OnDestroy {
 
   warehouse:string = "";
+  warehouseOptions = WAREHOUSE_STOCK_ROWS.map((row) => row.nameAr);
   categories:any;
   balance:number= 0;
 
@@ -23,7 +25,12 @@ export class CatComponent implements OnInit, OnDestroy {
 
   private querySub?: Subscription;
 
-  constructor(private category:CategoryService, private route:ActivatedRoute, private _location:Location) {}
+  constructor(
+    private category: CategoryService,
+    private route: ActivatedRoute,
+    private router: Router,
+    private _location: Location
+  ) {}
 
 
   ngOnInit(){
@@ -38,7 +45,21 @@ export class CatComponent implements OnInit, OnDestroy {
       if (Number.isNaN(this.balance)) {
         this.balance = 0;
       }
-      this.getData();
+      if (this.warehouse) {
+        this.getData();
+      } else {
+        this.categories = [];
+        this.length = 0;
+      }
+    });
+  }
+
+  onWarehouseChange(event: Event): void {
+    const name = (event.target as HTMLSelectElement).value;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { warehouse: name || null },
+      queryParamsHandling: 'merge',
     });
   }
 
@@ -47,6 +68,11 @@ export class CatComponent implements OnInit, OnDestroy {
   }
 
   getData(){
+    if (!this.warehouse) {
+      this.categories = [];
+      this.length = 0;
+      return;
+    }
     this.category.categoryDetails(this.warehouse, this.pageSize,this.page+1 , this.param).subscribe((res:any)=>{
       this.categories = res.data;
       this.length=res.total;

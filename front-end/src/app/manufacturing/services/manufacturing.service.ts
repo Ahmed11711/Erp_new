@@ -99,6 +99,51 @@ export interface RecipeDetail {
   breakdown: CostBreakdown;
 }
 
+export interface ManufactureConsumptionLine {
+  line_key: string;
+  bom_item_id: number;
+  resolved_category_id: number;
+  default_resolved_category_id?: number;
+  default_item_name?: string;
+  item_name: string;
+  warehouse: string;
+  bom_unit_qty: number;
+  default_quantity: number;
+  quantity: number;
+  unit_cost: number;
+  line_cost: number;
+  available_quantity: number;
+  sufficient: boolean;
+  is_customized: boolean;
+  is_substituted?: boolean;
+}
+
+export interface ManufactureConsumptionPreview {
+  applies: boolean;
+  lines: ManufactureConsumptionLine[];
+  total_cost: number;
+  all_sufficient: boolean;
+  message: string | null;
+}
+
+export interface ItemWithoutRecipeRow {
+  id: number;
+  category_name: string;
+  item_code: string | null;
+  warehouse: string;
+  product_type: string;
+  product_type_label: string;
+  color: string | null;
+  quantity: number | string;
+  category_price: number | string | null;
+  unit_price: number | string | null;
+}
+
+export interface ItemsWithoutRecipeReportResponse {
+  data: ItemWithoutRecipeRow[];
+  totals: { items_count: number };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -134,8 +179,65 @@ export class ManufacturingService {
     return this.http.post(`${environment.Url}/manufacture/confirm`,data);
   }
 
+  updateRecipeFromConsumption(payload: {
+    product_id: number;
+    quantity: number;
+    consumption_lines: Array<{
+      bom_item_id: number;
+      resolved_category_id: number;
+      quantity: number;
+    }>;
+  }) {
+    return this.http.post<{ message: string }>(
+      `${environment.Url}/manufacture/update-recipe-from-consumption`,
+      payload,
+    );
+  }
+
+  previewConsumption(payload: {
+    product_id: number;
+    quantity: number;
+    status?: string;
+    wip_keep_under_processing?: boolean;
+    consumption_lines?: Array<{
+      bom_item_id: number;
+      resolved_category_id: number;
+      quantity: number;
+    }>;
+  }) {
+    return this.http.post<ManufactureConsumptionPreview>(
+      `${environment.Url}/manufacture/confirm/preview`,
+      payload
+    );
+  }
+
   getAllRecipes() {
     return this.http.get<any[]>(`${environment.Url}/manufacture`);
+  }
+
+  getItemsWithoutRecipes(params?: {
+    warehouse?: string;
+    product_type?: string;
+    search?: string;
+  }) {
+    let httpParams = new HttpParams();
+    if (params?.warehouse) {
+      httpParams = httpParams.set('warehouse', params.warehouse);
+    }
+    if (params?.product_type) {
+      httpParams = httpParams.set('product_type', params.product_type);
+    }
+    if (params?.search) {
+      httpParams = httpParams.set('search', params.search);
+    }
+    return this.http.get<ItemsWithoutRecipeReportResponse>(
+      `${environment.Url}/manufacture/items-without-recipes`,
+      { params: httpParams },
+    );
+  }
+
+  getRecipeProduct(productId: number) {
+    return this.http.get<any>(`${environment.Url}/manufacture/recipe-product/${productId}`);
   }
 
   /**
@@ -150,11 +252,21 @@ export class ManufacturingService {
     if (scope === 'all_categories') {
       params = params.set('scope', 'all_categories');
     }
-    return this.http.get(`${environment.Url}/manufacture/manfucture_by_warhouse`, { params });
+    return this.http.get<any[]>(`${environment.Url}/manufacture/manfucture_by_warhouse`, { params });
   }
 
   confirmed(){
     return this.http.get(`${environment.Url}/manufacture/confirmed`)
+  }
+
+  confirmedDeleted() {
+    return this.http.get<any[]>(`${environment.Url}/manufacture/confirmed/deleted`);
+  }
+
+  deleteConfirmedOrder(id: number) {
+    return this.http.delete<{ message: string; order_id: number; deleted_by: number }>(
+      `${environment.Url}/manufacture/confirmed/${id}`
+    );
   }
 
   done(id:any){

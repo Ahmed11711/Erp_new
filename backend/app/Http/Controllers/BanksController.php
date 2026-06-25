@@ -13,20 +13,38 @@ use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\Bank\BankResource;
 use App\Services\TreeAccount\AddRecordedService;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\BankAccessService;
 use App\Services\Accounting\BankOperationalLedgerService;
 
 class BanksController extends Controller
 {
-    public function __construct(public AddRecordedService $addRecordedService)
-    {}
+    public function __construct(
+        public AddRecordedService $addRecordedService,
+        protected BankAccessService $bankAccess,
+    ) {}
 
     public function index(){
-        $banks = Bank::where('type', 'main')->get();
+        $user = rbac_user();
+        $canManageAccess = $this->bankAccess->canManageAccess($user);
+
+        $with = [];
+        if ($canManageAccess) {
+            $with[] = 'assignedUsers:id,name,email,department';
+        }
+
+        $query = Bank::with($with)->where('type', 'main');
+        $query = $this->bankAccess->scopeAccessibleTo($query, $user);
+        $banks = $query->get();
+
         return response(BankResource::collection($banks),200);
     }
 
     public function bankSelect(){
-        $data = Bank::where('type', 'main')->select('id', 'name')->get();
+        $user = rbac_user();
+        $query = Bank::where('type', 'main')->select('id', 'name');
+        $query = $this->bankAccess->scopeAccessibleTo($query, $user);
+        $data = $query->get();
+
         return response()->json($data, 200);
     }
 

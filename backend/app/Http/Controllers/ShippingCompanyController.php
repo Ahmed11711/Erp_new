@@ -8,6 +8,10 @@ use App\Models\ShippingCompany;
 use App\Models\TreeAccount;
 use App\Models\shippingCompanyDetails;
 use App\Services\Accounting\AccountLinkingService;
+use App\Services\Accounting\ReceivableReconciliationService;
+use App\Services\Accounting\ReceivableTreeAccountGuard;
+use App\Services\Shipping\ShippingCompanyDeletionService;
+use App\Services\Shipping\UnlinkedReceivableAccountException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -15,8 +19,11 @@ use Illuminate\Support\Facades\Cache;
 
 class ShippingCompanyController extends Controller
 {
-    public function __construct(public AccountLinkingService $accountLinkingService)
-    {
+    public function __construct(
+        public AccountLinkingService $accountLinkingService,
+        public ReceivableTreeAccountGuard $receivableGuard,
+        public ReceivableReconciliationService $reconciliationService,
+    ) {
     }
 
     /**
@@ -26,7 +33,10 @@ class ShippingCompanyController extends Controller
      */
     public function index()
     {
-        $shippingCompanies = ShippingCompany::with('receivableTreeAccount:id,code,name')->get();
+        $shippingCompanies = ShippingCompany::with([
+            'receivableTreeAccount:id,code,name,balance',
+            'treeAccount:id,code,name,balance',
+        ])->get();
 
         // عمود shipping_companies.orders_count في الجدول قيمة قديمة (افتراضي 0) ولا يُحدَّث مع الشحن.
         // العدد الحقيقي «تحت التحصيل» = صفوف shipping_company_details بحالة تم شحن ولم تُغلق بعد.
@@ -40,6 +50,7 @@ class ShippingCompanyController extends Controller
         $payload = $shippingCompanies->map(function (ShippingCompany $sc) use ($pendingByCompany) {
             $row = $sc->toArray();
             $row['orders_count'] = (int) ($pendingByCompany[$sc->id] ?? 0);
+            $row['balance'] = $sc->displayBalance();
 
             return $row;
         });
@@ -101,16 +112,20 @@ class ShippingCompanyController extends Controller
 
         if ($company->receivable_tree_account_id) {
             $account = TreeAccount::find($company->receivable_tree_account_id);
+            if ($account && ! $this->receivableGuard->isPaymentSourceTreeAccount((int) $account->id)) {
+                return response()->json([
+                    'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
+                    'receivable_tree_account_id' => $company->receivable_tree_account_id,
+                    'receivable_tree_account' => [
+                        'id' => $account->id,
+                        'name' => $account->name,
+                        'code' => (string) $account->code,
+                    ],
+                ]);
+            }
 
-            return response()->json([
-                'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
-                'receivable_tree_account_id' => $company->receivable_tree_account_id,
-                'receivable_tree_account' => $account ? [
-                    'id' => $account->id,
-                    'name' => $account->name,
-                    'code' => (string) $account->code,
-                ] : null,
-            ]);
+            $company->receivable_tree_account_id = null;
+            $company->save();
         }
 
         $account = $this->accountLinkingService->ensureShippingCompanyAccount($company);
@@ -144,6 +159,17 @@ class ShippingCompanyController extends Controller
             'type' => 'required|in:مندوب,شركة',
             'receivable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
+
+        if ($request->filled('receivable_tree_account_id')) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $request->receivable_tree_account_id,
+                    'شركة الشحن/المندوب'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
 
         $company = ShippingCompany::create([
             'name' => $request->name,
@@ -313,6 +339,17 @@ class ShippingCompanyController extends Controller
             'receivable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
 
+        if ($request->filled('receivable_tree_account_id')) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $request->receivable_tree_account_id,
+                    'شركة الشحن/المندوب'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
         $companyToUpdate->update([
             'name' => $request->name,
             'type' => $request->type,
@@ -350,15 +387,22 @@ class ShippingCompanyController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy($id, ShippingCompanyDeletionService $deletionService)
     {
         $companyToDelete = ShippingCompany::find($id);
-        if(!$companyToDelete){
-            return response()->json("not found", 404);
+        if (! $companyToDelete) {
+            return response()->json(['message' => 'غير موجود'], 404);
         }
-        $companyToDelete->delete();
 
-        return response()->json("deleted", 200);
+        try {
+            $deletionService->delete($companyToDelete);
+
+            return response()->json('deleted', 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'حدث خطأ أثناء الحذف: '.$e->getMessage()], 500);
+        }
     }
 
     /**
@@ -462,5 +506,67 @@ class ShippingCompanyController extends Controller
             'date_from' => $from,
             'date_to' => $to,
         ], 200);
+    }
+
+    /**
+     * عدّ الطلبات المرتبطة بشركة شحن/مندوب في فترة محددة.
+     */
+    public function reconcileCount(Request $request, $id)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $counts = $this->reconciliationService->countShippingOrders(
+            (int) $id,
+            $request->date_from,
+            $request->date_to
+        );
+
+        return response()->json($counts);
+    }
+
+    /**
+     * جلب الطلبات المرتبطة بشركة شحن/مندوب في فترة محددة (للاختيار).
+     */
+    public function reconcileOrders(Request $request, $id)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $orders = $this->reconciliationService->listShippingOrders(
+            (int) $id,
+            $request->date_from,
+            $request->date_to
+        );
+
+        return response()->json(['orders' => $orders]);
+    }
+
+    /**
+     * إعادة حساب مديونيات شركة شحن/مندوب.
+     */
+    public function reconcileReceivables(Request $request, $id)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+            'order_ids' => 'nullable|array',
+            'order_ids.*' => 'integer',
+        ]);
+
+        $result = $this->reconciliationService->reconcileShippingCompany(
+            (int) $id,
+            $request->date_from,
+            $request->date_to,
+            $request->order_ids
+        );
+
+        $status = $result['success'] ? 200 : 422;
+
+        return response()->json($result, $status);
     }
 }

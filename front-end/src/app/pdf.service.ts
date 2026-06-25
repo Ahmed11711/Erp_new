@@ -13,6 +13,7 @@ export interface AccountStatementPdfEntry {
   entryDate: string;
   createdAt: string;
   description: string;
+  userName?: string;
   debit: number;
   credit: number;
   runningBalance: number;
@@ -169,6 +170,7 @@ export class PdfService extends LoadingService {
       }
       headers.push(
         this.shapeAr('البيان / الشرح'),
+        this.shapeAr('المستخدم'),
         this.shapeAr('مدين'),
         this.shapeAr('دائن'),
         this.shapeAr('الرصيد المتحرك')
@@ -185,6 +187,7 @@ export class PdfService extends LoadingService {
         }
         row.push(
           this.shapeAr(entry.description ?? ''),
+          this.shapeAr(entry.userName ?? '—'),
           entry.debit > 0 ? this.fmtNum(entry.debit) : '-',
           entry.credit > 0 ? this.fmtNum(entry.credit) : '-',
           this.fmtNum(entry.runningBalance)
@@ -192,7 +195,7 @@ export class PdfService extends LoadingService {
         return row;
       });
 
-      const totalLabelIndex = payload.consolidated ? 2 : 1;
+      const totalLabelIndex = payload.consolidated ? 3 : 2;
       const footRow = headers.map((_, index) => {
         if (index === 0) {
           return '';
@@ -212,7 +215,7 @@ export class PdfService extends LoadingService {
         return '';
       });
 
-      const numericStart = payload.consolidated ? 3 : 2;
+      const numericStart = payload.consolidated ? 4 : 3;
       const columnStyles: Record<number, { halign: 'right' | 'center' | 'left'; cellWidth?: number }> = {
         0: { halign: 'center', cellWidth: 78 },
         [numericStart]: { halign: 'center', cellWidth: 62 },

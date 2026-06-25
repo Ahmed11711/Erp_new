@@ -23,8 +23,16 @@
 
 <div class="container-fluid">
   <div class="row">
-    <div class="col-md-4">
-        <input class="form-control w-50" type="month" (change)="onMonthChange($event)" [value]="prevMonthValue">
+    <div class="col-md-4 d-flex flex-wrap align-items-center gap-2">
+        <select
+          class="form-control w-auto"
+          [value]="warehouse"
+          (change)="onWarehouseChange($event)"
+          aria-label="اختر المخزن">
+          <option value="">— اختر المخزن —</option>
+          <option *ngFor="let name of warehouseOptions" [value]="name">{{ name }}</option>
+        </select>
+        <input class="form-control w-auto" type="month" (change)="onMonthChange($event)" [value]="prevMonthValue" [disabled]="!warehouse">
     </div>
     <div class="col-md-8">
       <form>
@@ -50,7 +58,11 @@
 </div>
 
 
-<div class="container-fluid table-responsive text-center py-2">
+<div *ngIf="!warehouse" class="container-fluid py-3">
+  <p class="alert alert-warning text-right mb-0">اختر مخزناً من القائمة أعلاه لعرض سجلات الجرد الشهري.</p>
+</div>
+
+<div class="container-fluid table-responsive text-center py-2" *ngIf="warehouse">
     <table class="table table-bordered table-hover">
       <thead class="thead-dark">
         <tr>

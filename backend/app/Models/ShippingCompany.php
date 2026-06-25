@@ -23,7 +23,7 @@ class ShippingCompany extends Model
         return $this->belongsTo(TreeAccount::class, 'tree_account_id');
     }
 
-    /** ذمم أصول: مستحق من الشركة (تحصيل/شحن) — منفصل عن tree_account_id لذمم مصروف الشحن */
+    /** ذمم مدين (أصول): تحصيل COD — ما على المندوب للشركة */
     public function receivableTreeAccount()
     {
         return $this->belongsTo(TreeAccount::class, 'receivable_tree_account_id');
@@ -32,5 +32,41 @@ class ShippingCompany extends Model
     public function details()
     {
         return $this->hasMany(shippingCompanyDetails::class, 'shipping_company_id');
+    }
+
+    /**
+     * صافي المركز: موجب = المندوب مدين للشركة (تحصيل) | سالب = للمندوب مستحق على الشركة.
+     */
+    public function displayBalance(): float
+    {
+        $receivable = 0.0;
+        $payable = 0.0;
+        $hasLedger = false;
+
+        if ($this->receivable_tree_account_id) {
+            if (! $this->relationLoaded('receivableTreeAccount')) {
+                $this->load('receivableTreeAccount:id,balance');
+            }
+            if ($this->receivableTreeAccount) {
+                $receivable = (float) $this->receivableTreeAccount->balance;
+                $hasLedger = true;
+            }
+        }
+
+        if ($this->tree_account_id) {
+            if (! $this->relationLoaded('treeAccount')) {
+                $this->load('treeAccount:id,balance');
+            }
+            if ($this->treeAccount) {
+                $payable = (float) $this->treeAccount->balance;
+                $hasLedger = true;
+            }
+        }
+
+        if ($hasLedger) {
+            return round($receivable + $payable, 2);
+        }
+
+        return (float) ($this->attributes['balance'] ?? 0);
     }
 }

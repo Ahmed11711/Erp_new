@@ -14,6 +14,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatInputModule } from '@angular/material/input';
 import { ManufacturingOrdersComponent } from './manufacturing-orders/manufacturing-orders.component';
 import { ManufacturingAdditionsComponent } from './manufacturing-additions/manufacturing-additions.component';
+import { ItemsWithoutRecipeReportComponent } from './items-without-recipe-report/items-without-recipe-report.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 
@@ -24,7 +25,8 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
     ManufacturingBomListComponent,
     ManufacturingConfirmationComponent,
     ManufacturingOrdersComponent,
-    ManufacturingAdditionsComponent
+    ManufacturingAdditionsComponent,
+    ItemsWithoutRecipeReportComponent
   ],
   imports: [
     CommonModule,

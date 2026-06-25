@@ -466,32 +466,107 @@ export class OrderDetailsComponent implements OnInit{
     })
   }
 
-  addNote(id){
-    Swal.fire({
-      titleText:'ادخل الملاحظة',
-      input: 'text',
-      inputPlaceholder: 'ملاحظة',
+  get visibleNotes(): any[] {
+    return (this.notes || [])
+      .filter((item) => item?.note && item.note !== 'null' && String(item.note).trim() !== '')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  get canManageOrderNotes(): boolean {
+    return this.user !== 'Review Management' && this.user !== 'Financial Accounts';
+  }
+
+  isNoteEdited(note: any): boolean {
+    if (!note?.updated_at || !note?.created_at) {
+      return false;
+    }
+    return new Date(note.updated_at).getTime() - new Date(note.created_at).getTime() > 1000;
+  }
+
+  noteEditorName(note: any): string {
+    return note?.edited_by?.name || note?.user?.name || '—';
+  }
+
+  private openNoteDialog(title: string, initialValue = ''): Promise<string | null> {
+    return Swal.fire({
+      titleText: title,
+      input: 'textarea',
+      inputValue: initialValue,
+      inputPlaceholder: 'اكتب الملاحظة هنا...',
       showCancelButton: true,
+      confirmButtonText: 'حفظ',
+      cancelButtonText: 'إلغاء',
+      inputAttributes: {
+        rows: '4',
+        dir: 'rtl',
+      },
       inputValidator: (value) => {
-        if (!value) {
-          return 'يجب ادخال ملاحظة'
+        if (!value || !String(value).trim()) {
+          return 'يجب ادخال ملاحظة';
         }
-        if (value !== '') {
-          this.orderService.addNote(id,value).subscribe((res:any)=>{
-            console.log(res);
-            if (res) {
-              Swal.fire({
-                icon : 'success',
-                timer:1500,
-                showConfirmButton:false,
-              })
-              this.getOrder();
-            }
-          })
-        }
-        return undefined
+        return undefined;
+      },
+    }).then((result) => (result.isConfirmed ? String(result.value || '').trim() : null));
+  }
+
+  addNote(orderId: number): void {
+    if (!orderId) {
+      return;
+    }
+
+    this.openNoteDialog('إضافة ملاحظة').then((value) => {
+      if (!value) {
+        return;
       }
-    })
+
+      this.orderService.addNote(orderId, value).subscribe({
+        next: () => {
+          Swal.fire({
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false,
+          });
+          this.getOrder();
+        },
+        error: (err) => {
+          Swal.fire({
+            icon: 'error',
+            title: 'تعذر حفظ الملاحظة',
+            text: err?.error?.message || 'حدث خطأ',
+          });
+        },
+      });
+    });
+  }
+
+  editNote(note: any): void {
+    if (!note?.id || !note?.can_edit) {
+      return;
+    }
+
+    this.openNoteDialog('تعديل الملاحظة', note.note).then((value) => {
+      if (!value || value === note.note) {
+        return;
+      }
+
+      this.orderService.updateNote(note.id, value).subscribe({
+        next: () => {
+          Swal.fire({
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false,
+          });
+          this.getOrder();
+        },
+        error: (err) => {
+          Swal.fire({
+            icon: 'error',
+            title: 'تعذر تعديل الملاحظة',
+            text: err?.error?.message || 'حدث خطأ',
+          });
+        },
+      });
+    });
   }
 
   reviewFn(){

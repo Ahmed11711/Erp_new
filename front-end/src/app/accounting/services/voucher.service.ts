@@ -8,11 +8,15 @@ export interface Voucher {
     id?: number;
     date: string;
     type: 'receipt' | 'payment';
-    voucher_type: 'client' | 'supplier' | 'shipping_company';
+    voucher_type: 'client' | 'supplier' | 'shipping_company' | 'collection_company';
     account_id: number;
-    client_id?: number;
+    client_kind?: 'company' | 'individual' | null;
+    client_id?: number | null;
+    individual_customer_phone?: string | null;
+    individual_customer_name?: string | null;
     supplier_id?: number;
     shipping_company_id?: number;
+    collection_company_id?: number;
     client_or_supplier_name?: string;
     amount: number;
     notes?: string;
@@ -50,8 +54,12 @@ export class VoucherService {
         return this.http.post<any>(this.apiUrl, voucher);
     }
 
-    updateVoucher(id: number, voucher: Voucher): Observable<any> {
+    updateVoucher(id: number, voucher: Partial<Voucher>): Observable<any> {
         return this.http.put<any>(`${this.apiUrl}/${id}`, voucher);
+    }
+
+    updateVoucherDate(id: number, date: string): Observable<any> {
+        return this.updateVoucher(id, { date } as Voucher);
     }
 
     deleteVoucher(id: number): Observable<any> {
@@ -62,12 +70,26 @@ export class VoucherService {
         return this.http.get<any>(`${environment.Url}/companies`);
     }
 
+    getClientOptions(search = ''): Observable<{ companies: { id: number; label: string }[]; individuals: { phone: string; name: string; label: string }[] }> {
+        let params = new HttpParams();
+        if (search?.trim()) {
+            params = params.set('search', search.trim());
+        }
+        return this.http.get<any>(`${this.apiUrl}/client-options`, { params });
+    }
+
     getSuppliers(): Observable<any> {
         return this.http.get<any>(`${environment.Url}/suppliers`);
     }
 
     getShippingCompaniesSelect(): Observable<{ id: number; name: string; type: string }[]> {
         return this.http.get<{ id: number; name: string; type: string }[]>(`${environment.Url}/shippingcompanySelect`);
+    }
+
+    getCollectionCompaniesSelect(): Observable<{ id: number; name: string; linked_shipping_company_id?: number | null }[]> {
+        return this.http.get<{ id: number; name: string; linked_shipping_company_id?: number | null }[]>(
+            `${environment.Url}/collection-companies/select`
+        );
     }
 
     /**

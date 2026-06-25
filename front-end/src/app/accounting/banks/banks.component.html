@@ -72,6 +72,7 @@
             <th>الاستخدام</th>
             <th>الرصيد</th>
             <th>الحساب المرتبط</th>
+            <th *ngIf="canManageBankAccess">المستخدمون المصرّح لهم</th>
             <th class="text-center" style="width: 120px;">الإجراءات</th>
           </tr>
         </thead>
@@ -97,7 +98,16 @@
               </span>
               <span *ngIf="!bank.asset" class="text-muted">—</span>
             </td>
+            <td *ngIf="canManageBankAccess" data-label="المستخدمون المصرّح لهم">
+              <span class="bank-users-label" [class.bank-users-label--open]="!bank.is_restricted">
+                {{ assignedUsersLabel(bank) }}
+              </span>
+            </td>
             <td class="text-center">
+              <button *ngIf="canManageBankAccess" class="erp-action-btn" title="صلاحيات المستخدمين"
+                      (click)="openUsersDialog(bank)">
+                <i class="fas fa-users"></i>
+              </button>
               <button class="erp-action-btn erp-action-btn--primary" title="تعديل"
                       (click)="openEditDialog(bank)">
                 <i class="fas fa-pen"></i>
@@ -328,6 +338,49 @@
               [disabled]="saving || !canSubmitTransfer() || transferData.amount > getFromBankBalance()">
         <span *ngIf="saving" class="spinner-border spinner-border-sm ml-1"></span>
         {{ saving ? 'جاري التحويل...' : 'إتمام التحويل' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BANK USERS DIALOG ===== -->
+<div class="erp-modal-overlay" *ngIf="showUsersDialog && usersDialogBank" (click)="closeUsersDialog()">
+  <div class="erp-modal erp-modal--wide" (click)="$event.stopPropagation()">
+    <div class="erp-modal__header">
+      <h3 class="erp-modal__title">
+        <i class="fas fa-users color-main"></i>
+        صلاحيات البنك — {{ usersDialogBank.name }}
+      </h3>
+      <button class="erp-modal__close" (click)="closeUsersDialog()">&times;</button>
+    </div>
+    <div class="erp-modal__body">
+      <p class="bank-users-hint">
+        <i class="fas fa-info-circle"></i>
+        اختر المستخدمين الذين يظهر لهم هذا البنك في القوائم والعمليات.
+        اترك القائمة فارغة ليكون البنك متاحاً للجميع.
+      </p>
+
+      <div *ngIf="loadingUsers" class="erp-loading py-3">
+        <div class="erp-loading__spinner"></div>
+        <span>جاري تحميل المستخدمين...</span>
+      </div>
+
+      <mat-form-field *ngIf="!loadingUsers" appearance="outline" class="w-100 banks-users-field" dir="rtl">
+        <mat-label>المستخدمون المصرّح لهم</mat-label>
+        <mat-select [(ngModel)]="selectedUserIds" multiple>
+          <mat-option *ngFor="let u of directoryUsers" [value]="u.id">
+            {{ u.name }}
+            <span class="text-muted" *ngIf="u.department"> — {{ u.department }}</span>
+          </mat-option>
+        </mat-select>
+        <mat-hint>{{ selectedUserIds.length ? (selectedUserIds.length + ' مستخدم') : 'بدون تحديد = متاح للجميع' }}</mat-hint>
+      </mat-form-field>
+    </div>
+    <div class="erp-modal__footer">
+      <button class="btn btn-outline-secondary" (click)="closeUsersDialog()" [disabled]="savingUsers">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveBankUsers()" [disabled]="savingUsers || loadingUsers">
+        <span *ngIf="savingUsers" class="spinner-border spinner-border-sm ml-1"></span>
+        {{ savingUsers ? 'جاري الحفظ...' : 'حفظ الصلاحيات' }}
       </button>
     </div>
   </div>

@@ -71,6 +71,21 @@ class Order extends Model
   return $this->belongsTo(Bank::class);
  }
 
+ public function status_histories()
+ {
+  return $this->hasMany(OrderStatusHistory::class)->orderByDesc('created_at');
+ }
+
+ public function rollback_audits()
+ {
+  return $this->hasMany(OrderRollbackAudit::class)->orderByDesc('created_at');
+ }
+
+ public function shipments()
+ {
+  return $this->hasMany(Shipment::class);
+ }
+
  /**
   * عند إغلاق كل سطور shipping_company_details (is_done) دون تحديث الطلب (مثلاً بعد قبض سند)،
   * تُحدَّث حالة الطلب إلى «تم التحصيل» وتُعبأ collection_date عند الحاجة.
@@ -94,6 +109,10 @@ class Order extends Model
    return false;
   }
   if (shippingCompanyDetails::where('order_id', $orderId)->where('is_done', 0)->exists()) {
+   return false;
+  }
+
+  if (app(\App\Services\Orders\OrderManualCollectionGuard::class)->openCollectionReceivableAmount($order) > 0.009) {
    return false;
   }
 

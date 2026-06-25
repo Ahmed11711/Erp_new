@@ -60,4 +60,24 @@ export class CollectionCompanyService {
       httpOptionsFromParams(params)
     );
   }
+
+  reconcileCount(id: number, dateFrom: string, dateTo: string) {
+    return this.http.get<any>(`${environment.Url}/collection-companies/${id}/reconcile-count`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+  }
+
+  reconcileOrders(id: number, dateFrom: string, dateTo: string) {
+    return this.http.get<any>(`${environment.Url}/collection-companies/${id}/reconcile-orders`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+  }
+
+  reconcileReceivables(id: number, dateFrom: string, dateTo: string, orderIds?: number[]) {
+    return this.http.post<any>(`${environment.Url}/collection-companies/${id}/reconcile-receivables`, {
+      date_from: dateFrom,
+      date_to: dateTo,
+      order_ids: orderIds || null,
+    });
+  }
 }

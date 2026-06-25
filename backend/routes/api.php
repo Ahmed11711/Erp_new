@@ -238,9 +238,14 @@ Route::middleware('auth')->group(function () {
         Route::get('suppliers/getAllSupplierTypes', [SupplierController::class, 'getAllSupplierTypes']);
         Route::get('suppliers/supplierDetails/{id}', [SupplierController::class, 'supplier_details']);
         Route::get('suppliers/supplier_names', [SupplierController::class, 'supplier_names']);
+        Route::get('suppliers/processing-vendors', [SupplierController::class, 'processingVendors']);
+        Route::get('suppliers/purge-preview', [SupplierController::class, 'purgePreview']);
+        Route::post('suppliers/purge-all', [SupplierController::class, 'purgeAll']);
+        Route::post('suppliers/bulk-delete', [SupplierController::class, 'destroyMany']);
         Route::apiResource('suppliers', App\Http\Controllers\SupplierController::class);
 
         Route::get('purchases/search', [App\Http\Controllers\PurchasesController::class, 'search']);
+        Route::post('purchases/bulk-delete', [App\Http\Controllers\PurchasesController::class, 'destroyMany']);
         Route::get('purchases/{id}', [App\Http\Controllers\PurchasesController::class, 'show']);
         Route::patch('purchases/{id}/print-status', [App\Http\Controllers\PurchasesController::class, 'updatePrintable']);
         Route::apiResource('purchases', App\Http\Controllers\PurchasesController::class);
@@ -248,6 +253,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware([FinanceOperationsLegacyApiAccess::class])->group(function () {
         Route::post('inventory/import/items', [InventoryExcelImportController::class, 'importItems']);
+        Route::post('inventory/import/recipe-sheet-items', [InventoryExcelImportController::class, 'importRecipeSheetItems']);
         Route::post('inventory/import/opening-balances', [InventoryExcelImportController::class, 'importOpeningBalances']);
         Route::post('inventory/import/adjustments', [InventoryExcelImportController::class, 'importAdjustments']);
 
@@ -271,6 +277,8 @@ Route::middleware('auth')->group(function () {
         Route::get('bank/transfermoney', [BanksController::class, 'transferMoney']);
 
         Route::get('expense/search', [App\Http\Controllers\ExpenseController::class, 'search']);
+        Route::get('expense/purge-preview', [App\Http\Controllers\ExpenseController::class, 'purgePreview']);
+        Route::post('expense/purge-all', [App\Http\Controllers\ExpenseController::class, 'purgeAll']);
         Route::post('editexpense/{id}', [App\Http\Controllers\ExpenseController::class, 'editExpense']);
         Route::post('deleteexpense/{id}', [App\Http\Controllers\ExpenseController::class, 'deleteExpense']);
         Route::apiResource('expense', App\Http\Controllers\ExpenseController::class);
@@ -317,6 +325,13 @@ Route::middleware('auth')->group(function () {
         Route::post('editcategory/{id}', [CategoriesController::class, 'editCategory']);
         Route::post('categories/{id}/promote-to-finished', [CategoriesController::class, 'promoteToFinished']);
         Route::delete('deletecategory/{id}', [CategoriesController::class, 'deleteCategory']);
+        Route::get('categories/{id}/links', [CategoriesController::class, 'categoryLinks']);
+        Route::post('categories/merge-preview', [CategoriesController::class, 'mergeCategoryPreview']);
+        Route::post('categories/merge', [CategoriesController::class, 'mergeCategory']);
+        Route::get('categories/duplicate-groups', [CategoriesController::class, 'duplicateCategoryGroups']);
+        Route::post('categories/merge-bulk', [CategoriesController::class, 'mergeCategoriesBulk']);
+        Route::post('categories/force-delete-preview', [CategoriesController::class, 'forceDeleteCategoriesPreview']);
+        Route::post('categories/force-delete-bulk', [CategoriesController::class, 'forceDeleteCategoriesBulk']);
         Route::post('categories/{id}/revision-roll-forward', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'rollForward']);
         Route::get('categories/{id}/revision-lineage', [\App\Http\Controllers\ItemRecipeRevisionController::class, 'lineage']);
         Route::patch('/categories/{id}/quantity', [CategoriesController::class, 'changeCategoryQuantityss']);
@@ -361,10 +376,16 @@ Route::middleware('auth')->group(function () {
     Route::middleware([ManufacturingModuleApiAccess::class])->group(function () {
         Route::post('manufacture', [App\Http\Controllers\ManufactureController::class, 'store']);
         Route::get('manufacture', [App\Http\Controllers\ManufactureController::class, 'index']);
+        Route::get('manufacture/items-without-recipes', [App\Http\Controllers\ManufactureController::class, 'itemsWithoutRecipes']);
+        Route::get('manufacture/recipe-product/{id}', [App\Http\Controllers\ManufactureController::class, 'recipeProduct'])->whereNumber('id');
         Route::get('manufacture/manfucture_by_warhouse', [App\Http\Controllers\ManufactureController::class, 'manfucture_by_warhouse']);
         Route::post('manufacture/confirm', [App\Http\Controllers\ManufactureController::class, 'confirm']);
+        Route::post('manufacture/update-recipe-from-consumption', [App\Http\Controllers\ManufactureController::class, 'updateRecipeFromConsumption']);
+        Route::post('manufacture/confirm/preview', [App\Http\Controllers\ManufactureController::class, 'previewConsumption']);
         Route::get('manufacture/confirmed', [App\Http\Controllers\ManufactureController::class, 'confirmed']);
+        Route::get('manufacture/confirmed/deleted', [App\Http\Controllers\ManufactureController::class, 'confirmedDeleted']);
         Route::get('manufacture/done/{id}', [App\Http\Controllers\ManufactureController::class, 'done']);
+        Route::delete('manufacture/confirmed/{id}', [App\Http\Controllers\ManufactureController::class, 'destroy'])->whereNumber('id');
 
         Route::get('manufacturing/production-orders', [ProductionOrderController::class, 'index']);
         Route::post('manufacturing/production-orders', [ProductionOrderController::class, 'store']);
@@ -372,6 +393,37 @@ Route::middleware('auth')->group(function () {
         Route::post('manufacturing/production-orders/{id}/start', [ProductionOrderController::class, 'start'])->whereNumber('id');
         Route::post('manufacturing/production-orders/{id}/complete', [ProductionOrderController::class, 'complete'])->whereNumber('id');
         Route::post('manufacturing/production-orders/{id}/cancel', [ProductionOrderController::class, 'cancel'])->whereNumber('id');
+    });
+
+    Route::middleware([\App\Http\Middleware\ProcessingModuleApiAccess::class])->prefix('processing')->group(function () {
+        Route::get('meta', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'meta']);
+        Route::get('vendors', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'vendors']);
+        Route::get('dashboard/kpis', [\App\Http\Controllers\Processing\ProcessingDashboardController::class, 'kpis']);
+        Route::get('reports/materials-at-vendor', [\App\Http\Controllers\Processing\ProcessingDashboardController::class, 'materialsAtVendor']);
+        Route::get('reports/vendor-balances', [\App\Http\Controllers\Processing\ProcessingDashboardController::class, 'vendorBalances']);
+        Route::get('reports/aging', [\App\Http\Controllers\Processing\ProcessingDashboardController::class, 'aging']);
+
+        Route::get('orders', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'index']);
+        Route::post('orders', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'store']);
+        Route::get('orders/{id}', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'show'])->whereNumber('id');
+        Route::put('orders/{id}', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'update'])->whereNumber('id');
+        Route::post('orders/{id}/approve', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'approve'])->whereNumber('id');
+
+        Route::get('dispatches', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'index']);
+        Route::post('dispatches', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'store']);
+        Route::post('dispatches/voucher', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'submitVoucher']);
+        Route::get('dispatches/{id}', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'show'])->whereNumber('id');
+        Route::post('dispatches/{id}/post', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'post'])->whereNumber('id');
+
+        Route::get('receipts', [\App\Http\Controllers\Processing\ProcessingReceiptController::class, 'index']);
+        Route::post('receipts', [\App\Http\Controllers\Processing\ProcessingReceiptController::class, 'store']);
+        Route::get('receipts/{id}', [\App\Http\Controllers\Processing\ProcessingReceiptController::class, 'show'])->whereNumber('id');
+        Route::post('receipts/{id}/post', [\App\Http\Controllers\Processing\ProcessingReceiptController::class, 'post'])->whereNumber('id');
+
+        Route::get('invoices', [\App\Http\Controllers\Processing\ProcessingInvoiceController::class, 'index']);
+        Route::post('invoices', [\App\Http\Controllers\Processing\ProcessingInvoiceController::class, 'store']);
+        Route::get('invoices/{id}', [\App\Http\Controllers\Processing\ProcessingInvoiceController::class, 'show'])->whereNumber('id');
+        Route::post('invoices/{id}/post', [\App\Http\Controllers\Processing\ProcessingInvoiceController::class, 'post'])->whereNumber('id');
     });
 
     Route::middleware([SettingsUserManagementApiAccess::class])->group(function () {
@@ -448,11 +500,14 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(['order.profile:ship_collect'])->group(function () {
         Route::post('shiporder/{id}', [OrdersController::class, 'ship_order']);
+        Route::get('order/{id}/delivery-transfer-check', [OrdersController::class, 'delivery_transfer_check']);
         Route::post('order/{id}/deliver', [OrdersController::class, 'deliver_order']);
         Route::post('orders/bulk-deliver', [OrdersController::class, 'bulk_deliver_orders']);
         Route::post('collectorder/{id}', [OrdersController::class, 'collect_order']);
         Route::post('collectorder-bulk', [OrdersController::class, 'bulk_collect_orders']); 
         Route::get('order/received/{id}', [OrdersController::class, 'received']);
+        Route::get('orders/{id}/rollback/preview', [\App\Http\Controllers\OrderRollbackController::class, 'preview']);
+        Route::post('orders/{id}/rollback', [\App\Http\Controllers\OrderRollbackController::class, 'execute']);
     });
 
     Route::middleware(['order.profile:part_shipment'])->group(function () {
@@ -554,16 +609,22 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(['order.profile:shipping_company_crud'])->group(function () {
         Route::get('shippingcompanies', [ShippingCompanyController::class, 'index']);
-        Route::get('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'show']);
     });
 
     Route::middleware(['order.profile:shipping_company_manage'])->group(function () {
         Route::get('shippingcompanies/unlinked-summary', [ShippingCompanyController::class, 'unlinkedSummary']);
         Route::post('shippingcompanies/link-unlinked', [ShippingCompanyController::class, 'linkUnlinked']);
         Route::post('shippingcompanies/{id}/link-account', [ShippingCompanyController::class, 'linkAccount']);
+        Route::get('shippingcompanies/{id}/reconcile-count', [ShippingCompanyController::class, 'reconcileCount']);
+        Route::get('shippingcompanies/{id}/reconcile-orders', [ShippingCompanyController::class, 'reconcileOrders']);
+        Route::post('shippingcompanies/{id}/reconcile-receivables', [ShippingCompanyController::class, 'reconcileReceivables']);
         Route::post('shippingcompanies', [ShippingCompanyController::class, 'store']);
         Route::put('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'update']);
         Route::delete('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'destroy']);
+    });
+
+    Route::middleware(['order.profile:shipping_company_crud'])->group(function () {
+        Route::get('shippingcompanies/{shippingcompany}', [ShippingCompanyController::class, 'show']);
     });
 
     Route::middleware(['order.profile:shipping_company_statement'])->group(function () {
@@ -574,16 +635,22 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['order.profile:shipping_company_crud'])->group(function () {
         Route::get('collection-companies/select', [CollectionCompanyController::class, 'select']);
         Route::get('collection-companies', [CollectionCompanyController::class, 'index']);
-        Route::get('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'show']);
     });
 
     Route::middleware(['order.profile:shipping_company_manage'])->group(function () {
         Route::get('collection-companies/unlinked-summary', [CollectionCompanyController::class, 'unlinkedSummary']);
         Route::post('collection-companies/link-unlinked', [CollectionCompanyController::class, 'linkUnlinked']);
         Route::post('collection-companies/{collectionCompany}/link-account', [CollectionCompanyController::class, 'linkAccount']);
+        Route::get('collection-companies/{collectionCompany}/reconcile-count', [CollectionCompanyController::class, 'reconcileCount']);
+        Route::get('collection-companies/{collectionCompany}/reconcile-orders', [CollectionCompanyController::class, 'reconcileOrders']);
+        Route::post('collection-companies/{collectionCompany}/reconcile-receivables', [CollectionCompanyController::class, 'reconcileReceivables']);
         Route::post('collection-companies', [CollectionCompanyController::class, 'store']);
         Route::put('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'update']);
         Route::delete('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'destroy']);
+    });
+
+    Route::middleware(['order.profile:shipping_company_crud'])->group(function () {
+        Route::get('collection-companies/{collectionCompany}', [CollectionCompanyController::class, 'show']);
     });
 
     Route::middleware(['order.profile:ship_collect'])->group(function () {
@@ -619,6 +686,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(['order.profile:add_note'])->group(function () {
         Route::get('addnote/{id}', [OrdersController::class, 'addNote']);
+        Route::post('addnote/{id}', [OrdersController::class, 'addNote']);
+        Route::put('updatenote/{id}', [OrdersController::class, 'updateNote']);
     });
 });
 
@@ -631,6 +700,7 @@ Route::middleware('auth')->group(function () {
     Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
     Route::post('tree_accounts/{id}/balance-adjustment', [TreeAccountController::class, 'balanceAdjustment']);
     Route::post('tree_accounts/bulk-balance-adjustment', [TreeAccountController::class, 'bulkBalanceAdjustment']);
+    Route::get('tree_accounts/{id}/audits', [TreeAccountController::class, 'audits']);
     Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
 });
 
@@ -639,6 +709,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
     // Vouchers
     Route::prefix('vouchers/')->group(function () {
         Route::get('/', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'index']);
+        Route::get('/client-options', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'clientOptions']);
         Route::post('/', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'store']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\VoucherController::class, 'update']);
@@ -687,6 +758,8 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
         Route::get('/direct-transactions', [App\Http\Controllers\V2\Accounting\BankController::class, 'listDirectTransactions']);
         Route::get('/direct-transactions/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'showDirectTransaction']);
         Route::put('/direct-transactions/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'updateDirectTransaction']);
+        Route::get('/{id}/users', [App\Http\Controllers\V2\Accounting\BankController::class, 'assignedUsers']);
+        Route::put('/{id}/users', [App\Http\Controllers\V2\Accounting\BankController::class, 'syncAssignedUsers']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'update']);
         Route::delete('/{id}', [App\Http\Controllers\V2\Accounting\BankController::class, 'destroy']);

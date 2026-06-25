@@ -13,9 +13,11 @@ import { ReactiveFormsModule} from '@angular/forms';
 import { MatPaginatorModule} from '@angular/material/paginator';
 import { SharedModule } from '../shared/shared.module';
 import {MatMenuModule} from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { SupplierDetailsComponent } from './supplier-details/supplier-details.component';
 import { DialogPayMoneyForSupplierComponent } from './dialog-pay-money-for-supplier/dialog-pay-money-for-supplier.component';
+import { DialogEditSupplierComponent } from './dialog-edit-supplier/dialog-edit-supplier.component';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -27,10 +29,12 @@ import { MatInputModule } from '@angular/material/input';
     AddSupplierComponent,
     ListSuppliersComponent,
     SupplierDetailsComponent,
-    DialogPayMoneyForSupplierComponent
+    DialogPayMoneyForSupplierComponent,
+    DialogEditSupplierComponent
   ],
   imports: [
     MatIconModule,
+    MatButtonModule,
     MatMenuModule,
     MatPaginatorModule,
     FormsModule,
@@ -43,6 +47,7 @@ import { MatInputModule } from '@angular/material/input';
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
-  ]
+  ],
+  exports: [DialogPayMoneyForSupplierComponent],
 })
 export class SuppliersModule { }

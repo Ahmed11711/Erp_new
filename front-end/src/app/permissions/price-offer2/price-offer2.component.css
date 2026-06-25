@@ -68,6 +68,13 @@ hr{
   unicode-bidi: embed;
 }
 
+.quote-ltr {
+  direction: ltr;
+  text-align: left;
+  min-width: 12rem;
+  border-bottom: 1px solid #ccc;
+}
+
 /* PDF-specific Arabic text handling */
 .pdf-arabic-fix {
   direction: rtl !important;

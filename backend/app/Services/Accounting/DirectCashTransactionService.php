@@ -88,6 +88,15 @@ class DirectCashTransactionService
 
             $this->postBankEntries($bank, $counterAccount, $storageType, $amount, $date, $notes, $batchCode);
             $this->applyBankBalanceDelta($bank, $storageType, $amount, $date, $notes, $batchCode);
+            app(CustomerCompanyDirectCashSyncService::class)->syncBankTransaction(
+                $bank,
+                $counterAccount,
+                $storageType,
+                $amount,
+                $date,
+                $notes,
+                $batchCode
+            );
 
             return $txn->fresh(['counterAccount', 'user']);
         });
@@ -134,6 +143,9 @@ class DirectCashTransactionService
                 }
             }
 
+            $syncService = app(CustomerCompanyDirectCashSyncService::class);
+            $syncService->reverseByRef($txn->entry_batch_code);
+
             $affectedAccounts = $this->removeActiveEntriesByBatch($txn->entry_batch_code);
 
             if ($newBank->id === $oldBank->id) {
@@ -152,6 +164,15 @@ class DirectCashTransactionService
 
             $this->postBankEntries($newBank, $newCounter, $newStorageType, $newAmount, $newDate, $newNotes, $txn->entry_batch_code);
             $this->applyBankBalanceDelta($newBank, $newStorageType, $newAmount, $newDate, $newNotes, $txn->entry_batch_code);
+            $syncService->syncBankTransaction(
+                $newBank,
+                $newCounter,
+                $newStorageType,
+                $newAmount,
+                $newDate,
+                $newNotes,
+                $txn->entry_batch_code
+            );
 
             $affectedAccounts[] = $newBank->asset_id;
             $affectedAccounts[] = $oldBank->asset_id;
@@ -239,6 +260,7 @@ class DirectCashTransactionService
 
             $this->postSafeEntries($safe, $counterAccount, $storageType, $amount, $date, $notes, $batchCode);
             $this->applySafeBalanceDelta($safe, $storageType, $amount);
+            $this->syncSafeCustomerCompany($safe, $counterAccount, $storageType, $amount, $date, $notes, $batchCode);
 
             return $txn->fresh(['counterAccount', 'user']);
         });
@@ -285,6 +307,9 @@ class DirectCashTransactionService
                 }
             }
 
+            $syncService = app(CustomerCompanyDirectCashSyncService::class);
+            $syncService->reverseByRef($txn->entry_batch_code);
+
             $affectedAccounts = $this->removeActiveEntriesByBatch($txn->entry_batch_code);
 
             if ($newSafe->id === $oldSafe->id) {
@@ -303,6 +328,7 @@ class DirectCashTransactionService
 
             $this->postSafeEntries($newSafe, $newCounter, $newStorageType, $newAmount, $newDate, $newNotes, $txn->entry_batch_code);
             $this->applySafeBalanceDelta($newSafe, $newStorageType, $newAmount);
+            $this->syncSafeCustomerCompany($newSafe, $newCounter, $newStorageType, $newAmount, $newDate, $newNotes, $txn->entry_batch_code);
 
             $affectedAccounts[] = $newSafe->account_id;
             $affectedAccounts[] = $oldSafe->account_id;
@@ -316,6 +342,28 @@ class DirectCashTransactionService
 
             return $txn->fresh(['counterAccount', 'user']);
         });
+    }
+
+    private function syncSafeCustomerCompany(
+        Safe $safe,
+        TreeAccount $counterAccount,
+        string $storageType,
+        float $amount,
+        string $date,
+        string $notes,
+        string $batchCode
+    ): void {
+        $syncService = app(CustomerCompanyDirectCashSyncService::class);
+        $details = $syncService->buildCashLabel('safe', $storageType, $batchCode, $notes);
+        $syncService->syncIfCustomerCompanyTreeAccount(
+            $counterAccount,
+            $storageType,
+            $amount,
+            null,
+            $batchCode,
+            $details,
+            $date
+        );
     }
 
     private function findEditableBankTransaction(int $id): BankTransaction

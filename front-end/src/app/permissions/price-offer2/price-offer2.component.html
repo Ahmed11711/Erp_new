@@ -28,8 +28,10 @@
           <div class="mx-4 mt-5">
             <h4 style="text-align: right; direction: rtl;"><input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"> : Date </h4>
             <h4 style="text-align: right; direction: rtl;"><input type="date" (change)="onDateToChange($event)" [value]="dateTo"> :  Valid till </h4>
-            <h4 style="text-align: right; direction: rtl;"> <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote" type="text" placeholder="..........." style="unicode-bidi: embed;"> : <span class="arabic-text">عرض سعر لـ</span> </h4>
-            <h4 style="text-align: right; direction: rtl;"><input name="title" autocomplete="off"  class="quote" type="text" [(ngModel)]="title"  placeholder="......"> This quotation for   </h4>
+            <h4 style="text-align: right; direction: rtl;"> <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote quote-ltr" type="text" placeholder="..........."> : Quote for </h4>
+            <h4 style="text-align: right; direction: rtl;"> <input name="contact_person" autocomplete="off" [(ngModel)]="contact_person" class="quote quote-ltr" type="text" placeholder="Contact person"> : Contact Person  </h4>
+            <h4 style="text-align: right; direction: rtl;"> <input name="client_phone" autocomplete="off" [(ngModel)]="client_phone" class="quote quote-ltr" type="text" placeholder="Phone number"> : Phone  </h4>
+            <h4 style="text-align: right; direction: rtl;"><input name="title" autocomplete="off"  class="quote quote-ltr" type="text" [(ngModel)]="title"  placeholder="......"> This quotation for   </h4>
           </div>
 
           <div dir="ltr" class="col-md-12">
@@ -191,7 +193,7 @@
 
 
       <div class="text-center my-3">
-        <button [disabled]="!quote || !dateFrom || !dateTo || total <= 0" class="btn btn-add" (click)="submitform()">{{ !id ? 'اضافة' : 'تعديل'}}  </button>
+        <button [disabled]="!dateFrom || !dateTo || total <= 0" class="btn btn-add" (click)="submitform()">{{ !id ? 'اضافة' : 'تعديل'}}  </button>
       </div>
 
 

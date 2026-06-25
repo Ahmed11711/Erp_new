@@ -1,0 +1,20 @@
+.proc-page { padding: 1rem 1.25rem; max-width: 1200px; }
+.proc-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+.proc-header .sub { color: #64748b; margin: 0 0 1.25rem; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.kpi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.kpi-card.warn { border-right: 4px solid #f59e0b; }
+.kpi-card.danger { border-right: 4px solid #ef4444; }
+.kpi-label { display: block; font-size: 0.85rem; color: #64748b; }
+.kpi-value { font-size: 1.35rem; color: #0f172a; }
+.panel { background: #fff; border-radius: 10px; border: 1px solid #e2e8f0; padding: 1rem; }
+.panel h2 { margin: 0 0 1rem; font-size: 1.1rem; }
+.proc-table { width: 100%; border-collapse: collapse; }
+.proc-table th, .proc-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f5f9; text-align: right; }
+.proc-table th {
+  background-color: #82225e !important;
+  color: #fff !important;
+  font-weight: 700;
+  border-bottom: 2px solid #6b1a4d !important;
+}
+.muted { color: #94a3b8; }

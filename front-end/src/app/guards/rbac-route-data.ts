@@ -11,6 +11,8 @@ export const RBAC_ROUTE = {
   suppliers: ['suppliers.view'],
   purchases: ['purchases.view'],
   manufacturingAll: ['manufacturing.view'],
+  manufacturingWrite: ['manufacturing.edit_recipe', 'categories.manage', 'system.rbac'],
+  processingAll: ['processing.view', 'purchases.view', 'suppliers.view'],
   ordersCreate: ['orders.create'],
   ordersView: ['orders.view'],
   ordersEdit: ['orders.edit'],

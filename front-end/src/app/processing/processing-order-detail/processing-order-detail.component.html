@@ -1,0 +1,106 @@
+<div class="proc-page" *ngIf="order">
+  <header class="proc-toolbar">
+    <div>
+      <a routerLink="/dashboard/processing/orders" class="back">← إذونات الصرف</a>
+      <h1>{{ primaryDispatch()?.dispatch_number || order.order_number }}</h1>
+      <p class="sub">
+        {{ order.supplier?.supplier_name }} — {{ statusLabels[order.status] || order.status }}
+        <span *ngIf="representativeLabel() !== '—'"> — مندوب: {{ representativeLabel() }}</span>
+      </p>
+    </div>
+    <button type="button" class="btn-secondary" (click)="paySupplier()">سداد المورد</button>
+  </header>
+
+  <section class="panel summary-panel">
+    <div class="summary-grid">
+      <div><span class="lbl">المورد</span><strong>{{ order.supplier?.supplier_name }}</strong></div>
+      <div><span class="lbl">المبلغ على الذمة</span><strong>{{ order.expected_service_total | number:'1.2-2' }} ج</strong></div>
+      <div><span class="lbl">رصيد المورد</span><strong>{{ order.supplier?.balance | number:'1.2-2' }} ج</strong></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>بنود الصرف</h2>
+    <table class="proc-table">
+      <thead>
+        <tr>
+          <th>اسم الصنف</th>
+          <th>الكمية المصروفة</th>
+          <th>المستلم</th>
+          <th>لدى المورد</th>
+          <th>المبلغ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let l of order.lines">
+          <td>{{ l.category?.category_name }}</td>
+          <td>{{ l.dispatched_qty | number:'1.0-4' }}</td>
+          <td>{{ l.received_good_qty | number:'1.0-4' }}</td>
+          <td>{{ (l.dispatched_qty - l.received_good_qty - l.received_damaged_qty - l.received_rejected_qty) | number:'1.0-4' }}</td>
+          <td>{{ l.expected_service_amount | number:'1.2-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel voucher-form receipt-form" *ngIf="canReceipt()">
+    <div class="voucher-form__head">
+      <div class="voucher-form__title-row">
+        <span class="voucher-form__label">تاريخ الاستلام</span>
+        <input class="voucher-form__date" type="date" [(ngModel)]="receiptDate" />
+      </div>
+    </div>
+
+    <div class="voucher-table-wrap">
+      <table class="voucher-table">
+        <thead>
+          <tr>
+            <th>اسم الصنف</th>
+            <th class="col-num">لدى المورد</th>
+            <th class="col-num">الكمية المستلمة</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of receiptLines">
+            <td>{{ r.category_name }}</td>
+            <td class="col-num">{{ r.at_vendor | number:'1.0-4' }}</td>
+            <td class="col-num">
+              <input class="field-control field-control--sm" type="number" min="0" [max]="r.at_vendor" step="0.0001" [(ngModel)]="r.received_qty" />
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr class="totals-row">
+            <td><strong>إجمالي الكميات</strong></td>
+            <td></td>
+            <td class="col-num"><strong>{{ totalReceiptQty() | number:'1.0-4' }}</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="voucher-footer">
+      <h2 class="voucher-footer__title">إذن استلام</h2>
+      <button type="button" class="btn-primary" [disabled]="busy" (click)="createReceipt()">
+        {{ busy ? 'جاري الترحيل...' : 'حفظ وترحيل إذن الاستلام' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="panel" *ngIf="order.invoices?.length">
+    <h2>ذمة المورد (فاتورة)</h2>
+    <table class="proc-table">
+      <thead><tr><th>الرقم</th><th>الإجمالي</th><th>مدفوع</th><th>متبقي</th><th>الحالة</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let inv of order.invoices">
+          <td>{{ inv.invoice_number }}</td>
+          <td>{{ inv.grand_total | number:'1.2-2' }}</td>
+          <td>{{ inv.paid_amount | number:'1.2-2' }}</td>
+          <td>{{ inv.due_amount | number:'1.2-2' }}</td>
+          <td>{{ inv.status }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">المبلغ مُسجّل على ذمة المورد — المحاسب يسدده من «سداد المورد».</p>
+  </section>
+</div>

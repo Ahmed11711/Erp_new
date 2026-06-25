@@ -23,7 +23,7 @@ class CollectionAccountingReportController extends Controller
         $status = $request->query('status'); // active | inactive
 
         $query = CollectionCompany::query()
-            ->with(['linkedShippingCompany:id,name,balance', 'receivableTreeAccount:id,code,name']);
+            ->with(['linkedShippingCompany:id,name,balance', 'receivableTreeAccount:id,code,name,balance,debit_balance,credit_balance']);
 
         if ($status) {
             $query->where('status', $status);
@@ -120,6 +120,7 @@ class CollectionAccountingReportController extends Controller
             'linked_shipping_company_name' => $cc->linkedShippingCompany?->name,
             'receivable_tree_account_id' => $cc->receivable_tree_account_id,
             'receivable_tree_account' => $cc->receivableTreeAccount,
+            'receivable_tree_balance' => round((float) ($cc->receivableTreeAccount?->balance ?? 0), 3),
             'pending_to_collect' => round($pendingToCollect, 3),
             'pending_from_orders' => round((float) $orderStats['pending_to_collect'], 3),
             'pending_from_ledger' => round((float) $ledgerStats['pending_to_collect'], 3),
@@ -270,10 +271,15 @@ class CollectionAccountingReportController extends Controller
     {
         $status = $request->query('status');
         $isDone = $request->query('is_done');
+        $pendingOnly = $request->boolean('pending_only');
 
         $query = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
             ->with(['order:id,customer_name,customer_phone_1,net_total,order_status,prepaid_amount'])
             ->orderByDesc('id');
+
+        if ($pendingOnly) {
+            $query->where('is_done', 0)->whereIn('status', ['تم شحن', 'تم التسليم']);
+        }
 
         if ($dateFrom) {
             $query->whereDate('shipping_date', '>=', $dateFrom);
@@ -284,11 +290,17 @@ class CollectionAccountingReportController extends Controller
         if ($status) {
             $query->where('status', $status);
         }
-        if ($isDone !== null && $isDone !== '') {
+        if (! $pendingOnly && $isDone !== null && $isDone !== '') {
             $query->where('is_done', (int) $isDone);
         }
 
         $details = $query->paginate($request->integer('per_page', 50));
+        $details->getCollection()->transform(function ($row) {
+            $row->collectible = ! $row->is_done && in_array($row->status, ['تم شحن', 'تم التسليم'], true);
+            $row->collectible_amount = $row->collectible ? round(abs((float) $row->amount), 2) : 0;
+
+            return $row;
+        });
 
         $aggregates = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
             ->when($dateFrom, fn ($q) => $q->whereDate('shipping_date', '>=', $dateFrom))
@@ -312,6 +324,9 @@ class CollectionAccountingReportController extends Controller
 
     private function ordersStatement(Request $request, CollectionCompany $company, ?string $dateFrom, ?string $dateTo)
     {
+        $pendingOnly = $request->boolean('pending_only');
+        $settledStatus = OrderSettlementStatus::Settled->value;
+
         $query = $this->ordersBaseQuery($company->id, $company->linked_shipping_company_id)
             ->select([
                 'orders.id',
@@ -326,13 +341,18 @@ class CollectionAccountingReportController extends Controller
                 'order_details.collection_receivable_amount',
                 'order_details.shipping_receivable_amount',
                 'order_details.collection_status',
+                'order_details.settlement_status',
             ]);
 
-        if ($dateFrom) {
-            $query->whereDate('order_details.shipping_date', '>=', $dateFrom);
-        }
-        if ($dateTo) {
-            $query->whereDate('order_details.shipping_date', '<=', $dateTo);
+        if ($pendingOnly) {
+            $query = $this->applyPendingCollectionScope($query, $dateFrom, $dateTo);
+        } else {
+            if ($dateFrom) {
+                $query->whereDate('order_details.shipping_date', '>=', $dateFrom);
+            }
+            if ($dateTo) {
+                $query->whereDate('order_details.shipping_date', '<=', $dateTo);
+            }
         }
 
         if ($request->filled('order_status')) {
@@ -347,6 +367,17 @@ class CollectionAccountingReportController extends Controller
 
         $details = $query->orderByDesc('orders.id')
             ->paginate($request->integer('per_page', 50));
+
+        $details->getCollection()->transform(function ($row) use ($settledStatus) {
+            $amt = round((float) ($row->collection_receivable_amount ?? 0), 2);
+            $isPending = $amt > 0.009
+                && ! in_array($row->order_status, ['ملغي', 'تم التحصيل'], true)
+                && ($row->settlement_status === null || $row->settlement_status !== $settledStatus);
+            $row->collectible = $isPending;
+            $row->collectible_amount = $isPending ? $amt : 0;
+
+            return $row;
+        });
 
         return response()->json([
             'company' => $company,

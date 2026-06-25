@@ -24,6 +24,8 @@ use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\InventoryAccountsTrueUpService;
 use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
+use App\Services\Items\CategoryMergeService;
+use App\Services\Items\CategoryForceDeletionService;
 use App\Services\Items\ItemCodeService;
 use App\Enums\InventoryMovementType;
 use App\Services\Inventory\InventoryMovementLedgerService;
@@ -124,6 +126,183 @@ class CategoriesController extends Controller
   }
 
   return response()->json(['message' => 'Category deleted successfully'], 200);
+ }
+
+ public function categoryLinks($id)
+ {
+  $category = Category::find($id);
+  if (! $category) {
+   return response()->json(['error' => 'Category not found'], 404);
+  }
+
+  $mergeService = app(CategoryMergeService::class);
+
+  return response()->json([
+   'category' => [
+    'id' => (int) $category->id,
+    'category_name' => $category->category_name,
+    'item_code' => $category->item_code,
+    'warehouse' => $category->warehouse,
+    'stock_id' => $category->stock_id,
+    'quantity' => (float) ($category->quantity ?? 0),
+   ],
+   'links' => $mergeService->countLinks((int) $id),
+  ], 200);
+ }
+
+ public function mergeCategoryPreview(Request $request)
+ {
+  $request->validate([
+   'source_id' => 'required|integer|exists:categories,id',
+   'target_id' => 'required|integer|exists:categories,id',
+  ]);
+
+  $preview = app(CategoryMergeService::class)->preview(
+   (int) $request->input('source_id'),
+   (int) $request->input('target_id'),
+  );
+
+  $status = $preview['valid'] ? 200 : 422;
+
+  return response()->json($preview, $status);
+ }
+
+ public function mergeCategory(Request $request)
+ {
+  $request->validate([
+   'source_id' => 'required|integer|exists:categories,id',
+   'target_id' => 'required|integer|exists:categories,id',
+  ]);
+
+  try {
+   $result = app(CategoryMergeService::class)->merge(
+    (int) $request->input('source_id'),
+    (int) $request->input('target_id'),
+   );
+  } catch (\InvalidArgumentException $e) {
+   return response()->json(['message' => $e->getMessage()], 422);
+  }
+
+  return response()->json([
+   'message' => 'تم دمج الصنف بنجاح.',
+   'result' => $result,
+  ], 200);
+ }
+
+ public function duplicateCategoryGroups(Request $request)
+ {
+  $stockId = $request->query('stock_id');
+  $groups = app(CategoryMergeService::class)->duplicateGroups(
+   $stockId !== null ? (int) $stockId : null
+  );
+
+  return response()->json([
+   'groups' => $groups,
+   'count' => count($groups),
+  ], 200);
+ }
+
+ public function mergeCategoriesBulk(Request $request)
+ {
+  $request->validate([
+   'target_id' => 'required|integer|exists:categories,id',
+   'source_ids' => 'required|array|min:1',
+   'source_ids.*' => 'integer|exists:categories,id',
+  ]);
+
+  try {
+   $result = app(CategoryMergeService::class)->mergeMany(
+    (int) $request->input('target_id'),
+    (array) $request->input('source_ids'),
+   );
+  } catch (\InvalidArgumentException $e) {
+   return response()->json(['message' => $e->getMessage()], 422);
+  }
+
+  return response()->json([
+   'message' => 'تم دمج الأصناف بنجاح.',
+   'result' => $result,
+  ], 200);
+ }
+
+ public function forceDeleteCategoriesPreview(Request $request)
+ {
+  $this->ensureAdmin();
+
+  $request->validate([
+   'category_ids' => 'nullable|array',
+   'category_ids.*' => 'integer|exists:categories,id',
+   'warehouse' => 'nullable|string|max:255',
+  ]);
+
+  $svc = app(CategoryForceDeletionService::class);
+  $categoryIds = array_map('intval', (array) $request->input('category_ids', []));
+
+  if ($request->filled('warehouse')) {
+   $categoryIds = $svc->categoryIdsForWarehouse((string) $request->input('warehouse'));
+  }
+
+  $preview = $svc->preview($categoryIds);
+
+  return response()->json($preview, 200);
+ }
+
+ public function forceDeleteCategoriesBulk(Request $request)
+ {
+  $this->ensureAdmin();
+
+  $request->validate([
+   'category_ids' => 'nullable|array',
+   'category_ids.*' => 'integer|exists:categories,id',
+   'warehouse' => 'nullable|string|max:255',
+   'confirm_phrase' => 'required|string',
+  ]);
+
+  $warehouse = trim((string) $request->input('warehouse', ''));
+  $expectedPhrase = $warehouse !== '' ? $warehouse : 'حذف نهائي';
+
+  if (trim((string) $request->input('confirm_phrase')) !== $expectedPhrase) {
+   return response()->json([
+    'message' => $warehouse !== ''
+     ? 'اكتب اسم المخزن بالضبط للتأكيد.'
+     : 'اكتب «حذف نهائي» للتأكيد.',
+   ], 422);
+  }
+
+  $svc = app(CategoryForceDeletionService::class);
+  $categoryIds = array_map('intval', (array) $request->input('category_ids', []));
+
+  if ($warehouse !== '') {
+   $categoryIds = $svc->categoryIdsForWarehouse($warehouse);
+  }
+
+  try {
+   $result = $svc->deleteMany($categoryIds);
+  } catch (\InvalidArgumentException $e) {
+   return response()->json(['message' => $e->getMessage()], 422);
+  } catch (\Throwable $e) {
+   Log::error('category_force_delete_failed', [
+    'category_ids' => $categoryIds,
+    'warehouse' => $warehouse,
+    'exception' => $e->getMessage(),
+   ]);
+
+   return response()->json([
+    'message' => 'تعذر تنفيذ الحذف: '.$e->getMessage(),
+   ], 500);
+  }
+
+  return response()->json([
+   'message' => 'تم حذف الأصناف وجميع ارتباطاتها.',
+   'result' => $result,
+  ], 200);
+ }
+
+ private function ensureAdmin(): void
+ {
+  if ((auth()->user()->department ?? '') !== 'Admin') {
+   abort(403, 'متاح للمسؤول فقط.');
+  }
  }
 
 
@@ -292,12 +471,25 @@ class CategoriesController extends Controller
    return response()->json(['error' => 'Category not found'], 404);
   }
 
-  $dup = Category::where('warehouse', $request->warehouse)
-   ->whereRaw('TRIM(category_name) = ?', [trim($request->category_name)])
-   ->where('id', '!=', (int) $id)
-   ->first();
-  if ($dup) {
-   return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
+  $incomingName = trim((string) $request->category_name);
+  $incomingWarehouse = trim((string) $request->warehouse);
+  $nameOrWarehouseChanged = $incomingName !== trim((string) $category->category_name)
+   || $incomingWarehouse !== trim((string) $category->warehouse);
+
+  if ($nameOrWarehouseChanged) {
+   $dupQuery = Category::query()
+    ->whereRaw('TRIM(category_name) = ?', [$incomingName])
+    ->where('id', '!=', (int) $id);
+
+   if ($stockId) {
+    $dupQuery->where('stock_id', $stockId);
+   } else {
+    $dupQuery->where('warehouse', $incomingWarehouse);
+   }
+
+   if ($dupQuery->first()) {
+    return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
+   }
   }
 
   $img_name = '';

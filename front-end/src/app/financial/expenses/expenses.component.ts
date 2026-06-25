@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ExpenseService } from '../services/expense.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-expenses',
@@ -19,7 +21,10 @@ export class ExpensesComponent implements OnInit {
   page = 0;
   pageSizeOptions = [15,50,100];
 
-  constructor(private expenseService:ExpenseService){
+  constructor(
+    private expenseService: ExpenseService,
+    private rbac: RbacService,
+  ) {
   }
 
   ngOnInit(){
@@ -231,6 +236,64 @@ export class ExpensesComponent implements OnInit {
       return s;
     }
     return s.slice(0, maxLen) + '…';
+  }
+
+  canPurgeAllExpenses(): boolean {
+    return this.rbac.can('expenses.purge_all') || this.rbac.can('system.rbac');
+  }
+
+  purgeAllExpenses(): void {
+    if (!this.canPurgeAllExpenses()) {
+      return;
+    }
+
+    this.expenseService.purgePreview().subscribe({
+      next: (preview) => {
+        const lines = [
+          `مصروفات نشطة: <strong>${preview.active_expense_count}</strong>`,
+          `إجمالي السجلات: <strong>${preview.total_expense_count}</strong>`,
+          `قيود محاسبية: <strong>${preview.gl_entry_count}</strong>`,
+        ];
+        if (preview.expense_line_count > 0) {
+          lines.push(`بنود تقسيم: <strong>${preview.expense_line_count}</strong>`);
+        }
+
+        Swal.fire({
+          title: 'حذف جميع المصروفات؟',
+          html: `
+            <p>سيتم حذف جميع المصروفات وقيودها من شجرة الحسابات، واسترداد أرصدة الخزن/البنوك/الحسابات الخدمية للمصروفات النشطة.</p>
+            <ul style="text-align:right;list-style:none;padding:0">${lines.map((l) => `<li>${l}</li>`).join('')}</ul>
+            <p class="text-danger"><strong>هذه العملية لا يمكن التراجع عنها.</strong></p>
+          `,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'نعم، احذف الكل',
+          cancelButtonText: 'إلغاء',
+          confirmButtonColor: '#d33',
+        }).then((result) => {
+          if (!result.isConfirmed) {
+            return;
+          }
+
+          this.expenseService.purgeAll().subscribe({
+            next: () => {
+              this.search('');
+              Swal.fire({ icon: 'success', title: 'تم حذف جميع المصروفات', timer: 3000, showConfirmButton: false });
+            },
+            error: (err) => {
+              const msg =
+                err?.error?.message ?? err?.error?.error ?? err?.message ?? 'تعذر تنفيذ الحذف';
+              Swal.fire({ icon: 'error', title: 'فشل الحذف', text: String(msg) });
+            },
+          });
+        });
+      },
+      error: (err) => {
+        const msg =
+          err?.error?.message ?? err?.error?.error ?? err?.message ?? 'تعذر تحميل المعاينة';
+        Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+      },
+    });
   }
 
 }

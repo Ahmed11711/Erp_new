@@ -1,21 +1,27 @@
-<div class="container-fluid" [class.shopify-review-page]="shopifyReviewMode">
+<div class="container-fluid order-details-page" [class.shopify-review-page]="shopifyReviewMode" dir="rtl">
 
- <div class="row py-3" *ngIf="isDetails">
-  <div class="col-md-3">
+ <div class="order-details-hero" *ngIf="isDetails">
+  <div class="order-details-hero__time">
    <app-time></app-time>
   </div>
-  <div class="col-md-2 offset-md-2 p-3">
-   <div>
-    <p class="title header" *ngIf="!shopifyReviewMode"> تفاصيل الطلب {{id}}</p>
-    <p class="title header shopify-review-page-title" *ngIf="shopifyReviewMode">
-     <span class="shopify-badge">Shopify</span> مراجعة طلب #{{id}}
-    </p>
-   </div>
-   <div class="d-flex justify-content-between " *ngIf="!isFinancialAccountsReadonly && !shopifyReviewMode">
-    <p class="bg-main " (click)="printSticker()"> ملصقات <i class="fa-solid fa-print text-white"></i></p>
-    <p class="bg-main" (click)="printInvoice('A3')"> A3 <i class="fa-solid fa-print text-white"></i></p>
-    <p class="bg-main" (click)="printInvoice('A4')"> A4 <i class="fa-solid fa-print text-white"></i></p>
-   </div>
+  <div class="order-details-hero__title-wrap">
+   <h1 class="order-details-hero__title" *ngIf="!shopifyReviewMode">تفاصيل الطلب #{{ id }}</h1>
+   <h1 class="order-details-hero__title shopify-review-page-title" *ngIf="shopifyReviewMode">
+    <span class="shopify-badge">Shopify</span>
+    مراجعة طلب #{{ id }}
+   </h1>
+   <p class="order-details-hero__subtitle" *ngIf="order?.order_status">{{ order?.order_status }} · {{ order?.order_type }}</p>
+  </div>
+  <div class="order-details-hero__actions" *ngIf="!isFinancialAccountsReadonly && !shopifyReviewMode">
+   <button type="button" class="order-details-hero__action-btn" (click)="printSticker()">
+    <i class="fa-solid fa-tags"></i> ملصقات
+   </button>
+   <button type="button" class="order-details-hero__action-btn" (click)="printInvoice('A3')">
+    <i class="fa-solid fa-file-lines"></i> A3
+   </button>
+   <button type="button" class="order-details-hero__action-btn" (click)="printInvoice('A4')">
+    <i class="fa-solid fa-file"></i> A4
+   </button>
   </div>
  </div>
 
@@ -52,8 +58,13 @@
   </p>
  </ng-template>
 
- <div class="container-fluid table-responsive text-center ">
-  <table class="table table-bordered table-hover w-100">
+ <div class="order-section-card order-info-card mb-3">
+  <div class="order-section-card__header">
+   <h5 class="order-section-card__title">بيانات الطلب</h5>
+  </div>
+
+  <div class="table-responsive text-center">
+   <table class="table table-bordered table-hover order-details-table w-100 mb-0">
    <thead class="thead-dark">
     <th>نوع الطلب</th>
     <th>حالة الطلب</th>
@@ -81,10 +92,10 @@
     </td>
    </tbody>
   </table>
- </div>
+  </div>
 
- <div class="container-fluid table-responsive text-center ">
-  <table class="table table-bordered table-hover w-100">
+  <div class="table-responsive text-center">
+   <table class="table table-bordered table-hover order-details-table w-100 mb-0">
    <thead class="thead-dark">
     <th>اسم العميل</th>
     <th>رقم الموبيل 1</th>
@@ -118,10 +129,10 @@
     </ng-container>
    </tbody>
   </table>
- </div>
+  </div>
 
- <div class="container-fluid table-responsive text-center ">
-  <table class="table table-bordered table-hover w-100">
+  <div class="table-responsive text-center">
+   <table class="table table-bordered table-hover order-details-table w-100 mb-0">
    <thead class="thead-dark">
     <th *ngIf="order?.order_details?.shipping_line?.name">خط التوزيع</th>
     <th *ngIf="maintenReasons.length > 0">سبب الصيانة</th>
@@ -157,9 +168,11 @@
     </td>
    </tbody>
   </table>
+  </div>
  </div>
 
- <div class="row">
+ <div class="order-section-card order-review-tools mb-3">
+  <div class="row g-3">
   <div class="col-md-2 mt-2" *ngIf="user == 'Admin'">
    <textarea class="form-control" [(ngModel)]="reviewdNote" placeholder="ملحوظة مراجعة الادمن" type="text"></textarea>
    <input class="my-2" id="reviewed" [(ngModel)]="reviewd" type="checkbox" name=""> <span class="m-2">تم المراجعة</span>
@@ -211,59 +224,71 @@
     </tbody>
    </table>
   </div>
- </div> <br>
+ </div>
+ </div>
 
- <div class="row">
-  <div class="col-md-8 table-responsive" *ngIf="order?.order_products_archive.length > 0 && user == 'Admin'">
-   <button class="btn bg-main" (click)="toggleUpdatedProduct()">طلب معدل</button>
-   <table class="table table-bordered table-hover" *ngIf="oldProduct">
-    <thead>
-     <tr>
-      <th>اسم المنتج</th>
-      <th>الكمية المطلوبة</th>
-      <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
-      <th>سعر البيع</th>
-      <th>اجمالى سعر البيع</th>
-      <th>بواسطة</th>
-      <th>التاريخ</th>
-     </tr>
-    </thead>
-    <tbody>
-     <tr *ngFor="let elm of order?.order_products_archive;">
-      <td>{{elm.category.category_name}}</td>
-      <td dir="ltr">{{elm.quantity}}</td>
-      <td *ngIf="order?.customer_type=='شركة'">{{elm.shipped_quantity}}</td>
-      <td dir="ltr">{{elm.price | customNumber}}</td>
-      <td dir="ltr">{{elm.total_price | customNumber}}</td>
-      <td>{{elm.updated_by}}</td>
-      <td>{{elm.created_at | customDate}}</td>
-     </tr>
-    </tbody>
-   </table>
-   <hr>
-  </div>
-
-  <div class="col-md-8 table-responsive">
-   <div class="shopify-review-add-product mb-2" *ngIf="shopifyReviewMode" dir="rtl">
-    <div class="row g-2 align-items-end">
-     <div class="col-md-5">
-      <ng-autocomplete
-        [data]="catalogProducts"
-        [searchKeyword]="catword"
-        placeholder="إضافة صنف"
-        (selected)="onReviewProductSelected($event)"
-        [itemTemplate]="reviewItemTpl"
-        [notFoundTemplate]="reviewNotFoundTpl">
-      </ng-autocomplete>
-      <ng-template #reviewItemTpl let-item><a [innerHTML]="item.category_name"></a></ng-template>
-      <ng-template #reviewNotFoundTpl let-notFound><div [innerHTML]="notFound"></div></ng-template>
-     </div>
-     <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm" placeholder="كمية" [(ngModel)]="reviewAddQty"></div>
-     <div class="col-md-2"><input type="number" min="0" class="form-control form-control-sm" placeholder="سعر" [(ngModel)]="reviewAddPrice"></div>
-     <div class="col-md-2"><button type="button" class="btn btn-sm btn-dark w-100" (click)="addReviewProduct()">إضافة</button></div>
+ <div class="row g-3 order-details-main">
+  <div class="col-12" *ngIf="order?.order_products_archive.length > 0 && user == 'Admin'">
+   <div class="order-section-card">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title">نسخة الطلب قبل التعديل</h5>
+     <button type="button" class="btn btn-sm bg-main" (click)="toggleUpdatedProduct()">طلب معدل</button>
+    </div>
+    <div class="table-responsive" *ngIf="oldProduct">
+     <table class="table table-bordered table-hover order-details-table w-100 mb-0">
+      <thead>
+       <tr>
+        <th>اسم المنتج</th>
+        <th>الكمية المطلوبة</th>
+        <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
+        <th>سعر البيع</th>
+        <th>اجمالى سعر البيع</th>
+        <th>بواسطة</th>
+        <th>التاريخ</th>
+       </tr>
+      </thead>
+      <tbody>
+       <tr *ngFor="let elm of order?.order_products_archive;">
+        <td>{{elm.category.category_name}}</td>
+        <td dir="ltr">{{elm.quantity}}</td>
+        <td *ngIf="order?.customer_type=='شركة'">{{elm.shipped_quantity}}</td>
+        <td dir="ltr">{{elm.price | customNumber}}</td>
+        <td dir="ltr">{{elm.total_price | customNumber}}</td>
+        <td>{{elm.updated_by}}</td>
+        <td>{{elm.created_at | customDate}}</td>
+       </tr>
+      </tbody>
+     </table>
     </div>
    </div>
-   <table class="table table-bordered table-hover">
+  </div>
+
+  <div class="col-12">
+   <div class="order-section-card">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title">منتجات الطلب</h5>
+    </div>
+    <div class="shopify-review-add-product mb-2" *ngIf="shopifyReviewMode">
+     <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+       <ng-autocomplete
+         [data]="catalogProducts"
+         [searchKeyword]="catword"
+         placeholder="إضافة صنف"
+         (selected)="onReviewProductSelected($event)"
+         [itemTemplate]="reviewItemTpl"
+         [notFoundTemplate]="reviewNotFoundTpl">
+       </ng-autocomplete>
+       <ng-template #reviewItemTpl let-item><a [innerHTML]="item.category_name"></a></ng-template>
+       <ng-template #reviewNotFoundTpl let-notFound><div [innerHTML]="notFound"></div></ng-template>
+      </div>
+      <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm" placeholder="كمية" [(ngModel)]="reviewAddQty"></div>
+      <div class="col-md-2"><input type="number" min="0" class="form-control form-control-sm" placeholder="سعر" [(ngModel)]="reviewAddPrice"></div>
+      <div class="col-md-2"><button type="button" class="btn btn-sm btn-dark w-100" (click)="addReviewProduct()">إضافة</button></div>
+     </div>
+    </div>
+    <div class="table-responsive">
+     <table class="table table-bordered table-hover order-details-table w-100 mb-0">
     <thead>
      <tr>
       <th>اسم المنتج</th>
@@ -343,57 +368,91 @@
      </ng-container>
     </tbody>
    </table>
-   <hr>
+    </div>
+   </div>
   </div>
 
-  <div class="col-md-4 ">
-   <!-- <textarea disabled name="" id="" cols="31" rows="5" [placeholder]="order?.order_notes"></textarea> -->
-   <div class="text-center table-responsive w-100" *ngIf="user != 'Review Management' && user != 'Financial Accounts'">
-    <button class="btn bg-main mb-2" (click)="addNote(order?.id)">اضف ملاحظة</button>
-
-    <table class="table w-100 my-0">
-     <thead>
-      <th>ملحوظة</th>
-      <th>بواسطة</th>
-     </thead>
-    </table>
-    <div class="content">
-     <table class="table w-100 table-hover">
-      <tbody>
-       <ng-container *ngFor="let item of notes">
-        <ng-container *ngIf="item?.note">
-         <tr *ngIf="item?.note !='null'" [ngClass]="item?.is_problem ? 'text-danger' : ''">
-          <td>{{item?.note}}</td>
-          <td>{{item?.user?.name}}</td>
-         </tr>
-        </ng-container>
-       </ng-container>
-      </tbody>
-     </table>
+  <div class="col-lg-5" *ngIf="canManageOrderNotes">
+   <div class="order-notes-panel order-section-card h-100">
+    <div class="order-notes-panel__header">
+     <div class="order-notes-panel__header-text">
+      <h5 class="order-notes-panel__title"><i class="fa-solid fa-comments"></i> ملاحظات الطلب</h5>
+      <p class="order-notes-panel__subtitle">سجل زمني لكل ملاحظة مع اسم المُضيف والوقت</p>
+     </div>
+     <button type="button" class="btn btn-sm order-notes-panel__add-btn" (click)="addNote(order?.id)">
+      <i class="fa-solid fa-plus"></i>
+      إضافة ملاحظة
+     </button>
     </div>
 
+    <div class="order-notes-list" *ngIf="visibleNotes.length; else emptyOrderNotes">
+     <article
+      class="order-note-card"
+      *ngFor="let item of visibleNotes"
+      [class.order-note-card--problem]="item?.is_problem">
+      <div class="order-note-card__top">
+       <span class="order-note-card__source" *ngIf="item?.added_from">{{ item.added_from }}</span>
+       <span class="order-note-card__badge order-note-card__badge--problem" *ngIf="item?.is_problem">مشكلة</span>
+      </div>
+      <p class="order-note-card__body">{{ item.note }}</p>
+      <div class="order-note-card__meta">
+       <span class="order-note-card__author">
+        <i class="fa-regular fa-user"></i>
+        {{ item?.user?.name || '—' }}
+       </span>
+       <span class="order-note-card__time" dir="ltr">
+        <i class="fa-regular fa-clock"></i>
+        {{ item?.created_at | date:'dd/MM/yyyy HH:mm:ss' }}
+       </span>
+      </div>
+      <div class="order-note-card__edit-meta" *ngIf="isNoteEdited(item)">
+       <i class="fa-solid fa-pen-to-square"></i>
+       آخر تعديل: {{ noteEditorName(item) }} · {{ item?.updated_at | date:'dd/MM/yyyy HH:mm:ss' }}
+      </div>
+      <div class="order-note-card__actions" *ngIf="item?.can_edit">
+       <button type="button" class="btn btn-sm btn-outline-secondary order-note-card__edit-btn" (click)="editNote(item)">
+        <i class="fa-solid fa-pen"></i>
+        تعديل
+       </button>
+      </div>
+     </article>
+    </div>
+
+    <ng-template #emptyOrderNotes>
+     <div class="order-notes-empty">
+      <i class="fa-regular fa-note-sticky"></i>
+      <p>لا توجد ملاحظات على هذا الطلب بعد</p>
+     </div>
+    </ng-template>
    </div>
-   <div class="table-responsive mb-2">
-    <table class="table w-100 my-0 mt-3">
-     <thead class="text-center notification-head">
-      <th>رقم الاشعار</th>
-      <th>النوع</th>
-      <th>المرسل</th>
-      <th>المرسل اليه</th>
-      <th>الملاحظة</th>
-      <th>تاريخ الارسال</th>
-     </thead>
-    </table>
-    <div class="content">
-     <table class="table table-hover w-100">
+  </div>
+
+  <div [ngClass]="canManageOrderNotes ? 'col-lg-7' : 'col-12'">
+   <div class="order-section-card order-side-panel order-notifications-panel h-100">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title"><i class="fa-solid fa-bell"></i> الإشعارات</h5>
+    </div>
+    <div class="table-responsive mb-0">
+     <table class="table w-100 my-0 order-details-table order-panel-table">
+      <thead class="text-center">
+       <th>رقم الاشعار</th>
+       <th>النوع</th>
+       <th>المرسل</th>
+       <th>المرسل اليه</th>
+       <th>الملاحظة</th>
+       <th>تاريخ الارسال</th>
+      </thead>
       <tbody class="text-center">
        <tr *ngFor="let elm of notifications" [ngClass]="elm?.type=='مرتجع' ? 'text-danger' : ''">
         <td>{{elm?.notification_number}}</td>
-        <td>{{elm?.type}}</td>
+        <td><span class="order-notif-type-badge">{{elm?.type}}</span></td>
         <td>{{elm?.sender?.name}}</td>
         <td>{{elm?.receiver?.name}}</td>
-        <td>{{elm?.note}}</td>
-        <td>{{elm?.created_at | date:'dd/MM/yyyy' }}</td>
+        <td class="order-notif-note-cell">{{elm?.note}}</td>
+        <td dir="ltr">{{elm?.created_at | date:'dd/MM/yyyy HH:mm' }}</td>
+       </tr>
+       <tr *ngIf="!notifications || notifications.length === 0">
+        <td colspan="6" class="order-empty-table-msg">لا توجد إشعارات</td>
        </tr>
       </tbody>
      </table>
@@ -404,18 +463,22 @@
 
 
 
- <div class="row mb-3" *ngIf="shopifyReviewMode" dir="rtl">
-  <div class="col-md-8">
+ <div class="row mb-3" *ngIf="shopifyReviewMode">
+  <div class="col-12">
    <label class="form-label">ملاحظة المراجعة (اختياري — تُضاف بجانب سجل التعديلات التلقائي)</label>
    <textarea class="form-control" rows="3" [(ngModel)]="reviewNote" placeholder="مثال: تم التحقق مع العميل هاتفياً"></textarea>
    <p class="text-muted small mt-1 mb-0" *ngIf="order?.shopify_review_note">آخر ملاحظة مراجعة: {{ order.shopify_review_note }}</p>
   </div>
  </div>
 
- <div class="row mb-4 text-center">
-
-  <div class="col-md-8 container-fluid table-responsive text-center ">
-   <table class="table table-bordered table-hover w-100">
+ <div class="row g-3 order-details-footer mb-4">
+  <div class="col-lg-8">
+   <div class="order-section-card order-financial-card">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title"><i class="fa-solid fa-coins"></i> الملخص المالي</h5>
+    </div>
+    <div class="table-responsive text-center">
+     <table class="table table-bordered table-hover order-details-table w-100 mb-0">
     <thead class="thead-dark">
      <th>مصاريف الشحن</th>
      <th *ngIf="order?.order_type == 'طلب صيانة'">مصاريف الصيانة</th>
@@ -450,51 +513,49 @@
      </ng-container>
     </tbody>
    </table>
+    </div>
 
-   <div class="shopify-review-save-block" *ngIf="shopifyReviewMode && isShopifyOrder" dir="rtl">
-    <button type="button" class="btn btn-success btn-lg shopify-review-save-main"
-      [disabled]="reviewSubmitting || !canConfirmShopifyReview"
-      (click)="confirmShopifyReview()">
-     <i class="fa-solid fa-check me-2"></i>
-     <span *ngIf="reviewSubmitting">جاري الحفظ...</span>
-     <span *ngIf="!reviewSubmitting">تم المراجعة — حفظ</span>
-    </button>
-    <p class="text-danger small mb-0 mt-2" *ngIf="!canConfirmShopifyReview">
-     لا تملك صلاحية حفظ المراجعة — اطلب تفعيل «Review imported Shopify orders».
-    </p>
+    <div class="shopify-review-save-block" *ngIf="shopifyReviewMode && isShopifyOrder">
+     <button type="button" class="btn btn-success btn-lg shopify-review-save-main"
+       [disabled]="reviewSubmitting || !canConfirmShopifyReview"
+       (click)="confirmShopifyReview()">
+      <i class="fa-solid fa-check me-2"></i>
+      <span *ngIf="reviewSubmitting">جاري الحفظ...</span>
+      <span *ngIf="!reviewSubmitting">تم المراجعة — حفظ</span>
+     </button>
+     <p class="text-danger small mb-0 mt-2" *ngIf="!canConfirmShopifyReview">
+      لا تملك صلاحية حفظ المراجعة — اطلب تفعيل «Review imported Shopify orders».
+     </p>
+    </div>
    </div>
   </div>
 
-  <div class="col-md-4 table-responsive">
-   <table class="table w-100 my-0 table-hover">
-    <thead>
-     <th>action</th>
-     <th>date</th>
-     <th>user</th>
-    </thead>
-   </table>
-   <div class="content">
-    <table class="table w-100 table-hover">
-     <tbody>
-      <tr *ngFor="let item of tracking">
-       <td>
-        <span [id]="item.id">{{item.action}}</span>
-       </td>
-       <td>
-        <div class="date">
-         <span [id]="item.id" (mouseenter)="showTime($event)" (mouseleave)="showTime($event)">{{item.date}} </span>
-         <span [id]="'date'+item.id" class="date-time d-none">{{item.created_at | date:'EEEE, hh:mm a'}}</span>
-        </div>
-       </td>
-       <td>{{item.user.name}}</td>
-
-      </tr>
-     </tbody>
-    </table>
+  <div class="col-lg-4">
+   <div class="order-section-card order-tracking-panel h-100">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title"><i class="fa-solid fa-clock-rotate-left"></i> سجل الإجراءات</h5>
+    </div>
+    <div class="order-tracking-list">
+     <div class="order-tracking-item" *ngFor="let item of tracking">
+      <div class="order-tracking-item__icon">
+       <i class="fa-solid fa-circle-dot"></i>
+      </div>
+      <div class="order-tracking-item__content">
+       <span class="order-tracking-item__action" [id]="item.id">{{item.action}}</span>
+       <div class="order-tracking-item__details">
+        <span class="order-tracking-item__user"><i class="fa-regular fa-user"></i> {{item.user.name}}</span>
+        <span class="order-tracking-item__date" dir="ltr"
+          [id]="item.id"
+          (mouseenter)="showTime($event)"
+          (mouseleave)="showTime($event)">{{item.date}}</span>
+        <span [id]="'date'+item.id" class="order-tracking-item__datetime d-none">{{item.created_at | date:'EEEE, hh:mm a'}}</span>
+       </div>
+      </div>
+     </div>
+     <div class="order-empty-table-msg" *ngIf="!tracking || tracking.length === 0">لا توجد إجراءات</div>
+    </div>
    </div>
   </div>
-
-
  </div>
 
 </div> <br>

@@ -6,10 +6,19 @@ import { TreeAccountService } from '../services/tree-account.service';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
+import { UserService } from '../../manage-system/services/user.service';
+import { RbacService } from '../../core/rbac/rbac.service';
 
 interface AccountOption {
   id: number;
   label: string;
+}
+
+interface BankUserRow {
+  id: number;
+  name: string;
+  email?: string;
+  department?: string;
 }
 
 @Component({
@@ -33,6 +42,13 @@ export class BanksComponent implements OnInit {
   showAddDialog = false;
   showEditDialog = false;
   showTransferDialog = false;
+  showUsersDialog = false;
+
+  directoryUsers: BankUserRow[] = [];
+  usersDialogBank: any = null;
+  selectedUserIds: number[] = [];
+  loadingUsers = false;
+  savingUsers = false;
 
   newBank: any = this.getEmptyBank();
   selectedBank: any = null;
@@ -46,8 +62,14 @@ export class BanksComponent implements OnInit {
     private bankService: BankService,
     private treeAccountService: TreeAccountService,
     private dialog: MatDialog,
-    private toast: ToastService
+    private toast: ToastService,
+    private userService: UserService,
+    private rbac: RbacService
   ) {}
+
+  get canManageBankAccess(): boolean {
+    return this.rbac.canAny(['system.rbac', 'finance.edit']);
+  }
 
   ngOnInit(): void {
     this.getAllBanks();
@@ -110,13 +132,82 @@ export class BanksComponent implements OnInit {
     this.bankService.getAll().subscribe({
       next: (res) => {
         const raw = res.data ?? res;
-        this.banks = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        const rows = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        this.banks = rows.map((b: any) => this.normalizeBankRow(b));
         this.filteredBanks = [...this.banks];
         this.loading = false;
       },
       error: () => {
         this.toast.error('حدث خطأ أثناء تحميل البنوك');
         this.loading = false;
+      }
+    });
+  }
+
+  private normalizeBankRow(bank: any): any {
+    const assigned = bank.assigned_users ?? bank.assignedUsers ?? [];
+    return {
+      ...bank,
+      assigned_users: Array.isArray(assigned) ? assigned : [],
+      is_restricted: !!(bank.is_restricted ?? (Array.isArray(assigned) && assigned.length > 0)),
+    };
+  }
+
+  assignedUsersLabel(bank: any): string {
+    const users: BankUserRow[] = bank?.assigned_users ?? [];
+    if (!users.length) {
+      return 'الجميع';
+    }
+    return users.map(u => u.name).join('، ');
+  }
+
+  openUsersDialog(bank: any): void {
+    if (!this.canManageBankAccess) {
+      return;
+    }
+    this.usersDialogBank = { ...bank };
+    this.selectedUserIds = (bank.assigned_users ?? []).map((u: BankUserRow) => u.id);
+    this.showUsersDialog = true;
+    if (!this.directoryUsers.length) {
+      this.loadDirectoryUsers();
+    }
+  }
+
+  private loadDirectoryUsers(): void {
+    this.loadingUsers = true;
+    this.userService.compactDirectory().subscribe({
+      next: (res) => {
+        this.directoryUsers = res?.data ?? res ?? [];
+        this.loadingUsers = false;
+      },
+      error: () => {
+        this.toast.error('تعذر تحميل قائمة المستخدمين');
+        this.loadingUsers = false;
+      }
+    });
+  }
+
+  closeUsersDialog(): void {
+    this.showUsersDialog = false;
+    this.usersDialogBank = null;
+    this.selectedUserIds = [];
+    this.savingUsers = false;
+  }
+
+  saveBankUsers(): void {
+    if (!this.usersDialogBank?.id) {
+      return;
+    }
+    this.savingUsers = true;
+    this.bankService.syncAssignedUsers(this.usersDialogBank.id, this.selectedUserIds).subscribe({
+      next: (res) => {
+        this.toast.success('تم حفظ صلاحيات البنك');
+        this.closeUsersDialog();
+        this.getAllBanks();
+      },
+      error: (err) => {
+        this.toast.error(err.error?.message || 'فشل حفظ الصلاحيات');
+        this.savingUsers = false;
       }
     });
   }

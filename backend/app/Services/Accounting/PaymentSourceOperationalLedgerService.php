@@ -2,8 +2,6 @@
 
 namespace App\Services\Accounting;
 
-use App\Models\ServiceAccount;
-
 /**
  * مزامنة الرصيد التشغيلي لمصدر النقد (بنك / خزينة / حساب خدمي) مع القيود المحاسبية.
  */
@@ -12,6 +10,7 @@ class PaymentSourceOperationalLedgerService
     public function __construct(
         private readonly BankOperationalLedgerService $bankLedger,
         private readonly SafeOperationalLedgerService $safeLedger,
+        private readonly ServiceAccountOperationalLedgerService $serviceAccountLedger,
     ) {}
 
     public function syncFromVoucher(
@@ -51,23 +50,15 @@ class PaymentSourceOperationalLedgerService
             return;
         }
 
-        $signed = $voucherType === 'receipt' ? $amount : -$amount;
-        if ($reverse) {
-            $signed *= -1;
-        }
-
-        if (abs($signed) < 0.000001) {
-            return;
-        }
-
-        $serviceAccount = ServiceAccount::query()->where('account_id', $treeAccountId)->first();
-        if ($serviceAccount) {
-            if ($signed >= 0) {
-                ServiceAccount::query()->whereKey($serviceAccount->id)->increment('balance', $signed);
-            } else {
-                ServiceAccount::query()->whereKey($serviceAccount->id)->decrement('balance', abs($signed));
-            }
-        }
+        $this->serviceAccountLedger->syncFromVoucher(
+            $treeAccountId,
+            $voucherType,
+            $amount,
+            $voucherId,
+            $notes,
+            $date,
+            $reverse
+        );
     }
 
     /**
@@ -116,20 +107,13 @@ class PaymentSourceOperationalLedgerService
             return;
         }
 
-        $serviceAccount = ServiceAccount::query()->where('account_id', $treeAccountId)->first();
-        if (! $serviceAccount) {
-            return;
-        }
-
-        $signed = round($debit - $credit, 2);
-        if (abs($signed) < 0.000001) {
-            return;
-        }
-
-        if ($signed >= 0) {
-            ServiceAccount::query()->whereKey($serviceAccount->id)->increment('balance', $signed);
-        } else {
-            ServiceAccount::query()->whereKey($serviceAccount->id)->decrement('balance', abs($signed));
-        }
+        $this->serviceAccountLedger->syncFromJournalLine(
+            $treeAccountId,
+            $debit,
+            $credit,
+            $details,
+            $ref,
+            $date
+        );
     }
 }

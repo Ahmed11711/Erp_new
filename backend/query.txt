@@ -33,3 +33,24 @@ WHERE ABS(IFNULL(unit_price, 0)) < 0.0000001
 
 -- SQL (لوكال أو سيرفر):
 -- ALTER TABLE categories MODIFY category_image VARCHAR(255) NULL DEFAULT '';
+
+حhp artisan db:fix-procedure-definers
+
+php artisan accounting:reconcile-banks
+
+php artisan accounting:reconcile-banks --fix --counter-account-id=XXX
+
+سددت من شاشة المورد مباشرة؟
+  → تفاصيل حساب المورد + كشف البنك + القيود اليومية
+
+سددت من «نقد صادر»؟
+  → دفعات سابقة + سندات الموردين + القيود اليومية + كشف البنك
+
+دفعت لشركة شحن؟
+  → دفعات سابقة (شركات شحن) + كشف حساب الذمم + القيود اليومية
+
+
+
+  php artisan migrate
+php artisan db:seed --class=ProcessingModuleSeeder
+php artisan db:seed --class=RbacFoundationSeeder

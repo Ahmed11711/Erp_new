@@ -74,6 +74,8 @@ export class PriceOffer2Component {
   phone_number:string="+201118127345";
   email:string="info@magalis-egypt.com";
   quote!:string;
+  contact_person!:string;
+  client_phone!:string;
   title!:string;
 
   id;
@@ -108,6 +110,8 @@ export class PriceOffer2Component {
         this.dateFrom = res.dateFrom;
         this.dateTo = res.dateTo;
         this.quote = res.quote;
+        this.contact_person = res.contact_person || '';
+        this.client_phone = res.client_phone || '';
         this.phone_number = res.phone_number;
         this.email = res.email;
         this.transportation = res.transportation;
@@ -159,7 +163,9 @@ export class PriceOffer2Component {
 
     formData.append('dateFrom', this.dateFrom);
     formData.append('dateTo', this.dateTo);
-    formData.append('quote', this.quote);
+    formData.append('quote', this.quote?.trim() || '');
+    formData.append('contact_person', this.contact_person?.trim() || '');
+    formData.append('client_phone', this.client_phone?.trim() || '');
     if (this.note && this.note.length > 0) {
       formData.append('note', this.note);
     }

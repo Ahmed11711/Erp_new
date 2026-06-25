@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\OrderDetails;
+use App\Models\Purchase;
 use App\Models\ShippingCompany;
 use App\Models\shippingCompanyDetails;
 use Illuminate\Http\Request;
@@ -29,6 +30,10 @@ class ShippingAccountingReportController extends Controller
                 'shipping_companies.balance',
                 'shipping_companies.tree_account_id',
                 'shipping_companies.receivable_tree_account_id',
+            ])
+            ->with([
+                'receivableTreeAccount:id,balance',
+                'treeAccount:id,balance',
             ])
             ->withCount([
                 'details as total_orders' => function ($q) use ($dateFrom, $dateTo) {
@@ -74,6 +79,9 @@ class ShippingAccountingReportController extends Controller
         }
 
         $companies = $query->orderBy('name')->get();
+        $companies->each(function (ShippingCompany $company) {
+            $company->balance = $company->displayBalance();
+        });
 
         $companyIds = $companies->pluck('id')->all();
         if ($companyIds !== []) {
@@ -93,6 +101,13 @@ class ShippingAccountingReportController extends Controller
                 $c->pending_order_ids = $raw
                     ? array_values(array_unique(array_filter(array_map('intval', explode(',', (string) $raw)))))
                     : [];
+            }
+
+            $freightStats = $this->purchaseFreightStatsByCompany($companyIds, $dateFrom, $dateTo);
+            foreach ($companies as $c) {
+                $st = $freightStats[(int) $c->id] ?? ['count' => 0, 'total' => 0.0];
+                $c->purchase_freight_count = (int) $st['count'];
+                $c->purchase_freight_total = round((float) $st['total'], 2);
             }
         }
 
@@ -138,6 +153,8 @@ class ShippingAccountingReportController extends Controller
             if ($row->relationLoaded('order') && $row->order) {
                 $row->order->refresh();
             }
+            $row->collectible = ! $row->is_done && in_array($row->status, ['تم شحن', 'تم التسليم'], true);
+            $row->collectible_amount = $row->collectible ? round(abs((float) $row->amount), 2) : 0;
         });
 
         $aggregates = shippingCompanyDetails::where('shipping_company_id', $id)
@@ -152,11 +169,75 @@ class ShippingAccountingReportController extends Controller
             ])
             ->first();
 
+        $purchaseFreight = $this->latestPurchaseFreightRows([(int) $id], $dateFrom, $dateTo);
+        $aggregates->purchase_freight_total = round((float) $purchaseFreight->sum('transport_cost'), 2);
+        $aggregates->purchase_freight_count = $purchaseFreight->count();
+
         return response()->json([
             'company' => $company,
             'aggregates' => $aggregates,
             'details' => $details,
+            'purchase_freight' => $purchaseFreight->map(function (Purchase $p) {
+                return [
+                    'purchase_id' => $p->id,
+                    'invoice_no' => $p->invoice_no ?? $p->invoice_number,
+                    'receipt_date' => $p->receipt_date,
+                    'supplier_name' => $p->supplier?->supplier_name,
+                    'invoice_type' => $p->invoice_type,
+                    'transport_cost' => round((float) $p->transport_cost, 2),
+                ];
+            })->values(),
         ]);
+    }
+
+    /**
+     * @param  array<int>  $companyIds
+     * @return array<int, array{count:int, total:float}>
+     */
+    private function purchaseFreightStatsByCompany(array $companyIds, ?string $dateFrom, ?string $dateTo): array
+    {
+        $stats = [];
+        foreach ($this->latestPurchaseFreightRows($companyIds, $dateFrom, $dateTo) as $row) {
+            $cid = (int) $row->shipping_company_id;
+            if (! isset($stats[$cid])) {
+                $stats[$cid] = ['count' => 0, 'total' => 0.0];
+            }
+            $stats[$cid]['count']++;
+            $stats[$cid]['total'] += (float) $row->transport_cost;
+        }
+
+        return $stats;
+    }
+
+    /**
+     * آخر مراجعة لكل فاتورة مشتريات لها شحن توريد على المندوب/الشركة.
+     *
+     * @param  array<int>  $companyIds
+     * @return \Illuminate\Support\Collection<int, Purchase>
+     */
+    private function latestPurchaseFreightRows(array $companyIds, ?string $dateFrom, ?string $dateTo)
+    {
+        if ($companyIds === []) {
+            return collect();
+        }
+
+        $rows = Purchase::query()
+            ->select('id', 'ref', 'shipping_company_id', 'transport_cost', 'receipt_date', 'invoice_no', 'invoice_number', 'supplier_id', 'invoice_type')
+            ->with('supplier:id,supplier_name')
+            ->whereIn('shipping_company_id', $companyIds)
+            ->where('transport_cost', '>', 0)
+            ->where(function ($q) {
+                $q->whereNull('status')->orWhere('status', '!=', '1');
+            })
+            ->when($dateFrom, fn ($q) => $q->whereDate('receipt_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->whereDate('receipt_date', '<=', $dateTo))
+            ->orderByDesc('id')
+            ->get();
+
+        return $rows
+            ->groupBy(fn (Purchase $p) => (int) ($p->ref ?: $p->id))
+            ->map(fn ($group) => $group->first())
+            ->values();
     }
 
     /**

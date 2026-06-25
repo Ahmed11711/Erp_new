@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AutocompleteComponent } from 'angular-ng-autocomplete';
 import { CategoryService } from 'src/app/categories/services/category.service';
@@ -11,24 +11,44 @@ import {
   RecipeExtraCost,
   CostBreakdown,
 } from '../services/manufacturing.service';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute, ParamMap } from '@angular/router';
 import { environment } from 'src/env/env';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
 
 @Component({
   selector: 'app-add-recipe',
   templateUrl: './add-recipe.component.html',
   styleUrls: ['./add-recipe.component.css']
 })
-export class AddRecipeComponent implements OnInit{
+export class AddRecipeComponent implements OnInit, OnDestroy {
   @ViewChild('productAuto') private productAuto?: AutocompleteComponent;
   @ViewChild('ingredientAuto') private ingredientAuto?: AutocompleteComponent;
 
   imgUrl!: string;
   /** صفوف فشل تحميل صورتها لعرض بديل */
   imageFailed = new Set<number>();
+  private routeParamsSub?: Subscription;
+  private routeIdSub?: Subscription;
+  private activeWarehouse: string | null = null;
+  private pendingRoutePreselect: { productId: number; productName?: string } | null = null;
+  private pendingEditRecipe: any = null;
 
-  constructor(private category:CategoryService , private manufacturingService:ManufacturingService , private route:Router){
+  editingRecipeId: number | null = null;
+  loadingRecipe = false;
+  savingRecipe = false;
+  bomLocked = false;
+  recipeName = '';
+  recipeDescription = '';
+
+  constructor(
+    private category: CategoryService,
+    private manufacturingService: ManufacturingService,
+    private route: Router,
+    private activatedRoute: ActivatedRoute,
+    private rbac: RbacService,
+  ) {
     this.imgUrl = environment.imgUrl;
   }
 
@@ -37,7 +57,120 @@ export class AddRecipeComponent implements OnInit{
   }
 
   ngOnInit(): void {
+    this.routeIdSub = this.activatedRoute.paramMap.subscribe((params) => {
+      const id = Number(params.get('id') ?? 0);
+      if (id > 0) {
+        this.beginEditRecipe(id);
+      }
+    });
+    this.routeParamsSub = this.activatedRoute.queryParamMap.subscribe((params) => {
+      this.handleRouteParams(params);
+    });
+  }
 
+  ngOnDestroy(): void {
+    this.routeParamsSub?.unsubscribe();
+    this.routeIdSub?.unsubscribe();
+  }
+
+  get isEditMode(): boolean {
+    return this.editingRecipeId != null;
+  }
+
+  canWriteRecipe(): boolean {
+    return this.rbac.canAny(RBAC_ROUTE.manufacturingWrite);
+  }
+
+  private beginEditRecipe(id: number): void {
+    this.editingRecipeId = id;
+    this.loadingRecipe = true;
+    this.manufacturingService.getRecipeDetail(id).subscribe({
+      next: (res) => {
+        const recipe = res.recipe;
+        this.bomLocked = Boolean(recipe?.bom_locked);
+        this.recipeName = String(recipe?.recipe_name ?? '');
+        this.recipeDescription = String(recipe?.description ?? '');
+        this.costBreakdown = res.breakdown ?? null;
+        const warehouse = String(recipe?.output_item?.warehouse ?? '').trim();
+        if (!warehouse) {
+          this.loadingRecipe = false;
+          alert('الوصفة لا ترتبط بمنتج نهائي — لا يمكن تعديلها من هذه الشاشة.');
+          this.route.navigate(['/dashboard/manufacturing/recipes']);
+          return;
+        }
+        this.pendingEditRecipe = recipe;
+        this.loadWarehouse(warehouse);
+        this.loadingRecipe = false;
+      },
+      error: () => {
+        this.loadingRecipe = false;
+        alert('تعذر تحميل الوصفة');
+        this.route.navigate(['/dashboard/manufacturing/recipes']);
+      },
+    });
+  }
+
+  private applyEditRecipeData(recipe: any): void {
+    if (recipe.output_item) {
+      const output = recipe.output_item;
+      const price = Number(output.category_price ?? output.unit_price ?? 0);
+      this.setSelectedProduct(
+        this.normalizeCategoryItem({
+          ...output,
+          category_price: price,
+        }),
+      );
+    }
+
+    this.tableData = (recipe.ingredients ?? []).map((ing: any) => {
+      const item = ing.item ?? {};
+      const id = Number(item.id ?? ing.item_id ?? 0);
+      const price = Number(ing.unit_cost ?? item.category_price ?? item.unit_price ?? 0);
+      const qty = Number(ing.quantity ?? 1);
+      return this.normalizeCategoryItem({
+        ...item,
+        id,
+        category_price: price,
+        quantity: qty,
+        total_price: qty * price,
+      });
+    });
+
+    this.extraCosts = (recipe.extra_costs ?? []).map((ec: any) => ({
+      id: Number(ec.id),
+      recipe_id: Number(ec.recipe_id ?? this.editingRecipeId ?? 0),
+      name: String(ec.name ?? ''),
+      type: ec.type === 'percentage' ? 'percentage' : 'fixed',
+      value: Number(ec.value),
+    }));
+
+    if (this.extraCosts.length > 0) {
+      this.computeLocalCostBreakdown();
+    } else {
+      this.calcTotalPrice();
+    }
+  }
+
+  private handleRouteParams(params: ParamMap): void {
+    const productId = Number(
+      params.get('productId') ?? params.get('productid') ?? 0,
+    );
+    const warehouse = params.get('warehouse')?.trim() ?? '';
+    const productName = params.get('productName')?.trim() || undefined;
+
+    if (!warehouse) {
+      return;
+    }
+
+    const preselect = productId > 0 ? { productId, productName } : null;
+
+    if (warehouse === this.activeWarehouse && preselect) {
+      this.applyRoutePreselect(preselect, warehouse);
+      return;
+    }
+
+    this.pendingRoutePreselect = preselect;
+    this.loadWarehouse(warehouse);
   }
 
   products:any[]=[];
@@ -52,6 +185,8 @@ export class AddRecipeComponent implements OnInit{
   /** بعد اختيار نوع المخزن يُعرض عمود المنتج حتى لو كانت القائمة فارغة */
   selectedWarehouse: string | null = null;
   loadingWarehouseProducts = false;
+  /** المنتج النهائي المختار (من التقرير أو من الإكمال) */
+  selectedProduct: any | null = null;
 
   /** إزالة وسوم تمييز البحث من المكتبة (<b>) حتى لا تظهر كنص في الجدول أو الحقل */
   private stripHighlightTags(value: string): string {
@@ -115,11 +250,17 @@ export class AddRecipeComponent implements OnInit{
     elm.total_price = elm.quantity * elm.category_price;
   }
 
-  productType(event: Event) {
-    const warehouse = (event.target as HTMLSelectElement).value;
-    if (!warehouse) {
+  onWarehouseSelected(warehouse: string | null): void {
+    if (!warehouse || warehouse === this.activeWarehouse) {
       return;
     }
+    this.pendingRoutePreselect = null;
+    this.loadWarehouse(warehouse);
+  }
+
+  /** تحميل أصناف المخزن واختيارياً تحديد منتج (مثلاً من تقرير أصناف بدون وصفة). */
+  loadWarehouse(warehouse: string): void {
+    this.activeWarehouse = warehouse;
     this.selectedWarehouse = warehouse;
     this.tableData = [];
     this.extraCosts = [];
@@ -128,16 +269,29 @@ export class AddRecipeComponent implements OnInit{
     this.products = [];
     this.recipes = [];
     this.totalPrice = 0;
+    this.selectedProduct = null;
+    this.product_id = 0;
     this.loadingWarehouseProducts = true;
+
+    const preselect = this.pendingRoutePreselect;
+    this.pendingRoutePreselect = null;
+
+    if (preselect && preselect.productId > 0) {
+      this.applyRoutePreselect(preselect, warehouse);
+    }
 
     this.category.getCatBywarehouse(warehouse).subscribe({
       next: (result: any) => {
         this.products = this.normalizeCategories(result);
-        this.loadingWarehouseProducts = false;
         if (warehouse === 'مخزن منتج تحت التشغيل') {
           this.loadRecipesWip();
         } else if (warehouse === 'مخزن منتج تام') {
           this.loadRecipesFinished();
+        }
+        this.loadingWarehouseProducts = false;
+        if (this.pendingEditRecipe) {
+          this.applyEditRecipeData(this.pendingEditRecipe);
+          this.pendingEditRecipe = null;
         }
       },
       error: () => {
@@ -145,6 +299,55 @@ export class AddRecipeComponent implements OnInit{
         this.products = [];
       },
     });
+  }
+
+  private applyRoutePreselect(
+    preselect: { productId: number; productName?: string },
+    warehouse: string,
+  ): void {
+    this.manufacturingService.getRecipeProduct(preselect.productId).subscribe({
+      next: (item) => {
+        this.setSelectedProduct(this.normalizeCategoryItem(item));
+      },
+      error: () => {
+        const fallback = this.products.find(
+          (p) => Number(p.id) === preselect.productId,
+        );
+        if (fallback) {
+          this.setSelectedProduct(this.normalizeCategoryItem(fallback));
+          return;
+        }
+        if (preselect.productName) {
+          this.setSelectedProduct(
+            this.normalizeCategoryItem({
+              id: preselect.productId,
+              category_name: preselect.productName,
+              warehouse,
+            }),
+          );
+        }
+      },
+    });
+  }
+
+  setSelectedProduct(item: any): void {
+    const clean = this.normalizeCategoryItem(item);
+    const id = Number(clean?.id ?? 0);
+    if (!id) {
+      return;
+    }
+    this.selectedProduct = clean;
+    this.product_id = id;
+    this.tableData = [];
+    this.extraCosts = [];
+    this.costBreakdown = null;
+    this.imageFailed.clear();
+    this.calcTotalPrice();
+  }
+
+  clearSelectedProduct(): void {
+    this.selectedProduct = null;
+    this.product_id = 0;
   }
 
   /** مواد خام فقط */
@@ -181,12 +384,7 @@ export class AddRecipeComponent implements OnInit{
   }
 
   productChange(event: any) {
-    this.product_id = event.id;
-    this.tableData = [];
-    this.extraCosts = [];
-    this.costBreakdown = null;
-    this.imageFailed.clear();
-    this.calcTotalPrice();
+    this.setSelectedProduct(event);
   }
 
   onProductSelected(item: any) {
@@ -194,7 +392,7 @@ export class AddRecipeComponent implements OnInit{
       return;
     }
     const clean = this.normalizeCategoryItem(item);
-    this.productChange(clean);
+    this.setSelectedProduct(clean);
     queueMicrotask(() => this.syncAutocompleteInput(this.productAuto, clean.category_name));
   }
 
@@ -215,6 +413,9 @@ export class AddRecipeComponent implements OnInit{
   }
 
   recipesChange(event:any) {
+    if (this.bomLocked) {
+      return;
+    }
     const foundElement = this.tableData.find(elm => elm.id === event.id);
     if (!foundElement) {
       this.tableData.push(event);
@@ -222,16 +423,85 @@ export class AddRecipeComponent implements OnInit{
     this.calcTotalPrice();
   }
 
+  /** خيارات الاستبدال — أصناف غير المنتج النهائي وغير الموجودة في صفوف أخرى */
+  getReplaceOptionsForRow(rowIndex: number): any[] {
+    if (rowIndex < 0 || rowIndex >= this.tableData.length) {
+      return [];
+    }
+    const currentId = Number(this.tableData[rowIndex]?.id ?? 0);
+    return this.recipes.filter((item) => {
+      const id = Number(item.id ?? 0);
+      if (!id || id === currentId) {
+        return false;
+      }
+      return !this.tableData.some((elm, idx) => idx !== rowIndex && Number(elm.id) === id);
+    });
+  }
+
+  onInlineRowItemSelected(rowIndex: number, item: any): void {
+    if (!item) {
+      return;
+    }
+    this.replaceRowItem(rowIndex, item);
+  }
+
+  private replaceRowItem(rowIndex: number, item: any): void {
+    if (this.bomLocked) {
+      return;
+    }
+    const clean = this.normalizeCategoryItem(item);
+    const newId = Number(clean?.id ?? 0);
+    if (!newId) {
+      return;
+    }
+
+    const duplicateIndex = this.tableData.findIndex(
+      (elm, idx) => idx !== rowIndex && Number(elm.id) === newId,
+    );
+    if (duplicateIndex >= 0) {
+      alert('هذا الصنف موجود بالفعل في الوصفة.');
+      return;
+    }
+
+    const prevRow = this.tableData[rowIndex];
+    const prevQty = Number(prevRow?.quantity ?? 1);
+    const qty = Number.isFinite(prevQty) && prevQty > 0 ? prevQty : 1;
+
+    this.prepareRecipeLine(clean);
+    clean.quantity = qty;
+    clean.total_price = qty * Number(clean.category_price ?? 0);
+
+    if (prevRow?.id != null) {
+      this.imageFailed.delete(prevRow.id);
+    }
+
+    this.tableData[rowIndex] = clean;
+    this.calcTotalPrice();
+  }
+
   /** تحديث الكمية والإجمالي (سلوك قريب من Excel مع إدخال مباشر) */
   onQuantityModelChange(elm: any): void {
     let q = Number(elm.quantity);
-    if (!Number.isFinite(q) || q < 1) {
+    if (!Number.isFinite(q) || q <= 0) {
       q = 1;
       elm.quantity = 1;
     } else {
       elm.quantity = q;
     }
-    elm.total_price = elm.quantity * elm.category_price;
+    elm.total_price = elm.quantity * Number(elm.category_price ?? 0);
+    this.calcTotalPrice();
+  }
+
+  onUnitCostModelChange(elm: any): void {
+    let cost = Number(elm.category_price);
+    if (!Number.isFinite(cost) || cost < 0) {
+      cost = 0;
+      elm.category_price = 0;
+    } else {
+      elm.category_price = cost;
+    }
+    const qty = Number(elm.quantity ?? 1);
+    elm.total_price = qty * elm.category_price;
     this.calcTotalPrice();
   }
 
@@ -271,6 +541,9 @@ export class AddRecipeComponent implements OnInit{
   }
 
   removeRow(index: number): void {
+    if (this.bomLocked) {
+      return;
+    }
     const row = this.tableData[index];
     if (row?.id != null) {
       this.imageFailed.delete(row.id);
@@ -309,6 +582,21 @@ export class AddRecipeComponent implements OnInit{
   // data for backend
   product_id!:number;
   confirmOrder(){
+    if (this.savingRecipe) {
+      return;
+    }
+    if (!this.product_id && !this.isEditMode) {
+      return;
+    }
+    if (!this.isEditMode && this.tableData.length === 0) {
+      return;
+    }
+
+    if (this.isEditMode && this.editingRecipeId) {
+      this.saveEditedRecipe();
+      return;
+    }
+
     if (this.product_id && this.tableData.length !==0) {
       const products = this.tableData.map(elm=>{
         return {id:elm.id , quantity:elm.quantity , total_price:elm.total_price}
@@ -338,6 +626,54 @@ export class AddRecipeComponent implements OnInit{
         },
       });
     }
+  }
+
+  private saveEditedRecipe(): void {
+    if (!this.editingRecipeId) {
+      return;
+    }
+
+    const recipeId = this.editingRecipeId;
+    const payload: Record<string, unknown> = {
+      recipe_name: this.recipeName.trim() || undefined,
+      description: this.recipeDescription.trim() || null,
+    };
+
+    if (!this.bomLocked) {
+      if (!this.product_id || this.tableData.length === 0) {
+        alert('يجب اختيار المنتج النهائي وإضافة مكونات للوصفة.');
+        return;
+      }
+
+      const extra_costs = this.extraCosts
+        .map((ec) => ({
+          name: String(ec.name ?? '').trim(),
+          type: ec.type === 'percentage' ? 'percentage' : 'fixed',
+          value: Number(ec.value),
+        }))
+        .filter((row) => row.name.length > 0 && Number.isFinite(row.value) && row.value >= 0);
+
+      payload.output_item_id = this.product_id;
+      payload.ingredients = this.tableData.map((elm) => ({
+        item_id: elm.id,
+        quantity: Number(elm.quantity),
+        unit_cost: Number(elm.category_price ?? elm.unit_price ?? 0),
+      }));
+      payload.extra_costs = extra_costs;
+    }
+
+    this.savingRecipe = true;
+    this.manufacturingService.updateRecipe(recipeId, payload).subscribe({
+      next: () => {
+        this.savingRecipe = false;
+        this.route.navigate(['/dashboard/manufacturing/recipes']);
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.savingRecipe = false;
+        const msg = err?.error?.message ?? 'تعذر حفظ التعديلات';
+        alert(msg);
+      },
+    });
   }
   //end
 
@@ -622,6 +958,9 @@ export class AddRecipeComponent implements OnInit{
 
   /** إضافة تكلفة إضافية قبل حفظ الوصفة — تخزين محلي فقط (يُرسل مع تأكيد الوصفة). */
   addExtraCost(): void {
+    if (this.bomLocked) {
+      return;
+    }
     const name = this.newExtraCostName?.trim();
     const val = this.newExtraCostValue;
     if (!name || val == null || Number(val) < 0) {
@@ -698,6 +1037,9 @@ export class AddRecipeComponent implements OnInit{
   }
 
   deleteExtraCost(extraCostId: number): void {
+    if (this.bomLocked) {
+      return;
+    }
     if (extraCostId < 0) {
       this.extraCosts = this.extraCosts.filter((e) => e.id !== extraCostId);
       if (this.extraCosts.length === 0) {

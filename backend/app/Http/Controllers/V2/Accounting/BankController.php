@@ -11,18 +11,32 @@ use App\Models\AccountEntry;
 use App\Services\Accounting\AccountingService;
 use App\Services\Accounting\DirectCashTransactionService;
 use App\Services\Accounting\BankOperationalLedgerService;
+use App\Services\Accounting\BankAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class BankController extends Controller
 {
+    public function __construct(protected BankAccessService $bankAccess)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
-        $query = Bank::with('asset')->where('type', 'main'); // Assuming 'asset' relation exists as per Model
+        $user = rbac_user();
+        $canManageAccess = $this->bankAccess->canManageAccess($user);
+
+        $with = ['asset'];
+        if ($canManageAccess) {
+            $with[] = 'assignedUsers:id,name,email,department';
+        }
+
+        $query = Bank::with($with)->where('type', 'main');
+        $query = $this->bankAccess->scopeAccessibleTo($query, $user);
 
         if ($request->has('search')) {
             $search = $request->search;
@@ -33,6 +47,47 @@ class BankController extends Controller
         $banks = $query->orderBy('name')->paginate($perPage);
 
         return response()->json($banks, 200);
+    }
+
+    /**
+     * GET accounting/banks/{id}/users — المستخدمون المصرّح لهم باستخدام البنك.
+     */
+    public function assignedUsers(int $id)
+    {
+        $user = rbac_user();
+        if (! $this->bankAccess->canManageAccess($user)) {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
+
+        Bank::query()->findOrFail($id);
+
+        return response()->json([
+            'data' => $this->bankAccess->assignedUsersForBank($id),
+        ], 200);
+    }
+
+    /**
+     * PUT accounting/banks/{id}/users — مزامنة المستخدمين المصرّح لهم.
+     * user_ids فارغ = البنك متاح للجميع.
+     */
+    public function syncAssignedUsers(Request $request, int $id)
+    {
+        $user = rbac_user();
+        if (! $this->bankAccess->canManageAccess($user)) {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
+
+        $data = $request->validate([
+            'user_ids' => ['nullable', 'array'],
+            'user_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $synced = $this->bankAccess->syncAssignedUsers($id, $data['user_ids'] ?? []);
+
+        return response()->json([
+            'message' => 'تم حفظ صلاحيات البنك',
+            'data' => $synced,
+        ], 200);
     }
 
     /**

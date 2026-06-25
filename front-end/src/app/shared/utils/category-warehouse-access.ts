@@ -47,3 +47,38 @@ export function canSelectCategoryWarehouse(
 
   return false;
 }
+
+const CATEGORY_ROW_ACTION_WAREHOUSES = [RAW, WIP, FINISHED];
+
+/**
+ * هل يُعرض زر خيارات الصف (تعديل / حذف) في قائمة الأصناف؟
+ * يدمج RBAC (categories.manage) مع قواعد الأقسام القديمة في list-categories.
+ */
+export function canShowCategoryRowActions(
+  warehouseName: string,
+  department: string | false | null | undefined,
+  rbac: RbacService
+): boolean {
+  if (!CATEGORY_ROW_ACTION_WAREHOUSES.includes(warehouseName)) {
+    return false;
+  }
+
+  if (rbac.can('categories.manage') || rbac.can('system.rbac')) {
+    return true;
+  }
+
+  const dept = String(department ?? '').trim();
+  const finished = warehouseName === FINISHED;
+
+  if (dept === 'Admin' || dept === 'Financial Accounts') {
+    return true;
+  }
+  if (dept === 'Data Entry' && finished) {
+    return true;
+  }
+  if ((dept === 'Account Management' || dept === 'Logistics Specialist') && !finished) {
+    return true;
+  }
+
+  return false;
+}

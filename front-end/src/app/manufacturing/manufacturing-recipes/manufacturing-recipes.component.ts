@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ManufacturingService, CostBreakdown } from '../services/manufacturing.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
 
 @Component({
   selector: 'app-manufacturing-recipes',
@@ -23,7 +25,14 @@ export class ManufacturingRecipesComponent implements OnInit {
   /** Delete confirmation */
   confirmDeleteId: number | null = null;
 
-  constructor(private manufacturingService: ManufacturingService) {}
+  constructor(
+    private manufacturingService: ManufacturingService,
+    private rbac: RbacService,
+  ) {}
+
+  canEditRecipe(): boolean {
+    return this.rbac.canAny(RBAC_ROUTE.manufacturingWrite);
+  }
 
   ngOnInit(): void {
     this.loadRecipes();
@@ -38,8 +47,7 @@ export class ManufacturingRecipesComponent implements OnInit {
       (r) =>
         (r.recipe_name || '').toLowerCase().includes(q) ||
         (r.description || '').toLowerCase().includes(q) ||
-        (r.output_item?.category_name || '').toLowerCase().includes(q) ||
-        (r.output_item?.color || '').toLowerCase().includes(q),
+        (r.output_item?.category_name || '').toLowerCase().includes(q),
     );
   }
 

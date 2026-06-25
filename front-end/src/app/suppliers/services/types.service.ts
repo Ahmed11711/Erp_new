@@ -18,6 +18,8 @@ export class TypesService {
     return this.http.get(`${environment.Url}/suppliers/getAllSupplierTypes`);
   }
 
-  
+  deleteType(id: number){
+    return this.http.delete(`${environment.Url}/suppliers/deleteType/${id}`);
+  }
 
 }

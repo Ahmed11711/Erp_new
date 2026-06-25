@@ -5,19 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\CollectionCompany;
 use App\Models\TreeAccount;
 use App\Services\Accounting\AccountLinkingService;
+use App\Services\Accounting\ReceivableReconciliationService;
+use App\Services\Accounting\ReceivableTreeAccountGuard;
+use App\Services\Shipping\UnlinkedReceivableAccountException;
 use Illuminate\Http\Request;
 
 class CollectionCompanyController extends Controller
 {
-    public function __construct(public AccountLinkingService $accountLinkingService)
-    {
+    public function __construct(
+        public AccountLinkingService $accountLinkingService,
+        public ReceivableTreeAccountGuard $receivableGuard,
+        public ReceivableReconciliationService $reconciliationService,
+    ) {
     }
 
     public function index(Request $request)
     {
         $q = CollectionCompany::query()->with([
             'linkedShippingCompany:id,name',
-            'receivableTreeAccount:id,code,name',
+            'receivableTreeAccount:id,code,name,balance,debit_balance,credit_balance',
         ]);
 
         if ($request->filled('status')) {
@@ -42,7 +48,7 @@ class CollectionCompanyController extends Controller
     {
         $collectionCompany->load(
             'linkedShippingCompany:id,name,type',
-            'receivableTreeAccount:id,code,name'
+            'receivableTreeAccount:id,code,name,balance,debit_balance,credit_balance'
         );
 
         return response()->json($collectionCompany);
@@ -91,16 +97,20 @@ class CollectionCompanyController extends Controller
     {
         if ($collectionCompany->receivable_tree_account_id) {
             $account = TreeAccount::find($collectionCompany->receivable_tree_account_id);
+            if ($account && ! $this->receivableGuard->isPaymentSourceTreeAccount((int) $account->id)) {
+                return response()->json([
+                    'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
+                    'receivable_tree_account_id' => $collectionCompany->receivable_tree_account_id,
+                    'receivable_tree_account' => [
+                        'id' => $account->id,
+                        'name' => $account->name,
+                        'code' => (string) $account->code,
+                    ],
+                ]);
+            }
 
-            return response()->json([
-                'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
-                'receivable_tree_account_id' => $collectionCompany->receivable_tree_account_id,
-                'receivable_tree_account' => $account ? [
-                    'id' => $account->id,
-                    'name' => $account->name,
-                    'code' => (string) $account->code,
-                ] : null,
-            ]);
+            $collectionCompany->receivable_tree_account_id = null;
+            $collectionCompany->save();
         }
 
         $account = $this->accountLinkingService->ensureCollectionCompanyAccount($collectionCompany);
@@ -134,6 +144,17 @@ class CollectionCompanyController extends Controller
             'receivable_tree_account_id' => 'nullable|exists:tree_accounts,id',
         ]);
 
+        if (! empty($data['receivable_tree_account_id'])) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $data['receivable_tree_account_id'],
+                    'شركة التحصيل'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
         $company = CollectionCompany::create($data);
 
         if (!$company->receivable_tree_account_id) {
@@ -165,6 +186,17 @@ class CollectionCompanyController extends Controller
             'receivable_tree_account_id' => 'nullable|exists:tree_accounts,id',
         ]);
 
+        if (array_key_exists('receivable_tree_account_id', $data) && ! empty($data['receivable_tree_account_id'])) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $data['receivable_tree_account_id'],
+                    'شركة التحصيل'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
         $collectionCompany->update($data);
 
         if (!$collectionCompany->receivable_tree_account_id) {
@@ -188,5 +220,67 @@ class CollectionCompanyController extends Controller
         $collectionCompany->delete();
 
         return response()->json(['message' => 'deleted']);
+    }
+
+    /**
+     * عدّ الطلبات المرتبطة بشركة تحصيل في فترة محددة.
+     */
+    public function reconcileCount(Request $request, CollectionCompany $collectionCompany)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $counts = $this->reconciliationService->countCollectionOrders(
+            $collectionCompany->id,
+            $request->date_from,
+            $request->date_to
+        );
+
+        return response()->json($counts);
+    }
+
+    /**
+     * جلب الطلبات المرتبطة بشركة تحصيل في فترة محددة.
+     */
+    public function reconcileOrders(Request $request, CollectionCompany $collectionCompany)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $orders = $this->reconciliationService->listCollectionOrders(
+            $collectionCompany->id,
+            $request->date_from,
+            $request->date_to
+        );
+
+        return response()->json(['orders' => $orders]);
+    }
+
+    /**
+     * إعادة حساب مديونيات شركة تحصيل.
+     */
+    public function reconcileReceivables(Request $request, CollectionCompany $collectionCompany)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+            'order_ids' => 'nullable|array',
+            'order_ids.*' => 'integer',
+        ]);
+
+        $result = $this->reconciliationService->reconcileCollectionCompany(
+            $collectionCompany->id,
+            $request->date_from,
+            $request->date_to,
+            $request->order_ids
+        );
+
+        $status = $result['success'] ? 200 : 422;
+
+        return response()->json($result, $status);
     }
 }

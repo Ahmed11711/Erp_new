@@ -23,7 +23,7 @@
           type="text"
           class="form-control"
           [(ngModel)]="recipeSearchQuery"
-          placeholder="اسم الوصفة، الوصف، المنتج النهائي أو اللون…" />
+          placeholder="اسم الوصفة، الوصف، أو المنتج النهائي…" />
       </div>
     </div>
   </div>
@@ -49,7 +49,6 @@
           </th>
           <th>#</th>
           <th>اسم الوصفة</th>
-          <th class="text-center">لون المنتج</th>
           <th class="text-center">عدد المكونات</th>
           <th class="text-center">تكاليف إضافية</th>
           <th class="text-center">الإجراءات</th>
@@ -67,14 +66,6 @@
               <strong>{{ r.recipe_name }}</strong>
               <small class="text-muted d-block" *ngIf="r.description">{{ r.description }}</small>
             </td>
-            <td class="text-center">
-              <span *ngIf="r.output_item?.color" class="d-inline-flex align-items-center justify-content-center flex-wrap" style="gap: 6px;">
-                <span class="mfg-recipe-color-swatch" [style.backgroundColor]="r.output_item.color"
-                  [attr.title]="r.output_item.color"></span>
-                <small>{{ r.output_item.color }}</small>
-              </span>
-              <span *ngIf="!r.output_item?.color" class="text-muted">—</span>
-            </td>
             <td class="text-center">{{ r.ingredients_count || 0 }}</td>
             <td class="text-center">{{ r.extra_costs_count || 0 }}</td>
             <td class="text-center" style="white-space:nowrap;">
@@ -82,6 +73,11 @@
                 title="عرض التفاصيل">
                 {{ expandedRecipeId === r.id ? '▲ إخفاء' : '▼ تفاصيل' }}
               </button>
+              <a *ngIf="canEditRecipe()" class="btn btn-sm btn-outline-secondary mx-1"
+                [routerLink]="['/dashboard/manufacturing/editrecipe', r.id]"
+                title="تعديل الوصفة">
+                تعديل
+              </a>
               <button class="btn btn-sm btn-outline-danger mx-1" (click)="askDelete(r.id)"
                 title="حذف الوصفة">
                 حذف
@@ -91,7 +87,7 @@
 
           <!-- Detail row (expandable) -->
           <tr *ngIf="expandedRecipeId === r.id">
-            <td colspan="7" class="detail-cell">
+            <td colspan="6" class="detail-cell">
               <div *ngIf="loadingDetail" class="text-center py-3 text-muted">جاري تحميل التفاصيل…</div>
 
               <div *ngIf="!loadingDetail && expandedDetail" class="detail-content">
@@ -101,12 +97,6 @@
                   <div class="d-flex flex-wrap align-items-center gap-2">
                     <strong>{{ expandedDetail.output_item.category_name }}</strong>
                     <span dir="ltr" class="text-muted small" *ngIf="expandedDetail.output_item.item_code">{{ expandedDetail.output_item.item_code }}</span>
-                    <span *ngIf="expandedDetail.output_item.color" class="d-inline-flex align-items-center" style="gap: 6px;">
-                      <span class="mfg-recipe-color-swatch" [style.backgroundColor]="expandedDetail.output_item.color"
-                        [attr.title]="expandedDetail.output_item.color"></span>
-                      <span>{{ expandedDetail.output_item.color }}</span>
-                    </span>
-                    <span *ngIf="!expandedDetail.output_item.color" class="text-muted small">بدون لون</span>
                   </div>
                 </div>
 
@@ -117,7 +107,6 @@
                     <tr>
                       <th>الصنف</th>
                       <th>كود الصنف</th>
-                      <th>اللون</th>
                       <th class="text-center">الكمية</th>
                       <th class="text-end">تكلفة الوحدة</th>
                       <th class="text-end">الإجمالي</th>
@@ -127,14 +116,6 @@
                     <tr *ngFor="let ing of expandedDetail.ingredients">
                       <td>{{ ing.item?.category_name || '—' }}</td>
                       <td dir="ltr">{{ ing.item?.item_code || '—' }}</td>
-                      <td>
-                        <span *ngIf="ing.item?.color" class="d-inline-flex align-items-center flex-wrap" style="gap: 6px;">
-                          <span class="mfg-recipe-color-swatch" [style.backgroundColor]="ing.item.color"
-                            [attr.title]="ing.item.color"></span>
-                          <span>{{ ing.item.color }}</span>
-                        </span>
-                        <span *ngIf="!ing.item?.color" class="text-muted">—</span>
-                      </td>
                       <td class="text-center">{{ ing.quantity }}</td>
                       <td class="text-end">{{ ing.unit_cost | number:'1.0-4' }}</td>
                       <td class="text-end font-weight-bold">{{ ing.quantity * ing.unit_cost | number:'1.0-2' }}</td>

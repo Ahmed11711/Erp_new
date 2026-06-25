@@ -1,7 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { ClientCashPaymentsComponent } from './client-cash-payments.component';
-import { SupplierCashPaymentsComponent } from './supplier-cash-payments.component';
+import { PreviousCashPaymentsComponent } from './previous-cash-payments/previous-cash-payments.component';
 import { ReceivePaymentComponent } from './receive-payment/receive-payment.component';
 import { CashGiveToClientComponent } from './give-to-client/give-to-client.component';
 import { CashPayToSupplierComponent } from './pay-to-supplier/pay-to-supplier.component';
@@ -12,17 +11,13 @@ const finCore = [...RBAC_ROUTE.financeTeam];
 
 const routes: Routes = [
   {
-    path: 'previous/clients',
-    component: ClientCashPaymentsComponent,
+    path: 'previous',
+    component: PreviousCashPaymentsComponent,
     canActivate: [departmentGuard],
     data: { rbacPermissions: finCore },
   },
-  {
-    path: 'previous/suppliers',
-    component: SupplierCashPaymentsComponent,
-    canActivate: [departmentGuard],
-    data: { rbacPermissions: finCore },
-  },
+  { path: 'previous/clients', redirectTo: 'previous', pathMatch: 'full' },
+  { path: 'previous/suppliers', redirectTo: 'previous', pathMatch: 'full' },
   {
     path: 'receive',
     component: ReceivePaymentComponent,
@@ -46,6 +41,16 @@ const routes: Routes = [
     data: {
       rbacPermissions: finCore,
       defaultParty: 'shipping_company',
+      defaultVoucherType: 'payment',
+    },
+  },
+  {
+    path: 'pay-collection-company',
+    component: ReceivePaymentComponent,
+    canActivate: [departmentGuard],
+    data: {
+      rbacPermissions: finCore,
+      defaultParty: 'collection_company',
       defaultVoucherType: 'payment',
     },
   },

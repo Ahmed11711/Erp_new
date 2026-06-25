@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AccountEntry;
 use App\Models\TreeAccount;
+use App\Services\Accounting\TreeAccountBalanceRebuildService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -12,7 +13,7 @@ class MergeDuplicateCustomerAccountsCommand extends Command
     protected $signature = 'accounting:merge-duplicate-customers {--dry-run : Show what would be merged without making changes}';
     protected $description = 'Find and merge duplicate customer accounts (name-only vs name+phone)';
 
-    public function handle(): int
+    public function handle(TreeAccountBalanceRebuildService $balanceRebuild): int
     {
         $dryRun = $this->option('dry-run');
 
@@ -60,7 +61,7 @@ class MergeDuplicateCustomerAccountsCommand extends Command
                         ->where('account_id', $nameOnly->id)
                         ->update(['account_id' => $withPhone->id]);
 
-                    $this->recalculateBalance($withPhone);
+                    $balanceRebuild->applyBalanceFromEntries($withPhone->fresh());
 
                     $nameOnly->delete();
                 });
@@ -85,8 +86,8 @@ class MergeDuplicateCustomerAccountsCommand extends Command
         }
 
         if (!$dryRun) {
-            $this->info("Recalculating parent account balances...");
-            $this->recalculateParentBalances();
+            $this->info('إعادة تجميع أرصدة الشجرة...');
+            $balanceRebuild->rebuildAll();
             $this->info("Done! Merged {$mergeCount} duplicate account(s).");
         } else {
             $this->info("Found {$mergeCount} duplicate(s). Run without --dry-run to merge.");
@@ -95,33 +96,4 @@ class MergeDuplicateCustomerAccountsCommand extends Command
         return Command::SUCCESS;
     }
 
-    private function recalculateBalance(TreeAccount $account): void
-    {
-        $totals = AccountEntry::where('tree_account_id', $account->id)
-            ->selectRaw('COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
-            ->first();
-
-        $account->update([
-            'debit_balance' => $totals->total_debit,
-            'credit_balance' => $totals->total_credit,
-            'balance' => $totals->total_debit - $totals->total_credit,
-        ]);
-    }
-
-    private function recalculateParentBalances(): void
-    {
-        for ($level = 3; $level >= 1; $level--) {
-            TreeAccount::where('level', $level)->each(function ($parent) {
-                $childSums = TreeAccount::where('parent_id', $parent->id)
-                    ->selectRaw('COALESCE(SUM(balance),0) as bal, COALESCE(SUM(debit_balance),0) as db, COALESCE(SUM(credit_balance),0) as cb')
-                    ->first();
-
-                $parent->update([
-                    'balance' => $childSums->bal,
-                    'debit_balance' => $childSums->db,
-                    'credit_balance' => $childSums->cb,
-                ]);
-            });
-        }
-    }
 }

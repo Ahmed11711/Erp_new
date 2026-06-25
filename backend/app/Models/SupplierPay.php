@@ -26,6 +26,7 @@ class SupplierPay extends Model
         'safe_id',
         'service_account_id',
         'supplier_id',
+        'processing_invoice_id',
         'receipt_date'
     ];
 

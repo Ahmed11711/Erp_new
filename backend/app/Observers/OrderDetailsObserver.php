@@ -19,13 +19,20 @@ class OrderDetailsObserver
             return;
         }
 
-        $hasLink = (bool) $orderDetails->shipping_company_id || (bool) $orderDetails->collection_company_id;
+        $hasLink = (bool) $orderDetails->shipping_company_id
+            || (bool) $orderDetails->collection_company_id
+            || ($orderDetails->collection_provider_type && $orderDetails->collection_provider_id);
 
         if ($orderDetails->wasRecentlyCreated && ! $hasLink) {
             return;
         }
 
-        if (! $orderDetails->wasRecentlyCreated && ! $orderDetails->wasChanged(['shipping_company_id', 'collection_company_id'])) {
+        if (! $orderDetails->wasRecentlyCreated && ! $orderDetails->wasChanged([
+            'shipping_company_id',
+            'collection_company_id',
+            'collection_provider_type',
+            'collection_provider_id',
+        ])) {
             return;
         }
 

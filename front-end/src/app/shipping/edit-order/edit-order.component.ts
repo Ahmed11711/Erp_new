@@ -30,6 +30,7 @@ export class EditOrderComponent {
   shippingWays:any[]=[];
   orderSources:any[]=[];
   errormessage:boolean=false;
+  errorMessageText = '';
   products:any[]=[];
   banksData:any[]=[];
   location:any[]=[];
@@ -270,7 +271,8 @@ export class EditOrderComponent {
   }
   changedCollectNote!:string;
   submitform(){
-    if (this.order.order_status == 'تم شحن') {
+    const needsCollectNote = this.order?.order_status === 'تم شحن' || this.order?.order_status === 'تم التسليم';
+    if (needsCollectNote) {
       Swal.fire({
         title: 'ملحوظة التحصيل المتغير',
         input: 'text',
@@ -341,6 +343,7 @@ export class EditOrderComponent {
 
     this.orderService.editOrder(this.id,formData).subscribe(result=>{
       this.errormessage=false;
+      this.errorMessageText = '';
       this.getOrder();
       Swal.fire({
         icon:'success',
@@ -349,14 +352,14 @@ export class EditOrderComponent {
         timerProgressBar:true,
         timer:1000
       })
-      if (this.order.order_status == 'تم شحن') {
+      if (this.order.order_status == 'تم شحن' || this.order.order_status == 'تم التسليم') {
         this.router.navigateByUrl(`/dashboard/shipping/collectorder/${this.id}`)
       }
     },
     (error)=>{
       console.log(error);
-
-      this.errormessage=true
+      this.errormessage=true;
+      this.errorMessageText = error?.error?.message || 'تعذّر حفظ التعديل — راجع البيانات وحاول مرة أخرى';
     });
 
   }

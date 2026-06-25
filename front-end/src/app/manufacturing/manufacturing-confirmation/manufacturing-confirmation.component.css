@@ -45,3 +45,88 @@ button , button:hover {
   padding: 0.5rem 2rem !important;
   color: white;
 }
+
+.consumption-panel {
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+}
+
+.consumption-table thead {
+  background-color: #82225e !important;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.consumption-table thead th {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.consumption-qty-input {
+  font-size: 1rem;
+  text-align: center;
+}
+
+.consumption-reset-btn {
+  border-color: #82225e !important;
+  color: #82225e !important;
+  background: transparent !important;
+  font-size: 0.9rem !important;
+  padding: 0.25rem 0.75rem !important;
+}
+
+.consumption-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.consumption-save-recipe-btn {
+  background: #82225e !important;
+  color: #fff !important;
+  border: 1px solid #82225e !important;
+  font-size: 0.9rem !important;
+  padding: 0.25rem 0.75rem !important;
+}
+
+.consumption-save-recipe-btn:disabled {
+  opacity: 0.65;
+}
+
+.consumption-cost-compare {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed rgba(130, 34, 94, 0.35);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.consumption-cost-compare__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.consumption-apply-cost-btn {
+  background: #fff !important;
+  color: #82225e !important;
+  border: 1px solid #82225e !important;
+  font-size: 0.9rem !important;
+}
+
+.consumption-substitute-cell {
+  min-width: 180px;
+}
+
+.consumption-substitute-cell ::ng-deep .autocomplete-container .input-container input {
+  font-size: 0.9rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.consumption-material-cell small {
+  font-size: 0.8rem;
+}

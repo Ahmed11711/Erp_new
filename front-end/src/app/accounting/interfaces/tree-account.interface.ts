@@ -1,3 +1,22 @@
+export interface TreeAccountUserRef {
+  id: number;
+  name: string;
+}
+
+export interface TreeAccountAuditEntry {
+  id: number;
+  tree_account_id?: number | null;
+  action: 'created' | 'updated' | 'deleted';
+  action_label?: string;
+  performed_by?: number | null;
+  performer?: TreeAccountUserRef | null;
+  account_code?: string;
+  account_name?: string;
+  parent_id?: number | null;
+  changes?: Record<string, { old: unknown; new: unknown }>;
+  created_at?: string;
+}
+
 export interface TreeAccount {
   id?: number;
   name: string;
@@ -38,6 +57,10 @@ export interface TreeAccount {
     branch_name: string;
   }[];
   detail_type?: string;
+  created_by?: number | null;
+  updated_by?: number | null;
+  created_by_user?: TreeAccountUserRef | null;
+  updated_by_user?: TreeAccountUserRef | null;
   created_at?: string;
   updated_at?: string;
 }

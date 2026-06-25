@@ -51,9 +51,18 @@ export class OrderService {
     return this.http.post(`${environment.Url}/editorder/${id}` , formData);
   }
 
-  chngeStatus(id:number , status:string,note:string , amount:any , bank:any ,receviedOrder:any , param = {}){
-    console.log(id , status);
-    return this.http.get(`${environment.Url}/changestatus/${id}?status=${status}&note=${note}&amount=${amount}&bank=${bank}&receviedOrder=${receviedOrder}` , {params:param});
+  chngeStatus(id:number , status:string,note:string , amount:any , bank:any ,receviedOrder:any , param: Record<string, string | number | boolean> = {}){
+    return this.http.get(
+      `${environment.Url}/changestatus/${id}`,
+      httpOptionsFromParams({
+        status,
+        note,
+        amount,
+        bank,
+        receviedOrder,
+        ...param,
+      }),
+    );
   }
 
   refuseOrder(id:number ,note:string , amount:any , bank:any ,receviedorder:any , reasoncat:any){
@@ -88,7 +97,11 @@ export class OrderService {
   }
 
   addNote(id:number,value:string){
-    return this.http.get(`${environment.Url}/addnote/${id}?value=${value}`);
+    return this.http.post(`${environment.Url}/addnote/${id}`, { value });
+  }
+
+  updateNote(id:number,value:string){
+    return this.http.put(`${environment.Url}/updatenote/${id}`, { value });
   }
 
   getOrderFulfillment(id: number) {
@@ -101,6 +114,10 @@ export class OrderService {
 
   transferOrderLiability(id: number, body: { to_holder_type: string; to_holder_id: number; amount?: number; reason?: string }) {
     return this.http.post(`${environment.Url}/orders/${id}/fulfillment/transfer-liability`, body);
+  }
+
+  checkDeliveryTransfer(id: number) {
+    return this.http.get<{ needs_transfer: boolean }>(`${environment.Url}/order/${id}/delivery-transfer-check`);
   }
 
   deliverOrder(id: number, body: any = {}) {
@@ -117,6 +134,16 @@ export class OrderService {
 
   bulkCollectOrders(formData: FormData) {
     return this.http.post(`${environment.Url}/collectorder-bulk`, formData);
+  }
+
+  getOrderRollbackPreview(id: number, target: 'confirmed' | 'new' = 'confirmed') {
+    return this.http.get(`${environment.Url}/orders/${id}/rollback/preview`, {
+      params: { target },
+    });
+  }
+
+  executeOrderRollback(id: number, body: { target: string; reason: string; confirmed: boolean }) {
+    return this.http.post(`${environment.Url}/orders/${id}/rollback`, body);
   }
 
   getShippingAccountsSummary(params: any = {}) {

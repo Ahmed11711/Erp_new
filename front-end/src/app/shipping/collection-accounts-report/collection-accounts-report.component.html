@@ -19,6 +19,13 @@
         <label class="form-label">إلى تاريخ</label>
         <input type="date" class="form-control" [(ngModel)]="dateTo" />
       </div>
+      <div class="col-md-2" *ngIf="activeTab === 'statement'">
+        <label class="form-label d-block">عرض</label>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="pendingOnly" [(ngModel)]="pendingOnly" (ngModelChange)="onPendingOnlyChange()" />
+          <label class="form-check-label" for="pendingOnly">المعلّق فقط</label>
+        </div>
+      </div>
       <div class="col-md-2">
         <button class="btn btn-primary w-100" (click)="applyFilters()">بحث</button>
       </div>
@@ -54,6 +61,7 @@
             <th>#</th>
             <th>شركة التحصيل</th>
             <th>حساب الشجرة</th>
+            <th>رصيد الشجرة</th>
             <th>مطلوب تحصيله</th>
             <th>طلبات معلقة</th>
             <th>محصل سابقاً</th>
@@ -72,20 +80,27 @@
               <span *ngIf="c.receivable_tree_account">{{ c.receivable_tree_account.code }} — {{ c.receivable_tree_account.name }}</span>
               <span *ngIf="!c.receivable_tree_account" class="text-danger">غير مربوط</span>
             </td>
+            <td dir="ltr" class="fw-bold">{{ (c.receivable_tree_balance ?? c.receivable_tree_account?.balance ?? 0) | number:'1.2-2' }}</td>
             <td dir="ltr" class="fw-bold text-danger">{{ c.pending_to_collect | number:'1.2-2' }}</td>
             <td>{{ c.pending_orders_count }}</td>
             <td dir="ltr">{{ c.total_collected | number:'1.2-2' }}</td>
             <td>
               <a
-                class="btn btn-sm btn-success text-white"
-                *ngIf="c.linked_shipping_company_id && pendingAmount(c) > 0"
+                class="btn btn-sm btn-success text-white me-1"
+                *ngIf="pendingAmount(c) > 0 && c.receivable_tree_account"
                 [routerLink]="['/dashboard/financial/cash/receive']"
                 [queryParams]="cashReceiptQuery(c)"
-              >قبض</a>
-              <span class="text-muted small" *ngIf="!c.linked_shipping_company_id">اربط شركة شحن للسند</span>
+              >قبض الكل</a>
+              <a
+                class="btn btn-sm btn-warning text-dark"
+                *ngIf="c.receivable_tree_account"
+                [routerLink]="['/dashboard/financial/cash/receive']"
+                [queryParams]="cashPaymentQuery(c)"
+              >صرف</a>
+              <span class="text-muted small d-block" *ngIf="!c.receivable_tree_account">اربط حساب الشجرة أولاً</span>
             </td>
             <td>
-              <button class="btn btn-sm btn-outline-primary" (click)="openStatement(c)">كشف</button>
+              <button class="btn btn-sm btn-outline-primary" (click)="openStatement(c)">كشف وتحديد طلبات</button>
             </td>
           </tr>
         </tbody>
@@ -99,6 +114,32 @@
     <h5 class="mb-2">كشف: {{ selected.name }}</h5>
     <p class="text-muted small" *ngIf="statementSource === 'ledger'">مصدر البيانات: كشف تشغيلي (شركة شحن مرتبطة)</p>
     <p class="text-muted small" *ngIf="statementSource === 'orders'">مصدر البيانات: طلبات مرتبطة بشركة التحصيل</p>
+
+    <div class="alert alert-info py-2 mb-3" *ngIf="selectedOrderIds.length">
+      <strong>{{ selectedOrderIds.length }}</strong> طلب محدّد — المجموع:
+      <strong dir="ltr">{{ selectedTotal | number:'1.2-2' }}</strong>
+      <span class="text-muted small d-block mt-1">عند الحفظ يُغلق كل طلب محدّد ويُسجَّل القيد على حساب ذمم شركة التحصيل. يمكنك قبض جزء من المبلغ ليُخصَم من المطلوب تحصيله.</span>
+      <div class="mt-2 d-flex flex-wrap gap-2">
+        <a
+          class="btn btn-sm btn-success text-white"
+          *ngIf="selected.receivable_tree_account && cashReceiptQuerySelected() as q"
+          [routerLink]="['/dashboard/financial/cash/receive']"
+          [queryParams]="q"
+        >قبض الطلبات المحددة ({{ selectedTotal | number:'1.2-2' }})</a>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearSelection()">إلغاء التحديد</button>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+      <button type="button" class="btn btn-sm btn-outline-primary" (click)="selectAllPendingOnPage()">تحديد الكل (الصفحة)</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearSelection()" *ngIf="selectedOrderIds.length">مسح التحديد</button>
+      <a
+        class="btn btn-sm btn-success text-white"
+        *ngIf="pendingAmount(selected) > 0 && selected.receivable_tree_account"
+        [routerLink]="['/dashboard/financial/cash/receive']"
+        [queryParams]="cashReceiptQuery(selected)"
+      >قبض كل المعلّق</a>
+    </div>
 
     <div class="row g-2 mb-3" *ngIf="aggregates">
       <div class="col-md-3">
@@ -131,20 +172,38 @@
       <table class="table table-sm table-bordered text-center">
         <thead>
           <tr>
+            <th style="width:40px"></th>
             <th>طلب</th>
             <th>عميل</th>
             <th>مبلغ</th>
             <th>حالة</th>
             <th>تاريخ شحن</th>
+            <th>قبض</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let d of details.data">
+          <tr *ngFor="let d of details.data" [class.table-success]="isRowSelected(d)">
+            <td>
+              <input
+                type="checkbox"
+                *ngIf="isCollectibleRow(d)"
+                [checked]="isRowSelected(d)"
+                (change)="toggleRow(d)"
+              />
+            </td>
             <td><a [routerLink]="orderLink(d.order_id)">{{ d.order_id }}</a></td>
             <td>{{ d.order?.customer_name }}</td>
-            <td dir="ltr">{{ d.amount | number:'1.2-2' }}</td>
+            <td dir="ltr" class="fw-bold">{{ rowCollectibleAmount(d) | number:'1.2-2' }}</td>
             <td>{{ d.status }}</td>
             <td>{{ d.shipping_date }}</td>
+            <td>
+              <a
+                *ngIf="isCollectibleRow(d)"
+                class="btn btn-sm btn-success text-white"
+                [routerLink]="['/dashboard/financial/cash/receive']"
+                [queryParams]="cashReceiptQuery(selected, rowCollectibleAmount(d), [d.order_id])"
+              >قبض</a>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -154,23 +213,43 @@
       <table class="table table-sm table-bordered text-center">
         <thead>
           <tr>
+            <th style="width:40px"></th>
             <th>طلب</th>
             <th>عميل</th>
             <th>صافي</th>
             <th>مبلغ التحصيل</th>
             <th>حالة الطلب</th>
+            <th>قبض</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let d of details.data">
+          <tr *ngFor="let d of details.data" [class.table-success]="isRowSelected(d)">
+            <td>
+              <input
+                type="checkbox"
+                *ngIf="isCollectibleRow(d)"
+                [checked]="isRowSelected(d)"
+                (change)="toggleRow(d)"
+              />
+            </td>
             <td><a [routerLink]="orderLink(d.id)">{{ d.id }}</a></td>
             <td>{{ d.customer_name }}</td>
             <td dir="ltr">{{ d.net_total | number:'1.2-2' }}</td>
-            <td dir="ltr" class="fw-bold">{{ d.collection_receivable_amount | number:'1.2-2' }}</td>
+            <td dir="ltr" class="fw-bold">{{ rowCollectibleAmount(d) | number:'1.2-2' }}</td>
             <td>{{ d.order_status }}</td>
+            <td>
+              <a
+                *ngIf="isCollectibleRow(d)"
+                class="btn btn-sm btn-success text-white"
+                [routerLink]="['/dashboard/financial/cash/receive']"
+                [queryParams]="cashReceiptQuery(selected, rowCollectibleAmount(d), [d.id])"
+              >قبض</a>
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <p class="text-muted text-center py-3" *ngIf="details && !details.data?.length">لا توجد سطور {{ pendingOnly ? 'معلّقة' : '' }} في الفترة المحددة.</p>
   </div>
 </div>

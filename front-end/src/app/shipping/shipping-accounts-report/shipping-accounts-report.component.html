@@ -107,6 +107,8 @@
             <th>المبلغ المعلق</th>
             <th>المبلغ المشحون</th>
             <th>المبلغ المحصل</th>
+            <th>شحن توريد (مشتريات)</th>
+            <th>عدد فواتير التوريد</th>
             <th>سند نقدي</th>
             <th>كشف حساب</th>
           </tr>
@@ -125,6 +127,8 @@
             <td dir="ltr" class="text-danger fw-bold">{{ c.total_pending_amount | number:'1.2-2' }}</td>
             <td dir="ltr">{{ c.total_shipped_amount | number:'1.2-2' }}</td>
             <td dir="ltr">{{ c.total_collected_amount | number:'1.2-2' }}</td>
+            <td dir="ltr" class="text-primary fw-semibold">{{ c.purchase_freight_total | number:'1.2-2' }}</td>
+            <td>{{ c.purchase_freight_count || 0 }}</td>
             <td>
               <div class="d-flex flex-wrap justify-content-center gap-1">
                 <a class="btn btn-sm btn-success text-white" [routerLink]="['/dashboard/financial/cash/receive']" [queryParams]="cashQueryReceipt(c, pendingAmountFromRow(c))">قبض</a>
@@ -148,9 +152,26 @@
   <div *ngIf="activeTab === 'statement' && selectedCompany">
     <div class="px-3 mb-3">
       <h5 class="mb-2">كشف حساب: {{ selectedCompany.name }} ({{ selectedCompany.type }})</h5>
+
+      <div class="alert alert-info py-2 mb-2" *ngIf="selectedOrderIds.length">
+        <strong>{{ selectedOrderIds.length }}</strong> طلب محدّد — المجموع:
+        <strong dir="ltr">{{ selectedTotal | number:'1.2-2' }}</strong>
+        <span class="text-muted small d-block mt-1">يُغلق كل طلب محدّد ويُحدَّث كشف التشغيل والقيد على حساب الذمم.</span>
+        <div class="mt-2 d-flex flex-wrap gap-2">
+          <a
+            class="btn btn-sm btn-success text-white"
+            *ngIf="cashQueryReceiptSelected() as q"
+            [routerLink]="['/dashboard/financial/cash/receive']"
+            [queryParams]="q"
+          >قبض الطلبات المحددة ({{ selectedTotal | number:'1.2-2' }})</a>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearSelection()">إلغاء التحديد</button>
+        </div>
+      </div>
+
       <div class="d-flex flex-wrap gap-2 align-items-center">
-        <span class="text-muted small">تسوية نقدية (يتم فتح شاشة السند مع تعبئة مبدئية):</span>
-        <a class="btn btn-sm btn-success text-white" [routerLink]="['/dashboard/financial/cash/receive']" [queryParams]="cashQueryReceipt(selectedCompany, suggestedAmountFromStatementAggregates())">قبض من المندوب/الشركة</a>
+        <span class="text-muted small">تسوية نقدية:</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" (click)="selectAllPendingOnPage()">تحديد المعلّق (الصفحة)</button>
+        <a class="btn btn-sm btn-success text-white" [routerLink]="['/dashboard/financial/cash/receive']" [queryParams]="cashQueryReceipt(selectedCompany, suggestedAmountFromStatementAggregates())">قبض كل المعلّق</a>
         <a class="btn btn-sm btn-danger" [routerLink]="['/dashboard/financial/cash/pay-shipping-partner']" [queryParams]="cashQueryPayment(selectedCompany, suggestedAmountFromStatementAggregates())">دفع للمندوب/الشركة</a>
       </div>
     </div>
@@ -186,12 +207,49 @@
           <div class="h5 mb-0">{{ statementAggregates.total_orders }}</div>
         </div>
       </div>
+      <div class="col-md-2" *ngIf="statementAggregates">
+        <div class="card text-center p-2 border-primary">
+          <div class="text-muted small">شحن توريد (مشتريات)</div>
+          <div class="h5 mb-0 text-primary">{{ statementAggregates.purchase_freight_total | number:'1.2-2' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-3 mb-4" *ngIf="purchaseFreight?.length">
+      <h6 class="mb-2">فواتير مشتريات — شحن توريد على {{ selectedCompany.name }}</h6>
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered table-sm text-center mb-0">
+          <thead class="table-secondary">
+            <tr>
+              <th>رقم الفاتورة</th>
+              <th>المورد</th>
+              <th>حالة الشراء</th>
+              <th>تاريخ الاستلام</th>
+              <th>مصاريف الشحن</th>
+              <th>تفاصيل</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of purchaseFreight">
+              <td>{{ p.invoice_no || ('#' + p.purchase_id) }}</td>
+              <td>{{ p.supplier_name || '—' }}</td>
+              <td>{{ p.invoice_type || '—' }}</td>
+              <td dir="ltr">{{ p.receipt_date }}</td>
+              <td dir="ltr" class="fw-bold text-primary">{{ p.transport_cost | number:'1.2-2' }}</td>
+              <td>
+                <a class="btn btn-sm btn-outline-secondary" [routerLink]="['/dashboard/purchases/invoice', p.purchase_id]" target="_blank">عرض</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="table-responsive px-3" *ngIf="statementDetails">
       <table class="table table-hover table-bordered table-sm text-center">
         <thead class="table-dark">
           <tr>
+            <th style="width:40px"></th>
             <th>رقم الطلب</th>
             <th>اسم العميل</th>
             <th>هاتف العميل</th>
@@ -204,14 +262,22 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let d of statementDetails.data">
+          <tr *ngFor="let d of statementDetails.data" [class.table-success]="isRowSelected(d)">
+            <td>
+              <input
+                type="checkbox"
+                *ngIf="isCollectibleRow(d)"
+                [checked]="isRowSelected(d)"
+                (change)="toggleRow(d)"
+              />
+            </td>
             <td>
               <a [routerLink]="['/dashboard/shipping/orderdetails', d.order_id]" target="_blank">{{ d.order_id }}</a>
             </td>
             <td>{{ d.order?.customer_name }}</td>
             <td dir="ltr">{{ d.order?.customer_phone_1 }}</td>
             <td dir="ltr">{{ d.order?.net_total | number:'1.2-2' }}</td>
-            <td dir="ltr" class="fw-bold">{{ d.amount | number:'1.2-2' }}</td>
+            <td dir="ltr" class="fw-bold">{{ rowCollectibleAmount(d) | number:'1.2-2' }}</td>
             <td>
               <span class="badge" 
                 [class.bg-warning]="d.status === 'تم شحن'" 
@@ -228,10 +294,10 @@
             </td>
             <td>
               <a
-                *ngIf="!d.is_done && (d.status === 'تم شحن' || d.status === 'تم التسليم')"
+                *ngIf="isCollectibleRow(d)"
                 class="btn btn-sm btn-success text-white"
                 [routerLink]="['/dashboard/financial/cash/receive']"
-                [queryParams]="cashQueryReceipt(selectedCompany, +d.amount, [d.order_id])"
+                [queryParams]="cashQueryReceipt(selectedCompany, rowCollectibleAmount(d), [d.order_id])"
               >قبض</a>
             </td>
           </tr>

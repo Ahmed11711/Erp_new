@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { TreeAccountService } from '../services/tree-account.service';
 import { AccountingReportService } from '../services/accounting-report.service';
-import { TreeAccount } from '../interfaces/tree-account.interface';
+import { TreeAccount, TreeAccountAuditEntry } from '../interfaces/tree-account.interface';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -21,6 +21,8 @@ export class AccountingTreeComponent implements OnInit {
   showAddDialog = false;
   showEditDialog = false;
   selectedAccount: TreeAccount | null = null;
+  accountAudits: TreeAccountAuditEntry[] = [];
+  loadingAccountMeta = false;
   expandedNodes: Set<number> = new Set();
 
   accountTypes = [
@@ -233,14 +235,68 @@ export class AccountingTreeComponent implements OnInit {
   }
 
   openEditDialog(account: TreeAccount): void {
+    if (!account.id) {
+      return;
+    }
     this.selectedAccount = { ...account };
+    this.accountAudits = [];
     this.showEditDialog = true;
+    this.loadingAccountMeta = true;
+
+    this.treeAccountService.getById(account.id).subscribe({
+      next: (response) => {
+        if (response?.data) {
+          this.selectedAccount = response.data;
+        }
+        this.loadingAccountMeta = false;
+      },
+      error: () => {
+        this.loadingAccountMeta = false;
+      }
+    });
+
+    this.treeAccountService.getAudits(account.id).subscribe({
+      next: (response) => {
+        this.accountAudits = Array.isArray(response?.data) ? response.data : [];
+      },
+      error: () => {
+        this.accountAudits = [];
+      }
+    });
+  }
+
+  formatAuditChanges(entry: TreeAccountAuditEntry): string {
+    const changes = entry.changes ?? {};
+    const labels: Record<string, string> = {
+      name: 'الاسم',
+      name_en: 'الاسم بالإنجليزية',
+      type: 'النوع',
+      parent_id: 'الحساب الأب',
+      is_trading_account: 'حساب تداول',
+      budget_type: 'نوع الموازنة',
+      budget_amount: 'مبلغ الموازنة',
+      budget_period: 'فترة الموازنة',
+      main_account_id: 'الحساب الرئيسي',
+      account_type: 'نوع الحساب',
+      detail_type: 'نوع التفصيل',
+    };
+
+    return Object.entries(changes)
+      .map(([field, value]) => {
+        const label = labels[field] ?? field;
+        const oldVal = value?.old ?? '—';
+        const newVal = value?.new ?? '—';
+        return `${label}: ${oldVal} ← ${newVal}`;
+      })
+      .join(' · ');
   }
 
   closeDialogs(): void {
     this.showAddDialog = false;
     this.showEditDialog = false;
     this.selectedAccount = null;
+    this.accountAudits = [];
+    this.loadingAccountMeta = false;
   }
 
   saveAccount(): void {

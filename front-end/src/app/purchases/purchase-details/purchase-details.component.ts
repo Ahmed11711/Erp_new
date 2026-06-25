@@ -1,11 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { purchaseStatusBadgeClass } from 'src/app/shared/utils/purchase-invoice-status.util';
+import { resolvePurchaseShippingRep } from 'src/app/shared/utils/purchase-shipping-rep.util';
 import { InvoiceService } from '../service/invoice.service';
 
 @Component({
   selector: 'app-purchase-details',
   templateUrl: './purchase-details.component.html',
-  styleUrls: ['./purchase-details.component.css']
+  styleUrls: ['./purchase-details.component.css', '../purchase-ui.shared.css']
 })
 export class PurchaseDetailsComponent implements OnInit{
 
@@ -15,6 +17,9 @@ export class PurchaseDetailsComponent implements OnInit{
   id!:any;
   /** رابط طباعة موقّع من الخادم */
   printUrl: string | null = null;
+
+  statusBadgeClass = purchaseStatusBadgeClass;
+  shippingRepName = resolvePurchaseShippingRep;
 
 
   constructor(private route:ActivatedRoute , private invoiceService:InvoiceService){

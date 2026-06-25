@@ -6,10 +6,7 @@ use App\Models\Approvals;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Purchase;
-use App\Models\PurchasesTracking;
-use App\Models\Bank;
-use App\Models\Supplier;
-use App\Services\CategoryInventoryCostService;
+use App\Services\Purchases\PurchaseDeletionService;
 
 
 class ApprovalsController extends Controller
@@ -55,99 +52,23 @@ class ApprovalsController extends Controller
 
                 if($data->table_name == 'purchases' && $data->type == 'delete'){
 
-                    $mainInvoice = Purchase::where('invoice_number' , $data->column_values['invoice_number'])->first();
+                    $main = Purchase::query()
+                        ->where('invoice_number', $data->column_values['invoice_number'])
+                        ->whereNull('ref')
+                        ->first();
 
-                    $purchase = Purchase::where('invoice_number' , $mainInvoice->invoice_number)->latest('id')->first();
-
-                    $oldCategories = DB::table('invoice_categories')->where('purchase_id', $purchase->id)->get();
-
-                    foreach($oldCategories as $product){
-                        $qty = (float) $product->product_quantity;
-                        $lineTotal = (float) $product->total;
-                        $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
-
-                        $apCatId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
-                        if (! $apCatId) {
-                            throw new \Exception('تعذر ربط الصنف عند الموافقة على الحذف: ' . $product->product_name);
-                        }
-
-                        DB::table('categories')->where('id', $apCatId)->increment('quantity', $qty * -1);
-                        DB::table('categories')->where('id', $apCatId)->increment('total_price', $lineTotal * -1);
-
-                        CategoryInventoryCostService::syncUnitPriceFromWeightedAverage($apCatId);
-
-                        DB::table('categories_balance')->insert([
-                            'invoice_number' => $purchase->invoice_number,
-                            'category_id' => $apCatId,
-                            'type' => 'حذف فواتير مشتريات',
-                            'quantity' => $qty * -1,
-                            'balance_before' => DB::table('categories')->where('id', $apCatId)->value('quantity') - ($qty * -1),
-                            'balance_after' => DB::table('categories')->where('id', $apCatId)->value('quantity'),
-                            'price' => $effectiveUnit * -1,
-                            'total_price' => $lineTotal * -1,
-                            'unit_cost' => $effectiveUnit,
-                            'cost_total' => $lineTotal * -1,
-                            'by' => auth()->user()->name,
-                            'created_at' =>now()
-                        ]
-                        );
-
-
-                        DB::table('warehouse_ratings')->insert([
-                            'category_id' => $apCatId,
-                            'price' => $effectiveUnit * -1,
-                            'quantity' => $qty * -1,
-                            'ref' => $purchase->invoice_number,
-                            'invoice_id' => $purchase->id,
-                            'fixed_quantity' => $qty * -1,
-                            'created_at' =>now()
-                        ]);
+                    if (! $main) {
+                        $main = Purchase::query()
+                            ->where('invoice_number', $data->column_values['invoice_number'])
+                            ->orderBy('id')
+                            ->first();
                     }
 
-                    $mainPurchase = Purchase::where('invoice_number' , $data->column_values['invoice_number'])->first();
-                    $mainPurchase->status = '1';
-                    $mainPurchase->save();
+                    if (! $main) {
+                        throw new \RuntimeException('تعذر العثور على فاتورة المشتريات.');
+                    }
 
-                    PurchasesTracking::create([
-                        'invoice_id' => $mainPurchase->id,
-                        'invoice_number' => $purchase->id,
-                        'action' => 'حذف فاتورة',
-                        'user_id' => $data->user_id,
-                    ]);
-
-                    $supplier = Supplier::find($purchase->supplier_id);
-                    $supplier->last_balance = $supplier->balance;
-                    $supplier->balance -= $purchase->due_amount;
-                    $supplier->save();
-
-
-                    DB::table('supplier_balance')->insert([
-                        'invoice_id' => $purchase->id,
-                        'balance_before' => $supplier->last_balance,
-                        'balance_after' => $supplier->balance,
-                        'user_id'=> $data->user_id
-                    ]);
-
-                    $bank = Bank::find($purchase->bank_id);
-                    $paid = (double)$purchase->paid_amount;
-                    $balance =(double) $bank->balance;
-                    $bank->balance= $balance+ $paid;
-                    $bank->save();
-
-                    $bank_details = ' حذف فاتور رقم '.$purchase->invoice_number;
-
-                    DB::table('bank_details')->insert([
-                        'bank_id' => $purchase->bank_id,
-                        'details' => $bank_details,
-                        'ref' => $purchase->invoice_number,
-                        'type' => 'فواتير مشتريات',
-                        'amount' => (double)$paid ,
-                        'balance_before' => $balance,
-                        'balance_after' => $bank->balance,
-                        'date' => date('Y-m-d'),
-                        'created_at' => now(),
-                        'user_id'=> $data->user_id
-                    ]);
+                    app(PurchaseDeletionService::class)->delete((int) $main->id, (int) auth()->id());
 
                 } else {
                     $columnValues = $data->column_values;

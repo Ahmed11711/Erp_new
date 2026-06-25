@@ -1,20 +1,15 @@
-/* ——— صفحة فاتورة مشتريات ——— */
+/* ——— فاتورة مشتريات — تنسيق بسيط ومنسّق ——— */
 .purchase-invoice-page {
-  --pi-primary: #5b4b8a;
-  --pi-primary-hover: #48396f;
-  --pi-accent: #0d9488;
-  --pi-accent-hover: #0f766e;
-  --pi-surface: #f8fafc;
+  --pi-brand: #82225e;
+  --pi-brand-hover: #6b1c4e;
   --pi-border: #e2e8f0;
+  --pi-bg: #f8fafc;
   --pi-text: #0f172a;
-  --pi-label: #0f172a;
-  --pi-muted: #475569;
-  --pi-radius: 12px;
-  --pi-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  --pi-shadow-lg: 0 4px 24px rgba(15, 23, 42, 0.08);
-  font-family: 'Segoe UI', Tahoma, 'Arabic UI Text', 'Geeza Pro', sans-serif;
-  color: var(--pi-text);
+  --pi-muted: #64748b;
+  --pi-radius: 10px;
+  max-width: 1140px;
   padding-bottom: 2rem;
+  color: var(--pi-text);
 }
 
 .purchase-invoice-page .pi-page-head {
@@ -22,399 +17,441 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 1rem;
-  padding: 1rem 0 1.25rem;
+  gap: 0.75rem;
+  padding: 0.75rem 0 1rem;
+  margin-bottom: 1rem;
   border-bottom: 1px solid var(--pi-border);
-  margin-bottom: 1.5rem;
 }
 
 .purchase-invoice-page .pi-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
   color: var(--pi-text);
 }
 
+/* بطاقة */
 .purchase-invoice-page .pi-card {
   background: #fff;
   border: 1px solid var(--pi-border);
   border-radius: var(--pi-radius);
-  box-shadow: var(--pi-shadow);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
   overflow: hidden;
-}
-
-.purchase-invoice-page .pi-card-header {
-  padding: 0.75rem 1.25rem;
-  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
-  border-bottom: 1px solid var(--pi-border);
-  font-weight: 700;
-  font-size: 1rem;
-  color: #312e81;
-}
-
-.purchase-invoice-page .pi-card-body {
-  padding: 1.25rem;
-}
-
-/* بطاقة إضافة البنود: القائمة المنسدلة للأصناف تخرج خارج البطاقة ولا تُقصّ */
-.purchase-invoice-page .pi-card.pi-card-autocomplete {
-  overflow: visible;
   position: relative;
+}
+
+/* طبقات البطاقات — القائمة المنسدلة تظهر فوق البطاقة التالية */
+.purchase-invoice-page form > .pi-card-layer-basic {
+  z-index: 40;
+  overflow: visible;
+}
+
+.purchase-invoice-page form > .pi-card-layer-lines {
+  z-index: 30;
+  overflow: visible;
+}
+
+.purchase-invoice-page form > .pi-card-layer-table {
   z-index: 20;
 }
 
-.purchase-invoice-page .pi-card.pi-card-autocomplete .pi-card-body-overflow-visible {
+.purchase-invoice-page form > .pi-card-layer-basic:has(.pi-ac-field:focus-within),
+.purchase-invoice-page form > .pi-card-layer-basic:has(.pi-status-field:focus-within),
+.purchase-invoice-page form > .pi-card-layer-lines:has(.pi-ac-field:focus-within) {
+  z-index: 200;
+}
+
+.purchase-invoice-page .pi-card.pi-card-autocomplete {
   overflow: visible;
+}
+
+.purchase-invoice-page .pi-card-header {
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pi-brand);
+  background: var(--pi-bg);
+  border-bottom: 1px solid var(--pi-border);
+}
+
+.purchase-invoice-page .pi-card-body {
+  padding: 1rem;
+}
+
+.purchase-invoice-page .pi-card-body-overflow-visible,
+.purchase-invoice-page .pi-card-layer-basic .pi-card-body,
+.purchase-invoice-page .pi-card-layer-lines .pi-card-body {
+  overflow: visible;
+}
+
+/* شبكة الحقول */
+.purchase-invoice-page .pi-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+  overflow: visible;
+}
+
+.purchase-invoice-page .pi-field-grid > .form-group,
+.purchase-invoice-page .pi-field-grid-basic > .form-group {
+  min-width: 0;
+}
+
+.purchase-invoice-page .pi-field-grid-basic {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: visible;
+}
+
+.purchase-invoice-page .pi-ac-field {
+  position: relative;
+  z-index: 5;
+}
+
+.purchase-invoice-page .pi-ac-field:focus-within {
+  z-index: 220;
+}
+
+.purchase-invoice-page .pi-ac-field-supplier {
+  z-index: 6;
+}
+
+.purchase-invoice-page .pi-ac-field-shipping {
+  z-index: 5;
+}
+
+.purchase-invoice-page .pi-shipping-party-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.purchase-invoice-page .pi-shipping-party-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.purchase-invoice-page .pi-shipping-party-type {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.purchase-invoice-page .pi-shipping-party-type--company {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.purchase-invoice-page .pi-status-field {
+  position: relative;
+  z-index: 50;
+}
+
+.purchase-invoice-page .pi-status-select {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.purchase-invoice-page .pi-field-grid-divider {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--pi-border);
+}
+
+::ng-deep .pi-status-select-panel {
+  max-height: 320px !important;
+}
+
+::ng-deep .pi-status-select-panel .mat-mdc-option {
+  min-height: 40px;
+  font-size: 0.875rem;
+}
+
+.purchase-invoice-page .pi-serial-field {
+  max-width: 220px;
+  margin-bottom: 0.85rem;
+}
+
+.purchase-invoice-page .pi-date-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.purchase-invoice-page input[type='date'].form-control {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.purchase-invoice-page .pi-field-span-2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 991.98px) {
+  .purchase-invoice-page .pi-field-grid,
+  .purchase-invoice-page .pi-field-grid-basic {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .purchase-invoice-page .pi-field-grid,
+  .purchase-invoice-page .pi-field-grid-basic {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-invoice-page .pi-serial-field {
+    max-width: none;
+  }
+
+  .purchase-invoice-page .pi-field-span-2 {
+    grid-column: span 1;
+  }
+}
+
+/* تسميات وحقول */
+.purchase-invoice-page label,
+.purchase-invoice-page .pi-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.3rem;
+}
+
+.purchase-invoice-page .pi-optional {
+  font-weight: 400;
+  color: var(--pi-muted);
+  font-size: 0.78rem;
+}
+
+.purchase-invoice-page .pi-hint {
+  font-size: 0.75rem;
+  color: var(--pi-muted);
+  margin-top: 0.25rem;
+  display: block;
+  line-height: 1.4;
 }
 
 .purchase-invoice-page .form-control,
 .purchase-invoice-page select.form-control {
+  width: 100%;
   border-radius: 8px;
-  border: 1px solid var(--pi-border);
-  padding: 0.5rem 0.75rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  background-color: #fff;
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: #fff;
   color: var(--pi-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .purchase-invoice-page select.form-control {
   cursor: pointer;
-  background-color: #fff;
+  appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  padding-inline-start: 0.75rem;
   padding-inline-end: 2rem;
-  appearance: none;
 }
 
-html[dir='rtl'] .purchase-invoice-page select.form-control {
-  background-position: left 0.75rem center;
+html[dir='rtl'] .purchase-invoice-page select.form-control,
+html:not([dir]) .purchase-invoice-page select.form-control {
+  background-position: left 0.65rem center;
 }
 
 html[dir='ltr'] .purchase-invoice-page select.form-control {
-  background-position: right 0.75rem center;
-}
-
-html:not([dir]) .purchase-invoice-page select.form-control {
-  background-position: left 0.75rem center;
+  background-position: right 0.65rem center;
 }
 
 .purchase-invoice-page .form-control:focus,
 .purchase-invoice-page select.form-control:focus {
-  border-color: var(--pi-accent);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  border-color: var(--pi-brand);
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.1);
   outline: none;
 }
 
-.purchase-invoice-page label {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--pi-label);
-  margin-bottom: 0.45rem;
-  letter-spacing: 0.01em;
-}
-
-.purchase-invoice-page .pi-label-strong {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--pi-label);
-}
-
-.purchase-invoice-page .pi-optional {
-  font-weight: 600;
-  font-size: 0.85em;
-  color: var(--pi-muted);
-}
-
-.purchase-invoice-page .pi-hint {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--pi-muted);
-  margin-top: 0.35rem;
-  display: block;
-  line-height: 1.45;
-}
-
-.purchase-invoice-page .pi-file-field-label {
-  margin-bottom: 0.35rem;
-}
-
-.purchase-invoice-page .pi-file-row.pi-file-row-inline {
+.purchase-invoice-page .form-group {
   margin-bottom: 0;
-  padding: 0.65rem 0.85rem;
-  min-height: calc(2.5rem + 2px);
-  align-items: center;
 }
 
-@media (max-width: 991.98px) {
-  .purchase-invoice-page .pi-row-basic-line1 .pi-datepicker-wrap {
-    margin-top: 0.5rem;
-  }
+/* autocomplete */
+.purchase-invoice-page .pi-add-line .pi-ac-field {
+  z-index: 35;
 }
 
-/* صف أرقام الفاتورة + إرفاق الصورة */
-.purchase-invoice-page .pi-row-invoice-file {
-  padding: 1rem;
-  margin-top: 0.5rem;
-  background: #f1f5f9;
-  border-radius: var(--pi-radius);
-  border: 1px solid #e2e8f0;
+.purchase-invoice-page .pi-add-line .pi-ac-field:focus-within {
+  z-index: 220;
 }
 
-.purchase-invoice-page .pi-input-emphasis {
-  font-weight: 600;
-  color: var(--pi-text);
-  border-color: #cbd5e1;
-}
-
-.purchase-invoice-page .pi-input-emphasis::placeholder {
-  color: #64748b;
-  font-weight: 500;
-}
-
-.purchase-invoice-page .pi-input-emphasis:focus {
-  border-color: var(--pi-accent);
-}
-
-/* Material datepicker في الصفحة */
-.purchase-invoice-page .pi-datepicker-wrap .mat-mdc-form-field,
-.purchase-invoice-page .pi-datepicker-wrap .mat-form-field {
-  width: 100%;
-}
-
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-form-field-label,
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-mdc-floating-label,
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-mdc-floating-label.mat-mdc-floating-label-floating,
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mdc-floating-label {
-  color: #334155 !important;
-  font-weight: 700 !important;
-}
-
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep input.mat-mdc-input-element,
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep input.mat-input-element {
-  font-weight: 700 !important;
-  color: #0f172a !important;
-}
-
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-mdc-text-field-wrapper,
-.purchase-invoice-page .pi-datepicker-wrap ::ng-deep .mat-form-field-flex {
-  border-radius: 8px;
-  background: #fff;
-}
-
-/* إصلاح ألوان ng-autocomplete + ظهور القائمة فوق بطاقة الجدول */
-.purchase-invoice-page ::ng-deep .ng-autocomplete {
+.purchase-invoice-page ::ng-deep .pi-ac-wrap,
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container {
   width: 100% !important;
-  background: transparent !important;
   position: relative;
-  z-index: 25;
+  overflow: visible !important;
 }
 
-.purchase-invoice-page ::ng-deep .ng-autocomplete .input-container input {
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .input-container input {
   width: 100% !important;
   border-radius: 8px !important;
-  border: 1px solid var(--pi-border) !important;
-  padding: 0.5rem 0.75rem !important;
-  font-size: 0.95rem !important;
-  font-weight: 600 !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 0.5rem 0.65rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
   background: #fff !important;
-  color: #0f172a !important;
+  color: var(--pi-text) !important;
 }
 
-.purchase-invoice-page ::ng-deep .ng-autocomplete .input-container input:focus {
-  border-color: var(--pi-accent) !important;
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12) !important;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .input-container input:focus {
+  border-color: var(--pi-brand) !important;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.1) !important;
   outline: none !important;
 }
 
-.purchase-invoice-page ::ng-deep .ng-autocomplete .suggestions-container {
-  z-index: 11000 !important;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container {
+  z-index: 12000 !important;
   position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  max-height: 260px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   border-radius: 8px !important;
   border: 1px solid var(--pi-border) !important;
-  box-shadow: var(--pi-shadow-lg) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14) !important;
   margin-top: 4px !important;
-  overflow: hidden;
+  background: #fff !important;
 }
 
-.purchase-invoice-page ::ng-deep .ng-autocomplete .suggestions-container ul li {
-  padding: 0.5rem 0.75rem !important;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul {
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
 }
 
-.purchase-invoice-page ::ng-deep .ng-autocomplete .suggestions-container ul li:hover {
-  background: #f1f5f9 !important;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li {
+  padding: 0 !important;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-/* صف إضافة البند */
-.purchase-invoice-page .add-line-items-row {
-  align-items: flex-end;
-  padding: 1rem;
-  background: var(--pi-surface);
-  border-radius: var(--pi-radius);
-  border: 1px dashed var(--pi-border);
-  margin-bottom: 1rem;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li:last-child {
+  border-bottom: none;
 }
 
-.purchase-invoice-page .add-line-items-row .add-line-label {
-  display: block;
-  margin-bottom: 0.35rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: #0f172a;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li a {
+  display: block !important;
+  padding: 0 !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: var(--pi-text) !important;
+  text-decoration: none !important;
+  background: #fff !important;
 }
 
-.purchase-invoice-page .add-line-items-row .add-line-label-actions {
-  visibility: hidden;
-  user-select: none;
-}
-
-.purchase-invoice-page .btn-pi-add {
+.pi-category-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  padding-inline-start: 1rem;
+  text-align: right;
   width: 100%;
-  border: none;
-  border-radius: 8px;
-  padding: 0.55rem 1rem;
+  box-sizing: border-box;
+}
+
+.pi-category-option__name {
   font-weight: 600;
-  font-size: 0.95rem;
-  background: var(--pi-accent);
-  color: #fff;
-  transition: background 0.15s ease, transform 0.05s ease;
+  color: var(--pi-text);
 }
 
-.purchase-invoice-page .btn-pi-add:hover:not(:disabled) {
-  background: var(--pi-accent-hover);
-  color: #fff;
+.purchase-invoice-page ::ng-deep .pi-category-option__name b {
+  font-weight: 700;
+  color: var(--pi-brand);
 }
 
-.purchase-invoice-page .btn-pi-add:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.pi-category-option__meta,
+.pi-category-option__code {
+  font-size: 0.8rem;
 }
 
-/* جدول البنود — ظل فقط بدون z-index حتى لا يغطّي قوائم الـ autocomplete أعلاه */
-.purchase-invoice-page .pi-table-card-front {
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
-  border: 1px solid #cbd5e1;
-  position: relative;
-  z-index: 0;
-}
-
-.purchase-invoice-page .pi-table-responsive {
-  background: #fff;
-}
-
-.purchase-invoice-page .pi-table-wrap {
-  padding: 0;
-  margin-bottom: 1rem;
-}
-
-.purchase-invoice-page .pi-table {
-  margin-bottom: 0;
-  border-collapse: separate;
-  border-spacing: 0;
-  border-radius: 0 0 var(--pi-radius) var(--pi-radius);
-  overflow: hidden;
-  border: none;
-  box-shadow: inset 0 1px 0 #e2e8f0;
-}
-
-.purchase-invoice-page .pi-table thead th {
-  background: linear-gradient(180deg, #4c3d75 0%, var(--pi-primary) 100%);
-  color: #fff;
-  font-weight: 800;
-  font-size: 0.9rem;
-  letter-spacing: 0.02em;
-  padding: 0.85rem 0.7rem;
-  border: none;
-  white-space: nowrap;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-}
-
-.purchase-invoice-page .pi-table tbody td,
-.purchase-invoice-page .pi-table tbody th {
-  padding: 0.75rem 0.65rem;
+.pi-category-option__swatch {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
   vertical-align: middle;
-  border-top: 1px solid #e2e8f0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #0f172a;
-  background: #fff;
 }
 
-.purchase-invoice-page .pi-table tbody tr:hover:not(.pi-empty-row) td,
-.purchase-invoice-page .pi-table tbody tr:hover:not(.pi-empty-row) th {
-  background: #f1f5f9;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li:hover,
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li.selected {
+  background: var(--pi-bg) !important;
 }
 
-.purchase-invoice-page .pi-table tbody tr:last-child td {
-  border-bottom: 1px solid #e2e8f0;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li:hover a,
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .suggestions-container ul li.selected a {
+  background: var(--pi-bg) !important;
 }
 
-/* صف الحالة الفارغة — واضح وليس باهتاً */
-.purchase-invoice-page .pi-table tbody tr.pi-empty-row td.pi-table-empty-msg {
-  text-align: center;
-  padding: 2.25rem 1.25rem !important;
-  font-size: 1.05rem !important;
-  font-weight: 800 !important;
-  line-height: 1.6;
-  color: #0f172a !important;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
-  border-top: none !important;
-  border-bottom: none !important;
-  box-shadow: inset 0 0 0 2px dashed #64748b;
+.purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .input-container .x {
+  top: 50% !important;
+  transform: translateY(-50%);
 }
 
-.purchase-invoice-page .pi-qty-cell {
-  max-width: 140px;
+html[dir='rtl'] .purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .input-container .x {
+  right: auto !important;
+  left: 0.5rem !important;
 }
 
-.purchase-invoice-page .btn-pi-remove {
-  border: none;
-  border-radius: 6px;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.85rem;
-  background: #fef2f2;
-  color: #b91c1c;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.purchase-invoice-page .btn-pi-remove:hover {
-  background: #fee2e2;
+html[dir='ltr'] .purchase-invoice-page ::ng-deep .pi-ac-wrap .autocomplete-container .input-container .x {
+  right: 0.5rem !important;
+  left: auto !important;
 }
 
 /* رفع ملف */
-.purchase-invoice-page .pi-file-row {
+.purchase-invoice-page .pi-file-inline {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: var(--pi-surface);
-  border-radius: var(--pi-radius);
-  border: 1px solid var(--pi-border);
-  margin-bottom: 1rem;
-}
-
-.purchase-invoice-page .pi-file-row label.pi-file-label {
-  display: inline-flex;
-  align-items: center;
   gap: 0.5rem;
-  padding: 0.45rem 1rem;
+  min-height: 38px;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid var(--pi-border);
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--pi-primary);
-  margin-bottom: 0;
 }
 
-.purchase-invoice-page .pi-file-row input[type='file'] {
+.purchase-invoice-page .pi-file-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  background: var(--pi-bg);
+  border: 1px solid var(--pi-border);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pi-brand);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.purchase-invoice-page .pi-file-label input[type='file'] {
   position: absolute;
   width: 0.1px;
   height: 0.1px;
@@ -424,79 +461,214 @@ html:not([dir]) .purchase-invoice-page select.form-control {
 }
 
 .purchase-invoice-page .pi-file-name {
-  margin-inline-start: 0.75rem;
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
   color: var(--pi-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* الملخص والأزرار */
-.purchase-invoice-page .pi-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  padding: 1rem;
-  background: var(--pi-surface);
-  border-radius: var(--pi-radius);
-  border: 1px solid var(--pi-border);
-  margin-bottom: 1rem;
+/* صف إضافة البند */
+.purchase-invoice-page .pi-add-line {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
 }
 
-.purchase-invoice-page .pi-summary .form-group {
-  margin-bottom: 0;
-  min-width: 160px;
+@media (max-width: 767.98px) {
+  .purchase-invoice-page .pi-add-line {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .purchase-invoice-page .pi-add-line .pi-add-line-btn {
+    grid-column: 1 / -1;
+  }
 }
 
-.purchase-invoice-page .pi-summary .pi-due {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--pi-accent);
-  margin: 0;
-  padding-top: 0.25rem;
-}
-
-.purchase-invoice-page .pi-cost-card.card {
-  border-radius: var(--pi-radius);
-  border-color: var(--pi-border);
-  box-shadow: var(--pi-shadow);
-}
-
-.purchase-invoice-page .pi-cost-card .card-header {
-  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+.purchase-invoice-page .btn-pi-add {
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
   font-weight: 600;
-  color: var(--pi-primary);
-  border-bottom-color: var(--pi-border);
+  font-size: 0.875rem;
+  background: var(--pi-brand);
+  color: #fff;
+  white-space: nowrap;
+  min-height: 38px;
+}
+
+.purchase-invoice-page .btn-pi-add:hover:not(:disabled) {
+  background: var(--pi-brand-hover);
+}
+
+.purchase-invoice-page .btn-pi-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* جدول */
+.purchase-invoice-page .pi-table-wrap {
+  position: relative;
+}
+
+.purchase-invoice-page .pi-table {
+  margin: 0;
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.purchase-invoice-page .pi-table thead th {
+  background: var(--pi-bg);
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--pi-border);
+  white-space: nowrap;
+}
+
+.purchase-invoice-page .pi-table tbody td,
+.purchase-invoice-page .pi-table tbody th {
+  padding: 0.6rem 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9;
+  font-weight: 500;
+}
+
+.purchase-invoice-page .pi-table tbody tr:last-child td,
+.purchase-invoice-page .pi-table tbody tr:last-child th {
+  border-bottom: none;
+}
+
+.purchase-invoice-page .pi-table tbody tr:hover:not(.pi-empty-row) td,
+.purchase-invoice-page .pi-table tbody tr:hover:not(.pi-empty-row) th {
+  background: #fafafa;
+}
+
+.purchase-invoice-page .pi-table-empty-msg {
+  text-align: center;
+  padding: 2rem 1rem !important;
+  color: var(--pi-muted) !important;
+  font-size: 0.875rem !important;
+  background: #fff !important;
+}
+
+.purchase-invoice-page .pi-tracking-details {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.875rem;
+  color: #334155;
+  min-width: 220px;
+}
+
+.purchase-invoice-page .pi-qty-cell {
+  max-width: 120px;
+}
+
+.purchase-invoice-page .btn-pi-remove {
+  border: none;
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.8125rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.purchase-invoice-page .btn-pi-remove:hover {
+  background: #fee2e2;
+}
+
+/* ملخص مالي */
+.purchase-invoice-page .pi-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+@media (max-width: 767.98px) {
+  .purchase-invoice-page .pi-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.purchase-invoice-page .pi-due {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--pi-brand);
+  margin: 0;
+  padding-top: 0.35rem;
+}
+
+.purchase-invoice-page .pi-cost-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--pi-border);
+}
+
+.purchase-invoice-page .pi-cost-item {
+  padding: 0.65rem 0.75rem;
+  background: var(--pi-bg);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+}
+
+.purchase-invoice-page .pi-cost-item strong {
+  display: block;
+  color: var(--pi-muted);
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.purchase-invoice-page .pi-cost-item p {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 767.98px) {
+  .purchase-invoice-page .pi-cost-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* زر الحفظ */
+.purchase-invoice-page .pi-form-actions {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.purchase-invoice-page .pi-submit-hint {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
 }
 
 .purchase-invoice-page .btn-pi-submit {
   border: none;
-  border-radius: 10px;
-  padding: 0.65rem 2rem;
+  border-radius: 8px;
+  padding: 0.55rem 1.75rem;
   font-weight: 600;
-  font-size: 1rem;
-  background: var(--pi-primary);
+  font-size: 0.9375rem;
+  background: var(--pi-brand);
   color: #fff;
-  min-width: 140px;
-  transition: background 0.15s ease;
+  min-width: 130px;
 }
 
 .purchase-invoice-page .btn-pi-submit:hover:not(:disabled) {
-  background: var(--pi-primary-hover);
-  color: #fff;
+  background: var(--pi-brand-hover);
 }
 
 .purchase-invoice-page .btn-pi-submit:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .purchase-invoice-page .alert {
   border-radius: var(--pi-radius);
-}
-
-i {
-  cursor: pointer;
-}
-
-.fa-solid {
-  cursor: auto;
+  font-size: 0.875rem;
 }

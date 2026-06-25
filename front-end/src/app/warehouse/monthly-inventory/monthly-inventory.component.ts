@@ -1,9 +1,10 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { Location } from '@angular/common';
 import Swal from 'sweetalert2';
 import { Subscription } from 'rxjs';
+import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-rows';
 
 /** صف جدول الجرد الشهري من واجهة الـ API */
 export interface MonthlyInventoryRow {
@@ -26,6 +27,7 @@ export interface MonthlyInventoryRow {
 export class MonthlyInventoryComponent implements OnInit, OnDestroy {
 
   warehouse = '';
+  warehouseOptions = WAREHOUSE_STOCK_ROWS.map((row) => row.nameAr);
   categories: MonthlyInventoryRow[] = [];
   prevMonthValue!: string;
   month!: number;
@@ -39,7 +41,12 @@ export class MonthlyInventoryComponent implements OnInit, OnDestroy {
 
   private querySub?: Subscription;
 
-  constructor(private category: CategoryService, private route: ActivatedRoute, private _location: Location) {}
+  constructor(
+    private category: CategoryService,
+    private route: ActivatedRoute,
+    private router: Router,
+    private _location: Location
+  ) {}
 
 
   ngOnInit(): void {
@@ -60,7 +67,21 @@ export class MonthlyInventoryComponent implements OnInit, OnDestroy {
         this.prevMonthValue = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
       }
       this.page = 0;
-      this.getData();
+      if (this.warehouse) {
+        this.getData();
+      } else {
+        this.categories = [];
+        this.length = 0;
+      }
+    });
+  }
+
+  onWarehouseChange(event: Event): void {
+    const name = (event.target as HTMLSelectElement).value;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { warehouse: name || null },
+      queryParamsHandling: 'merge',
     });
   }
 
@@ -80,6 +101,11 @@ export class MonthlyInventoryComponent implements OnInit, OnDestroy {
   }
 
   getData(){
+    if (!this.warehouse) {
+      this.categories = [];
+      this.length = 0;
+      return;
+    }
     this.category.monthlyInventoryDetails(this.warehouse, this.pageSize,this.page+1 , this.prevMonthValue , this.param).subscribe((res:any)=>{
       const rows = res?.data;
       this.categories = Array.isArray(rows) ? rows as MonthlyInventoryRow[] : [];

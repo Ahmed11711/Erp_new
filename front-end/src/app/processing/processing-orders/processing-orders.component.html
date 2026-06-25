@@ -1,0 +1,212 @@
+<div class="proc-page">
+  <header class="proc-toolbar">
+    <div>
+      <h1>إذونات الصرف</h1>
+      <p class="sub">صرف مواد للموردين / المعالجين — يُرحّل تلقائياً ويُسجّل المبلغ على ذمة المورد</p>
+    </div>
+    <button type="button" class="btn-add" (click)="openForm()">
+      <span aria-hidden="true">+</span> إذن صرف جديد
+    </button>
+  </header>
+
+  <section class="voucher-form" *ngIf="showForm">
+    <div class="voucher-form__head">
+      <div class="voucher-form__meta-row">
+        <div class="voucher-form__title-row">
+          <span class="voucher-form__label">رقم الفاتورة</span>
+          <strong class="voucher-form__number">{{ nextDispatchNumber || '…' }}</strong>
+        </div>
+        <div class="voucher-form__title-row">
+          <span class="voucher-form__label">التاريخ</span>
+          <input class="voucher-form__date" type="date" [(ngModel)]="form.dispatch_date" />
+        </div>
+      </div>
+      <button type="button" class="btn-icon-close" (click)="closeForm()" aria-label="إغلاق">×</button>
+    </div>
+
+    <p class="form-hint alert-warn" *ngIf="vendorsError && !vendorsLoading">{{ vendorsError }}</p>
+
+    <fieldset class="voucher-fieldset">
+      <legend>نوع الصرف</legend>
+      <label class="radio-pill" *ngFor="let t of dispatchTypes">
+        <input type="radio" name="dispatch_type" [value]="t.value" [(ngModel)]="form.dispatch_type" />
+        <span>{{ t.label }}</span>
+      </label>
+    </fieldset>
+
+    <div class="voucher-grid">
+      <div class="voucher-field voucher-field--wide">
+        <label class="field-label">يصرف إلى (المورد) <span class="req">*</span></label>
+        <div *ngIf="selectedVendor" class="selected-chip">
+          <strong>{{ selectedVendor.supplier_name }}</strong>
+          <button type="button" class="chip-clear" (click)="clearVendor()">تغيير</button>
+        </div>
+        <ng-autocomplete
+          *ngIf="!selectedVendor && !vendorsLoading"
+          class="proc-ac"
+          [data]="vendors"
+          [searchKeyword]="vendorKeyword"
+          [minQueryLength]="0"
+          [debounceTime]="150"
+          notFoundText="لا يوجد مورد بهذا الاسم"
+          placeholder="ابحث عن أي مورد…"
+          (selected)="onVendorSelected($event)"
+          (inputCleared)="clearVendor()"
+          [itemTemplate]="vendorItemTpl"
+          [notFoundTemplate]="notFoundTpl"
+        ></ng-autocomplete>
+      </div>
+
+      <div class="voucher-field voucher-field--wide">
+        <label class="field-label">مندوب الشحن</label>
+        <div class="rep-toggle">
+          <button type="button" class="rep-btn" [class.active]="form.representative_type === 'internal'" (click)="setRepType('internal')">مندوب بالنظام</button>
+          <button type="button" class="rep-btn" [class.active]="form.representative_type === 'external'" (click)="setRepType('external')">مندوب خارجي</button>
+          <button type="button" class="rep-btn" [class.active]="!form.representative_type" (click)="setRepType(null)">بدون</button>
+        </div>
+        <div *ngIf="form.representative_type === 'internal'" class="rep-body">
+          <div *ngIf="selectedRepresentative" class="selected-chip selected-chip--sm">
+            <span>{{ selectedRepresentative.name }}</span>
+            <button type="button" class="chip-clear" (click)="clearRepresentative()">×</button>
+          </div>
+          <ng-autocomplete
+            *ngIf="!selectedRepresentative"
+            class="proc-ac"
+            [data]="representatives"
+            [searchKeyword]="representativeKeyword"
+            [minQueryLength]="0"
+            placeholder="اختر مندوباً من قائمة المناديب…"
+            (selected)="onRepresentativeSelected($event)"
+            [itemTemplate]="representativeItemTpl"
+            [notFoundTemplate]="notFoundTpl"
+          ></ng-autocomplete>
+        </div>
+        <input
+          *ngIf="form.representative_type === 'external'"
+          class="field-control"
+          type="text"
+          [(ngModel)]="form.external_representative_name"
+          placeholder="اسم المندوب الخارجي (نص حر)"
+        />
+      </div>
+    </div>
+
+    <div class="voucher-table-wrap">
+      <table class="voucher-table">
+        <thead>
+          <tr>
+            <th>اسم الصنف</th>
+            <th class="col-num">الكمية</th>
+            <th class="col-num">المبلغ</th>
+            <th class="col-act"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let line of form.lines; let i = index">
+            <td>
+              <div *ngIf="line.category_id" class="selected-chip selected-chip--sm">
+                <span>{{ line.category_label }}</span>
+                <button type="button" class="chip-clear" (click)="clearLineCategory(line)">×</button>
+              </div>
+              <ng-autocomplete
+                *ngIf="!line.category_id"
+                class="proc-ac proc-ac--table"
+                [data]="categories"
+                [searchKeyword]="categoryKeyword"
+                [minQueryLength]="0"
+                notFoundText="لا يوجد صنف"
+                placeholder="ابحث عن الصنف…"
+                (selected)="onLineCategorySelected(line, $event)"
+                [itemTemplate]="catItemTpl"
+                [notFoundTemplate]="notFoundTpl"
+              ></ng-autocomplete>
+            </td>
+            <td class="col-num">
+              <input class="field-control field-control--sm" type="number" min="0" step="0.0001" [(ngModel)]="line.ordered_qty" placeholder="0" />
+            </td>
+            <td class="col-num">
+              <input class="field-control field-control--sm" type="number" min="0" step="0.01" [(ngModel)]="line.expected_service_amount" placeholder="0.00" />
+            </td>
+            <td class="col-act">
+              <button type="button" class="btn-row-remove" *ngIf="form.lines.length > 1" (click)="removeLine(i)">×</button>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr class="totals-row">
+            <td><strong>الإجمالي</strong></td>
+            <td class="col-num"><strong>{{ totalQty() | number:'1.0-4' }}</strong></td>
+            <td class="col-num"><strong>{{ totalAmount() | number:'1.2-2' }}</strong></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <button type="button" class="btn-outline-sm" (click)="addLine()">+ إضافة سطر</button>
+
+    <div class="voucher-footer">
+      <h2 class="voucher-footer__title">فاتورة صرف</h2>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" (click)="closeForm()">إلغاء</button>
+        <button type="button" class="btn-primary" [disabled]="saving || vendorsLoading" (click)="save()">
+          {{ saving ? 'جاري الترحيل...' : 'حفظ وترحيل إذن الصرف' }}
+        </button>
+      </div>
+    </div>
+
+    <ng-template #vendorItemTpl let-item>
+      <div class="ac-option">
+        <span class="ac-option__title">{{ item.supplier_name }}</span>
+        <span class="ac-option__meta" *ngIf="item.supplierType?.supplier_type">{{ item.supplierType.supplier_type }}</span>
+      </div>
+    </ng-template>
+    <ng-template #catItemTpl let-item>
+      <div class="ac-option">
+        <span class="ac-option__title">{{ item.category_name }}</span>
+        <span class="ac-option__meta">متاح: {{ item.quantity | number:'1.0-4' }}</span>
+      </div>
+    </ng-template>
+    <ng-template #representativeItemTpl let-item>
+      <div class="ac-option">
+        <span class="ac-option__title">{{ item.name }}</span>
+      </div>
+    </ng-template>
+    <ng-template #notFoundTpl let-notFound>
+      <div class="ac-not-found">{{ notFound }}</div>
+    </ng-template>
+  </section>
+
+  <div class="panel loading-panel" *ngIf="loading">
+    <span class="spinner"></span> جاري التحميل...
+  </div>
+
+  <div class="panel orders-panel" *ngIf="!loading && orders.length">
+    <table class="proc-table">
+      <thead>
+        <tr>
+          <th>رقم الإذن</th>
+          <th>المورد</th>
+          <th>الحالة</th>
+          <th>التاريخ</th>
+          <th>المبلغ</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let o of orders">
+          <td><strong>{{ dispatchNumber(o) }}</strong></td>
+          <td>{{ o.supplier?.supplier_name }}</td>
+          <td><span class="badge" [ngClass]="statusClass(o.status)">{{ statusLabels[o.status] || o.status }}</span></td>
+          <td>{{ o.expected_return_date || o.created_at | date:'yyyy-MM-dd' }}</td>
+          <td>{{ o.expected_service_total | number:'1.2-2' }}</td>
+          <td class="actions">
+            <button type="button" class="btn-text" (click)="openDetail(o)">تفاصيل / استلام</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p *ngIf="!loading && !orders.length && !showForm" class="empty-state">لا توجد إذونات صرف بعد. اضغط «إذن صرف جديد» للبدء.</p>
+</div>

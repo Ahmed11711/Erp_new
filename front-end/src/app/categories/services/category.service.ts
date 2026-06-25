@@ -128,4 +128,53 @@ export class CategoryService {
   return this.http.post(`${environment.Url}/categories/${id}/promote-to-finished`, {});
  }
 
+ getCategoryLinks(id: number) {
+  return this.http.get(`${environment.Url}/categories/${id}/links`);
+ }
+
+ previewCategoryMerge(sourceId: number, targetId: number) {
+  return this.http.post(`${environment.Url}/categories/merge-preview`, {
+   source_id: sourceId,
+   target_id: targetId,
+  });
+ }
+
+ mergeCategory(sourceId: number, targetId: number) {
+  return this.http.post(`${environment.Url}/categories/merge`, {
+   source_id: sourceId,
+   target_id: targetId,
+  });
+ }
+
+ /** مجموعات الأصناف المكررة (نفس الاسم داخل نفس المخزن). */
+ duplicateCategoryGroups(stockId?: number) {
+  let url = `${environment.Url}/categories/duplicate-groups`;
+  if (stockId) {
+   url += `?stock_id=${stockId}`;
+  }
+  return this.http.get(url);
+ }
+
+ /** دمج أكثر من صنف مصدر في صنف واحد محتفظ به. */
+ mergeCategoriesBulk(targetId: number, sourceIds: number[]) {
+  return this.http.post(`${environment.Url}/categories/merge-bulk`, {
+   target_id: targetId,
+   source_ids: sourceIds,
+  });
+ }
+
+ /** معاينة حذف قسري لأصناف (مع عدّ الارتباطات) — Admin فقط. */
+ previewForceDeleteCategories(payload: { category_ids?: number[]; warehouse?: string }) {
+  return this.http.post(`${environment.Url}/categories/force-delete-preview`, payload);
+ }
+
+ /** حذف قسري لأصناف مع كل ارتباطاتها — Admin فقط. */
+ forceDeleteCategories(payload: {
+  category_ids?: number[];
+  warehouse?: string;
+  confirm_phrase: string;
+ }) {
+  return this.http.post(`${environment.Url}/categories/force-delete-bulk`, payload);
+ }
+
 }

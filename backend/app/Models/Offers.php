@@ -14,6 +14,8 @@ class Offers extends Model
         'user_id',
         'offer',
         'quote',
+        'contact_person',
+        'client_phone',
         'dateFrom',
         'dateTo',
         'subtotal',

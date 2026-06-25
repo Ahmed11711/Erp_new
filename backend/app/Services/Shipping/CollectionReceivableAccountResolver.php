@@ -7,12 +7,18 @@ use App\Models\CollectionCompany;
 use App\Models\Order;
 use App\Models\OrderDetails;
 use App\Models\ShippingCompany;
+use App\Services\Accounting\ReceivableTreeAccountGuard;
 
 /**
  * يحدد حساب الذمم (شجرة الحسابات) لجهة التحصيل من الربط الجديد أو legacy.
  */
 class CollectionReceivableAccountResolver
 {
+    public function __construct(
+        private readonly ReceivableTreeAccountGuard $receivableGuard,
+    ) {
+    }
+
     public function receivableAccountIdForOrderDetails(?OrderDetails $od): ?int
     {
         if (! $od) {
@@ -32,7 +38,9 @@ class CollectionReceivableAccountResolver
         if ($od->collection_company_id) {
             $legacy = ShippingCompany::find($od->collection_company_id);
 
-            return $legacy?->receivable_tree_account_id ? (int) $legacy->receivable_tree_account_id : null;
+            return $this->receivableGuard->sanitizeReceivableAccountId(
+                $legacy?->receivable_tree_account_id ? (int) $legacy->receivable_tree_account_id : null
+            );
         }
 
         return null;
@@ -66,7 +74,7 @@ class CollectionReceivableAccountResolver
             return null;
         }
         if ($cc->receivable_tree_account_id) {
-            return (int) $cc->receivable_tree_account_id;
+            return $this->receivableGuard->sanitizeReceivableAccountId((int) $cc->receivable_tree_account_id);
         }
 
         if ($cc->linked_shipping_company_id) {
@@ -80,6 +88,8 @@ class CollectionReceivableAccountResolver
     {
         $sc = ShippingCompany::find($id);
 
-        return $sc?->receivable_tree_account_id ? (int) $sc->receivable_tree_account_id : null;
+        return $this->receivableGuard->sanitizeReceivableAccountId(
+            $sc?->receivable_tree_account_id ? (int) $sc->receivable_tree_account_id : null
+        );
     }
 }

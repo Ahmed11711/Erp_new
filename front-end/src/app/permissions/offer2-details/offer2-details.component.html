@@ -21,10 +21,11 @@
         <div class="mx-4 mt-5">
           <h4 style="text-align: start;"> Date :  {{offer?.dateFrom}} </h4>
           <h4 style="text-align: start;">Valid till :    {{offer?.dateTo}} </h4>
-          <h4 style="display: flex; align-items: center; gap: 10px; text-align: start;">
-            Quote for:
-            <input readonly type="text" [value]="offer?.quote || ''" >
-          </h4>
+          <div class="quote-client-info" *ngIf="offer?.quote || offer?.contact_person || offer?.client_phone">
+            <h4 style="text-align: start;" class="my-1" *ngIf="offer?.quote">Quote for : {{offer?.quote}}</h4>
+            <h4 style="text-align: start;" class="my-1" *ngIf="offer?.contact_person">Contact Person : {{offer?.contact_person}}</h4>
+            <h4 style="text-align: start;" class="my-1" *ngIf="offer?.client_phone">Phone : {{offer?.client_phone}}</h4>
+          </div>
           <h4 style="text-align: start;" *ngIf="offer?.title">This quotation for {{offer?.title}} </h4>
         </div>
 

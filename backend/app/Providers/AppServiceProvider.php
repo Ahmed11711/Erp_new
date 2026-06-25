@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use App\Models\Order;
 use App\Models\OrderDetails;
+use App\Models\TreeAccount;
 use Doctrine\DBAL\Types\Type;
 
 use App\Observers\OrderDetailsObserver;
 use App\Observers\OrderObserver;
+use App\Observers\TreeAccountObserver;
 use App\Repositories\AccountTree\AccountTreeRepository;
 use App\Repositories\AccountTree\AccountTreeRepositoryInterface;
 use Doctrine\DBAL\Types\StringType;
@@ -51,6 +53,8 @@ class AppServiceProvider extends ServiceProvider
 
             Order::observe(OrderObserver::class);
             OrderDetails::observe(OrderDetailsObserver::class);
-    }
+        }
+
+        TreeAccount::observe(TreeAccountObserver::class);
     }
 }

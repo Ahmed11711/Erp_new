@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\BaseController\BaseController;
 use App\Http\Resources\V2\TreeAccount\TreeAccountResource;
+use App\Http\Resources\V2\TreeAccount\TreeAccountAuditResource;
+use App\Models\TreeAccountAudit;
 use App\Http\Requests\V2\TreeAccount\TreeAccountStoreRequest;
 use App\Http\Requests\V2\TreeAccount\TreeAccountUpdateRequest;
 use App\Repositories\TreeAccount\TreeAccountRepositoryInterface;
@@ -229,7 +231,7 @@ class TreeAccountController extends BaseController
             });
 
             return $this->successResponse(
-                new $this->resourceClass(TreeAccount::find($validated['id'])),
+                new $this->resourceClass(TreeAccount::with(['createdByUser:id,name', 'updatedByUser:id,name'])->find($validated['id'])),
                 'Account created successfully',
                 201
             );
@@ -253,11 +255,31 @@ class TreeAccountController extends BaseController
          if (!$record) {
             return $this->errorResponse("Record not found", 404);
         }
-        $record->load(['children']);
+        $record->load(['children', 'createdByUser:id,name', 'updatedByUser:id,name']);
         // Log::alert("Tree Account Show with Children", ['account'=>$record]);
         return $this->successResponse(
             new TreeAccountResource($record),
             'Tree account with parent and children retrieved successfully'
+        );
+    }
+
+    public function audits(int $id): JsonResponse
+    {
+        $record = $this->repository->find($id);
+        if (! $record) {
+            return $this->errorResponse('Record not found', 404);
+        }
+
+        $audits = TreeAccountAudit::query()
+            ->with('performer:id,name')
+            ->where('tree_account_id', $id)
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+
+        return $this->successResponse(
+            TreeAccountAuditResource::collection($audits),
+            'Tree account audit log retrieved successfully'
         );
     }
     public function destroy($id): JsonResponse

@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content class="rollback-dialog-content" [formGroup]="form">
+  <div class="status-row">
+    <div>
+      <span class="label">الحالة الحالية</span>
+      <strong>{{ data.currentStatus }}</strong>
+    </div>
+    <div>
+      <span class="label">الحالة المستهدفة</span>
+      <strong>{{ preview?.target_status || '—' }}</strong>
+    </div>
+  </div>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>الهدف</mat-label>
+    <mat-select formControlName="target">
+      <mat-option value="confirmed">طلب مؤكد</mat-option>
+      <mat-option value="new">طلب جديد</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>سبب إعادة الفتح *</mat-label>
+    <textarea matInput rows="3" formControlName="reason" placeholder="أدخل سبباً واضحاً…"></textarea>
+    <mat-error *ngIf="form.controls.reason.hasError('required')">السبب مطلوب</mat-error>
+    <mat-error *ngIf="form.controls.reason.hasError('minlength')">3 أحرف على الأقل</mat-error>
+  </mat-form-field>
+
+  <section class="ops-section">
+    <h3>العمليات التي سيتم عكسها</h3>
+    <p *ngIf="loadingPreview" class="muted">جاري التحميل…</p>
+    <p *ngIf="loadError" class="error-text">{{ loadError }}</p>
+    <ul *ngIf="!loadingPreview && preview?.operations?.length" class="ops-list">
+      <li *ngFor="let op of preview.operations">
+        <mat-checkbox [checked]="op.checked" disabled>{{ op.label }}</mat-checkbox>
+      </li>
+    </ul>
+  </section>
+
+  <mat-checkbox formControlName="confirmCheck" color="warn">
+    أؤكد أنني راجعت العمليات وأريد تنفيذ إعادة الفتح
+  </mat-checkbox>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="onClose()" [disabled]="submitting">إلغاء</button>
+  <button mat-raised-button color="warn" type="button" (click)="submit()" [disabled]="submitting || !form.valid">
+    {{ submitting ? 'جاري التنفيذ…' : 'تنفيذ إعادة الفتح' }}
+  </button>
+</mat-dialog-actions>

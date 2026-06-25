@@ -9,9 +9,9 @@ use App\Support\ArabicTextNormalizer;
 /**
  * During manufacturing, map a BOM line to the concrete stock row to issue.
  *
- * - Non color-following materials: the BOM item_id is consumed as stored.
- * - Color-following master items (supports_color): issue the child row whose
- *   color_id matches the finished product / production run color.
+ * - Non color-following materials (e.g. دمور, fasteners): always issue the base/master SKU.
+ * - Color-following master items (e.g. fabrics): issue the child row whose color_id
+ *   matches the finished product / production run color.
  */
 final class ManufacturingConsumptionResolver
 {
@@ -59,18 +59,24 @@ final class ManufacturingConsumptionResolver
      */
     public function resolveForProduction(Item $bomLineItem, ?int $productionColorId): Item
     {
-        $bomLineItem->loadMissing(['parentItem']);
+        $baseId = $bomLineItem->parent_item_id
+            ? (int) $bomLineItem->parent_item_id
+            : (int) $bomLineItem->id;
 
-        $base = $bomLineItem->parent_item_id
-            ? ($bomLineItem->parentItem ?? Item::query()->findOrFail((int) $bomLineItem->parent_item_id))
-            : $bomLineItem;
+        /** @var Item $base */
+        $base = Item::query()->findOrFail($baseId);
 
-        if (! $base->supports_color) {
-            return $bomLineItem;
+        $followsColor = SupportsColorEstimator::followsProductionColor(
+            (string) ($base->category_name ?? ''),
+            (bool) $base->supports_color
+        );
+
+        if (! $followsColor) {
+            return $base;
         }
 
         if ($productionColorId === null) {
-            return $bomLineItem;
+            return $base;
         }
 
         $child = Item::query()

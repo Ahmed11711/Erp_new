@@ -53,6 +53,11 @@ class Expense extends Model
         return $this->belongsTo(ExpenseKind::class);
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function lines()
     {
         return $this->hasMany(ExpenseLine::class)->orderBy('sort_order');

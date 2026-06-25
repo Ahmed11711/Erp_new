@@ -91,12 +91,35 @@ class SalesOrderAccountingTest extends TestCase
             'credit_balance' => 0,
         ]);
 
+        $cashParent = TreeAccount::create([
+            'code' => $p . '1000200',
+            'name' => 'النقدية',
+            'type' => 'asset',
+            'level' => 3,
+            'parent_id' => $root->id,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
         $this->bankAcc = TreeAccount::create([
             'code' => $p . '1000211',
             'name' => 'خزينة الشركة',
             'type' => 'asset',
             'level' => 4,
-            'parent_id' => $root->id,
+            'parent_id' => $cashParent->id,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
+        TreeAccount::create([
+            'code' => $p . '1000212',
+            'name' => 'مقبوضات بانتظار التسجيل',
+            'type' => 'asset',
+            'level' => 4,
+            'parent_id' => $cashParent->id,
+            'detail_type' => 'unallocated_prepaid_receipts',
             'balance' => 0,
             'debit_balance' => 0,
             'credit_balance' => 0,
@@ -268,6 +291,95 @@ class SalesOrderAccountingTest extends TestCase
         // Net customer balance = 1200 - 500 = 700
         $customerBalance = $customerDebit - $customerCredit;
         $this->assertEquals(700, $customerBalance, 'Customer remaining balance should be 700');
+    }
+
+    /** @test */
+    public function prepaid_increase_posts_single_cash_journal_not_duplicate(): void
+    {
+        $service = app(SalesOrderAccountingService::class);
+
+        $order = $this->createTestOrder(
+            productTotal: 1000,
+            shippingRevenue: 200,
+            prepaidAmount: 0,
+            discount: 0,
+            bankId: $this->bank->id,
+            prepaidPaymentType: null,
+        );
+
+        $service->recordInitialOrderRecognition($order);
+
+        $increment = 140.0;
+        request()->merge(['payment_type' => 'bank', 'bank_id' => $this->bank->id]);
+        $order->prepaid_amount = $increment;
+        $order->net_total = (float) $order->net_total - $increment;
+        $order->save();
+
+        $bankDebits = (float) AccountEntry::query()
+            ->where('tree_account_id', $this->bankAcc->id)
+            ->where('order_id', $order->id)
+            ->sum('debit');
+
+        $this->assertEquals(
+            $increment,
+            round($bankDebits, 2),
+            'Bank should be debited once for the prepaid increase'
+        );
+
+        $this->assertSame(
+            1,
+            AccountEntry::query()
+                ->where('order_id', $order->id)
+                ->where('entry_batch_code', 'like', 'PARTCOLLECT-' . $order->id . '-%')
+                ->where('debit', '>', 0)
+                ->count()
+        );
+
+        $this->assertSame(
+            0,
+            AccountEntry::query()
+                ->where('order_id', $order->id)
+                ->where('entry_batch_code', 'like', 'ORD-PREPAID-' . $order->id . '-%')
+                ->where('debit', '>', 0)
+                ->count(),
+            'ORD-PREPAID must not duplicate PARTCOLLECT when only prepaid_amount changes'
+        );
+    }
+
+    /** @test */
+    public function pending_prepaid_reduces_customer_balance_without_cash_journal()
+    {
+        $service = app(SalesOrderAccountingService::class);
+
+        $order = $this->createTestOrder(
+            productTotal: 1000,
+            shippingRevenue: 200,
+            prepaidAmount: 500,
+            discount: 0,
+            bankId: null,
+            prepaidPaymentType: 'pending'
+        );
+
+        $service->recordInitialOrderRecognition($order);
+
+        $customerEntries = AccountEntry::where('tree_account_id', $this->customerAcc->id)->get();
+        $customerDebit = $customerEntries->sum('debit');
+        $customerCredit = $customerEntries->sum('credit');
+        $customerBalance = $customerDebit - $customerCredit;
+
+        $this->assertEquals(1200, $customerDebit);
+        $this->assertEquals(500, $customerCredit);
+        $this->assertEquals(700, $customerBalance);
+
+        $cashPrepaidEntries = AccountEntry::where('order_id', $order->id)
+            ->where('entry_batch_code', 'like', 'ORD-PREPAID-' . $order->id . '-%')
+            ->count();
+        $this->assertSame(0, $cashPrepaidEntries);
+
+        $pendingEntries = AccountEntry::where('order_id', $order->id)
+            ->where('entry_batch_code', 'like', 'ORD-PREPAID-PENDING-' . $order->id . '-%')
+            ->count();
+        $this->assertGreaterThan(0, $pendingEntries);
     }
 
     /** @test */
@@ -562,7 +674,8 @@ class SalesOrderAccountingTest extends TestCase
         float $shippingRevenue,
         float $prepaidAmount,
         float $discount,
-        ?int $bankId = null
+        ?int $bankId = null,
+        ?string $prepaidPaymentType = null
     ): Order {
         $totalInvoice = $productTotal + $shippingRevenue;
         // net_total = total_invoice - prepaid - discount (matches frontend formula)
@@ -576,7 +689,8 @@ class SalesOrderAccountingTest extends TestCase
             $prepaidAmount,
             $discount,
             $netTotal,
-            $bankId
+            $bankId,
+            $prepaidPaymentType
         ) {
             return Order::create([
                 'customer_name' => 'عميل تجريبي',
@@ -598,6 +712,7 @@ class SalesOrderAccountingTest extends TestCase
                 'discount' => $discount,
                 'net_total' => $netTotal,
                 'bank_id' => $bankId,
+                'prepaid_payment_type' => $prepaidPaymentType,
                 'order_status' => 'طلب جديد',
             ]);
         });

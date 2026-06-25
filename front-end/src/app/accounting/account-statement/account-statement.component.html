@@ -90,6 +90,7 @@
         <thead class="bg-dark text-white">
           <th>التاريخ</th>
           <th>البيان / الشرح</th>
+          <th>المستخدم</th>
           <th class="text-success">مدين</th>
           <th class="text-danger">دائن</th>
           <th>الرصيد المتحرك</th>
@@ -98,6 +99,7 @@
           <tr *ngFor="let entry of entries">
             <td dir="ltr">{{ (entry.entry_date || entry.created_at) | date:'dd/MM/yyyy' }} <span class="text-muted small">{{ entry.created_at | date:'HH:mm' }}</span></td>
             <td>{{ entry.description }}</td>
+            <td>{{ entry.user_name || '—' }}</td>
             <td class="text-success">{{ entry.debit > 0 ? (entry.debit | number:'1.2-2') : '-' }}</td>
             <td class="text-danger">{{ entry.credit > 0 ? (entry.credit | number:'1.2-2') : '-' }}</td>
             <td style="direction: ltr;">{{ entry.running_balance | number:'1.2-2' }}</td>
@@ -105,7 +107,7 @@
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="2">الإجمالي</td>
+            <td colspan="3">الإجمالي</td>
             <td class="text-success">{{ totalDebit | number:'1.2-2' }}</td>
             <td class="text-danger">{{ totalCredit | number:'1.2-2' }}</td>
             <td style="direction: ltr;">{{ closingBalance | number:'1.2-2' }}</td>

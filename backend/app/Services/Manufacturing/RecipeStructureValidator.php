@@ -11,6 +11,10 @@ use App\Models\Recipe;
  */
 final class RecipeStructureValidator
 {
+    private const RAW_WAREHOUSE = 'مخزن مواد خام';
+    private const WIP_WAREHOUSE = 'مخزن منتج تحت التشغيل';
+    private const FINISHED_WAREHOUSE = 'مخزن منتج تام';
+
     /**
      * @throws \InvalidArgumentException
      */
@@ -22,38 +26,66 @@ final class RecipeStructureValidator
 
         $output = Item::query()->find($outputItemId);
         if (! $output) {
-            throw new \InvalidArgumentException('Output product not found.');
+            throw new \InvalidArgumentException('المنتج النهائي غير موجود.');
         }
 
         $outType = $output->resolvedProductType();
         if (! in_array($outType, [ProductType::SemiFinished, ProductType::Finished], true)) {
             throw new \InvalidArgumentException(
-                'Recipe output must be a semi-finished or finished product (not raw material).'
+                'يجب أن يكون المنتج النهائي للوصفة تحت التشغيل أو منتجاً تاماً (وليس مادة خام).'
             );
         }
+
+        $outputAnchorId = ManufacturingConsumptionResolver::outputAnchorId($output);
 
         $recipe->loadMissing('ingredients.item');
         foreach ($recipe->ingredients as $ing) {
             $ingItem = $ing->item;
             if (! $ingItem) {
-                throw new \InvalidArgumentException('Ingredient item missing for recipe line #' . $ing->id);
-            }
-            /** @var Item $ingEffective */
-            $ingEffective = $ingItem->parent_item_id
-                ? (Item::query()->find((int) $ingItem->parent_item_id) ?? $ingItem)
-                : $ingItem;
-
-            if ((int) $ingEffective->id === (int) $outputItemId) {
-                throw new \InvalidArgumentException('Recipe cannot list the output product as its own ingredient.');
+                throw new \InvalidArgumentException('مكوّن الوصفة غير موجود للسطر #' . $ing->id);
             }
 
-            $inType = $ingEffective->resolvedProductType();
+            $ingAnchorId = $ingItem->parent_item_id
+                ? (int) $ingItem->parent_item_id
+                : (int) $ingItem->id;
+
+            if ($ingAnchorId === $outputAnchorId || (int) $ingItem->id === (int) $outputItemId) {
+                throw new \InvalidArgumentException('لا يمكن أن يكون المنتج النهائي مكوّناً في الوصفة نفسها.');
+            }
+
+            if (self::ingredientAllowedByWarehouse($ingItem, $outputAnchorId)) {
+                continue;
+            }
+
+            $inType = $ingItem->resolvedProductType();
             if ($inType === ProductType::Finished) {
                 throw new \InvalidArgumentException(
-                    'Recipe ingredients must be raw materials or semi-finished items only (finished product used as ingredient: '
+                    'يجب أن تكون مكونات الوصفة مواد خام أو تحت التشغيل (صنف منتج تام غير مسموح كمكوّن: '
                     . $ingItem->category_name . ').'
                 );
             }
         }
+    }
+
+    /**
+     * يعتمد على مخزن الصف الفعلي (وليس نوع الأب) — يطابق حركة المخزون والوصفات القديمة.
+     */
+    private static function ingredientAllowedByWarehouse(Item $ingItem, int $outputAnchorId): bool
+    {
+        $warehouse = trim((string) ($ingItem->warehouse ?? ''));
+
+        if ($warehouse === self::RAW_WAREHOUSE || $warehouse === self::WIP_WAREHOUSE) {
+            return true;
+        }
+
+        if ($warehouse === self::FINISHED_WAREHOUSE) {
+            $ingAnchorId = $ingItem->parent_item_id
+                ? (int) $ingItem->parent_item_id
+                : (int) $ingItem->id;
+
+            return $ingAnchorId !== $outputAnchorId;
+        }
+
+        return false;
     }
 }

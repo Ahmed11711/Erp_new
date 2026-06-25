@@ -60,7 +60,9 @@ class DeliveryConfirmationAccountingService
         $shippingCo = $od->shipping_company;
         $collectionCo = $od->collection_company;
 
-        $shippingReceivableAcc = $shippingCo?->receivable_tree_account_id;
+        $shippingReceivableAcc = app(ReceivableTreeAccountGuard::class)->sanitizeReceivableAccountId(
+            $shippingCo?->receivable_tree_account_id ? (int) $shippingCo->receivable_tree_account_id : null
+        );
         $collectionReceivableAcc = app(CollectionReceivableAccountResolver::class)
             ->receivableAccountIdForOrderDetails($od);
 
@@ -72,12 +74,18 @@ class DeliveryConfirmationAccountingService
             $prepaidPart = round((float) ($od->collection_receivable_amount ?? 0), 2);
         }
 
+        $alreadyOnShipping = $this->receivableAlreadyOnAccount($order->id, $shippingReceivableAcc);
+        $alreadyOnCollection = $this->receivableAlreadyOnAccount($order->id, $collectionReceivableAcc);
+
+        $codToTransfer = round(max(0, $codPart - $alreadyOnShipping), 2);
+        $prepaidToTransfer = round(max(0, $prepaidPart - $alreadyOnCollection), 2);
+
         $batchCode = 'DELIVERY-' . $order->id . '-' . now()->format('YmdHis');
         $desc = 'تأكيد تسليم — نقل ذمة العميل إلى المندوب/شركة الشحن — طلب رقم ' . $order->id;
 
         $lines = [];
 
-        if ($codPart > 0.009) {
+        if ($codToTransfer > 0.009) {
             $drAccountId = $shippingReceivableAcc
                 ? (int) $shippingReceivableAcc
                 : (int) $customerAccount->id;
@@ -85,20 +93,20 @@ class DeliveryConfirmationAccountingService
             if ($drAccountId !== (int) $customerAccount->id) {
                 $lines[] = [
                     'account_id' => $drAccountId,
-                    'debit' => $codPart,
+                    'debit' => $codToTransfer,
                     'credit' => 0,
                     'description' => 'ذمة شركة الشحن/المندوب — مستحق تحصيل عند التسليم (' . ($shippingCo->name ?? '') . ')',
                 ];
                 $lines[] = [
                     'account_id' => (int) $customerAccount->id,
                     'debit' => 0,
-                    'credit' => $codPart,
+                    'credit' => $codToTransfer,
                     'description' => 'تخفيض ذمة العميل — نُقلت إلى شركة الشحن/المندوب',
                 ];
             }
         }
 
-        if ($prepaidPart > 0.009) {
+        if ($prepaidToTransfer > 0.009) {
             $drAccountId = $collectionReceivableAcc
                 ? (int) $collectionReceivableAcc
                 : (int) $customerAccount->id;
@@ -106,22 +114,24 @@ class DeliveryConfirmationAccountingService
             if ($drAccountId !== (int) $customerAccount->id) {
                 $lines[] = [
                     'account_id' => $drAccountId,
-                    'debit' => $prepaidPart,
+                    'debit' => $prepaidToTransfer,
                     'credit' => 0,
                     'description' => 'ذمة شركة التحصيل — جزء مدفوع مقدماً (' . ($collectionCo->name ?? '') . ')',
                 ];
                 $lines[] = [
                     'account_id' => (int) $customerAccount->id,
                     'debit' => 0,
-                    'credit' => $prepaidPart,
+                    'credit' => $prepaidToTransfer,
                     'description' => 'تخفيض ذمة العميل — نُقلت إلى شركة التحصيل',
                 ];
             }
         }
 
         if (empty($lines)) {
-            Log::info('DeliveryConfirmation: no receivable transfer needed (no intermediary accounts)', [
+            Log::info('DeliveryConfirmation: no receivable transfer needed (already on intermediary or no intermediary accounts)', [
                 'order_id' => $order->id,
+                'already_on_shipping' => $alreadyOnShipping,
+                'already_on_collection' => $alreadyOnCollection,
             ]);
             return ['batch_code' => $batchCode, 'transferred_amount' => $grandTotal];
         }
@@ -139,9 +149,52 @@ class DeliveryConfirmationAccountingService
     public function reverseDeliveryTransfer(Order $order): void
     {
         $pattern = 'DELIVERY-' . $order->id . '-%';
+        $accountIds = AccountEntry::query()
+            ->where('order_id', $order->id)
+            ->where('entry_batch_code', 'like', $pattern)
+            ->pluck('tree_account_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($accountIds === []) {
+            return;
+        }
+
         AccountEntry::where('order_id', $order->id)
             ->where('entry_batch_code', 'like', $pattern)
             ->delete();
+
+        $accounting = app(AccountingService::class);
+        foreach ($accountIds as $accountId) {
+            try {
+                $accounting->updateAccountHierarchyBalances($accountId);
+            } catch (\Throwable $e) {
+                Log::warning('DeliveryConfirmation: tree balance rebuild failed after delivery reversal', [
+                    'order_id' => $order->id,
+                    'account_id' => $accountId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * كم من المديونية مُسجَّل بالفعل (مدين) على حساب الوسيط في قيود فاتورة الطلب الأصلية (ORD-*).
+     * إذا كان SalesOrderAccountingService وضع الذمة مباشرة على شركة الشحن/التحصيل
+     * عند إنشاء أو تحديث الفاتورة، فلا حاجة لنقلها مرة أخرى عند تأكيد التسليم.
+     */
+    private function receivableAlreadyOnAccount(int $orderId, ?int $accountId): float
+    {
+        if (!$accountId) {
+            return 0;
+        }
+
+        return round((float) AccountEntry::where('order_id', $orderId)
+            ->where('entry_batch_code', 'like', 'ORD-' . $orderId . '-%')
+            ->where('tree_account_id', $accountId)
+            ->sum('debit'), 2);
     }
 
     private function resolveCustomerAccount(Order $order): ?TreeAccount

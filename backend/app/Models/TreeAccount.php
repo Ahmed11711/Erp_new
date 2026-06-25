@@ -160,6 +160,21 @@ class TreeAccount extends Model
         return $this->hasMany(Safe::class, 'account_id');
     }
 
+    public function createdByUser()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updatedByUser()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function audits()
+    {
+        return $this->hasMany(TreeAccountAudit::class)->orderByDesc('created_at');
+    }
+
     /**
      * Whether another tree account already uses this display name (trimmed).
      */
@@ -518,7 +533,6 @@ class TreeAccount extends Model
         if ($kind->tree_account_id) {
             $linked = static::query()
                 ->whereKey((int) $kind->tree_account_id)
-                ->where('type', 'expense')
                 ->first();
             if ($linked) {
                 return $linked;
@@ -602,7 +616,6 @@ class TreeAccount extends Model
         if ($kind && $kind->tree_account_id) {
             $acc = static::query()
                 ->whereKey((int) $kind->tree_account_id)
-                ->where('type', 'expense')
                 ->first();
             if ($acc) {
                 return $acc;
@@ -873,6 +886,11 @@ class TreeAccount extends Model
             if ($wt === 'finished_goods' || $name === 'مخزن منتج تام') {
                 return static::resolveInventoryFinishedAccount();
             }
+            if ($wt === 'materials_at_vendor'
+                || $name === 'مواد لدى مندوب'
+                || $name === 'مخزون لدى معالج خارجي') {
+                return static::resolveInventorySubcontractAccount();
+            }
         }
 
         return static::resolveInventoryAccount();
@@ -961,6 +979,13 @@ class TreeAccount extends Model
             ?? static::resolveInventoryAccount();
     }
 
+    public static function resolveInventorySubcontractAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_subcontract')->whereDoesntHave('children')->first()
+            ?? static::where('code', '1000224')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
     public static function resolveInventoryAdjustmentLossAccount(): ?self
     {
         return static::where('detail_type', 'inventory_adjustment_loss')->whereDoesntHave('children')->first();
@@ -969,5 +994,70 @@ class TreeAccount extends Model
     public static function resolveInventoryAdjustmentGainAccount(): ?self
     {
         return static::where('detail_type', 'inventory_adjustment_gain')->whereDoesntHave('children')->first();
+    }
+
+    /**
+     * حساب وسيط لمقبوضات العملاء المسجّلة دون تحديد بنك/خزينة بعد.
+     * detail_type: unallocated_prepaid_receipts
+     */
+    public static function resolveUnallocatedPrepaidReceiptsAccount(): ?self
+    {
+        $settingId = Setting::where('key', 'unallocated_prepaid_receipts_account_id')->value('value');
+        if ($settingId) {
+            $acc = static::find((int) $settingId);
+
+            return $acc && ! $acc->children()->exists() ? $acc : null;
+        }
+
+        $acc = static::where('detail_type', 'unallocated_prepaid_receipts')
+            ->whereDoesntHave('children')
+            ->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $cashParent = static::where('name', 'النقدية')->where('type', 'asset')->orderBy('id')->first();
+        if (! $cashParent) {
+            return null;
+        }
+
+        $existing = static::where('parent_id', $cashParent->id)
+            ->where(function ($q) {
+                $q->where('name', 'like', '%مقبوضات بانتظار%')
+                    ->orWhere('name', 'like', '%تحت الحساب%معلق%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first();
+
+        return $existing;
+    }
+
+    public static function ensureUnallocatedPrepaidReceiptsAccount(): self
+    {
+        $acc = static::resolveUnallocatedPrepaidReceiptsAccount();
+        if ($acc) {
+            return $acc;
+        }
+
+        $cashParent = static::where('name', 'النقدية')->where('type', 'asset')->orderBy('id')->first();
+        if (! $cashParent) {
+            throw new \RuntimeException('تعذر إنشاء حساب مقبوضات بانتظار التسجيل: لم يُعثر على حساب «النقدية» في الشجرة.');
+        }
+
+        $resolved = static::resolveNextChildCodeAndLevel($cashParent, static::queryLastChildUnderParentLocked($cashParent));
+
+        return static::create([
+            'name' => 'مقبوضات بانتظار التسجيل',
+            'name_en' => 'Unallocated customer receipts',
+            'code' => $resolved['code'],
+            'parent_id' => $cashParent->id,
+            'type' => 'asset',
+            'level' => $resolved['level'],
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'unallocated_prepaid_receipts',
+        ]);
     }
 }

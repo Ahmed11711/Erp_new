@@ -24,7 +24,6 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
 import { ExpenseDetailsComponent } from './expense-details/expense-details.component';
 import { BankDetailsComponent } from './bank-details/bank-details.component';
-import { EditexpenseComponent } from './editexpense/editexpense.component';
 import { PendingComponent } from './pending/pending.component';
 import { BanksMovementsComponent } from './banks-movements/banks-movements.component';
 import { BankMovementDetailsDialogComponent } from './bank-movement-details-dialog/bank-movement-details-dialog.component';
@@ -72,7 +71,6 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
     AddCovenantComponent,
     ExpenseDetailsComponent,
     BankDetailsComponent,
-    EditexpenseComponent,
     PendingComponent,
     BanksMovementsComponent,
     BankMovementDetailsDialogComponent,

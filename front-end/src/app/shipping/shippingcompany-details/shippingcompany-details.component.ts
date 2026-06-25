@@ -12,6 +12,13 @@ import { DialogNotificationNoteComponent } from '../dialog-notification-note/dia
 import { UserService } from 'src/app/manage-system/services/user.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import {
+  canRefuseFromShippingRow,
+  isCompanyCustomerType,
+  isIndividualCustomerType,
+} from '../utils/order-refuse.utils';
+import { allowsManualShippingCollection } from '../utils/order-collect-eligibility.utils';
 
 @Component({
   selector: 'app-shippingcompany-details',
@@ -45,7 +52,8 @@ export class ShippingcompanyDetailsComponent {
 
   constructor(private shippingService:ShippingCompanyService,private order: OrderService , private route:ActivatedRoute , private authService:AuthService,
     private bankService:BanksService , public dialog: MatDialog , private userService:UserService,
-    private safeService: SafeService, private serviceAccountsService: ServiceAccountsService
+    private safeService: SafeService, private serviceAccountsService: ServiceAccountsService,
+    private rbac: RbacService,
     ){
   }
 
@@ -203,7 +211,41 @@ export class ShippingcompanyDetailsComponent {
     if (os === 'تم التحصيل') {
       return false;
     }
+    const order = elm?.order;
+    if (order && !allowsManualShippingCollection(order)) {
+      return false;
+    }
     return true;
+  }
+
+  isIndividualCustomer(order: any): boolean {
+    return isIndividualCustomerType(order?.customer_type);
+  }
+
+  isCompanyCustomer(order: any): boolean {
+    return isCompanyCustomerType(order?.customer_type);
+  }
+
+  canRefuseOrderMenu(): boolean {
+    const allowed = new Set([
+      'Admin',
+      'Shipping Management',
+      'Operation Management',
+      'Finance and operations management',
+      'Operation Specialist',
+      'Logistics Specialist',
+      'Data Entry',
+      'Review Management',
+    ]);
+    return allowed.has(this.user) || this.rbac.can('orders.change_status');
+  }
+
+  canShowShippingActionsMenu(): boolean {
+    return this.canRefuseOrderMenu() || this.canBulkCollectRole;
+  }
+
+  canRefuseFromRow(elm: any): boolean {
+    return canRefuseFromShippingRow(elm?.order?.order_status, elm?.status, elm?.is_done);
   }
 
   /** نفس أدوار قائمة «تحصيل الطلب» في الجدول */

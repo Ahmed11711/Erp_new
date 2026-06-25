@@ -4,14 +4,20 @@ import { SuppliersService } from 'src/app/suppliers/services/suppliers.service';
 import { Router } from '@angular/router';
 import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
+import { purchaseStatusBadgeClass } from 'src/app/shared/utils/purchase-invoice-status.util';
+import { resolvePurchaseListInvoiceType, resolvePurchaseListShippingRep, resolvePurchaseShippingRep } from 'src/app/shared/utils/purchase-shipping-rep.util';
 
 @Component({
   selector: 'app-list-invoice',
   templateUrl: './list-invoice.component.html',
-  styleUrls: ['./list-invoice.component.css']
+  styleUrls: ['./list-invoice.component.css', '../purchase-ui.shared.css']
 })
 export class ListInvoiceComponent {
   user!:string;
+
+  statusBadgeClass = purchaseStatusBadgeClass;
+  shippingRepName = resolvePurchaseListShippingRep;
+  invoiceTypeLabel = resolvePurchaseListInvoiceType;
 
   suppliers : any[] = [];
   keyword = 'supplier_name';
@@ -26,6 +32,7 @@ export class ListInvoiceComponent {
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15,50,100];
+  selectedIds = new Set<number>();
 
   constructor(private invoice : InvoiceService, private supplier:SuppliersService, private route:Router, private authService:AuthService ) {
   }
@@ -79,6 +86,7 @@ export class ListInvoiceComponent {
       if (result.isConfirmed) {
         this.invoice.deleteInvoice(id).subscribe(res=>{
           if (res) {
+            this.selectedIds.delete(id);
             this.search(arguments);
             if (this.user == 'Admin') {
               Swal.fire({
@@ -96,9 +104,10 @@ export class ListInvoiceComponent {
             }
           }
         }, error => {
+          const msg = error?.error?.message ?? 'تم الحذف من قبل وفي انتظار موافقة الأدمن';
           Swal.fire({
             icon: 'error',
-            text: 'تم الحذف من قبل وفي انتظار موافقة الأدمن',
+            text: msg,
             timer: 3000,
             showConfirmButton:false
           })
@@ -106,6 +115,103 @@ export class ListInvoiceComponent {
       )
 
     }})
+  }
+
+  isSelectable(item: { status?: string | number }): boolean {
+    return String(item?.status) !== '1';
+  }
+
+  isSelected(id: number): boolean {
+    return this.selectedIds.has(id);
+  }
+
+  toggleSelection(id: number, checked: boolean): void {
+    if (checked) {
+      this.selectedIds.add(id);
+    } else {
+      this.selectedIds.delete(id);
+    }
+  }
+
+  get selectableInvoices(): any[] {
+    return (this.invoices ?? []).filter((item) => this.isSelectable(item));
+  }
+
+  get allSelectableSelected(): boolean {
+    const selectable = this.selectableInvoices;
+    return selectable.length > 0 && selectable.every((item) => this.selectedIds.has(item.id));
+  }
+
+  get someSelectableSelected(): boolean {
+    const selectable = this.selectableInvoices;
+    const selectedCount = selectable.filter((item) => this.selectedIds.has(item.id)).length;
+    return selectedCount > 0 && selectedCount < selectable.length;
+  }
+
+  toggleSelectAll(checked: boolean): void {
+    if (checked) {
+      this.selectableInvoices.forEach((item) => this.selectedIds.add(item.id));
+    } else {
+      this.selectableInvoices.forEach((item) => this.selectedIds.delete(item.id));
+    }
+  }
+
+  deleteSelectedInvoices(): void {
+    const ids = Array.from(this.selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+
+    Swal.fire({
+      title: 'تأكيد حذف المحدد؟',
+      html: `سيتم حذف <strong>${ids.length}</strong> فاتورة مشتريات مع عكس آثارها على المخزون والمحاسبة.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'نعم، احذف',
+      cancelButtonText: 'إلغاء',
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      this.invoice.deleteInvoices(ids).subscribe({
+        next: (res: any) => {
+          const results = res?.results ?? {};
+          const deleted = results.deleted?.length ?? 0;
+          const pending = results.pending?.length ?? 0;
+          const failed = results.failed ?? [];
+
+          ids.forEach((id) => this.selectedIds.delete(id));
+          this.search(arguments);
+
+          if (failed.length > 0) {
+            const lines = failed.map((f: { id: number; message: string }) => `#${f.id}: ${f.message}`).join('<br>');
+            Swal.fire({
+              icon: 'warning',
+              title: 'اكتمل جزئياً',
+              html: `تم: ${deleted} | انتظار موافقة: ${pending} | فشل: ${failed.length}<br><small>${lines}</small>`,
+            });
+            return;
+          }
+
+          if (this.user === 'Admin') {
+            Swal.fire({ icon: 'success', title: `تم حذف ${deleted} فاتورة`, timer: 3000, showConfirmButton: false });
+          } else {
+            Swal.fire({
+              icon: 'success',
+              title: `تم إرسال ${pending} طلب حذف`,
+              text: 'في انتظار موافقة الأدمن',
+              timer: 3500,
+              showConfirmButton: false,
+            });
+          }
+        },
+        error: (err) => {
+          const msg = err?.error?.message ?? err?.error?.results?.failed?.[0]?.message ?? 'تعذر تنفيذ الحذف الجماعي';
+          Swal.fire({ icon: 'error', title: 'فشل الحذف', text: String(msg) });
+        },
+      });
+    });
   }
 
   resetInp(){

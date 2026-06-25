@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Services\Accounting\LedgerJournalService;
 use App\Services\Accounting\SalesOrderAccountingService;
 use App\Services\Accounting\AccountingService;
+use App\Services\Orders\OrderStatusHistoryService;
 use App\Services\Shipping\OrderFinancialStateService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -35,6 +36,17 @@ class OrderObserver
     public function updated(Order $order): void
     {
         try {
+            if ($order->wasChanged('order_status') && ! OrderStatusHistoryService::$suppressAutoRecord) {
+                app(OrderStatusHistoryService::class)->record(
+                    (int) $order->id,
+                    $order->getOriginal('order_status'),
+                    (string) $order->order_status,
+                    OrderStatusHistoryService::$pendingReason,
+                    auth()->id(),
+                );
+                OrderStatusHistoryService::$pendingReason = null;
+            }
+
             if ($order->wasChanged('prepaid_amount')) {
                 $old = (float) ($order->getOriginal('prepaid_amount') ?? 0);
                 $new = (float) $order->prepaid_amount;
@@ -72,7 +84,7 @@ class OrderObserver
                 });
             }
 
-            if ($order->wasChanged([
+            $financialRecognitionFields = [
                 'total_invoice',
                 'discount',
                 'shipping_revenue',
@@ -83,14 +95,22 @@ class OrderObserver
                 'customer_phone_1',
                 'customer_type',
                 'company_id',
-            ])) {
-                DB::afterCommit(function () use ($order) {
+                'bank_id',
+                'prepaid_payment_type',
+            ];
+            if ($order->wasChanged($financialRecognitionFields)) {
+                // إعادة بناء ORD-PREPAID-* عند تغيير مصدر الدفع فقط — لا عند تغيير المبلغ وحده
+                // لأن الزيادة/النقصان تُسجَّل عبر PARTCOLLECT-* / PREPAID-REV-*.
+                $rebuildPrepaid = $order->wasChanged(['bank_id', 'prepaid_payment_type'])
+                    && (float) ($order->prepaid_amount ?? 0) > 0.009;
+
+                DB::afterCommit(function () use ($order, $rebuildPrepaid) {
                     $fresh = Order::with('order_products')->find($order->id);
                     if (!$fresh) {
                         return;
                     }
                     try {
-                        $this->salesOrderAccounting->refreshOrderRecognition($fresh);
+                        $this->salesOrderAccounting->refreshOrderRecognition($fresh, $rebuildPrepaid);
                     } catch (\Throwable $e) {
                         Log::error('OrderObserver: refreshOrderRecognition failed', [
                             'order_id' => $fresh->id,

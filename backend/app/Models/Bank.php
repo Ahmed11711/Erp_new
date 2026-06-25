@@ -21,4 +21,10 @@ class Bank extends Model
     {
         return $this->belongsTo(TreeAccount::class, 'asset_id');
     }
+
+    public function assignedUsers()
+    {
+        return $this->belongsToMany(User::class, 'bank_user', 'bank_id', 'user_id')
+            ->withTimestamps();
+    }
 }

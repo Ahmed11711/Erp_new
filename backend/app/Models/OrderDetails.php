@@ -28,6 +28,7 @@ class OrderDetails extends Model
         'delivery_status',
         'collection_status',
         'settlement_status',
+        'settlement_voucher_id',
         'liability_holder_type',
         'liability_holder_id',
         'liability_transferred_at',

@@ -8,6 +8,7 @@ use App\Models\AccountEntry;
 use App\Models\DailyEntry;
 use App\Models\TreeAccount;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\BankOperationalLedgerService;
 use App\Services\Accounting\ProductPerformanceReportService;
 use App\Services\CategoryInventoryCostService;
 use Illuminate\Http\Request;
@@ -483,7 +484,11 @@ class AccountingReportController extends Controller
         }
 
         // 2. Fetch Entries (filter & sort by accounting date, not only system created_at)
-        $query = AccountEntry::with(['voucher', 'dailyEntry', 'account'])
+        $query = AccountEntry::with([
+                'voucher.user:id,name',
+                'dailyEntry.user:id,name',
+                'account',
+            ])
             ->select('account_entries.*')
             ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
             ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
@@ -500,6 +505,8 @@ class AccountingReportController extends Controller
             ->orderBy('account_entries.created_at', 'asc')
             ->orderBy('account_entries.id', 'asc')
             ->get();
+
+        $this->attachPerformedByUserNames($entries);
 
         // 3. Calculate Running Balance
         $runningBalance = $openingBalance;
@@ -531,6 +538,77 @@ class AccountingReportController extends Controller
             'total_debit' => $entries->sum('debit'),
             'total_credit' => $entries->sum('credit'),
         ], 200);
+    }
+
+    /**
+     * يضيف user_name لكل قيد من السند/القيد اليومي أو حركات البنك/الخزنة المرتبطة بـ entry_batch_code.
+     *
+     * @param  \Illuminate\Support\Collection<int, AccountEntry>  $entries
+     */
+    private function attachPerformedByUserNames($entries): void
+    {
+        $batchCodes = $entries->pluck('entry_batch_code')->filter()->unique()->values()->all();
+        $userByBatch = [];
+
+        if ($batchCodes !== []) {
+            $bankRows = DB::table('bank_transactions')
+                ->join('users', 'bank_transactions.user_id', '=', 'users.id')
+                ->whereIn('bank_transactions.entry_batch_code', $batchCodes)
+                ->select('bank_transactions.entry_batch_code', 'users.name')
+                ->get();
+
+            foreach ($bankRows as $row) {
+                $userByBatch[$row->entry_batch_code] = $row->name;
+            }
+
+            $safeRows = DB::table('safe_transactions')
+                ->join('users', 'safe_transactions.user_id', '=', 'users.id')
+                ->whereIn('safe_transactions.entry_batch_code', $batchCodes)
+                ->select('safe_transactions.entry_batch_code', 'users.name')
+                ->get();
+
+            foreach ($safeRows as $row) {
+                $userByBatch[$row->entry_batch_code] = $row->name;
+            }
+
+            $opsPrefix = BankOperationalLedgerService::BATCH_PREFIX;
+            $opsRefs = [];
+            foreach ($batchCodes as $code) {
+                if (! str_starts_with((string) $code, $opsPrefix)) {
+                    continue;
+                }
+                $suffix = substr((string) $code, strlen($opsPrefix));
+                $parts = explode('-', $suffix);
+                if ($parts === []) {
+                    continue;
+                }
+                $opsRefs[(string) $code] = end($parts);
+            }
+
+            if ($opsRefs !== []) {
+                $detailRows = DB::table('bank_details')
+                    ->join('users', 'bank_details.user_id', '=', 'users.id')
+                    ->whereIn('bank_details.ref', array_values(array_unique(array_values($opsRefs))))
+                    ->select('bank_details.ref', 'users.name')
+                    ->get()
+                    ->keyBy('ref');
+
+                foreach ($opsRefs as $code => $ref) {
+                    $detail = $detailRows->get($ref);
+                    if ($detail) {
+                        $userByBatch[$code] = $detail->name;
+                    }
+                }
+            }
+        }
+
+        foreach ($entries as $entry) {
+            $name = $entry->voucher?->user?->name
+                ?? $entry->dailyEntry?->user?->name
+                ?? ($entry->entry_batch_code ? ($userByBatch[$entry->entry_batch_code] ?? null) : null);
+
+            $entry->setAttribute('user_name', $name);
+        }
     }
 
     /**

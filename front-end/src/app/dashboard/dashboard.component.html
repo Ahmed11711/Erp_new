@@ -79,7 +79,7 @@
                         <a mat-list-item routerLink="/dashboard/warehouse/list" routerLinkActive="active">
                             <span>المخازن</span>
                         </a>
-                        <a mat-list-item routerLink="/dashboard/warehouse/monthlyinventory" routerLinkActive="active">
+                        <a mat-list-item routerLink="/dashboard/warehouse/listwarhouse" routerLinkActive="active">
                             <span>الجرد الشهري</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/warehouse/inventory-import" routerLinkActive="active">
@@ -117,6 +117,25 @@
                         </a>
                     </mat-nav-list>
                 </mat-expansion-panel>
+
+
+                   <!-- ══════ التشغيل الخارجي ══════ -->
+                   <mat-expansion-panel [class.mat-elevation-z0]="true"
+                   *ngIf="rbac.can('processing.view') || rbac.can('purchases.view')">
+                   <mat-expansion-panel-header>
+                       <mat-icon>build_circle</mat-icon>
+                       التشغيل الخارجي
+                   </mat-expansion-panel-header>
+                   <mat-nav-list>
+                       <a mat-list-item routerLink="/dashboard/processing/dashboard" routerLinkActive="active">
+                           <span>لوحة التشغيل الخارجي</span>
+                       </a>
+                       <a mat-list-item routerLink="/dashboard/processing/orders" routerLinkActive="active">
+                           <span>إذونات الصرف والاستلام</span>
+                       </a>
+                   </mat-nav-list>
+               </mat-expansion-panel>
+
 
                 <!-- ══════ الموردين ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
@@ -159,6 +178,7 @@
                     </mat-nav-list>
                 </mat-expansion-panel>
 
+                
                 <!-- ══════ تقارير (بدون قسم الحسابات) ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
                     *ngIf="canReportsSection() && !showAccountingSection">
@@ -206,11 +226,15 @@
                         التصنيع
                     </mat-expansion-panel-header>
                     <mat-nav-list>
-                        <a mat-list-item routerLink="/dashboard/manufacturing/addrecipe" routerLinkActive="active">
+                        <a mat-list-item routerLink="/dashboard/manufacturing/addrecipe" routerLinkActive="active"
+                            *ngIf="rbac.canAny(RBAC.manufacturingWrite)">
                             <span>إضافة وصفة</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/manufacturing/recipes" routerLinkActive="active">
                             <span>وصفات التصنيع</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/manufacturing/items-without-recipes" routerLinkActive="active">
+                            <span>أصناف بدون وصفة</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/manufacturing/bom" routerLinkActive="active">
                             <span>قائمة المواد (BOM)</span>
@@ -227,6 +251,7 @@
                     </mat-nav-list>
                 </mat-expansion-panel>
 
+             
                 <!-- ══════ الحسابات ══════ -->
                 <mat-expansion-panel [class.mat-elevation-z0]="true"
                     *ngIf="showAccountingSection">

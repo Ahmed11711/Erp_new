@@ -38,4 +38,103 @@ i{
   cursor: pointer;
 }
 
+.search-toolbar {
+  min-height: 2.75rem;
+}
+
+.filter-toolbar {
+  min-height: 2.75rem;
+  gap: 1.25rem;
+}
+
+.filter-toolbar select {
+  min-width: 0;
+}
+
+.deleted-log-btn {
+  white-space: nowrap;
+  font-size: 0.95rem;
+  padding: 0.4rem 0.85rem;
+  border-color: #82225e;
+  color: #82225e;
+}
+
+.deleted-log-btn:hover {
+  background-color: #82225e;
+  color: white;
+}
+
+.deleted-log-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 18, 32, 0.45);
+  z-index: 1050;
+  backdrop-filter: blur(2px);
+}
+
+.deleted-log-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1100px, 94vw);
+  max-height: 88vh;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(28, 18, 32, 0.28);
+  z-index: 1060;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.deleted-log-modal__header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e8dce4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f0f4;
+}
+
+.deleted-log-modal__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1c1220;
+  margin: 0;
+}
+
+.deleted-log-modal__close {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  color: #6b5a63;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.deleted-log-modal__close:hover {
+  background: rgba(130, 34, 94, 0.1);
+  color: #82225e;
+}
+
+.deleted-log-modal__body {
+  padding: 1rem 1.25rem 1.25rem;
+  overflow: auto;
+  flex: 1 1 auto;
+}
+
+.deleted-log-table thead tr {
+  background-color: #82225e !important;
+  color: white;
+  font-size: 0.95rem;
+}
+
+.deleted-log-table th,
+.deleted-log-table td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
 

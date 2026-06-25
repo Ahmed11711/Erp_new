@@ -25,7 +25,10 @@ class AccountLinkingService
 
     private const BUCKET_CORPORATE = 'عملاء شركات';
 
-    private const BUCKET_ONLINE = 'عملاء أونلاين';
+    /** @deprecated حساب تجميعي قديم — يُستبدل بـ Shopify تحت عملاء أفراد */
+    private const BUCKET_ONLINE_LEGACY = 'عملاء أونلاين';
+
+    private const BUCKET_SHOPIFY = 'Shopify';
 
     /**
      * الحصول على الحساب الأب لعملاء الشركات من الإعدادات
@@ -59,8 +62,24 @@ class AccountLinkingService
     public function getCustomerIndividualParent(): ?TreeAccount
     {
         $parentId = Setting::where('key', 'customer_individual_parent_account_id')->value('value');
+        if ($parentId) {
+            $fromSetting = TreeAccount::find($parentId);
+            if ($fromSetting) {
+                return $fromSetting;
+            }
+        }
 
-        return $parentId ? TreeAccount::find($parentId) : null;
+        $byBucket = TreeAccount::query()
+            ->where('type', 'asset')
+            ->where('name', self::BUCKET_INDIVIDUALS)
+            ->orderByRaw("CASE WHEN code = '1000234' OR code = 1000234 THEN 0 ELSE 1 END")
+            ->orderBy('level')
+            ->first();
+        if ($byBucket) {
+            return $byBucket;
+        }
+
+        return $this->ensureReceivableBucket(self::BUCKET_INDIVIDUALS);
     }
 
     /**
@@ -68,9 +87,48 @@ class AccountLinkingService
      */
     public function getCustomerOnlineParent(): ?TreeAccount
     {
-        $parentId = Setting::where('key', 'customer_online_parent_account_id')->value('value');
+        return $this->getShopifyOnlineParent();
+    }
 
-        return $parentId ? TreeAccount::find($parentId) : null;
+    /**
+     * حساب Shopify تحت «عملاء أفراد» — يُنشأ تلقائياً لعملاء الطلبات الإلكترونية.
+     */
+    public function getShopifyOnlineParent(): ?TreeAccount
+    {
+        $parentId = Setting::where('key', 'customer_online_parent_account_id')->value('value');
+        if ($parentId) {
+            $fromSetting = TreeAccount::find($parentId);
+            if ($fromSetting) {
+                return $fromSetting;
+            }
+        }
+
+        return $this->ensureShopifyBucket();
+    }
+
+    /**
+     * إنشاء أو جلب حساب Shopify تحت «عملاء أفراد».
+     */
+    public function ensureShopifyBucket(): ?TreeAccount
+    {
+        $individualParent = $this->getCustomerIndividualParent();
+        if (!$individualParent) {
+            return null;
+        }
+
+        $existing = TreeAccount::query()
+            ->where('parent_id', $individualParent->id)
+            ->where(function ($q) {
+                $q->where('name', self::BUCKET_SHOPIFY)
+                    ->orWhere('name', 'شوبيفاي');
+            })
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return $this->createChildAccount($individualParent, self::BUCKET_SHOPIFY, 'asset');
     }
 
     /**
@@ -218,10 +276,21 @@ class AccountLinkingService
      */
     public function ensureShippingCompanyAccount(ShippingCompany $company): ?TreeAccount
     {
+        $guard = app(ReceivableTreeAccountGuard::class);
+
         if ($company->receivable_tree_account_id) {
             $existing = TreeAccount::find($company->receivable_tree_account_id);
-            if ($existing) {
+            if ($existing && ! $guard->isPaymentSourceTreeAccount((int) $existing->id)) {
                 return $existing;
+            }
+
+            if ($existing && $guard->isPaymentSourceTreeAccount((int) $existing->id)) {
+                Log::warning('AccountLinkingService: shipping company receivable linked to payment source — re-linking', [
+                    'shipping_company_id' => $company->id,
+                    'invalid_tree_account_id' => $existing->id,
+                ]);
+                $company->receivable_tree_account_id = null;
+                $company->save();
             }
         }
 
@@ -240,6 +309,41 @@ class AccountLinkingService
 
         $account = $this->createChildAccount($parent, $name, 'asset');
         $company->receivable_tree_account_id = $account->id;
+        $company->save();
+
+        return $account;
+    }
+
+    /**
+     * ذمم دائن (خصوم): مستحق للمندوب/شركة الشحن — شحن توريد/مشتريات.
+     * منفصل عن receivable_tree_account_id (ذمم مدين — تحصيل COD).
+     */
+    public function ensureShippingCompanyFreightPayableAccount(ShippingCompany $company): ?TreeAccount
+    {
+        if ($company->tree_account_id) {
+            $existing = TreeAccount::find($company->tree_account_id);
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        try {
+            $parent = TreeAccount::ensureShippingCourierPayableAccount();
+        } catch (\Throwable $e) {
+            Log::error('AccountLinkingService: cannot resolve freight payable parent for shipping company', [
+                'shipping_company_id' => $company->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        $name = trim((string) ($company->name ?? '')) !== ''
+            ? $company->name
+            : ('شركة شحن ' . $company->id);
+
+        $account = $this->createChildAccount($parent, $name, 'liability');
+        $company->tree_account_id = $account->id;
         $company->save();
 
         return $account;
@@ -286,10 +390,17 @@ class AccountLinkingService
             ];
         }
 
+        $guard = app(ReceivableTreeAccountGuard::class);
         $companies = ShippingCompany::query()
-            ->whereNull('receivable_tree_account_id')
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->filter(function (ShippingCompany $company) use ($guard) {
+                if (! $company->receivable_tree_account_id) {
+                    return true;
+                }
+
+                return $guard->isPaymentSourceTreeAccount((int) $company->receivable_tree_account_id);
+            });
 
         $linked = 0;
         $failedItems = [];
@@ -367,10 +478,17 @@ class AccountLinkingService
             ];
         }
 
+        $guard = app(ReceivableTreeAccountGuard::class);
         $companies = CollectionCompany::query()
-            ->whereNull('receivable_tree_account_id')
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->filter(function (CollectionCompany $company) use ($guard) {
+                if (! $company->receivable_tree_account_id) {
+                    return true;
+                }
+
+                return $guard->isPaymentSourceTreeAccount((int) $company->receivable_tree_account_id);
+            });
 
         $linked = 0;
         $failedItems = [];
@@ -413,10 +531,21 @@ class AccountLinkingService
      */
     public function ensureCollectionCompanyAccount(CollectionCompany $company): ?TreeAccount
     {
+        $guard = app(ReceivableTreeAccountGuard::class);
+
         if ($company->receivable_tree_account_id) {
             $existing = TreeAccount::find($company->receivable_tree_account_id);
-            if ($existing) {
+            if ($existing && ! $guard->isPaymentSourceTreeAccount((int) $existing->id)) {
                 return $existing;
+            }
+
+            if ($existing && $guard->isPaymentSourceTreeAccount((int) $existing->id)) {
+                Log::warning('AccountLinkingService: collection company receivable linked to payment source — re-linking', [
+                    'collection_company_id' => $company->id,
+                    'invalid_tree_account_id' => $existing->id,
+                ]);
+                $company->receivable_tree_account_id = null;
+                $company->save();
             }
         }
 
@@ -514,6 +643,27 @@ class AccountLinkingService
     }
 
     /**
+     * مزامنة اسم حساب شجرة المورد مع اسم المورد
+     */
+    public function syncSupplierTreeAccountName(Supplier $supplier): void
+    {
+        if (! $supplier->tree_account_id) {
+            return;
+        }
+
+        $account = TreeAccount::find($supplier->tree_account_id);
+        $desiredName = trim($supplier->supplier_name ?? '');
+        if (! $account || $desiredName === '') {
+            return;
+        }
+
+        if (trim($account->name) !== $desiredName) {
+            $account->name = $desiredName;
+            $account->save();
+        }
+    }
+
+    /**
      * إنشاء حساب فرعي تحت الحساب الأب
      */
     public function createChildAccount(TreeAccount $parent, string $name, string $type): TreeAccount
@@ -557,8 +707,7 @@ class AccountLinkingService
             $parent = match ($kind) {
                 'corporate' => $this->getCustomerCorporateParent()
                     ?? $this->ensureReceivableBucket(self::BUCKET_CORPORATE),
-                'online' => $this->getCustomerOnlineParent()
-                    ?? $this->ensureReceivableBucket(self::BUCKET_ONLINE),
+                'online' => $this->getShopifyOnlineParent(),
                 default => $this->getCustomerIndividualParent()
                     ?? $this->ensureReceivableBucket(self::BUCKET_INDIVIDUALS),
             };
@@ -593,7 +742,7 @@ class AccountLinkingService
     }
 
     /**
-     * عميل فردي من قناة إلكترونية — تحت «عملاء أونلاين» (أو الإعداد المخصص).
+     * عميل فردي من قناة إلكترونية — تحت Shopify ← عملاء أفراد (أو الإعداد المخصص).
      */
     public function ensureOnlineChannelCustomerAccount(string $customerName, ?string $phone): TreeAccount
     {
@@ -754,16 +903,33 @@ class AccountLinkingService
     }
 
     /**
-     * نقطة تثبيت ذمم العملاء: المدينون القياسي، أو مجلد العملاء القديم تحت الأصول.
+     * نقطة تثبيت ذمم العملاء: مجلد «العملاء» إن وُجدت تحته فروع التجميع، وإلا المدينون القياسي.
      */
     private function receivableCustomersAnchor(): ?TreeAccount
     {
+        $legacyCustomers = $this->findNestedLegacyCustomersFolder();
+        if ($legacyCustomers && $this->hasCustomerBucketsUnder($legacyCustomers)) {
+            return $legacyCustomers;
+        }
+
         return $this->findReceivablesControlAccount()
-            ?? $this->findNestedLegacyCustomersFolder();
+            ?? $legacyCustomers;
+    }
+
+    private function hasCustomerBucketsUnder(TreeAccount $parent): bool
+    {
+        return TreeAccount::query()
+            ->where('parent_id', $parent->id)
+            ->whereIn('name', [
+                self::BUCKET_INDIVIDUALS,
+                self::BUCKET_CORPORATE,
+                self::BUCKET_ONLINE_LEGACY,
+            ])
+            ->exists();
     }
 
     /**
-     * إنشاء أو جلب حساب تجميعي (عملاء أفراد / شركات / أونلاين) تحت المدينون أو مجلد العملاء الوسيط.
+     * إنشاء أو جلب حساب تجميعي (عملاء أفراد / شركات) تحت مجلد العملاء أو المدينون.
      */
     private function ensureReceivableBucket(string $bucketName): ?TreeAccount
     {

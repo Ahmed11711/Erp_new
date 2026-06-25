@@ -1,4 +1,4 @@
-<div class="container-fluid">
+<div class="purchase-list-page container-fluid">
   <div class="row py-3">
     <div class="col-4 d-flex align-items-center">
       <app-time></app-time>
@@ -7,15 +7,11 @@
       <div><p class="title header m-auto">فواتير المشتريات</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
-  <div class="container-fluid">
-
-
-    <form class="my-5 text-center">
+  <div class="container-fluid pl-filters">
+    <form class="text-center">
       <div class="row">
         <div class="form-group col-md-3">
           <div class="ng-autocomplete">
@@ -42,7 +38,10 @@
           <div class="form-group w-100" (change)="search($event)">
             <select id="status" class="form-control"
               type="text" class="form-control">
-              <option selected disabled>حالة الشراء</option>
+              <option selected disabled value="">حالة الشراء</option>
+              <option value="اضافة وارد جديد">اضافة وارد جديد</option>
+              <option value="مرتجع مبيعات">مرتجع مبيعات</option>
+              <option value="امانات">امانات</option>
               <option value="تم الاستلام">تم الاستلام</option>
               <option value="مرتجع">مرتجع</option>
             </select>
@@ -63,14 +62,33 @@
 
       </div>
     </form>
+  </div>
+
+    <div class="row pl-bulk-actions" *ngIf="selectedIds.size > 0">
+      <div class="col-12 text-center">
+        <button type="button" class="btn btn-danger" (click)="deleteSelectedInvoices()">
+          حذف المحدد ({{ selectedIds.size }})
+        </button>
+      </div>
+    </div>
 
 
-    <table class="table w-75 m-auto text-center table-hover">
-      <thead class="bg-dark text-white">
+    <div class="pl-table-container">
+    <div class="pl-table-wrap">
+    <table class="table pl-table m-auto text-center table-hover">
+      <thead>
         <tr>
+          <th scope="col" style="width: 48px;">
+            <mat-checkbox
+              [checked]="allSelectableSelected"
+              [indeterminate]="someSelectableSelected"
+              (change)="toggleSelectAll($event.checked)">
+            </mat-checkbox>
+          </th>
           <th scope="col">الرقم التسلسلي</th>
           <th scope="col">  المرجع</th>
           <th scope="col"> اسم المورد</th>
+          <th scope="col">مندوب الشحن</th>
           <th scope="col"> حالة الشراء</th>
           <th scope="col">اجمالي الفاتورة</th>
           <th scope="col">المدفوع</th>
@@ -84,11 +102,23 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let item of invoices; let i = index" [ngClass]="{ 'bg-success': item?.status == 0, 'bg-danger': item?.status == 1 }">
+        <tr *ngFor="let item of invoices; let i = index"
+          [class.pl-row--superseded]="item?.status == 0 || item?.status == '0'"
+          [class.pl-row--deleted]="item?.status == 1 || item?.status == '1'">
+          <td>
+            <mat-checkbox
+              *ngIf="isSelectable(item)"
+              [checked]="isSelected(item.id)"
+              (change)="toggleSelection(item.id, $event.checked)">
+            </mat-checkbox>
+          </td>
           <td dir="ltr">{{ item?.id }}</td>
           <td>{{item?.invoice_number}}</td>
           <td>{{item?.supplier?.supplier_name}}</td>
-          <td>{{item?.invoice_type}}</td>
+          <td>{{ shippingRepName(item) }}</td>
+          <td>
+            <span [ngClass]="statusBadgeClass(invoiceTypeLabel(item))">{{ invoiceTypeLabel(item) }}</span>
+          </td>
           <td dir="ltr">{{!item?.updated_purchase ?  (item?.total_price | customNumber ): (item?.updated_purchase?.total_price | customNumber )}}</td>
           <td dir="ltr">{{!item?.updated_purchase ?  (item?.paid_amount | customNumber ): (item?.updated_purchase?.paid_amount | customNumber )}}</td>
           <td dir="ltr">{{!item?.updated_purchase ?  (item?.due_amount | customNumber ): (item?.updated_purchase?.due_amount | customNumber )}}</td>
@@ -124,6 +154,8 @@
         </tr>
       </tbody>
     </table>
+    </div>
+    </div>
 
     <div class="mt-4">
       <mat-paginator #paginator

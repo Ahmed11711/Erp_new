@@ -532,19 +532,22 @@
               </ng-container>
 
               <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم') && (item.order_type !='طلب صيانة' || item.order_details.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
+                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="canShowCollectOrderMenu(item)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
                   <span> تحصيل الطلب</span>
                 </button>
               </ng-container>
 
-              <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button mat-menu-item *ngIf="item.order_status=='تم شحن' && item.customer_type=='افراد'" (click)="refuseOrder(item.customer_type,item.id)">
-                  <span> رفض استلام</span>
+              <ng-container *ngIf="canShowRollbackMenu()">
+                <button mat-menu-item *ngIf="canRollbackOrder(item)" (click)="reopenOrder(item)">
+                  <span>إعادة فتح الطلب</span>
                 </button>
               </ng-container>
 
-              <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-                <button mat-menu-item *ngIf="item.order_status=='تم شحن' && item.customer_type=='شركة'" (click)="changeOrderStatus(item.customer_type,item.id,'رفض استلام','refused',item)">
+              <ng-container *ngIf="canRefuseOrderMenu()">
+                <button mat-menu-item *ngIf="canRefuseOrder(item) && isIndividualCustomer(item)" (click)="refuseOrder(item.customer_type,item.id)">
+                  <span> رفض استلام</span>
+                </button>
+                <button mat-menu-item *ngIf="canRefuseOrder(item) && isCompanyCustomer(item)" (click)="changeOrderStatus(item.customer_type,item.id,'رفض استلام','refused',item)">
                   <span> رفض استلام</span>
                 </button>
               </ng-container>
@@ -709,17 +712,20 @@
               </button>
             </ng-container>
             <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم') && (item.order_type !='طلب صيانة' || item.order_details.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
+              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="canShowCollectOrderMenu(item)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
                 <span> تحصيل الطلب</span>
               </button>
             </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button mat-menu-item *ngIf="item.order_status=='تم شحن' && item.customer_type=='افراد'" (click)="refuseOrder(item.customer_type,item.id)">
-                <span> رفض استلام</span>
+            <ng-container *ngIf="canShowRollbackMenu()">
+              <button mat-menu-item *ngIf="canRollbackOrder(item)" (click)="reopenOrder(item)">
+                <span>إعادة فتح الطلب</span>
               </button>
             </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist'">
-              <button mat-menu-item *ngIf="item.order_status=='تم شحن' && item.customer_type=='شركة'" (click)="changeOrderStatus(item.customer_type,item.id,'رفض استلام','refused',item)">
+            <ng-container *ngIf="canRefuseOrderMenu()">
+              <button mat-menu-item *ngIf="canRefuseOrder(item) && isIndividualCustomer(item)" (click)="refuseOrder(item.customer_type,item.id)">
+                <span> رفض استلام</span>
+              </button>
+              <button mat-menu-item *ngIf="canRefuseOrder(item) && isCompanyCustomer(item)" (click)="changeOrderStatus(item.customer_type,item.id,'رفض استلام','refused',item)">
                 <span> رفض استلام</span>
               </button>
             </ng-container>

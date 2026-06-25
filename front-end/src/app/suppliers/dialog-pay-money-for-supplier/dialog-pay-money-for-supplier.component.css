@@ -41,6 +41,17 @@
   font-weight: 500;
 }
 
+.supplier-pay-dialog__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.supplier-pay-dialog__due {
+  font-weight: 600;
+  color: #82225e;
+}
+
 .supplier-pay-dialog__balance-wrap {
   display: flex;
   flex-direction: column;

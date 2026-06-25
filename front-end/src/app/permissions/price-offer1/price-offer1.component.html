@@ -29,14 +29,15 @@
             </h4>
           </div>
           <hr>
-          <div class="d-flex py-4 justify-content-between align-items-center text-white">
-            <div>
-              <h4> <input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"> : Date </h4>
-              <h4> <input type="date" (change)="onDateToChange($event)" [value]="dateTo"> : Valid until </h4>
-
+          <div class="d-flex py-4 justify-content-between align-items-start text-white" dir="ltr">
+            <div class="client-fields">
+              <h4>Quote for : <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote quote-ltr" type="text" placeholder="..........."></h4>
+              <h4>Contact Person  : <input name="contact_person" autocomplete="off" [(ngModel)]="contact_person" class="quote quote-ltr" type="text" placeholder="Contact person"></h4>
+              <h4>Phone  : <input name="client_phone" autocomplete="off" [(ngModel)]="client_phone" class="quote quote-ltr" type="text" placeholder="Phone number"></h4>
             </div>
             <div>
-              <h4> <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote" type="text" placeholder="..........."> : Quote for </h4>
+              <h4>Date : <input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"></h4>
+              <h4>Valid until : <input type="date" (change)="onDateToChange($event)" [value]="dateTo"></h4>
             </div>
           </div>
         </div>

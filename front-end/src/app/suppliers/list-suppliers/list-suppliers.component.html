@@ -60,11 +60,11 @@
           </div>
           <div class="col-md-3">
             <div>
-              <input (change)="search()" id="own" type="radio" name="status" ngModel [(ngModel)]="selectedStatus" value="own">
+              <input (change)="runSearch()" id="own" type="radio" name="status" ngModel [(ngModel)]="selectedStatus" value="own">
               <label class="mx-2" for="own">مدين</label>
             </div>
             <div>
-              <input (change)="search()" id="want" type="radio" name="status" ngModel [(ngModel)]="selectedStatus" value="want">
+              <input (change)="runSearch()" id="want" type="radio" name="status" ngModel [(ngModel)]="selectedStatus" value="want">
               <label class="mx-2" for="want">دائن</label>
             </div>
           </div>
@@ -77,10 +77,32 @@
     </form>
     <div class="row">
       <div class="col-md-12 text-center">
+        <button
+          *ngIf="canPurgeAllSuppliers()"
+          type="button"
+          class="btn btn-outline-danger btn-sm mb-2"
+          (click)="purgeAllSuppliers()">
+          حذف جميع الموردين وحساباتهم
+        </button>
+        <div class="mb-2" *ngIf="canDeleteSupplier() && selectedIds.size > 0">
+          <button
+            type="button"
+            class="btn btn-danger btn-sm"
+            (click)="deleteSelectedSuppliers()">
+            حذف المحدد ({{ selectedIds.size }})
+          </button>
+        </div>
   <div class="container table-responsive py-5">
     <table class="table table-bordered table-hover">
       <thead class="thead-dark">
         <tr>
+          <th scope="col" *ngIf="canDeleteSupplier()" style="width: 40px;">
+            <input
+              type="checkbox"
+              [checked]="allSelected"
+              [indeterminate]="someSelected"
+              (change)="toggleSelectAll($any($event.target).checked)">
+          </th>
           <th scope="col">#</th>
           <th scope="col"> اسم المورد</th>
           <th scope="col">فئة المورد</th>
@@ -94,36 +116,52 @@
       </thead>
       <tbody>
         <tr *ngFor="let item of suppliersData; let i = index">
-          <th scope="row">{{i+1}}</th>
-          <td>{{item.supplier_name}}</td>
-          <td>{{item.supplier_type.supplier_type}}</td>
-          <td>{{item.supplier_phone}}</td>
-          <td>{{item.supplier_address}}</td>
-          <!-- <td>{{item.supplier_rate}}</td>
-          <td>{{item.price_rate}}</td> -->
-          <td dir="ltr">{{item.balance | customNumber}}</td>
+          <td *ngIf="canDeleteSupplier()">
+            <input
+              type="checkbox"
+              [checked]="isSelected(item.id)"
+              (change)="toggleSelection(item.id, $any($event.target).checked)">
+          </td>
+          <td>{{ page * pageSize + i + 1 }}</td>
+          <td>{{ item?.supplier_name }}</td>
+          <td>{{ supplierTypeLabel(item) }}</td>
+          <td dir="ltr">{{ item?.supplier_phone }}</td>
+          <td>{{ item?.supplier_address }}</td>
+          <td dir="ltr">{{ item?.balance ?? 0 | customNumber }}</td>
           <td>
-            <button class="btn" mat-icon-button [matMenuTriggerFor]="menu" aria-label="Example icon-button with a menu">
+            <span
+              class="supplier-row-menu"
+              [matMenuTriggerFor]="rowMenu"
+              (click)="menuItem = item">
               <mat-icon>more_vert</mat-icon>
-            </button>
-            <mat-menu #menu="matMenu">
-              <button mat-menu-item [routerLink]="['/dashboard/suppliers/supplier_details',item.id]">
-                <!-- <mat-icon>dialpad</mat-icon> -->
-              <span>تفاصيل حساب المورد</span>
-              </button>
-              <button mat-menu-item (click)="openDialog(item)">
-              <span>سداد حساب المورد</span>
-              </button>
-            </mat-menu>
+            </span>
           </td>
         </tr>
       </tbody>
     </table>
 
+    <mat-menu #rowMenu="matMenu">
+      <ng-container *ngIf="menuItem as active">
+        <button mat-menu-item [routerLink]="['/dashboard/suppliers/supplier_details', active.id]">
+          <span>تفاصيل حساب المورد</span>
+        </button>
+        <button mat-menu-item (click)="openEditDialog(active)">
+          <span>تعديل بيانات المورد</span>
+        </button>
+        <button mat-menu-item (click)="openDialog(active)">
+          <span>سداد حساب المورد</span>
+        </button>
+        <button mat-menu-item (click)="deleteSupplier(active)" *ngIf="canDeleteSupplier()">
+          <span>حذف المورد</span>
+        </button>
+      </ng-container>
+    </mat-menu>
+
     </div>
     <mat-paginator #paginator
               class="demo-paginator"
               [length]="length"
+              [pageSize]="pageSize"
               showFirstLastButtons
               (page)="onPageChange($event)"
               [pageSizeOptions]="pageSizeOptions"

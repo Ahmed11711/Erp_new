@@ -68,10 +68,36 @@ export class InventoryImportService {
 
   constructor(private http: HttpClient) {}
 
-  importItems(file: File): Observable<{ created: number; updated: number }> {
+  importItems(file: File, defaultWarehouse?: string): Observable<{ created: number; updated: number }> {
     const fd = new FormData();
     fd.append('file', file);
+    if (defaultWarehouse?.trim()) {
+      fd.append('default_warehouse', defaultWarehouse.trim());
+    }
     return this.http.post<{ created: number; updated: number }>(`${this.base}/items`, fd);
+  }
+
+  importRecipeSheetItems(
+    file: File,
+    warehouse: string,
+    options?: { includeProducts?: boolean; includeMaterials?: boolean; sheet?: string },
+  ): Observable<{ message: string; created: number; updated: number; skipped: number; warnings: string[] }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('warehouse', warehouse);
+    if (options?.sheet) {
+      fd.append('sheet', options.sheet);
+    }
+    if (options?.includeProducts === false) {
+      fd.append('include_products', '0');
+    }
+    if (options?.includeMaterials === false) {
+      fd.append('include_materials', '0');
+    }
+    return this.http.post<{ message: string; created: number; updated: number; skipped: number; warnings: string[] }>(
+      `${this.base}/recipe-sheet-items`,
+      fd,
+    );
   }
 
   importOpeningBalances(file: File, createMissingItems: boolean): Observable<{ processed_lines: number }> {

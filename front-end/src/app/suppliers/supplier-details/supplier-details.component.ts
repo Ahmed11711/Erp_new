@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { SuppliersService } from '../services/suppliers.service';
 import { DialogPayMoneyForSupplierComponent } from '../dialog-pay-money-for-supplier/dialog-pay-money-for-supplier.component';
+import { DialogEditSupplierComponent } from '../dialog-edit-supplier/dialog-edit-supplier.component';
 
 @Component({
   selector: 'app-supplier-details',
@@ -70,6 +71,21 @@ export class SupplierDetailsComponent {
       panelClass: 'supplier-pay-dialog',
       data: {
         supplier: this.supplierForPay,
+        refreshData: () => this.getData(),
+      },
+    });
+  }
+
+  openEditDialog(): void {
+    if (!this.id) {
+      return;
+    }
+    this.dialog.open(DialogEditSupplierComponent, {
+      width: '480px',
+      maxWidth: '95vw',
+      panelClass: 'supplier-edit-dialog-panel',
+      data: {
+        supplierId: Number(this.id),
         refreshData: () => this.getData(),
       },
     });

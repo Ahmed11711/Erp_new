@@ -1,149 +1,142 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
-      <app-time></app-time>
-    </div>
-    <div class="col-5">
-      <h1 class="header text-center mx-auto my-4">
+<div class="purchase-details-page container-fluid px-3 px-md-4">
+  <div class="pp-page-head">
+    <div class="pp-head-start">
+      <h1 class="pp-title">
         تفاصيل الفاتورة
-        <span *ngIf="invoice?.invoice_no || invoice?.invoice_number">
+        <span *ngIf="invoice?.invoice_no || invoice?.invoice_number" class="pp-doc-no">
           — {{ invoice?.invoice_no || invoice?.invoice_number }}
         </span>
       </h1>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end gap-2 flex-wrap">
-      <button *ngIf="printUrl" type="button" class="btn btn-outline-primary btn-sm" (click)="openPrint()">
+    <div class="pp-head-end">
+      <app-time></app-time>
+      <button *ngIf="printUrl" type="button" class="btn btn-outline-primary btn-sm pp-print-btn" (click)="openPrint()">
         <i class="fa fa-print" aria-hidden="true"></i> طباعة الفاتورة
       </button>
     </div>
   </div>
 
-
-</div>
-<div class="container-fluid text-center">
-  <div class="row">
-      <div class="form-group col-md-2">
-          <p>الرقم التسلسلي</p>
-          <h3 dir="ltr">{{ id || '—' }}</h3>
-      </div>
-
-      <div class="form-group col-md-2">
-          <p>رقم المستند الداخلي</p>
-          <h3>{{ invoice?.invoice_no || invoice?.invoice_number || '—' }}</h3>
-      </div>
-
-      <div class="form-group col-md-2" *ngIf="invoice?.external_invoice_no">
-        <p>رقم فاتورة المورد</p>
-        <h3>{{ invoice?.external_invoice_no }}</h3>
-      </div>
-
-      <div class="form-group col-md-2">
-          <p >حالة الشراء</p>
-          <h3>{{ invoice?.invoice_type || '' }}</h3>
-      </div>
-
-      <div class="form-group col-md-2">
-        <p>المورد</p>
-        <h3>{{ invoice?.supplier?.supplier_name || '' }}</h3>
-      </div>
-
-      <div class="form-group col-md-2">
-        <p>تاريخ الاستلام</p>
-        <h3>{{ invoice?.receipt_date || '' }}</h3>
-      </div>
+  <div class="pp-meta-grid">
+    <div class="pp-meta-card">
+      <span class="pp-meta-label">الرقم التسلسلي</span>
+      <span class="pp-meta-value" dir="ltr">{{ id || '—' }}</span>
+    </div>
+    <div class="pp-meta-card">
+      <span class="pp-meta-label">رقم المستند الداخلي</span>
+      <span class="pp-meta-value">{{ invoice?.invoice_no || invoice?.invoice_number || '—' }}</span>
+    </div>
+    <div class="pp-meta-card" *ngIf="invoice?.external_invoice_no">
+      <span class="pp-meta-label">رقم فاتورة المورد</span>
+      <span class="pp-meta-value">{{ invoice?.external_invoice_no }}</span>
+    </div>
+    <div class="pp-meta-card">
+      <span class="pp-meta-label">حالة الشراء</span>
+      <span [ngClass]="statusBadgeClass(invoice?.invoice_type)">{{ invoice?.invoice_type || '—' }}</span>
+    </div>
+    <div class="pp-meta-card">
+      <span class="pp-meta-label">المورد</span>
+      <span class="pp-meta-value">{{ invoice?.supplier?.supplier_name || '—' }}</span>
+    </div>
+    <div class="pp-meta-card">
+      <span class="pp-meta-label">مندوب الشحن</span>
+      <span class="pp-meta-value">{{ shippingRepName(invoice) }}</span>
+    </div>
+    <div class="pp-meta-card">
+      <span class="pp-meta-label">تاريخ الاستلام</span>
+      <span class="pp-meta-value" dir="ltr">{{ invoice?.receipt_date || '—' }}</span>
+    </div>
   </div>
 
-  <div class=" table-responsive py-5">
-    <table class="table w-75 table-bordered table-hover text-center">
-      <thead class="thead-dark">
-        <tr>
-          <th scope="col">#</th>
-          <th scope="col"> اسم الصنف</th>
-          <th scope="col">الوحدة</th>
-          <th scope="col"> الكمية </th>
-          <th scope="col"> السعر </th>
-          <th scope="col"> الاجمالي</th>
-          <th scope="col">السعر معدل</th>
-          <th scope="col"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let item of data let i = index">
-          <th scope="row">{{i+1}}</th>
-          <td>{{item?.product_name}}</td>
-          <td>{{item?.product_unit}}</td>
-          <td>{{item?.product_quantity | customNumber}}</td>
-          <td>{{item?.product_price | customNumber}}</td>
-          <td>{{item?.total | customNumber}}</td>
-          <td>
-            <i class="fa-solid"
-                [ngClass]="{
-                  'fa-check': item?.price_edited === 1,
-                  'text-success': item?.price_edited === 1
-                }">
-            </i>
-          </td>
-          <td></td>
-          <!-- <td><a (click)="reomveProduct(item?.id)" class="btn btn-dark">X</a></td> -->
-          <!-- <td>{{item}}</td> -->
-          <!-- <td><i class="fa fa-trash" aria-hidden="true"></i></td> -->
-        </tr>
-      </tbody>
-    </table>
+  <div class="pp-card">
+    <div class="pp-card-header">بنود الفاتورة</div>
+    <div class="pp-table-wrap">
+      <table class="table pp-table mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم الصنف</th>
+            <th>الوحدة</th>
+            <th>الكمية</th>
+            <th>السعر</th>
+            <th>الإجمالي</th>
+            <th>السعر معدّل</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of data; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td class="pp-product-name">{{ item?.product_name }}</td>
+            <td>{{ item?.product_unit }}</td>
+            <td dir="ltr">{{ item?.product_quantity | customNumber }}</td>
+            <td dir="ltr">{{ item?.product_price | customNumber }}</td>
+            <td dir="ltr" class="pp-line-total">{{ item?.total | customNumber }}</td>
+            <td>
+              <span *ngIf="item?.price_edited === 1" class="pp-edited-yes" title="تم تعديل السعر">
+                <i class="fa-solid fa-check"></i>
+              </span>
+              <span *ngIf="item?.price_edited !== 1" class="pp-edited-no">—</span>
+            </td>
+          </tr>
+          <tr *ngIf="!data?.length">
+            <td colspan="7" class="pp-empty">لا توجد بنود</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
-  <div class="form-row text-center">
-    <div class="col-md-8 row">
-      <div class="form-group col-md-3">
-        <p>المبلغ الكلي</p>
-        <h3>{{ invoice?.total_price | customNumber}}</h3>
+  <div class="pp-bottom-grid">
+    <div class="pp-card pp-totals-card">
+      <div class="pp-card-header">ملخص المبالغ</div>
+      <div class="pp-totals-grid">
+        <div class="pp-total-item">
+          <span class="pp-total-label">المبلغ الكلي</span>
+          <span class="pp-total-value" dir="ltr">{{ invoice?.total_price | customNumber }}</span>
+        </div>
+        <div class="pp-total-item">
+          <span class="pp-total-label">المبلغ المدفوع</span>
+          <span class="pp-total-value pp-total-value--paid" dir="ltr">{{ invoice?.paid_amount | customNumber }}</span>
+        </div>
+        <div class="pp-total-item">
+          <span class="pp-total-label">المبلغ المتبقي</span>
+          <span class="pp-total-value pp-total-value--due" dir="ltr">{{ invoice?.due_amount | customNumber }}</span>
+        </div>
+        <div class="pp-total-item">
+          <span class="pp-total-label">مصاريف الشحن</span>
+          <span class="pp-total-value" dir="ltr">{{ invoice?.transport_cost | customNumber }}</span>
+        </div>
+        <div class="pp-total-item pp-total-item--wide" *ngIf="invoice?.safe?.name || invoice?.bank?.name">
+          <span class="pp-total-label">مصدر الدفع</span>
+          <span class="pp-total-value">{{ invoice?.safe?.name || invoice?.bank?.name }}</span>
+        </div>
       </div>
-      <div class="form-group col-md-3">
-        <p>المبلغ المدفوع</p>
-        <h3>{{ invoice?.paid_amount | customNumber}}</h3>
-      </div>
-      <div class="form-group col-md-3">
-        <p>المبلغ المتبقي</p>
-        <h3>{{ invoice?.due_amount | customNumber }}</h3>
-      </div>
-
-      <div class="form-group col-md-3">
-        <p> مصاريف الشحن</p>
-        <h3>{{ invoice?.transport_cost | customNumber}}</h3>
-      </div>
-
-      <div class="form-group col-md-3">
-        <p> الخزينة</p>
-        <h3>{{ invoice?.safe?.name || invoice?.bank?.name || '' }}</h3>
-      </div>
-
     </div>
 
-    <div class="col-md-4 table-responsive">
-      <table class="table w-100 my-0 table-hover">
-        <thead>
-            <th>action</th>
-            <th>date</th>
-            <th>user</th>
-        </thead>
-      </table>
-      <div class="content">
-        <table class="table w-100 table-hover">
-          <tbody>
-            <tr *ngFor="let item of tracking" (dblclick)="getInvoice(item?.invoice_number)">
-              <td>
-                <span [id]="item.id">{{item?.action}}</span>
-              </td>
-              <td>
-                <span [id]="item.id">{{item?.created_at | date}}</span>
-              </td>
-              <td>{{ item?.user?.name }}</td>
+    <div class="pp-card pp-tracking-card">
+      <div class="pp-card-header">سجل التعديلات</div>
+      <div class="pp-table-wrap">
+        <table class="table pp-table pp-tracking-table mb-0">
+          <thead>
+            <tr>
+              <th>الإجراء</th>
+              <th>التاريخ</th>
+              <th>المستخدم</th>
+              <th>ملاحظات التعديل</th>
             </tr>
-        </tbody>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of tracking" (dblclick)="getInvoice(item?.invoice_number)" class="pp-tracking-row">
+              <td>{{ item?.action }}</td>
+              <td dir="ltr">{{ item?.created_at | date:'yyyy-MM-dd HH:mm' }}</td>
+              <td>{{ item?.user?.name || '—' }}</td>
+              <td class="pp-tracking-details">{{ item?.details || '—' }}</td>
+            </tr>
+            <tr *ngIf="!tracking?.length">
+              <td colspan="4" class="pp-empty">لا يوجد سجل</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
-
   </div>
-
 </div>

@@ -11,6 +11,7 @@ export const RBAC_MODULE_AR: Record<string, string> = {
   suppliers: 'الموردين',
   purchases: 'المشتريات',
   manufacturing: 'التصنيع',
+  processing: 'التشغيل الخارجي',
   notifications: 'الإشعارات',
   nav: 'القوائم والتنقل في الواجهة',
   shipping: 'شركات الشحن والمندوبين',
@@ -59,10 +60,19 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
   'categories.manage': 'إدارة الأصناف والوحدات',
 
   'suppliers.view': 'عرض الموردين',
+  'suppliers.delete': 'حذف مورد وحسابه في الشجرة',
+  'suppliers.purge_all': 'حذف جميع الموردين وحساباتهم',
+  'expenses.purge_all': 'حذف جميع المصروفات وقيودها',
 
   'purchases.view': 'عرض المشتريات',
 
   'manufacturing.view': 'عرض التصنيع والوصفات',
+  'manufacturing.edit_recipe': 'تعديل وصفات التصنيع',
+  'manufacturing.delete_order': 'حذف أوامر التصنيع',
+  'processing.view': 'عرض التشغيل الخارجي',
+  'processing.create': 'إنشاء مستندات التشغيل الخارجي',
+  'processing.post': 'ترحيل مستندات التشغيل الخارجي',
+  'nav.processing': 'قائمة: التشغيل الخارجي',
 
   'notifications.review_filter': 'تصفية ومراجعة الإشعارات',
 

@@ -7,6 +7,7 @@ use App\Models\Purchase;
 use App\Models\StockTransaction;
 use App\Models\StockTransactionItem;
 use App\Models\TransactionType;
+use App\Services\Purchases\PurchaseInvoiceTypeResolver;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,6 +18,7 @@ class PurchaseStockDocumentService
 {
     public function __construct(
         private StockMovementJournalService $journal,
+        private PurchaseInvoiceTypeResolver $typeResolver,
     ) {}
 
     public function syncPurchaseDocument(Purchase $purchase): void
@@ -26,8 +28,6 @@ class PurchaseStockDocumentService
         }
 
         DB::transaction(function () use ($purchase) {
-            // رقم transaction_no فريد على مستوى الجدول؛ مراجعة مشتريات جديدة تُعيد استخدام نفس invoice_no
-            // بينما سند المخزون القديم ما زال مربوطاً بصف purchase سابق في نفس السلسلة → تعارض 1062.
             $mainId = $purchase->ref ? (int) $purchase->ref : (int) $purchase->id;
             $chainPurchaseIds = Purchase::query()
                 ->where(function ($q) use ($mainId) {
@@ -46,7 +46,10 @@ class PurchaseStockDocumentService
                 return;
             }
 
-            $purchaseType = TransactionType::query()->where('code', 'PURCHASE_ADD')->firstOrFail();
+            $kind = $this->typeResolver->kind($purchase->invoice_type);
+            $typeCode = $this->typeResolver->stockTransactionCode($kind);
+            $direction = $this->typeResolver->stockDirection($kind);
+            $purchaseType = TransactionType::query()->where('code', $typeCode)->firstOrFail();
             $typeId = (int) $purchaseType->id;
 
             $warehouseId = null;
@@ -83,9 +86,9 @@ class PurchaseStockDocumentService
                 StockTransactionItem::query()->create([
                     'stock_transaction_id' => $doc->id,
                     'product_id' => $cid,
-                    'qty' => $line->product_quantity,
+                    'qty' => abs((float) $line->product_quantity),
                     'price' => $line->product_price,
-                    'total' => $line->total,
+                    'total' => abs((float) $line->total),
                 ]);
             }
 
@@ -102,14 +105,15 @@ class PurchaseStockDocumentService
                 $running = bcsub($final, $sum, 6);
                 foreach ($catLines as $l) {
                     $qty = (string) $l->product_quantity;
+                    $absQty = (string) abs((float) $qty);
                     $before = $running;
                     $after = bcadd($running, $qty, 6);
                     $this->journal->record(
                         $categoryId,
                         $cat->stock_id ? (int) $cat->stock_id : null,
-                        'in',
-                        (float) $qty,
-                        'PURCHASE_ADD',
+                        $direction,
+                        (float) $absQty,
+                        $typeCode,
                         (float) $before,
                         (float) $after,
                         'purchase',

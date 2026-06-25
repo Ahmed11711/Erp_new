@@ -27,6 +27,11 @@ use Illuminate\Support\Facades\Log;
  *   Dr  Cash/Bank/Safe
  *   Cr  نفس حساب الذمة المستخدم في الفاتورة للجزء المدفوع مقدماً (شركة تحصيل أو عميل)
  *
+ * عند تسجيل دفعة مقدمة دون تحديد بنك/خزينة:
+ *   Dr  مقبوضات بانتظار التسجيل
+ *   Cr  ذمة العميل (أو وسيط التحصيل إن وُجد)
+ * وعند ربط شركة تحصيل دون قيد نقدية (مثل Shopify) تبقى الذمة مفتوحة على الوسيط.
+ *
  * Courier cost (ShippingCourierAccountingService) لا يمر على ذمم المبيعات.
  */
 class SalesOrderAccountingService
@@ -52,18 +57,71 @@ class SalesOrderAccountingService
     {
         DB::transaction(function () use ($order, $rebuildPrepaid) {
             $pattern = 'ORD-' . $order->id . '-%';
+            $affectedAccountIds = $this->collectAccountIdsFromOrderBatches($order->id, $pattern);
+
             AccountEntry::where('order_id', $order->id)
                 ->where('entry_batch_code', 'like', $pattern)
                 ->delete();
 
             if ($rebuildPrepaid) {
-                AccountEntry::where('order_id', $order->id)
-                    ->where('entry_batch_code', 'like', 'ORD-PREPAID-' . $order->id . '-%')
-                    ->delete();
+                foreach ([
+                    'ORD-PREPAID-' . $order->id . '-%',
+                    'ORD-PREPAID-PENDING-' . $order->id . '-%',
+                ] as $prepaidPattern) {
+                    $affectedAccountIds = array_values(array_unique(array_merge(
+                        $affectedAccountIds,
+                        $this->collectAccountIdsFromOrderBatches($order->id, $prepaidPattern)
+                    )));
+
+                    AccountEntry::where('order_id', $order->id)
+                        ->where('entry_batch_code', 'like', $prepaidPattern)
+                        ->delete();
+                }
             }
 
             $this->writeEntries($order, skipPrepaid: ! $rebuildPrepaid);
+
+            $this->rebuildTreeBalancesForAccounts($affectedAccountIds);
         });
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function collectAccountIdsFromOrderBatches(int $orderId, string $batchPattern): array
+    {
+        return AccountEntry::query()
+            ->where('order_id', $orderId)
+            ->where('entry_batch_code', 'like', $batchPattern)
+            ->pluck('tree_account_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * بعد حذف قيود قديمة يجب إعادة تجميع أرصدة الشجرة وإلا تبقى ذمم العميل/الإيرادات معلّقة.
+     *
+     * @param  list<int>  $accountIds
+     */
+    private function rebuildTreeBalancesForAccounts(array $accountIds): void
+    {
+        if ($accountIds === []) {
+            return;
+        }
+
+        $accounting = app(AccountingService::class);
+        foreach ($accountIds as $accountId) {
+            try {
+                $accounting->updateAccountHierarchyBalances($accountId);
+            } catch (\Throwable $e) {
+                Log::warning('SalesOrderAccountingService: tree balance rebuild failed after entry removal', [
+                    'account_id' => $accountId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     private function writeEntries(Order $order, bool $skipPrepaid = false): void
@@ -144,42 +202,13 @@ class SalesOrderAccountingService
             return;
         }
 
+        // الدفعة المقدمة على بنك/خزينة/حساب خدمي تُسجَّل عبر OrderPaymentSourceLedgerService
+        // عند تحديث الرصيد التشغيلي. هنا نُبقي فقط حالة «بانتظار مصدر الدفع».
         if ($order->prepaid_amount > 0) {
-            $prepaid = (float) $order->prepaid_amount;
-            $cashAccountId = $this->resolveCashAccountIdForPrepaid($order);
-            if (!$cashAccountId) {
-                Log::warning('SalesOrderAccountingService: prepaid present but cash account unresolved', [
-                    'order_id' => $order->id,
-                    'bank_id' => $order->bank_id,
-                ]);
-
-                return;
+            $paymentType = trim((string) ($order->prepaid_payment_type ?? ''));
+            if (in_array($paymentType, ['', 'pending', 'none'], true)) {
+                $this->postPrepaidCollectionEntry($order, $customerAccount);
             }
-
-            $prepaidBatch = 'ORD-PREPAID-' . $order->id . '-' . now()->format('YmdHis');
-            $prepaidDesc = 'دفعة مقدمة — طلب رقم ' . $order->id;
-
-            $creditReceivableId = $this->resolvePrepaidCreditTreeAccountId($order) ?? $customerAccount->id;
-
-            $this->journal->postBalancedJournal(
-                [
-                    [
-                        'account_id' => $cashAccountId,
-                        'debit' => $prepaid,
-                        'credit' => 0,
-                        'description' => 'تحصيل دفعة مقدمة — نقدية/بنك',
-                    ],
-                    [
-                        'account_id' => $creditReceivableId,
-                        'debit' => 0,
-                        'credit' => $prepaid,
-                        'description' => 'تخفيض ذمة (عميل/وسيط تحصيل) — دفعة مقدمة',
-                    ],
-                ],
-                $prepaidDesc,
-                $order->id,
-                $prepaidBatch
-            );
         }
     }
 
@@ -197,7 +226,12 @@ class SalesOrderAccountingService
         $codPart = round(max(0, $grandTotal - $prepaidPart), 2);
 
         $od = $order->order_details;
-        $shipAr = $od?->shipping_company?->receivable_tree_account_id;
+        $receivableGuard = app(ReceivableTreeAccountGuard::class);
+        $shipAr = $receivableGuard->sanitizeReceivableAccountId(
+            $od?->shipping_company?->receivable_tree_account_id
+                ? (int) $od->shipping_company->receivable_tree_account_id
+                : null
+        );
         $collectAr = app(CollectionReceivableAccountResolver::class)
             ->receivableAccountIdForOrderDetails($od);
 
@@ -239,6 +273,98 @@ class SalesOrderAccountingService
         }
 
         return $out;
+    }
+
+    private function postPrepaidCollectionEntry(Order $order, TreeAccount $customerAccount): void
+    {
+        $prepaid = (float) $order->prepaid_amount;
+        $creditReceivableId = $this->resolvePrepaidCreditTreeAccountId($order) ?? $customerAccount->id;
+        $cashAccountId = $this->resolveCashAccountIdForPrepaid($order);
+
+        if ($cashAccountId) {
+            $prepaidBatch = 'ORD-PREPAID-' . $order->id . '-' . now()->format('YmdHis');
+            $prepaidDesc = 'دفعة مقدمة — طلب رقم ' . $order->id;
+
+            $this->journal->postBalancedJournal(
+                [
+                    [
+                        'account_id' => $cashAccountId,
+                        'debit' => $prepaid,
+                        'credit' => 0,
+                        'description' => 'تحصيل دفعة مقدمة — نقدية/بنك',
+                    ],
+                    [
+                        'account_id' => $creditReceivableId,
+                        'debit' => 0,
+                        'credit' => $prepaid,
+                        'description' => 'تخفيض ذمة (عميل/وسيط تحصيل) — دفعة مقدمة',
+                    ],
+                ],
+                $prepaidDesc,
+                $order->id,
+                $prepaidBatch
+            );
+
+            return;
+        }
+
+        if ($this->shouldKeepPrepaidReceivableOpen($order, $creditReceivableId, $customerAccount)) {
+            Log::info('SalesOrderAccountingService: prepaid receivable kept open on intermediary (no cash journal)', [
+                'order_id' => $order->id,
+                'receivable_account_id' => $creditReceivableId,
+            ]);
+
+            return;
+        }
+
+        try {
+            $pendingAccount = TreeAccount::ensureUnallocatedPrepaidReceiptsAccount();
+        } catch (\Throwable $e) {
+            Log::warning('SalesOrderAccountingService: prepaid pending account unavailable', [
+                'order_id' => $order->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        $prepaidBatch = 'ORD-PREPAID-PENDING-' . $order->id . '-' . now()->format('YmdHis');
+        $prepaidDesc = 'دفعة مقدمة بانتظار تسجيل مصدر الدفع — طلب رقم ' . $order->id;
+
+        $this->journal->postBalancedJournal(
+            [
+                [
+                    'account_id' => $pendingAccount->id,
+                    'debit' => $prepaid,
+                    'credit' => 0,
+                    'description' => 'مقبوضات عملاء بانتظار تسجيل بنك/خزينة',
+                ],
+                [
+                    'account_id' => $creditReceivableId,
+                    'debit' => 0,
+                    'credit' => $prepaid,
+                    'description' => 'تخفيض ذمة العميل — مبلغ تحت الحساب',
+                ],
+            ],
+            $prepaidDesc,
+            $order->id,
+            $prepaidBatch
+        );
+    }
+
+    /**
+     * شركة تحصيل/وسيط يحتفظ بالنقدية — لا قيد بنك حتى التسوية (نفس منطق Shopify).
+     */
+    private function shouldKeepPrepaidReceivableOpen(Order $order, int $creditReceivableId, TreeAccount $customerAccount): bool
+    {
+        if ($creditReceivableId !== (int) $customerAccount->id) {
+            return true;
+        }
+
+        $order->loadMissing(['order_details.collection_company']);
+
+        return app(CollectionReceivableAccountResolver::class)
+            ->receivableAccountIdForOrder($order) !== null;
     }
 
     /**
@@ -312,7 +438,18 @@ class SalesOrderAccountingService
 
     private function resolveCashAccountIdForPrepaid(Order $order): ?int
     {
-        $paymentType = request()->input('payment_type', 'bank');
+        $storedType = trim((string) ($order->prepaid_payment_type ?? ''));
+        if ($storedType === 'pending') {
+            return null;
+        }
+
+        $paymentType = $storedType !== ''
+            ? $storedType
+            : request()->input('payment_type', 'bank');
+
+        if ($paymentType === 'pending') {
+            return null;
+        }
 
         if ($paymentType === 'safe') {
             $safeId = request()->input('safe_id');

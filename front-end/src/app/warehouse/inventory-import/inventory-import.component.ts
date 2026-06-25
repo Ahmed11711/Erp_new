@@ -4,9 +4,11 @@ import {
   StockCountPreviewResponse,
   StockCountPreviewRow,
 } from '../services/inventory-import.service';
+import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-rows';
 
 type ImportStep = 'upload' | 'preview' | 'confirmed';
 type TabType = 'stock-count' | 'items' | 'opening' | 'adjustment';
+type ItemsImportMode = 'simple' | 'recipe-sheet';
 
 @Component({
   selector: 'app-inventory-import',
@@ -32,6 +34,11 @@ export class InventoryImportComponent implements OnInit {
 
   // Legacy sections
   itemsFile: File | null = null;
+  itemsImportMode: ItemsImportMode = 'recipe-sheet';
+  itemsWarehouse = 'مخزن مواد خام';
+  includeRecipeProducts = true;
+  includeRecipeMaterials = true;
+  readonly warehouseOptions = WAREHOUSE_STOCK_ROWS.map((w) => w.nameAr);
   openingFile: File | null = null;
   adjustmentFile: File | null = null;
   createMissingItems = false;
@@ -216,20 +223,35 @@ export class InventoryImportComponent implements OnInit {
   }
 
   uploadItems(): void {
-    if (!this.itemsFile) return;
+    if (!this.itemsFile || !this.itemsWarehouse.trim()) return;
     this.loadingItems = true;
     this.messageItems = '';
     this.errorItems = '';
-    this.importApi.importItems(this.itemsFile).subscribe({
-      next: (res) => {
-        this.loadingItems = false;
-        this.messageItems = `تم: إنشاء ${res.created}، تحديث ${res.updated}`;
-      },
-      error: (err) => {
-        this.loadingItems = false;
-        this.errorItems = err?.error?.message || 'فشل الاستيراد';
-      },
-    });
+
+    const onSuccess = (res: { created: number; updated: number; skipped?: number; message?: string }) => {
+      this.loadingItems = false;
+      const skippedPart =
+        res.skipped != null && res.skipped > 0 ? `، بدون تغيير ${res.skipped}` : '';
+      this.messageItems =
+        res.message ??
+        `تم: إنشاء ${res.created}، تحديث ${res.updated}${skippedPart} — المخزن: ${this.itemsWarehouse}`;
+    };
+    const onError = (err: { error?: { message?: string } }) => {
+      this.loadingItems = false;
+      this.errorItems = err?.error?.message || 'فشل الاستيراد';
+    };
+
+    if (this.itemsImportMode === 'recipe-sheet') {
+      this.importApi
+        .importRecipeSheetItems(this.itemsFile, this.itemsWarehouse, {
+          includeProducts: this.includeRecipeProducts,
+          includeMaterials: this.includeRecipeMaterials,
+        })
+        .subscribe({ next: onSuccess, error: onError });
+      return;
+    }
+
+    this.importApi.importItems(this.itemsFile, this.itemsWarehouse).subscribe({ next: onSuccess, error: onError });
   }
 
   uploadOpening(): void {

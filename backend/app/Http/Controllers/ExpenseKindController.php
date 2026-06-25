@@ -46,10 +46,6 @@ class ExpenseKindController extends Controller
             'expense_kind' => 'required|string|max:255',
             'tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
-        if ($error = $this->validateExpenseLedgerAccount($validated['tree_account_id'] ?? null)) {
-            return $error;
-        }
-
         $data = ExpenseKind::create($validated);
         if (empty($validated['tree_account_id'])) {
             TreeAccount::ensureExpenseKindLedgerAccount($data, $validated['expense_type']);
@@ -69,38 +65,12 @@ class ExpenseKindController extends Controller
             'expense_kind' => 'required|string|max:255',
             'tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
-        if ($error = $this->validateExpenseLedgerAccount($validated['tree_account_id'] ?? null)) {
-            return $error;
-        }
-
         $expense_kind->update($validated);
         if (empty($validated['tree_account_id'])) {
             TreeAccount::ensureExpenseKindLedgerAccount($expense_kind, $validated['expense_type']);
         }
 
         return response()->json($expense_kind->fresh()->load('treeAccount'), 200);
-    }
-
-    /**
-     * @return \Illuminate\Http\JsonResponse|null
-     */
-    private function validateExpenseLedgerAccount($treeAccountId)
-    {
-        if ($treeAccountId === null || $treeAccountId === '') {
-            return null;
-        }
-
-        $acc = TreeAccount::find((int) $treeAccountId);
-        if (! $acc || $acc->type !== 'expense') {
-            return response()->json(['message' => 'حساب الشجرة يجب أن يكون من نوع مصروف'], 422);
-        }
-
-        TreeAccount::ensureCashOutExpenseParent();
-        if (! TreeAccount::isUnderCashOutExpenseParent($acc)) {
-            return response()->json(['message' => 'حساب المصروف يجب أن يكون تحت حساب الأب «النقد الصادر»'], 422);
-        }
-
-        return null;
     }
 
     public function search(Request $request){

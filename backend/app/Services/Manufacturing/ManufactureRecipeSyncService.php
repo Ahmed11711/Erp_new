@@ -3,6 +3,8 @@
 namespace App\Services\Manufacturing;
 
 use App\Models\Item;
+use App\Models\Manufacture;
+use App\Models\ManufactureProduct;
 use App\Models\Recipe;
 use App\Models\RecipeExtraCost;
 use App\Models\RecipeIngredient;
@@ -113,9 +115,70 @@ final class ManufactureRecipeSyncService
 
         Item::query()->whereKey($anchorId)->update(['recipe_id' => $recipe->id]);
 
+        $this->syncLegacyManufactureLines($anchorId, $products);
+
         RecipeStructureValidator::assertValidForRecipe(
             $recipe->fresh(['ingredients.item']),
             $anchorId
         );
+    }
+
+    /**
+     * Keep legacy manufacture_products rows aligned with recipe ingredient decimals.
+     *
+     * @param  array<int, array{id:mixed, quantity:mixed, total_price:mixed}>  $products
+     */
+    public function syncLegacyManufactureLines(int $anchorId, array $products): void
+    {
+        $manufacture = Manufacture::query()->where('product_id', $anchorId)->first();
+        if ($manufacture === null) {
+            return;
+        }
+
+        foreach ($products as $product) {
+            $qty = (float) ($product['quantity'] ?? 0);
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $totalPrice = (float) ($product['total_price'] ?? 0);
+            ManufactureProduct::query()->updateOrCreate(
+                [
+                    'manufacture_id' => $manufacture->id,
+                    'product_id' => (int) $product['id'],
+                ],
+                [
+                    'quantity' => $qty,
+                    'total_price' => $totalPrice,
+                ]
+            );
+        }
+    }
+
+    public function syncLegacyManufactureLinesFromRecipe(Recipe $recipe): void
+    {
+        $outputItemId = (int) ($recipe->output_item_id ?? 0);
+        if ($outputItemId <= 0) {
+            return;
+        }
+
+        $recipe->loadMissing('ingredients');
+        $products = [];
+        foreach ($recipe->ingredients as $ingredient) {
+            $qty = (float) ($ingredient->quantity ?? 0);
+            if ($qty <= 0) {
+                continue;
+            }
+            $unitCost = (float) ($ingredient->unit_cost ?? 0);
+            $products[] = [
+                'id' => (int) $ingredient->item_id,
+                'quantity' => $qty,
+                'total_price' => round($qty * $unitCost, 4),
+            ];
+        }
+
+        if ($products !== []) {
+            $this->syncLegacyManufactureLines($outputItemId, $products);
+        }
     }
 }

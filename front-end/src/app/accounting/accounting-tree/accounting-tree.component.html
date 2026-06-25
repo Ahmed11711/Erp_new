@@ -183,6 +183,40 @@
             حساب تداول
           </label>
         </div>
+
+        <div class="account-audit-panel" *ngIf="!loadingAccountMeta">
+          <h4 class="audit-title">سجل المستخدمين</h4>
+          <p class="small text-muted mb-2" *ngIf="selectedAccount.created_by_user || selectedAccount.updated_by_user">
+            <span *ngIf="selectedAccount.created_by_user">
+              <strong>أُنشئ بواسطة:</strong> {{ selectedAccount.created_by_user.name }}
+              <span *ngIf="selectedAccount.created_at"> — {{ selectedAccount.created_at }}</span>
+            </span>
+            <br *ngIf="selectedAccount.created_by_user && selectedAccount.updated_by_user">
+            <span *ngIf="selectedAccount.updated_by_user">
+              <strong>آخر تعديل:</strong> {{ selectedAccount.updated_by_user.name }}
+              <span *ngIf="selectedAccount.updated_at"> — {{ selectedAccount.updated_at }}</span>
+            </span>
+          </p>
+          <p class="small text-muted mb-2" *ngIf="!selectedAccount.created_by_user && !selectedAccount.updated_by_user">
+            لا يوجد سجل مستخدم لهذا الحساب (أُنشئ قبل تفعيل التتبع أو آلياً).
+          </p>
+
+          <div class="audit-log-list" *ngIf="accountAudits.length > 0">
+            <div class="audit-log-item" *ngFor="let entry of accountAudits">
+              <div class="audit-log-head">
+                <span class="badge badge-audit">{{ entry.action_label || entry.action }}</span>
+                <strong>{{ entry.performer?.name || '—' }}</strong>
+                <span class="text-muted">{{ entry.created_at }}</span>
+              </div>
+              <div class="audit-log-changes small text-muted" *ngIf="entry.action === 'updated' && formatAuditChanges(entry)">
+                {{ formatAuditChanges(entry) }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="account-audit-panel" *ngIf="loadingAccountMeta">
+          <p class="small text-muted mb-0">جاري تحميل سجل المستخدمين...</p>
+        </div>
       </form>
     </div>
     <div class="modal-footer">

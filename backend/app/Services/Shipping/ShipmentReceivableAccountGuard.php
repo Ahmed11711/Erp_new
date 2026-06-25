@@ -3,9 +3,11 @@
 namespace App\Services\Shipping;
 
 use App\Enums\CollectionProviderType;
+use App\Models\CollectionCompany;
 use App\Models\Order;
 use App\Models\ShippingCompany;
 use App\Support\CollectionProviderMorph;
+use App\Services\Accounting\ReceivableTreeAccountGuard;
 
 /**
  * يضمن قبل تأكيد شحن طلب (أفراد) أن جهات التحصيل/الشحن التي ستحمل مديونية
@@ -21,6 +23,7 @@ class ShipmentReceivableAccountGuard
 {
     public function __construct(
         private CollectionReceivableAccountResolver $resolver,
+        private ReceivableTreeAccountGuard $receivableGuard,
     ) {
     }
 
@@ -67,9 +70,18 @@ class ShipmentReceivableAccountGuard
         // جزء الدفع عند الاستلام (COD) ينتقل إلى شركة الشحن/المندوب.
         if ($codPart > 0.009) {
             $sc = ShippingCompany::find($shippingCompanyId);
-            if (! $sc || ! $sc->receivable_tree_account_id) {
+            $shipReceivableId = $sc?->receivable_tree_account_id
+                ? (int) $sc->receivable_tree_account_id
+                : null;
+
+            if (! $sc || ! $this->receivableGuard->sanitizeReceivableAccountId($shipReceivableId)) {
                 $name = $sc?->name ?? ('#' . $shippingCompanyId);
-                $missing[] = 'شركة الشحن «' . $name . '» غير مرتبطة بحساب ذمم في شجرة الحسابات.';
+                if ($shipReceivableId && $this->receivableGuard->isPaymentSourceTreeAccount($shipReceivableId)) {
+                    $missing[] = 'شركة الشحن «' . $name
+                        . '» مربوطة بحساب خزينة/بنك — يجب ربطها بحساب ذمم منفصل في شجرة الحسابات.';
+                } else {
+                    $missing[] = 'شركة الشحن «' . $name . '» غير مرتبطة بحساب ذمم في شجرة الحسابات.';
+                }
             }
         }
 
@@ -95,11 +107,17 @@ class ShipmentReceivableAccountGuard
             $accId = $this->resolver->receivableAccountIdForProvider($provType, (int) $provId);
             if (! $accId) {
                 $name = CollectionProviderMorph::resolveName($provType, (int) $provId) ?? ('#' . $provId);
+                $rawId = $this->rawReceivableAccountIdForProvider($provType, (int) $provId);
                 $label = $provType === CollectionProviderType::CollectionCompany->value
                     ? 'شركة التحصيل'
                     : 'جهة التحصيل';
-                $missing[] = $label . ' «' . $name
-                    . '» غير مرتبطة بحساب ذمم في شجرة الحسابات (اربطها هي أو شركة الشحن المرتبطة بها).';
+                if ($rawId && $this->receivableGuard->isPaymentSourceTreeAccount($rawId)) {
+                    $missing[] = $label . ' «' . $name
+                        . '» مربوطة بحساب خزينة/بنك — يجب ربطها بحساب ذمم منفصل في شجرة الحسابات.';
+                } else {
+                    $missing[] = $label . ' «' . $name
+                        . '» غير مرتبطة بحساب ذمم في شجرة الحسابات (اربطها هي أو شركة الشحن المرتبطة بها).';
+                }
             }
         }
 
@@ -143,5 +161,19 @@ class ShipmentReceivableAccountGuard
             : CollectionProviderType::ShippingCompany->value;
 
         return [$type, $shippingCompanyId];
+    }
+
+    private function rawReceivableAccountIdForProvider(string $type, int $id): ?int
+    {
+        $enum = CollectionProviderType::tryFrom($type);
+        if (! $enum) {
+            return null;
+        }
+
+        return match ($enum) {
+            CollectionProviderType::CollectionCompany => CollectionCompany::find($id)?->receivable_tree_account_id,
+            CollectionProviderType::ShippingCompany, CollectionProviderType::Courier => ShippingCompany::find($id)?->receivable_tree_account_id,
+            default => null,
+        };
     }
 }

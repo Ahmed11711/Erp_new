@@ -43,3 +43,12 @@ td{
 ::ng-deep .ng-autocomplete{
   width: 100% !important;
 }
+
+.expense-kind-account-input {
+  background-color: #fff;
+  color: #212529;
+}
+
+::ng-deep .expense-kind-autocomplete-panel {
+  max-height: 280px !important;
+}

@@ -45,4 +45,24 @@ enum InventoryMovementType: string
 
     /** Transfer leg — inbound warehouse line (paired with StockDocumentTransferOut). */
     case StockDocumentTransferIn = 'stock_document_transfer_in';
+
+    /** Subcontracting — issue raw materials to external processor. */
+    case SubcontractDispatchOut = 'subcontract_dispatch_out';
+
+    /** Subcontracting — receive into materials-at-vendor pool. */
+    case SubcontractDispatchIn = 'subcontract_dispatch_in';
+
+    /** Subcontracting — good receipt out from vendor pool. */
+    case SubcontractReceiptGoodOut = 'subcontract_receipt_good_out';
+
+    /** Subcontracting — good receipt into destination warehouse. */
+    case SubcontractReceiptGoodIn = 'subcontract_receipt_good_in';
+
+    /** Subcontracting — rejected qty returned to raw warehouse. */
+    case SubcontractReceiptRejectedOut = 'subcontract_receipt_rejected_out';
+
+    case SubcontractReceiptRejectedIn = 'subcontract_receipt_rejected_in';
+
+    /** Subcontracting — damaged / scrap write-off from vendor pool. */
+    case SubcontractReceiptDamagedOut = 'subcontract_receipt_damaged_out';
 }

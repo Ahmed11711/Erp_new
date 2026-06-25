@@ -5,6 +5,10 @@ import { OrderService } from '../services/order.service';
 import Swal from 'sweetalert2';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service'; // Import
 import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
+import {
+  allowsManualShippingCollection,
+  manualCollectionBlockedMessage,
+} from '../utils/order-collect-eligibility.utils';
 
 @Component({
   selector: 'app-collect-order',
@@ -12,13 +16,13 @@ import { SafeService } from 'src/app/accounting/services/safe.service'; // Impor
   styleUrls: ['./collect-order.component.css']
 })
 export class CollectOrderComponent {
-  line!: string;
-  company!: string;
-  banks !: any[];
-  safes!: any[]; // Safes
-  serviceAccounts!: any[]; // Service Accounts
-  total_balance !: number;
-  order_type !: string;
+  line = '—';
+  company = '—';
+  banks: any[] = [];
+  safes: any[] = [];
+  serviceAccounts: any[] = [];
+  total_balance: number = 0;
+  order_type = '';
   collectType: string = 'تحصيل في الخزينة';
   paymentType: string = 'bank'; // Default to bank
   imgtext: string = "صورة الايصال";
@@ -33,17 +37,40 @@ export class CollectOrderComponent {
 
   ngOnInit(): void {
     const id = this.route.snapshot.params['id'];
-    this.order.getOrderById(id).subscribe((res: any) => {
-      this.line = res.order_details.shipping_line.name;
-      this.company = res.order_details.shipping_company?.name;
-      this.total_balance = res.net_total;
-      this.order_type = res.order_type;
+    this.order.getOrderById(id).subscribe({
+      next: (res: any) => {
+        const details = res?.order_details;
+        this.line = details?.shipping_line?.name ?? '—';
+        this.company = details?.shipping_company?.name ?? '—';
+        if (res?.order_status === 'تم التحصيل') {
+          Swal.fire({ icon: 'info', title: 'تم تحصيل هذا الطلب مسبقاً' }).then(() =>
+            this.router.navigate(['/dashboard/shipping/listorders'])
+          );
+          return;
+        }
 
-      if (res.order_status === 'تم التحصيل') {
-        Swal.fire({ icon: 'info', title: 'تم تحصيل هذا الطلب مسبقاً' }).then(() =>
-          this.router.navigate(['/dashboard/shipping/listorders'])
-        );
-      }
+        if (!allowsManualShippingCollection(res)) {
+          Swal.fire({
+            icon: 'info',
+            title: 'لا يمكن تحصيل هذا الطلب من هنا',
+            text: manualCollectionBlockedMessage(res),
+          }).then(() => this.router.navigate(['/dashboard/shipping/listorders']));
+          return;
+        }
+
+        this.total_balance = Number(res?.net_total ?? 0);
+        this.order_type = res?.order_type ?? '';
+        if (this.total_balance <= 0.0001 && Number(res?.prepaid_amount ?? 0) > 0) {
+          Swal.fire({
+            icon: 'info',
+            title: 'الطلب مدفوع بالكامل مسبقاً',
+            text: 'صافي التحصيل من الشحن صفر — تُسوَّى ذمة شركة التحصيل عبر «نقد وارد / شركة تحصيل».',
+          });
+        }
+      },
+      error: () => {
+        Swal.fire({ icon: 'error', title: 'تعذر تحميل بيانات الطلب' });
+      },
     });
 
     this.bank.bankSelect().subscribe((res: any) => {
@@ -59,6 +86,10 @@ export class CollectOrderComponent {
 
 
   collectOrder(form: any) {
+    if (!this.canSubmitCollection(form)) {
+      return;
+    }
+
     if (this.order_type == 'طلب مرتجع' || this.order_type == 'طلب استبدال') {
       Swal.fire({
         title: 'هل تم استلام المنتج',
@@ -122,8 +153,8 @@ export class CollectOrderComponent {
     } else {
       const id = this.route.snapshot.params['id'];
       const formData = new FormData();
-      formData.append('amount', this.total_balance.toString());
-      formData.append('note', form.value.note);
+      formData.append('amount', String(this.total_balance ?? 0));
+      formData.append('note', form.value.note ?? '');
       if (this.collectType === 'تحصيل الكتروني') {
         formData.append('reference_number', this.referenceNumber);
         if (this.selectedFile) {
@@ -166,8 +197,33 @@ export class CollectOrderComponent {
   onFileChanged(event: any) {
     this.selectedFile = event.target.files[0];
     this.imgtext = this.selectedFile?.name || 'No image selected';
-    console.log(this.selectedFile);
   }
 
+  private canSubmitCollection(form: any): boolean {
+    const amount = Number(this.total_balance ?? 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+      Swal.fire({ icon: 'warning', title: 'مبلغ التحصيل غير صالح' });
+      return false;
+    }
 
+    if (this.collectType !== 'تحصيل في الخزينة') {
+      return true;
+    }
+
+    const paymentType = form?.value?.paymentType || this.paymentType || 'bank';
+    if (paymentType === 'safe' && !form?.value?.safe) {
+      Swal.fire({ icon: 'warning', title: 'اختر الخزينة' });
+      return false;
+    }
+    if (paymentType === 'service_account' && !form?.value?.service_account) {
+      Swal.fire({ icon: 'warning', title: 'اختر الحساب الخدمي' });
+      return false;
+    }
+    if (paymentType === 'bank' && !form?.value?.bank) {
+      Swal.fire({ icon: 'warning', title: 'اختر البنك أو الخزينة' });
+      return false;
+    }
+
+    return true;
+  }
 }

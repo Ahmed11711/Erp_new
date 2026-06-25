@@ -284,12 +284,14 @@
         </div>
         <div class="col-md-2 d-flex flex-column justify-content-end" *ngIf="prepaid_amount > 0">
           <mat-form-field class="w-100">
-            <mat-label>طريقة الدفع</mat-label>
+            <mat-label>مصدر الدفع (اختياري)</mat-label>
             <mat-select formControlName='payment_type'>
+              <mat-option value="pending">بانتظار التسجيل المحاسبي</mat-option>
               <mat-option value="bank">بنك</mat-option>
               <mat-option value="safe">خزينة</mat-option>
               <mat-option value="service_account">حساب خدمي</mat-option>
             </mat-select>
+            <mat-hint>يمكن ترك المصدر لاحقاً للمحاسب</mat-hint>
           </mat-form-field>
         </div>
         <div class="col-md-2 d-flex flex-column justify-content-end"
@@ -318,6 +320,12 @@
               <mat-option [value]="elm.id" *ngFor="let elm of safesData">{{elm.name}}</mat-option>
             </mat-select>
           </mat-form-field>
+        </div>
+        <div class="col-12" *ngIf="prepaid_amount > 0 && form.get('payment_type')?.value === 'pending'">
+          <div class="alert alert-info py-2 mb-0 small text-center">
+            سيُسجَّل المبلغ كـ «تحت الحساب» ويُخفَّض رصيد العميل محاسبياً دون قيد بنك/خزينة.
+            يمكن للمحاسب لاحقاً تحديد مصدر الدفع من تعديل الطلب أو سند قبض.
+          </div>
         </div>
       </div>
 
