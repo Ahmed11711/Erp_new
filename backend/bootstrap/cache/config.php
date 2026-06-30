@@ -283,7 +283,7 @@
       array (
         'driver' => 'sqlite',
         'url' => NULL,
-        'database' => 'newerp',
+        'database' => 'magalis',
         'prefix' => '',
         'foreign_key_constraints' => true,
       ),
@@ -293,7 +293,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'newerp',
+        'database' => 'magalis',
         'username' => 'root',
         'password' => '',
         'unix_socket' => '',
@@ -313,7 +313,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'newerp',
+        'database' => 'magalis',
         'username' => 'root',
         'password' => '',
         'charset' => 'utf8',
@@ -328,7 +328,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'newerp',
+        'database' => 'magalis',
         'username' => 'root',
         'password' => '',
         'charset' => 'utf8',
@@ -731,7 +731,8 @@
       'permissions' => 
       array (
         0 => 'orders.edit',
-        1 => 'orders.view',
+        1 => 'orders.cancel_line',
+        2 => 'orders.view',
       ),
     ),
     'confirm_order' => 
@@ -866,6 +867,9 @@
         3 => 'Logistics Specialist',
         4 => 'Shipping Management',
         5 => 'Data Entry',
+        6 => 'Customer Service',
+        7 => 'Finance and operations management',
+        8 => 'Review Management',
       ),
       'permissions' => 
       array (
@@ -935,6 +939,296 @@
       array (
         0 => 'orders.edit',
         1 => 'orders.view',
+      ),
+    ),
+  ),
+  'order_status_visibility' => 
+  array (
+    'statuses' => 
+    array (
+      'new' => 
+      array (
+        'permission' => 'orders.view_status.new',
+        'name' => 'View New Orders',
+        'labels' => 
+        array (
+          0 => 'طلب جديد',
+          1 => 'جديد',
+        ),
+        'filter_value' => 'طلب جديد',
+        'filter_label' => 'جديد',
+      ),
+      'confirmed' => 
+      array (
+        'permission' => 'orders.view_status.confirmed',
+        'name' => 'View Confirmed Orders',
+        'labels' => 
+        array (
+          0 => 'طلب مؤكد',
+        ),
+        'filter_value' => 'طلب مؤكد',
+        'filter_label' => 'طلب مؤكد',
+      ),
+      'partial_ship' => 
+      array (
+        'permission' => 'orders.view_status.partial_ship',
+        'name' => 'View Partially Shipped Orders',
+        'labels' => 
+        array (
+          0 => 'شحن جزئي',
+        ),
+        'filter_value' => 'شحن جزئي',
+        'filter_label' => 'شحن جزئي',
+      ),
+      'shipped' => 
+      array (
+        'permission' => 'orders.view_status.shipped',
+        'name' => 'View Shipped Orders',
+        'labels' => 
+        array (
+          0 => 'تم شحن',
+        ),
+        'filter_value' => 'تم شحن',
+        'filter_label' => 'تم شحن',
+      ),
+      'delivered' => 
+      array (
+        'permission' => 'orders.view_status.delivered',
+        'name' => 'View Delivered Orders',
+        'labels' => 
+        array (
+          0 => 'تم التسليم',
+        ),
+        'filter_value' => 'تم التسليم',
+        'filter_label' => 'تم التسليم',
+      ),
+      'received' => 
+      array (
+        'permission' => 'orders.view_status.received',
+        'name' => 'View Received Orders',
+        'labels' => 
+        array (
+          0 => 'تم الاستلام',
+        ),
+        'filter_value' => 'تم الاستلام',
+        'filter_label' => 'تم الاستلام',
+      ),
+      'collected' => 
+      array (
+        'permission' => 'orders.view_status.collected',
+        'name' => 'View Collected Orders',
+        'labels' => 
+        array (
+          0 => 'تم التحصيل',
+        ),
+        'filter_value' => 'تم التحصيل',
+        'filter_label' => 'تم التحصيل',
+      ),
+      'postponed' => 
+      array (
+        'permission' => 'orders.view_status.postponed',
+        'name' => 'View Postponed Orders',
+        'labels' => 
+        array (
+          0 => 'مؤجل',
+        ),
+        'filter_value' => 'مؤجل',
+        'filter_label' => 'مؤجل',
+      ),
+      'archived' => 
+      array (
+        'permission' => 'orders.view_status.archived',
+        'name' => 'View Archived Orders',
+        'labels' => 
+        array (
+          0 => 'أرشيف',
+        ),
+        'filter_value' => 'أرشيف',
+        'filter_label' => 'أرشيف',
+      ),
+      'maintained' => 
+      array (
+        'permission' => 'orders.view_status.maintained',
+        'name' => 'View Maintained Orders',
+        'labels' => 
+        array (
+          0 => 'تم الصيانة',
+        ),
+        'filter_value' => 'تم الصيانة',
+        'filter_label' => 'تم الصيانة',
+      ),
+      'refused' => 
+      array (
+        'permission' => 'orders.view_status.refused',
+        'name' => 'View Refused Orders',
+        'labels' => 
+        array (
+          0 => 'رفض استلام',
+        ),
+        'filter_value' => 'رفض استلام',
+        'filter_label' => 'رفض استلام',
+      ),
+      'cancelled' => 
+      array (
+        'permission' => 'orders.view_status.cancelled',
+        'name' => 'View Cancelled Orders',
+        'labels' => 
+        array (
+          0 => 'ملغي',
+        ),
+        'filter_value' => 'ملغي',
+        'filter_label' => 'ملغي',
+      ),
+    ),
+    'department_default_status_keys' => 
+    array (
+      'Admin' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'archived',
+        8 => 'maintained',
+        9 => 'refused',
+        10 => 'cancelled',
+      ),
+      'Customer Service' => '*',
+      'Data Entry' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'archived',
+        8 => 'maintained',
+        9 => 'refused',
+        10 => 'cancelled',
+      ),
+      'Account Management' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'archived',
+        8 => 'maintained',
+        9 => 'refused',
+        10 => 'cancelled',
+      ),
+      'Finance and operations management' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'archived',
+        8 => 'maintained',
+        9 => 'refused',
+        10 => 'cancelled',
+      ),
+      'Corparates' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'archived',
+        8 => 'maintained',
+        9 => 'refused',
+        10 => 'cancelled',
+      ),
+      'Employee' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'archived',
+        8 => 'maintained',
+        9 => 'refused',
+        10 => 'cancelled',
+      ),
+      'Operation Management' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'postponed',
+        6 => 'maintained',
+        7 => 'refused',
+      ),
+      'Operation Specialist' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'postponed',
+        6 => 'maintained',
+        7 => 'refused',
+      ),
+      'Logistics Specialist' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'postponed',
+        6 => 'maintained',
+        7 => 'refused',
+      ),
+      'Shipping Management' => 
+      array (
+        0 => 'confirmed',
+        1 => 'partial_ship',
+        2 => 'shipped',
+        3 => 'delivered',
+        4 => 'received',
+        5 => 'collected',
+        6 => 'postponed',
+        7 => 'maintained',
+        8 => 'refused',
+        9 => 'cancelled',
+      ),
+      'Review Management' => 
+      array (
+        0 => 'shipped',
+        1 => 'delivered',
+        2 => 'collected',
+        3 => 'postponed',
+        4 => 'cancelled',
+        5 => 'refused',
+      ),
+      'Financial Accounts' => 
+      array (
+        0 => 'shipped',
+        1 => 'partial_ship',
+        2 => 'collected',
+        3 => 'received',
+        4 => 'delivered',
       ),
     ),
   ),

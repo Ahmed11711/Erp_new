@@ -11,15 +11,22 @@
       <!-- Filters -->
       <div class="filters-card">
         <div class="row">
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label>من تاريخ</label>
             <input type="date" class="form-control" [(ngModel)]="dateFrom" />
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label>إلى تاريخ</label>
             <input type="date" class="form-control" [(ngModel)]="dateTo" />
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
+            <label>المستخدم</label>
+            <select class="form-control" [(ngModel)]="selectedUserId">
+              <option [ngValue]="null">كل المستخدمين</option>
+              <option *ngFor="let user of users" [ngValue]="user.id">{{ user.name }}</option>
+            </select>
+          </div>
+          <div class="col-md-3">
             <label>بحث</label>
             <input type="text" class="form-control" placeholder="ابحث برقم القيد أو الوصف..." 
                    [(ngModel)]="searchTerm" />

@@ -54,3 +54,18 @@ php artisan accounting:reconcile-banks --fix --counter-account-id=XXX
   php artisan migrate
 php artisan db:seed --class=ProcessingModuleSeeder
 php artisan db:seed --class=RbacFoundationSeeder
+
+
+
+cd c:\xampp\htdocs\Erp_new\backend
+php artisan db:seed --class=RbacFoundationSeeder
+php artisan route:clear && php artisan config:clear
+
+php artisan db:seed --class=RbacFoundationSeeder
+
+php artisan db:fix-procedure-definers
+
+
+php artisan collection:backfill-receivables
+
+php artisan db:seed --class=AccountStatementEditPermissionSeeder

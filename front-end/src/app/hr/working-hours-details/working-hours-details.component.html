@@ -55,24 +55,34 @@
       </th>
     </thead>
     <tbody>
-      <tr *ngFor="let elm of tableData; let i = index;">
-        <td dir="ltr">{{elm.date}}</td>
+      <tr *ngFor="let elm of tableData; let i = index;" [class.row-edited]="elm.logs_count > 0 && !elm.reviewed">
+        <td dir="ltr">
+          {{elm.date}}
+          <button
+            *ngIf="elm.id"
+            type="button"
+            class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+            title="سجل التعديلات"
+            (click)="showChangeLog(elm)">
+            <mat-icon class="log-icon" [class.log-icon--has-data]="elm.logs_count > 0">history</mat-icon>
+          </button>
+        </td>
         <td dir="ltr">{{elm.date | customDayName}}</td>
-        <td colspan="3" *ngIf="elm.hours == '00:00' && !elm.holiday && elm.check_in == '08:00 AM'" class="bg-gray">متغيب</td>
+        <td colspan="3" *ngIf="elm.hours == '00:00' && !elm.holiday && elm.check_in == '08:00 AM' && !elm.hours_permission" class="bg-gray">متغيب</td>
         <td [attr.colspan]="!elm?.hours_permission ? 3 : 3" *ngIf="elm.holiday && elm.check_in == elm.check_out" class="bg-main">أجازة اسبوعية</td>
         <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">00:00</td>
         <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">0</td>
         <td colspan="3" *ngIf="elm.vacation" class="bg-success">{{elm.vacation_reason}}</td>
         <td colspan="1" *ngIf="elm.vacation">00:00</td>
         <td colspan="1" *ngIf="elm.vacation">0</td>
-        <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''" [ngClass]="elm.times.length > 2 ? 'bg-info' : ''" (dblclick)="selectCheckIn(elm)"><i class="fa-solid fa-pen" (click)="editCheckIn(elm)"></i>{{elm.check_in}}</td>
+        <td dir="ltr" *ngIf="elm.salary_type2 == 'اذن' || (elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''" [ngClass]="elm.times?.length > 2 ? 'bg-info' : ''" (dblclick)="selectCheckIn(elm)"><i class="fa-solid fa-pen" (click)="editCheckIn(elm)"></i>{{elm.check_in}}</td>
         <td *ngIf="elm.hours == '00:00' && !elm.holiday && (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" class="bg-danger" (dblclick)="addCheckOut(elm)"></td>
-        <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''"><i class="fa-solid fa-pen" (click)="editCheckOut(elm)"></i>{{elm.check_out}}</td>
-        <td dir="ltr" *ngIf="(elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.hours}}</td>
-        <td dir="ltr" *ngIf="elm.hours_permission || !elm.holiday && !elm.vacation || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)">{{elm.hoursDifference}}</td>
+        <td dir="ltr" *ngIf="elm.salary_type2 == 'اذن' || (elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''"><i class="fa-solid fa-pen" (click)="editCheckOut(elm)"></i>{{elm.check_out}}</td>
+        <td dir="ltr" *ngIf="elm.salary_type2 == 'اذن' || (elm.hours != '00:00' && elm.holiday) || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out) || (elm.check_in !== '08:00 AM' && elm.check_in === elm.check_out)" [ngClass]="elm.holiday && elm.check_in != elm.check_out ? 'bg-main' : ''">{{elm.hours}}</td>
+        <td dir="ltr" *ngIf="elm.salary_type2 == 'اذن' || elm.hours_permission || !elm.holiday && !elm.vacation || (elm.salary_type2 == 'حافز'  && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.salary_type >= 0 && elm.check_out != elm.check_in) || (elm.holiday && elm.check_in != elm.check_out)">{{elm.hoursDifference}}</td>
         <td *ngIf="((elm.salary_type2 == 'خصم' && !elm.holiday && !elm.vacation) || (elm.salary_type2 == 'خصم' && elm.holiday && elm.check_in != elm.check_out))">خصم : {{elm.salary_type | customNumber}}ج   <span *ngIf="elm.absence_deduction">( {{elm.absence_deduction}} يوم )</span></td>
         <td *ngIf="((elm.salary_type2 == 'حافز' && !elm.holiday && !elm.vacation) || (elm.salary_type2 == 'حافز' && elm.holiday && elm.check_in != elm.check_out))"><span *ngIf="!elm.is_overTime_removed">حافز : {{elm.salary_type | customNumber}}ج</span><span *ngIf="elm.is_overTime_removed">راتب متغير</span></td>
-        <td dir="ltr"><span *ngIf="elm.hours_permission && elm.check_in != elm.check_out || elm.hours_permission && elm.check_in == elm.check_out && elm.holiday || (elm.hours_permission && '-'+elm.hours_permission != elm.hoursDifference)">{{elm.hours_permission | fixedTime}} : اذن </span><span *ngIf="elm.hours == '00:00' && !elm.holiday && '-'+elm.hours_permission == elm.hoursDifference">اجازة باذن</span></td>
+        <td dir="ltr"><span *ngIf="elm.salary_type2 == 'اذن'">اجازة باذن</span><span *ngIf="elm.hours_permission && elm.salary_type2 != 'اذن' && (elm.check_in != elm.check_out || elm.holiday)">{{elm.hours_permission | fixedTime}} : اذن </span><span *ngIf="elm.hours == '00:00' && !elm.holiday && elm.hours_permission && '-'+elm.hours_permission == elm.hoursDifference">اجازة باذن</span></td>
         <td *ngIf="(url == 'workinghoursdetails' || url == 'employee') && user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management'">
           <div  *ngIf="elm.hoursDifference < '00:00' && !elm.holiday && elm.salary_type !== 0 && !elm.absence_deduction">
             <span [matMenuTriggerFor]="menu" style="cursor: pointer;">

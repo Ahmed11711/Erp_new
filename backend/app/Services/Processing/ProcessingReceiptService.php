@@ -75,15 +75,23 @@ class ProcessingReceiptService
                 }
 
                 $sourceCat = Category::query()->findOrFail($orderLine->category_id);
-                $destCat = $orderLine->destination_category_id
-                    ? Category::query()->findOrFail($orderLine->destination_category_id)
-                    : $this->categoryResolver->resolveInStock($sourceCat, $destStock);
+                $destCat = $this->resolveReceiptDestination($row, $orderLine, $sourceCat, $destStock);
 
-                if (! $orderLine->destination_category_id) {
+                if ((int) $orderLine->destination_category_id !== (int) $destCat->id) {
                     $orderLine->update(['destination_category_id' => $destCat->id]);
                 }
 
                 $returnCat = $sourceCat;
+
+                $materialUnitCost = (float) ($orderLine->unit_material_cost ?? 0);
+                $allocatedService = $this->resolveAllocatedService($row, $orderLine, $good);
+                [$destUnitCost, $destSellPrice] = $this->resolveDestPricing(
+                    $row,
+                    $destCat,
+                    $materialUnitCost,
+                    $allocatedService,
+                    $good
+                );
 
                 ProcessingReceiptLine::query()->create([
                     'processing_receipt_id' => $receipt->id,
@@ -94,8 +102,10 @@ class ProcessingReceiptService
                     'good_qty' => $good,
                     'damaged_qty' => $damaged,
                     'rejected_qty' => $rejected,
-                    'material_unit_cost' => (float) ($orderLine->unit_material_cost ?? 0),
-                    'allocated_service_cost' => (float) ($row['allocated_service_cost'] ?? 0),
+                    'material_unit_cost' => $materialUnitCost,
+                    'allocated_service_cost' => $allocatedService,
+                    'dest_unit_cost' => $destUnitCost,
+                    'dest_sell_price' => $destSellPrice,
                     'rejection_return_category_id' => $returnCat->id,
                 ]);
             }
@@ -104,57 +114,187 @@ class ProcessingReceiptService
         });
     }
 
+    /**
+     * Decide which product receives the good (processed) quantity:
+     *  1. A new product the user named at receipt time (created as a raw material).
+     *  2. An existing product the user explicitly picked.
+     *  3. The destination previously stored on the order line.
+     *  4. Fallback: a shadow of the source category in the destination warehouse.
+     */
+    private function resolveReceiptDestination(
+        array $row,
+        ProcessingOrderLine $orderLine,
+        Category $sourceCat,
+        \App\Models\Stock $destStock
+    ): Category {
+        $newName = trim((string) ($row['new_product_name'] ?? ''));
+        if ($newName !== '') {
+            return $this->categoryResolver->createNamedProduct($sourceCat, $destStock, $newName, 'raw_material');
+        }
+
+        if (! empty($row['destination_category_id'])) {
+            return Category::query()->findOrFail((int) $row['destination_category_id']);
+        }
+
+        if ($orderLine->destination_category_id) {
+            return Category::query()->findOrFail($orderLine->destination_category_id);
+        }
+
+        return $this->categoryResolver->resolveInStock($sourceCat, $destStock);
+    }
+
+    /**
+     * Processing (service) cost only for the good quantity. This is the "تكلفة الاستلام"
+     * the user sees — it represents the processing fee, NOT the material or item price.
+     * The value entered (received_total_cost) is taken as the processing cost directly.
+     */
+    private function resolveAllocatedService(
+        array $row,
+        ProcessingOrderLine $orderLine,
+        float $goodQty
+    ): float {
+        if ($goodQty <= 0) {
+            return 0.0;
+        }
+
+        if (isset($row['received_total_cost']) && $row['received_total_cost'] !== null && $row['received_total_cost'] !== '') {
+            return round(max(0.0, (float) $row['received_total_cost']), 4);
+        }
+
+        if (isset($row['allocated_service_cost']) && $row['allocated_service_cost'] !== null) {
+            return round(max(0.0, (float) $row['allocated_service_cost']), 4);
+        }
+
+        $orderedQty = (float) $orderLine->ordered_qty;
+        $servicePerUnit = $orderedQty > 0 ? (float) $orderLine->expected_service_amount / $orderedQty : 0.0;
+
+        return round(max(0.0, $servicePerUnit) * $goodQty, 4);
+    }
+
+    /**
+     * The destination item's unit cost & selling price are set manually by the user
+     * (no weighted average). If not supplied we keep the item's current values, and
+     * for a brand-new product fall back to (material + processing) per unit as a hint.
+     *
+     * @return array{0: float, 1: ?float}  [unitCost, sellPrice|null]
+     */
+    private function resolveDestPricing(
+        array $row,
+        Category $destCat,
+        float $materialUnitCost,
+        float $allocatedService,
+        float $goodQty
+    ): array {
+        $hasUnit = isset($row['dest_unit_cost']) && $row['dest_unit_cost'] !== null && $row['dest_unit_cost'] !== '';
+        $hasSell = isset($row['dest_sell_price']) && $row['dest_sell_price'] !== null && $row['dest_sell_price'] !== '';
+
+        if ($hasUnit) {
+            $unitCost = round(max(0.0, (float) $row['dest_unit_cost']), 4);
+        } else {
+            $current = (float) ($destCat->unit_price ?? 0);
+            if ($current > 0.00001) {
+                $unitCost = round($current, 4);
+            } else {
+                $servicePerUnit = $goodQty > 0 ? $allocatedService / $goodQty : 0.0;
+                $unitCost = round($materialUnitCost + $servicePerUnit, 4);
+            }
+        }
+
+        $sellPrice = $hasSell ? round(max(0.0, (float) $row['dest_sell_price']), 4) : null;
+
+        return [$unitCost, $sellPrice];
+    }
+
     public function post(ProcessingReceipt $receipt): ProcessingReceipt
     {
         if ($receipt->status !== ProcessingDocumentStatus::Draft->value) {
             throw new \InvalidArgumentException('إذن الاستلام ليس في حالة مسودة.');
         }
 
-        $receipt->load(['lines.orderLine', 'order', 'destinationStock']);
+        $receipt->load(['lines.orderLine', 'lines.destinationCategory', 'order', 'destinationStock']);
 
         return DB::transaction(function () use ($receipt) {
             $refType = 'processing_receipt';
             $journalLegs = [];
             $atVendorAccId = $this->accounting->resolveMaterialsAtVendorAccount()->id;
             $scrapAccId = $this->accounting->resolveScrapExpenseAccount()->id;
-            $destAccId = $this->accounting->resolveStockAccount((int) $receipt->destination_stock_id)->id;
+            $serviceAccId = $this->accounting->resolveServiceExpenseAccount()->id;
+            $varianceAccId = $scrapAccId;
             $sourceAccId = $this->accounting->resolveStockAccount((int) $receipt->order->source_stock_id)->id;
 
+            $destAccCache = [];
+            $resolveDestAcc = function (int $stockId) use (&$destAccCache) {
+                return $destAccCache[$stockId] ??= $this->accounting->resolveStockAccount($stockId)->id;
+            };
+
             foreach ($receipt->lines as $line) {
+                $destStockId = (int) (($line->destinationCategory->stock_id ?? null) ?: $receipt->destination_stock_id);
+                $destAccId = $resolveDestAcc($destStockId);
+
                 $atVendor = Category::query()->lockForUpdate()->findOrFail($line->at_vendor_category_id);
                 $unitCost = (float) $line->material_unit_cost;
-                $servicePerUnit = $line->good_qty > 0
-                    ? (float) $line->allocated_service_cost / (float) $line->good_qty
-                    : 0;
-
-                $this->processQtyLeg(
-                    $atVendor,
-                    $line->destination_category_id ? Category::query()->lockForUpdate()->findOrFail($line->destination_category_id) : null,
-                    (float) $line->good_qty,
-                    $unitCost,
-                    $servicePerUnit,
-                    InventoryMovementType::SubcontractReceiptGoodOut,
-                    InventoryMovementType::SubcontractReceiptGoodIn,
-                    $refType,
-                    (int) $receipt->id,
-                    $receipt->receipt_number
-                );
 
                 if ((float) $line->good_qty > 0) {
-                    $goodMaterial = round((float) $line->good_qty * $unitCost, 4);
-                    $service = round((float) $line->allocated_service_cost, 4);
-                    $journalLegs[] = [
-                        'debit_account_id' => $destAccId,
-                        'credit_account_id' => $atVendorAccId,
-                        'amount' => $goodMaterial,
-                        'description' => 'استلام جيد — مواد',
-                    ];
-                    if ($service > 0) {
+                    $goodQty = (float) $line->good_qty;
+                    $materialValue = round($goodQty * $unitCost, 4);
+                    $serviceValue = round((float) $line->allocated_service_cost, 4);
+
+                    $destCat = $line->destination_category_id
+                        ? Category::query()->lockForUpdate()->findOrFail($line->destination_category_id)
+                        : null;
+
+                    $manualUnitCost = (float) ($line->dest_unit_cost ?? 0);
+                    if ($manualUnitCost <= 0.00001) {
+                        $manualUnitCost = $goodQty > 0 ? round(($materialValue + $serviceValue) / $goodQty, 4) : 0.0;
+                    }
+
+                    $invDelta = $this->receiveGoodQty(
+                        $atVendor,
+                        $destCat,
+                        $goodQty,
+                        $unitCost,
+                        $materialValue,
+                        $manualUnitCost,
+                        $line->dest_sell_price !== null ? (float) $line->dest_sell_price : null,
+                        $refType,
+                        (int) $receipt->id,
+                        $receipt->receipt_number
+                    );
+
+                    // Fund the destination inventory increase from materials-at-vendor,
+                    // capitalize the processing fee, and route any difference (because the
+                    // user set the item cost manually) to the processing variance account
+                    // so the journal stays balanced and matches the inventory subledger.
+                    if ($materialValue > 0.00001) {
                         $journalLegs[] = [
                             'debit_account_id' => $destAccId,
                             'credit_account_id' => $atVendorAccId,
-                            'amount' => $service,
-                            'description' => 'استلام جيد — تكلفة تشغيل',
+                            'amount' => $materialValue,
+                            'description' => 'استلام — تفريغ قيمة المواد لدى المندوب',
+                        ];
+                    }
+                    if ($serviceValue > 0.00001) {
+                        $journalLegs[] = [
+                            'debit_account_id' => $destAccId,
+                            'credit_account_id' => $serviceAccId,
+                            'amount' => $serviceValue,
+                            'description' => 'رسملة تكلفة المعالجة على الصنف المستلم',
+                        ];
+                    }
+                    $variance = round($invDelta - $materialValue - $serviceValue, 4);
+                    if ($variance > 0.00001) {
+                        $journalLegs[] = [
+                            'debit_account_id' => $destAccId,
+                            'credit_account_id' => $varianceAccId,
+                            'amount' => $variance,
+                            'description' => 'فروق تقييم الصنف المستلم (تشغيل خارجي)',
+                        ];
+                    } elseif ($variance < -0.00001) {
+                        $journalLegs[] = [
+                            'debit_account_id' => $varianceAccId,
+                            'credit_account_id' => $destAccId,
+                            'amount' => -$variance,
+                            'description' => 'فروق تقييم الصنف المستلم (تشغيل خارجي)',
                         ];
                     }
                 }
@@ -242,6 +382,76 @@ class ProcessingReceiptService
 
             return $receipt->fresh(['lines', 'order']);
         });
+    }
+
+    /**
+     * Receive the good (processed) quantity onto the destination product:
+     *  - material leaves "materials at vendor" (quantity + valuation down at material cost),
+     *  - the destination item quantity is increased,
+     *  - the destination item is revalued to the user's manual unit cost & selling price
+     *    (overwrite — NO weighted average).
+     *
+     * @return float  Change in the destination item's inventory value (total_price delta).
+     */
+    private function receiveGoodQty(
+        Category $atVendor,
+        ?Category $dest,
+        float $qty,
+        float $materialUnitCost,
+        float $materialValue,
+        float $manualUnitCost,
+        ?float $manualSellPrice,
+        string $refType,
+        int $refId,
+        string $label
+    ): float {
+        if ($qty <= 0 || ! $dest) {
+            return 0.0;
+        }
+
+        $this->ledger->recordOutbound(
+            $atVendor,
+            InventoryMovementType::SubcontractReceiptGoodOut,
+            $qty,
+            $materialUnitCost,
+            $materialValue,
+            true,
+            $refType,
+            $refId,
+            $label,
+            null,
+            auth()->user()?->name
+        );
+
+        $priorTotal = (float) ($dest->total_price ?? 0);
+        $receivedValue = round($qty * $manualUnitCost, 4);
+
+        // Add quantity only; valuation is set explicitly below (no weighted average).
+        $this->ledger->recordInbound(
+            $dest,
+            InventoryMovementType::SubcontractReceiptGoodIn,
+            $qty,
+            $manualUnitCost,
+            $receivedValue,
+            false,
+            $refType,
+            $refId,
+            $label,
+            null,
+            auth()->user()?->name
+        );
+
+        $fresh = Category::query()->lockForUpdate()->findOrFail($dest->id);
+        $newQty = (float) $fresh->quantity;
+        $fresh->unit_price = round($manualUnitCost, 4);
+        $fresh->total_price = round($manualUnitCost * $newQty, 4);
+        if ($manualSellPrice !== null && $manualSellPrice > 0.00001) {
+            $fresh->category_price = round($manualSellPrice, 4);
+            $fresh->sell_total_price = round($manualSellPrice * $newQty, 4);
+        }
+        $fresh->save();
+
+        return round((float) $fresh->total_price - $priorTotal, 4);
     }
 
     private function processQtyLeg(

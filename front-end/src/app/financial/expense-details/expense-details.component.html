@@ -33,8 +33,8 @@
           <p>{{ data.expense_type }}</p>
         </div>
         <div class="col-md-4" *ngIf="!isSplit">
-            <h3>فئة المصروف</h3>
-            <p>{{ data?.kind?.expense_kind }}</p>
+            <h3>الحساب (مدين)</h3>
+            <p>{{ lineDebitTreeLabel({ debit_tree_account: data.debit_tree_account, tree_account: data.tree_account, kind: data.kind }) }}</p>
         </div>
         <div class="col-md-4">
           <h3>بيان المصروف</h3>
@@ -65,17 +65,17 @@
             <thead class="bg-dark text-white">
               <tr>
                 <th>نوع المصروف</th>
-                <th>فئة المصروف</th>
+                <th>الحساب (مدين)</th>
+                <th>بيان</th>
                 <th>المبلغ</th>
-                <th>حساب الشجرة (مدين)</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let line of data.lines">
                 <td>{{ line.expense_type }}</td>
-                <td>{{ line.kind?.expense_kind }}</td>
-                <td dir="ltr">{{ line.amount | customNumber }}</td>
                 <td class="text-start small text-muted">{{ lineDebitTreeLabel(line) }}</td>
+                <td class="text-start">{{ line.statement || data.expens_statement }}</td>
+                <td dir="ltr">{{ line.amount | customNumber }}</td>
               </tr>
             </tbody>
           </table>

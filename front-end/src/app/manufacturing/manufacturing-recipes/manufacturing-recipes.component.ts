@@ -34,6 +34,10 @@ export class ManufacturingRecipesComponent implements OnInit {
     return this.rbac.canAny(RBAC_ROUTE.manufacturingWrite);
   }
 
+  canDeleteRecipe(): boolean {
+    return this.rbac.canAny(RBAC_ROUTE.manufacturingDeleteRecipe);
+  }
+
   ngOnInit(): void {
     this.loadRecipes();
   }
@@ -101,6 +105,7 @@ export class ManufacturingRecipesComponent implements OnInit {
   // ──────────────────────────────────────────────────────────
 
   askDelete(recipeId: number): void {
+    if (!this.canDeleteRecipe()) return;
     this.confirmDeleteId = recipeId;
   }
 
@@ -150,7 +155,7 @@ export class ManufacturingRecipesComponent implements OnInit {
   }
 
   bulkDelete(): void {
-    if (this.selectedIds.size === 0) return;
+    if (!this.canDeleteRecipe() || this.selectedIds.size === 0) return;
     this.bulkDeleting = true;
 
     this.manufacturingService

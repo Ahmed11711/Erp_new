@@ -52,6 +52,12 @@ class ProcessingReceiptController extends Controller
             'lines.*.damaged_qty' => 'nullable|numeric|min:0',
             'lines.*.rejected_qty' => 'nullable|numeric|min:0',
             'lines.*.allocated_service_cost' => 'nullable|numeric|min:0',
+            'lines.*.received_total_cost' => 'nullable|numeric|min:0',
+            'lines.*.received_unit_cost' => 'nullable|numeric|min:0',
+            'lines.*.dest_unit_cost' => 'nullable|numeric|min:0',
+            'lines.*.dest_sell_price' => 'nullable|numeric|min:0',
+            'lines.*.destination_category_id' => 'nullable|exists:categories,id',
+            'lines.*.new_product_name' => 'nullable|string|max:255',
         ]);
 
         $order = ProcessingOrder::query()->findOrFail((int) $data['processing_order_id']);

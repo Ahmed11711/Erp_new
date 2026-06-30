@@ -11,6 +11,7 @@ import { MatInputModule } from '@angular/material/input';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { SharedModule } from '../shared/shared.module';
 import { TrackingsComponent } from './trackings/trackings.component';
+import { ActivityLogComponent } from './activity-log/activity-log.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule } from '@angular/material/paginator';
@@ -28,6 +29,7 @@ import { MatDividerModule } from '@angular/material/divider';
   declarations: [
     AdminOrderComponent,
     TrackingsComponent,
+    ActivityLogComponent,
     WhatsappManagementComponent
   ],
   imports: [

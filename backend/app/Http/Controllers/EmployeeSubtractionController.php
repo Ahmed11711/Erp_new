@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\EmployeeSubtraction;
+use App\Services\Hr\EmployeeAbsencePermissionService;
 use Illuminate\Http\Request;
 use App\Models\EmployeeMonthPaid;
+use Illuminate\Support\Carbon;
 
 
 class EmployeeSubtractionController extends Controller
@@ -12,11 +14,26 @@ class EmployeeSubtractionController extends Controller
 
     public function absenceStatus(Request $request)
     {
-        $employee = EmployeeSubtraction::find($request->id);
-        $employee->absence_status = $request->absence_status;
-        $employee->absence_count = $request->absence_count;
-        $employee->amount = $employee->amount * $request->absence_count;
+        $validated = $request->validate([
+            'id' => 'required|integer|exists:employee_subtractions,id',
+            'absence_status' => 'required|in:تم باستاذان,خصم',
+            'absence_count' => 'required|in:0,1,2',
+        ]);
+
+        $employee = EmployeeSubtraction::findOrFail($validated['id']);
+        $employee->absence_status = $validated['absence_status'];
+        $employee->absence_count = $validated['absence_count'];
+        $employee->amount = $employee->amount * $validated['absence_count'];
         $employee->save();
+
+        if ($validated['absence_status'] === 'تم باستاذان' && (int) $validated['absence_count'] === 0) {
+            $date = Carbon::parse($employee->created_at)->format('Y-m-d');
+            app(EmployeeAbsencePermissionService::class)->applyFullDayPermission(
+                (int) $employee->employee_id,
+                $date
+            );
+        }
+
         return response()->json($employee, 200);
     }
 

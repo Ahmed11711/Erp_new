@@ -28,6 +28,24 @@ final class OrderManualCollectionGuard
     }
 
     /**
+     * هل يُسمح بـ «تحصيل الطلب» (COD على الشحن و/أو ذمة شركة تحصيل مثل Paymob)؟
+     */
+    public function allowsManualOrderCollection(Order $order): bool
+    {
+        return $this->allowsManualShippingCollection($order)
+            || $this->openCollectionReceivableAmount($order) > 0.009;
+    }
+
+    /** المبلغ الإجمالي المتوقع عند تحصيل الطلب من الواجهة */
+    public function expectedManualCollectTotal(Order $order): float
+    {
+        return round(
+            max(0, $this->shippingCodAmount($order)) + max(0, $this->openCollectionReceivableAmount($order)),
+            2
+        );
+    }
+
+    /**
      * جزء التحصيل عند الاستلام (COD) على شركة الشحن/المندوب.
      */
     public function shippingCodAmount(Order $order): float
@@ -174,20 +192,31 @@ final class OrderManualCollectionGuard
      */
     public function manualCollectionUnavailableMessage(Order $order): ?string
     {
-        if (! $this->allowsManualShippingCollection($order)) {
+        if (! $this->allowsManualOrderCollection($order)) {
             return $this->manualCollectionBlockedMessage($order);
         }
 
+        $openCollection = $this->openCollectionReceivableAmount($order);
         $allOpen = $this->openShippingDetailRows($order);
+        $manualRows = $this->filterManualCollectShippingRows($order, $allOpen);
 
-        if ($allOpen->isEmpty()) {
+        // ذمة شركة التحصيل فقط (Paymob / مدفوع إلكترونياً) — لا يلزم سطر مندوب مفتوح
+        if ($manualRows->isEmpty() && $openCollection > 0.009) {
+            $company = app(\App\Services\Shipping\CollectionCompanyForOrderResolver::class)->resolve($order);
+            if ($company === null) {
+                return 'لا توجد شركة تحصيل مرتبطة — راجع وسيلة الدفع أو «شركات التحصيل والدفع».';
+            }
+
+            return null;
+        }
+
+        if ($allOpen->isEmpty() && $openCollection <= 0.009) {
             return 'لا توجد مستحقات تحصيل مفتوحة لهذا الطلب.';
         }
 
-        $manualRows = $this->filterManualCollectShippingRows($order, $allOpen);
         if ($manualRows->isEmpty()) {
-            if ($this->openCollectionReceivableAmount($order) > 0.009) {
-                return 'مستحقات هذا الطلب على شركة التحصيل — استخدم «نقد وارد / شركة تحصيل» أو «قبض» من تقرير ذمم شركات التحصيل.';
+            if ($openCollection > 0.009) {
+                return null;
             }
 
             return 'لا توجد مستحقات تحصيل مفتوحة على المندوب/شركة الشحن لهذا الطلب.';
@@ -212,11 +241,7 @@ final class OrderManualCollectionGuard
 
     public function manualCollectionBlockedMessage(Order $order): string
     {
-        if ($this->openCollectionReceivableAmount($order) > 0.009 && ! $this->allowsManualShippingCollection($order)) {
-            return 'هذا الطلب مدفوع مقدماً عبر شركة تحصيل — يُسوَّى عبر «نقد وارد / شركة تحصيل» وليس «تحصيل الطلب».';
-        }
-
-        return 'لا يوجد مبلغ للتحصيل من شركة الشحن/المندوب على هذا الطلب.';
+        return 'لا يوجد مبلغ مفتوح للتحصيل على هذا الطلب.';
     }
 
     /**

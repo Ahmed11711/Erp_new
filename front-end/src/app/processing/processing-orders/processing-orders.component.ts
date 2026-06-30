@@ -23,6 +23,13 @@ export class ProcessingOrdersComponent implements OnInit {
   vendorsError: string | null = null;
   saving = false;
   nextDispatchNumber: string | null = null;
+  private categorySearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private listSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  listSearch = '';
+  filterSupplierId: number | null = null;
+  filterStatus = '';
+  totalOrders = 0;
 
   showForm = false;
   selectedVendor: any = null;
@@ -64,18 +71,40 @@ export class ProcessingOrdersComponent implements OnInit {
     this.loadVendors();
     this.loadRepresentatives();
     this.loadOrders();
-    this.loadRawCategories();
   }
 
   loadOrders(): void {
     this.loading = true;
-    this.api.listOrders({ itemsPerPage: 50 }).subscribe({
+    const params: Record<string, string | number> = { itemsPerPage: 50 };
+    const q = this.listSearch.trim();
+    if (q) params['q'] = q;
+    if (this.filterSupplierId) params['supplier_id'] = this.filterSupplierId;
+    if (this.filterStatus) params['status'] = this.filterStatus;
+
+    this.api.listOrders(params).subscribe({
       next: (res: any) => {
-        this.orders = res?.data || res || [];
+        this.orders = res?.data || [];
+        this.totalOrders = res?.total ?? this.orders.length;
         this.loading = false;
       },
       error: () => (this.loading = false),
     });
+  }
+
+  onListSearchInput(): void {
+    if (this.listSearchTimer) clearTimeout(this.listSearchTimer);
+    this.listSearchTimer = setTimeout(() => this.loadOrders(), 350);
+  }
+
+  clearListFilters(): void {
+    this.listSearch = '';
+    this.filterSupplierId = null;
+    this.filterStatus = '';
+    this.loadOrders();
+  }
+
+  hasListFilters(): boolean {
+    return !!(this.listSearch.trim() || this.filterSupplierId || this.filterStatus);
   }
 
   loadVendors(): void {
@@ -101,20 +130,11 @@ export class ProcessingOrdersComponent implements OnInit {
         this.representatives = list
           .filter((item: any) => String(item?.type ?? '') === 'مندوب' && String(item?.name ?? '').trim() !== '')
           .sort((a: any, b: any) => String(a?.name ?? '').localeCompare(String(b?.name ?? ''), 'ar'));
-        this.applyDefaultRepresentative();
       },
       error: () => {
         this.representatives = [];
       },
     });
-  }
-
-  private applyDefaultRepresentative(): void {
-    if (this.selectedRepresentative || !this.representatives.length || !this.showForm) {
-      return;
-    }
-    const rep = this.representatives[0];
-    this.onRepresentativeSelected(rep);
   }
 
   private normalizeVendors(rows: unknown): any[] {
@@ -130,10 +150,19 @@ export class ProcessingOrdersComponent implements OnInit {
     return [];
   }
 
-  loadRawCategories(): void {
+  searchRawCategories(query: string): void {
+    const q = (query ?? '').trim();
+    if (!q) {
+      this.categories = [];
+      return;
+    }
     this.http
       .get<any>(`${environment.Url}/categories/search`, {
-        params: { itemsPerPage: 500, warehouse: 'مخزن مواد خام' },
+        params: {
+          itemsPerPage: 50,
+          warehouse: 'مخزن مواد خام',
+          category_name: q,
+        },
       })
       .subscribe({
         next: (res) => {
@@ -142,7 +171,22 @@ export class ProcessingOrdersComponent implements OnInit {
             category_name: c.category_name || '',
           }));
         },
+        error: () => {
+          this.categories = [];
+        },
       });
+  }
+
+  onCategoryInputChanged(value: string): void {
+    if (this.categorySearchTimer) {
+      clearTimeout(this.categorySearchTimer);
+    }
+    const q = (value ?? '').trim();
+    if (!q) {
+      this.categories = [];
+      return;
+    }
+    this.categorySearchTimer = setTimeout(() => this.searchRawCategories(q), 300);
   }
 
   statusClass(s: string): string {
@@ -171,9 +215,9 @@ export class ProcessingOrdersComponent implements OnInit {
       lines: [this.newLine()],
     };
     this.showForm = true;
+    this.categories = [];
     this.loadVendors();
     this.loadNextDispatchNumber();
-    this.applyDefaultRepresentative();
   }
 
   loadNextDispatchNumber(): void {
@@ -207,7 +251,7 @@ export class ProcessingOrdersComponent implements OnInit {
   onLineCategorySelected(line: any, item: any): void {
     if (!item?.id) return;
     line.category_id = item.id;
-    line.category_label = item.category_name;
+    line.category_label = this.stripHighlightTags(String(item.category_name ?? ''));
   }
 
   clearLineCategory(line: any): void {
@@ -270,13 +314,57 @@ export class ProcessingOrdersComponent implements OnInit {
     return this.dispatchTypes.find((t) => t.value === value)?.label || value;
   }
 
+  private stripHighlightTags(value: string): string {
+    return String(value ?? '').replace(/<\/?b>/gi, '');
+  }
+
+  selectedCategoryLabel = (item: any): string => {
+    if (!item?.category_name) return '';
+    return this.stripHighlightTags(String(item.category_name));
+  };
+
+  filterCategorySearch = (items: any[], query: string) => {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return [...items];
+    return items.filter((item) => {
+      const name = this.stripHighlightTags(String(item.category_name ?? '')).toLowerCase();
+      const code = String(item.item_code ?? '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    });
+  };
+
+  filterVendorSearch = (items: any[], query: string) => {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return [...items];
+    return items.filter((item) => {
+      const name = this.stripHighlightTags(String(item.supplier_name ?? '')).toLowerCase();
+      return name.includes(q);
+    });
+  };
+
+  selectedVendorLabel = (item: any): string => {
+    if (!item?.supplier_name) return '';
+    return this.stripHighlightTags(String(item.supplier_name));
+  };
+
+  filterRepresentativeSearch = (items: any[], query: string) => {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) return [...items];
+    return items.filter((item) => {
+      const name = this.stripHighlightTags(String(item.name ?? '')).toLowerCase();
+      return name.includes(q);
+    });
+  };
+
+  selectedRepresentativeLabel = (item: any): string => {
+    if (!item?.name) return '';
+    return this.stripHighlightTags(String(item.name));
+  };
+
   save(): void {
     if (!this.form.supplier_id) {
       Swal.fire('تنبيه', 'اختر المورد (يصرف إلى)', 'warning');
       return;
-    }
-    if (!this.form.representative_type && this.representatives.length) {
-      this.applyDefaultRepresentative();
     }
     if (this.form.representative_type === 'internal' && !this.form.shipping_company_id) {
       Swal.fire('تنبيه', 'اختر مندوباً من قائمة المناديب', 'warning');
@@ -352,5 +440,13 @@ export class ProcessingOrdersComponent implements OnInit {
   dispatchNumber(o: any): string {
     const notes = o?.dispatch_notes || o?.dispatchNotes || [];
     return notes.length ? notes[0].dispatch_number : o.order_number;
+  }
+
+  dispatchDate(o: any): string {
+    const notes = o?.dispatch_notes || o?.dispatchNotes || [];
+    if (notes.length && notes[0].dispatch_date) {
+      return notes[0].dispatch_date;
+    }
+    return o.expected_return_date || o.created_at || '';
   }
 }

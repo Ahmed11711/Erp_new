@@ -7,6 +7,7 @@ use App\Http\Resources\V2\TreeAccount\TreeAccountResource;
 use App\Models\AccountEntry;
 use App\Models\DailyEntry;
 use App\Models\TreeAccount;
+use App\Services\Accounting\AccountEntryEditLinkService;
 use App\Services\Accounting\AccountingService;
 use App\Services\Accounting\BankOperationalLedgerService;
 use App\Services\Accounting\ProductPerformanceReportService;
@@ -34,7 +35,7 @@ class AccountingReportController extends Controller
     {
         $effectiveDateExpr = 'DATE(COALESCE(de.date, v.date, account_entries.created_at))';
 
-        $query = AccountEntry::with(['account', 'dailyEntry', 'voucher'])
+        $query = AccountEntry::with(['account', 'dailyEntry.user', 'voucher.user'])
             ->select('account_entries.*')
             ->join('tree_accounts', 'account_entries.tree_account_id', '=', 'tree_accounts.id')
             ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
@@ -56,6 +57,14 @@ class AccountingReportController extends Controller
         /** فقط حركات مرتبطة برأس قيد يومي (شاشة القيود اليومية أو أي ترحيل ينشئ DailyEntry) */
         if ($request->boolean('daily_entry_only')) {
             $query->whereNotNull('account_entries.daily_entry_id');
+        }
+
+        if ($request->filled('user_id')) {
+            $userId = (int) $request->user_id;
+            $query->where(function ($q) use ($userId) {
+                $q->where('de.user_id', $userId)
+                    ->orWhere('v.user_id', $userId);
+            });
         }
 
         // إجمالي المدين/الدائن لكل النتائج المصفّاة — وليس للصفحة الحالية فقط
@@ -93,6 +102,10 @@ class AccountingReportController extends Controller
             $entry->setAttribute(
                 'journal_header_description',
                 $entry->dailyEntry?->description
+            );
+            $entry->setAttribute(
+                'journal_user_name',
+                $entry->dailyEntry?->user?->name ?? $entry->voucher?->user?->name
             );
 
             return $entry;
@@ -508,6 +521,9 @@ class AccountingReportController extends Controller
 
         $this->attachPerformedByUserNames($entries);
 
+        $forAdmin = $this->userCanEditAccountStatementEntries();
+        app(AccountEntryEditLinkService::class)->attachEditLinks($entries, $forAdmin);
+
         // 3. Calculate Running Balance
         $runningBalance = $openingBalance;
         $processedEntries = $entries->map(function ($entry) use (&$runningBalance, $isDebitNature) {
@@ -538,6 +554,19 @@ class AccountingReportController extends Controller
             'total_debit' => $entries->sum('debit'),
             'total_credit' => $entries->sum('credit'),
         ], 200);
+    }
+
+    private function userCanEditAccountStatementEntries(): bool
+    {
+        $user = auth()->user();
+        if ($user && trim((string) ($user->department ?? '')) === 'Admin') {
+            return true;
+        }
+
+        return has_any_permission([
+            'finance.account_statement.edit',
+            'system.rbac',
+        ]);
     }
 
     /**

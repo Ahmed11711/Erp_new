@@ -70,6 +70,23 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.order-details-hero__action-btn--prepaid {
+  background: #ffc107;
+  border-color: #ffc107;
+  color: #3d2a00;
+}
+
+.order-details-hero__action-btn--prepaid:hover {
+  background: #ffda6a;
+  border-color: #ffda6a;
+  color: #3d2a00;
+}
+
+.order-prepaid-adjust-btn {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
 .order-details-hero__action-btn i {
   font-size: 1rem;
   color: #fff;

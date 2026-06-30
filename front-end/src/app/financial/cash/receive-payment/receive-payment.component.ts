@@ -5,6 +5,7 @@ import { VoucherService } from '../../../accounting/services/voucher.service';
 import { ToastService } from '../../../shared/toast/toast.service';
 import {
   buildClientVoucherFields,
+  CashClientCompanyOption,
   CashClientOptionsResponse,
 } from '../cash-client-selection';
 
@@ -29,8 +30,8 @@ export class ReceivePaymentComponent implements OnInit {
   selectedClientKey: string | null = null;
   clientSearch = '';
   suppliers: any[] = [];
-  shippingPartners: { id: number; name: string; type: string }[] = [];
-  collectionCompanies: { id: number; name: string; linked_shipping_company_id?: number | null }[] = [];
+  shippingPartners: { id: number; name: string; type: string; balance?: number }[] = [];
+  collectionCompanies: { id: number; name: string; linked_shipping_company_id?: number | null; balance?: number }[] = [];
 
   voucher: any = {
     date: new Date().toISOString().split('T')[0],
@@ -253,6 +254,42 @@ export class ReceivePaymentComponent implements OnInit {
   onPlaceChange(): void {
     this.selectedSourceId = null;
     this.voucher.account_id = null;
+  }
+
+  get selectedSupplier(): any | null {
+    if (this.party !== 'supplier' || !this.voucher.supplier_id) {
+      return null;
+    }
+    return this.suppliers.find((s) => s.id === this.voucher.supplier_id) ?? null;
+  }
+
+  get selectedClientCompany(): CashClientCompanyOption | null {
+    if (this.party !== 'client' || !this.selectedClientKey || !this.selectedClientKey.startsWith('company:')) {
+      return null;
+    }
+    const id = Number(this.selectedClientKey.slice('company:'.length));
+    return this.clientOptions.companies.find((c) => c.id === id) ?? null;
+  }
+
+  get selectedIndividualPhone(): string | null {
+    if (this.party !== 'client' || !this.selectedClientKey || !this.selectedClientKey.startsWith('individual:')) {
+      return null;
+    }
+    return this.selectedClientKey.slice('individual:'.length) || null;
+  }
+
+  get selectedShippingPartner(): { id: number; name: string; type: string; balance?: number } | null {
+    if (this.party !== 'shipping_company' || !this.voucher.shipping_company_id) {
+      return null;
+    }
+    return this.shippingPartners.find((s) => s.id === this.voucher.shipping_company_id) ?? null;
+  }
+
+  get selectedCollectionCompany(): { id: number; name: string; balance?: number } | null {
+    if (this.party !== 'collection_company' || !this.voucher.collection_company_id) {
+      return null;
+    }
+    return this.collectionCompanies.find((c) => c.id === this.voucher.collection_company_id) ?? null;
   }
 
   private resolveAccountId(): number | null {

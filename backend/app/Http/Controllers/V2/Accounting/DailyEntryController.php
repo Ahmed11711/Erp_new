@@ -7,6 +7,7 @@ use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Models\User;
 use App\Services\Accounting\AccountingService;
 use App\Services\Accounting\BudgetReviewService;
 use Illuminate\Http\Request;
@@ -31,10 +32,43 @@ class DailyEntryController extends Controller
             });
         }
 
+        if ($request->filled('user_id')) {
+            $query->where('user_id', (int) $request->user_id);
+        }
+
         $perPage = $request->get('per_page', 25);
         $entries = $query->orderBy('date', 'desc')->paginate($perPage);
 
         return response()->json($entries, 200);
+    }
+
+    /** مستخدمون لهم حركات في القيود/السندات — للفلتر (بدون صلاحية Admin). */
+    public function users()
+    {
+        $userIds = DailyEntry::query()
+            ->whereNotNull('user_id')
+            ->distinct()
+            ->pluck('user_id');
+
+        $voucherUserIds = DB::table('account_entries')
+            ->join('vouchers', 'account_entries.voucher_id', '=', 'vouchers.id')
+            ->whereNotNull('vouchers.user_id')
+            ->distinct()
+            ->pluck('vouchers.user_id');
+
+        $userIds = $userIds->merge($voucherUserIds)->unique()->filter()->values();
+
+        $currentId = auth()->id();
+        if ($currentId && ! $userIds->contains($currentId)) {
+            $userIds->push($currentId);
+        }
+
+        $users = User::query()
+            ->whereIn('id', $userIds)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json(['data' => $users], 200);
     }
 
     public function store(Request $request)

@@ -7,6 +7,18 @@
             </p>
         </div>
         <div class="card-body">
+            <div class="party-balance-bar" *ngIf="selectedSupplier" dir="rtl">
+                <div class="party-balance-bar__info">
+                    <span class="party-balance-bar__name">{{ selectedSupplier.supplier_name }}</span>
+                    <span class="party-balance-bar__label">الرصيد الحالي:</span>
+                    <span class="party-balance-bar__value" dir="ltr">{{ selectedSupplier.balance ?? 0 | number:'1.2-2' }}</span>
+                </div>
+                <a class="btn btn-outline-primary btn-sm party-balance-bar__btn"
+                   [routerLink]="['/dashboard/suppliers/supplier_details', selectedSupplier.id]"
+                   target="_blank">
+                    <i class="fas fa-file-invoice"></i> عرض كشف الحساب
+                </a>
+            </div>
             <div class="row">
                 <div class="col-md-6 form-group">
                     <label>مكان الصرف</label>

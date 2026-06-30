@@ -41,6 +41,8 @@ import { CustomerCompanyDetailsComponent } from './customer-company-details/cust
 import { DialogNotificationNoteComponent } from './dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from './dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from './dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { DialogCancelOrderLineComponent } from './dialog-cancel-order-line/dialog-cancel-order-line.component';
+import { DialogPrepaidAdjustmentComponent } from './dialog-prepaid-adjustment/dialog-prepaid-adjustment.component';
 import { DialogOrderRollbackComponent } from './dialog-order-rollback/dialog-order-rollback.component';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CustomerCompanyBalanceComponent } from './customer-company-balance/customer-company-balance.component';
@@ -79,6 +81,8 @@ import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review
     DialogNotificationNoteComponent,
     DialogOrderNotificationComponent,
     DialogCancelRefuseOrderComponent,
+    DialogCancelOrderLineComponent,
+    DialogPrepaidAdjustmentComponent,
     DialogOrderRollbackComponent,
     CustomerCompanyBalanceComponent,
     DialogCollectFromCustomerCompanyComponent,

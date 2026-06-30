@@ -12,6 +12,7 @@ use App\Models\AccountEntry;
 use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Services\Expenses\ExpensePurgeService;
+use App\Services\Accounting\ExpenseDebitOperationalSyncService;
 use Illuminate\Http\Request;
 use App\Observers\OrderObserver;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,9 @@ class ExpenseController extends Controller
     {
         $data = Expense::with([
             'kind.treeAccount',
+            'treeAccount',
             'lines.kind.treeAccount',
+            'lines.treeAccount',
             'bank.asset',
             'safe.account',
             'serviceAccount.account',
@@ -57,11 +60,12 @@ class ExpenseController extends Controller
         if ($hasSplitLines) {
             $rules['lines'] = 'required|array|min:1';
             $rules['lines.*.expense_type'] = 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل';
-            $rules['lines.*.kind_id'] = 'required|integer|exists:expense_kinds,id';
+            $rules['lines.*.tree_account_id'] = 'required|integer|exists:tree_accounts,id';
             $rules['lines.*.amount'] = 'required|numeric|min:0.01';
+            $rules['lines.*.statement'] = 'required|string|max:500';
         } else {
             $rules['expense_type'] = 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل';
-            $rules['kind_id'] = 'required|numeric|exists:expense_kinds,id';
+            $rules['tree_account_id'] = 'required|integer|exists:tree_accounts,id';
         }
 
         $request->validate($rules);
@@ -90,6 +94,19 @@ class ExpenseController extends Controller
                     'message' => 'مجموع بنود التقسيم (' . $linesTotal . ') يجب أن يساوي المبلغ الإجمالي (' . $amount . ')',
                 ], 422);
             }
+            try {
+                foreach ($lines as $lineRow) {
+                    $this->resolveLeafTreeAccount((int) $lineRow['tree_account_id']);
+                }
+            } catch (\Exception $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        } else {
+            try {
+                $this->resolveLeafTreeAccount((int) $request->tree_account_id);
+            } catch (\Exception $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         }
 
         $img_name = '';
@@ -100,7 +117,9 @@ class ExpenseController extends Controller
         }
 
         $headerType = $hasSplitLines ? (string) $lines[0]['expense_type'] : (string) $request->expense_type;
-        $headerKindId = $hasSplitLines ? (int) $lines[0]['kind_id'] : (int) $request->kind_id;
+        $headerTreeAccountId = $hasSplitLines
+            ? (int) $lines[0]['tree_account_id']
+            : (int) $request->tree_account_id;
 
         DB::beginTransaction();
         try {
@@ -111,7 +130,8 @@ class ExpenseController extends Controller
                 'safe_id' => $paymentType === 'safe' ? $safeId : null,
                 'service_account_id' => $paymentType === 'service_account' ? $serviceAccountId : null,
                 'user_id' => auth()->user()->id,
-                'kind_id' => $headerKindId,
+                'kind_id' => null,
+                'tree_account_id' => $headerTreeAccountId,
                 'expens_statement' => request('expens_statement'),
                 'amount' => $amount,
                 'note' => request('note'),
@@ -122,43 +142,46 @@ class ExpenseController extends Controller
 
             $debitPostings = [];
             $bankDetailLabel = $expense->expense_type;
+            $entryDate = $request->created_at ?? date('Y-m-d');
 
             if ($hasSplitLines) {
                 foreach ($lines as $idx => $lineRow) {
-                    $kind = ExpenseKind::find($lineRow['kind_id']);
-                    if (! $kind) {
-                        throw new \Exception('فئة المصروف غير موجودة');
-                    }
+                    $debitTree = $this->resolveLeafTreeAccount((int) $lineRow['tree_account_id']);
                     ExpenseLine::create([
                         'expense_id' => $expense->id,
                         'expense_type' => $lineRow['expense_type'],
-                        'kind_id' => $lineRow['kind_id'],
+                        'kind_id' => null,
+                        'tree_account_id' => $debitTree->id,
                         'amount' => $lineRow['amount'],
+                        'statement' => $lineRow['statement'] ?? null,
                         'sort_order' => $idx,
                     ]);
-                    $debitTree = TreeAccount::resolveExpenseDebitForKind($kind, $lineRow['expense_type']);
-                    if (! $debitTree) {
-                        throw new \Exception('لم يُعثر على حساب مصروف في شجرة الحسابات لنوع: ' . $lineRow['expense_type']);
-                    }
                     $debitPostings[] = [
                         'tree_account_id' => $debitTree->id,
                         'amount' => (float) $lineRow['amount'],
-                        'label' => $kind->expense_kind,
+                        'label' => $debitTree->name,
+                        'statement' => $lineRow['statement'] ?? '',
                     ];
                 }
                 $bankDetailLabel = 'مصروف مقسّم (' . count($lines) . ' بنود)';
             } else {
-                $expenseKind = ExpenseKind::find($expense->kind_id);
-                $debitTree = TreeAccount::resolveExpenseDebitForKind($expenseKind, $expense->expense_type);
-                if (! $debitTree) {
-                    throw new \Exception('لم يُعثر على حساب مصروف في شجرة الحسابات لنوع: ' . $expense->expense_type);
-                }
+                $debitTree = $this->resolveLeafTreeAccount($headerTreeAccountId);
+                ExpenseLine::create([
+                    'expense_id' => $expense->id,
+                    'expense_type' => $headerType,
+                    'kind_id' => null,
+                    'tree_account_id' => $debitTree->id,
+                    'amount' => $amount,
+                    'statement' => request('expens_statement'),
+                    'sort_order' => 0,
+                ]);
                 $debitPostings[] = [
                     'tree_account_id' => $debitTree->id,
                     'amount' => $amount,
-                    'label' => $expenseKind->expense_kind ?? $expense->expense_type,
+                    'label' => $debitTree->name,
+                    'statement' => (string) request('expens_statement'),
                 ];
-                $bankDetailLabel = $expense->expense_type . ' - ' . ($expenseKind->expense_kind ?? '');
+                $bankDetailLabel = $expense->expense_type . ' - ' . $debitTree->name;
             }
 
             $creditTreeId = null;
@@ -207,9 +230,11 @@ class ExpenseController extends Controller
 
             $this->createExpenseAccountingEntry($debitPostings, $amount, $creditTreeId, $sourceName, $expense->expense_number);
 
+            $this->applyExpenseDebitOperationalSync($debitPostings, $expense->expense_number, $entryDate, false);
+
             DB::commit();
 
-            return response()->json($expense->load(['lines.kind.treeAccount', 'kind.treeAccount']), 201);
+            return response()->json($expense->load(['lines.treeAccount', 'treeAccount', 'kind.treeAccount']), 201);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Expense store failed: ' . $e->getMessage());
@@ -240,9 +265,14 @@ class ExpenseController extends Controller
         foreach ($debitPostings as $posting) {
             $lineAmount = (float) $posting['amount'];
             $label = trim((string) ($posting['label'] ?? ''));
-            $desc = $label !== ''
-                ? 'مصروف - ' . $label . ' - ' . $sourceName . ' - ' . $ref
-                : 'مصروف - ' . $sourceName . ' - ' . $ref;
+            $lineStatement = trim((string) ($posting['statement'] ?? ''));
+            if ($lineStatement !== '') {
+                $desc = 'مصروف - ' . $lineStatement . ' - ' . $sourceName . ' - ' . $ref;
+            } elseif ($label !== '') {
+                $desc = 'مصروف - ' . $label . ' - ' . $sourceName . ' - ' . $ref;
+            } else {
+                $desc = 'مصروف - ' . $sourceName . ' - ' . $ref;
+            }
 
             AccountEntry::create([
                 'tree_account_id' => (int) $posting['tree_account_id'],
@@ -303,8 +333,10 @@ class ExpenseController extends Controller
             }
             $normalized[] = [
                 'expense_type' => (string) ($row['expense_type'] ?? ''),
+                'tree_account_id' => (int) ($row['tree_account_id'] ?? 0),
                 'kind_id' => (int) ($row['kind_id'] ?? 0),
                 'amount' => $lineAmount,
+                'statement' => trim((string) ($row['statement'] ?? '')),
             ];
         }
 
@@ -334,11 +366,12 @@ class ExpenseController extends Controller
         if ($hasSplitLines) {
             $rules['lines'] = 'required|array|min:1';
             $rules['lines.*.expense_type'] = 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل';
-            $rules['lines.*.kind_id'] = 'required|integer|exists:expense_kinds,id';
+            $rules['lines.*.tree_account_id'] = 'required|integer|exists:tree_accounts,id';
             $rules['lines.*.amount'] = 'required|numeric|min:0.01';
+            $rules['lines.*.statement'] = 'required|string|max:500';
         } else {
             $rules['expense_type'] = 'required|in:مصروف ادارى,مصروف تسويق,مصروف تشغيل';
-            $rules['kind_id'] = 'required|numeric|exists:expense_kinds,id';
+            $rules['tree_account_id'] = 'required|integer|exists:tree_accounts,id';
         }
 
         $request->validate($rules);
@@ -367,17 +400,36 @@ class ExpenseController extends Controller
                     'message' => 'مجموع بنود التقسيم (' . $linesTotal . ') يجب أن يساوي المبلغ الإجمالي (' . $amount . ')',
                 ], 422);
             }
+            try {
+                foreach ($lines as $lineRow) {
+                    $this->resolveLeafTreeAccount((int) $lineRow['tree_account_id']);
+                }
+            } catch (\Exception $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        } else {
+            try {
+                $this->resolveLeafTreeAccount((int) $request->tree_account_id);
+            } catch (\Exception $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         }
 
         DB::beginTransaction();
         try {
-            $expense = Expense::with('lines')->find($id);
+            $expense = Expense::with('lines.treeAccount')->find($id);
             if (! $expense) {
                 throw new \Exception('المصروف غير موجود');
             }
             if ((int) $expense->status === 1 || (float) $expense->amount < 0) {
                 throw new \Exception('لا يمكن تعديل هذا المصروف');
             }
+
+            $oldDebitPostings = $this->buildDebitPostingsFromExpense($expense);
+            $entryDateOld = $expense->created_at
+                ? (is_string($expense->created_at) ? substr($expense->created_at, 0, 10) : $expense->created_at->format('Y-m-d'))
+                : date('Y-m-d');
+            $this->reverseExpenseDebitOperationalSync($oldDebitPostings, $expense->expense_number, $entryDateOld);
 
             $affectedAccountIds = $this->reverseExpenseGlEntries($expense->expense_number);
             $this->restoreExpensePaymentSource($expense);
@@ -390,7 +442,10 @@ class ExpenseController extends Controller
             }
 
             $headerType = $hasSplitLines ? (string) $lines[0]['expense_type'] : (string) $request->expense_type;
-            $headerKindId = $hasSplitLines ? (int) $lines[0]['kind_id'] : (int) $request->kind_id;
+            $headerTreeAccountId = $hasSplitLines
+                ? (int) $lines[0]['tree_account_id']
+                : (int) $request->tree_account_id;
+            $entryDate = $request->created_at ?? date('Y-m-d');
 
             $expense->update([
                 'expense_type' => $headerType,
@@ -398,7 +453,8 @@ class ExpenseController extends Controller
                 'bank_id' => $paymentType === 'bank' ? $bankId : null,
                 'safe_id' => $paymentType === 'safe' ? $safeId : null,
                 'service_account_id' => $paymentType === 'service_account' ? $serviceAccountId : null,
-                'kind_id' => $headerKindId,
+                'kind_id' => null,
+                'tree_account_id' => $headerTreeAccountId,
                 'expens_statement' => $request->expens_statement,
                 'amount' => $amount,
                 'note' => $request->note,
@@ -414,40 +470,42 @@ class ExpenseController extends Controller
 
             if ($hasSplitLines) {
                 foreach ($lines as $idx => $lineRow) {
-                    $kind = ExpenseKind::find($lineRow['kind_id']);
-                    if (! $kind) {
-                        throw new \Exception('فئة المصروف غير موجودة');
-                    }
+                    $debitTree = $this->resolveLeafTreeAccount((int) $lineRow['tree_account_id']);
                     ExpenseLine::create([
                         'expense_id' => $expense->id,
                         'expense_type' => $lineRow['expense_type'],
-                        'kind_id' => $lineRow['kind_id'],
+                        'kind_id' => null,
+                        'tree_account_id' => $debitTree->id,
                         'amount' => $lineRow['amount'],
+                        'statement' => $lineRow['statement'] ?? null,
                         'sort_order' => $idx,
                     ]);
-                    $debitTree = TreeAccount::resolveExpenseDebitForKind($kind, $lineRow['expense_type']);
-                    if (! $debitTree) {
-                        throw new \Exception('لم يُعثر على حساب في شجرة الحسابات لنوع: ' . $lineRow['expense_type']);
-                    }
                     $debitPostings[] = [
                         'tree_account_id' => $debitTree->id,
                         'amount' => (float) $lineRow['amount'],
-                        'label' => $kind->expense_kind,
+                        'label' => $debitTree->name,
+                        'statement' => $lineRow['statement'] ?? '',
                     ];
                 }
                 $bankDetailLabel = 'تعديل مصروف مقسّم (' . count($lines) . ' بنود)';
             } else {
-                $expenseKind = ExpenseKind::find($expense->kind_id);
-                $debitTree = TreeAccount::resolveExpenseDebitForKind($expenseKind, $expense->expense_type);
-                if (! $debitTree) {
-                    throw new \Exception('لم يُعثر على حساب في شجرة الحسابات لنوع: ' . $expense->expense_type);
-                }
+                $debitTree = $this->resolveLeafTreeAccount($headerTreeAccountId);
+                ExpenseLine::create([
+                    'expense_id' => $expense->id,
+                    'expense_type' => $headerType,
+                    'kind_id' => null,
+                    'tree_account_id' => $debitTree->id,
+                    'amount' => $amount,
+                    'statement' => $request->expens_statement,
+                    'sort_order' => 0,
+                ]);
                 $debitPostings[] = [
                     'tree_account_id' => $debitTree->id,
                     'amount' => $amount,
-                    'label' => $expenseKind->expense_kind ?? $expense->expense_type,
+                    'label' => $debitTree->name,
+                    'statement' => (string) $request->expens_statement,
                 ];
-                $bankDetailLabel = 'تعديل ' . $expense->expense_type . ' - ' . ($expenseKind->expense_kind ?? '');
+                $bankDetailLabel = 'تعديل ' . $expense->expense_type . ' - ' . $debitTree->name;
             }
 
             [$creditTreeId, $sourceName] = $this->applyExpensePaymentSource(
@@ -458,7 +516,7 @@ class ExpenseController extends Controller
                 $amount,
                 $bankDetailLabel,
                 $expense->expense_number,
-                $request->created_at ?? date('Y-m-d')
+                $entryDate
             );
 
             $this->createExpenseAccountingEntry(
@@ -468,6 +526,8 @@ class ExpenseController extends Controller
                 $sourceName,
                 $expense->expense_number
             );
+
+            $this->applyExpenseDebitOperationalSync($debitPostings, $expense->expense_number, $entryDate, false);
 
             $accountingService = app(\App\Services\Accounting\AccountingService::class);
             foreach ($debitPostings as $posting) {
@@ -483,7 +543,7 @@ class ExpenseController extends Controller
             DB::commit();
 
             return response()->json(
-                $expense->fresh()->load(['lines.kind.treeAccount', 'kind.treeAccount', 'bank.asset', 'safe.account', 'serviceAccount.account']),
+                $expense->fresh()->load(['lines.treeAccount', 'treeAccount', 'kind.treeAccount', 'bank.asset', 'safe.account', 'serviceAccount.account']),
                 200
             );
         } catch (\Exception $e) {
@@ -605,10 +665,16 @@ class ExpenseController extends Controller
     {
         DB::beginTransaction();
         try {
-            $oldExpense = Expense::find($id);
+            $oldExpense = Expense::with('lines.treeAccount', 'treeAccount')->find($id);
             if (!$oldExpense) {
                 throw new \Exception('المصروف غير موجود');
             }
+
+            $oldDebitPostings = $this->buildDebitPostingsFromExpense($oldExpense);
+            $entryDateOld = $oldExpense->created_at
+                ? (is_string($oldExpense->created_at) ? substr($oldExpense->created_at, 0, 10) : $oldExpense->created_at->format('Y-m-d'))
+                : date('Y-m-d');
+            $this->reverseExpenseDebitOperationalSync($oldDebitPostings, $oldExpense->expense_number, $entryDateOld);
 
             $affectedAccountIds = $this->reverseExpenseGlEntries($oldExpense->expense_number);
 
@@ -624,6 +690,7 @@ class ExpenseController extends Controller
                 'service_account_id' => $oldExpense->service_account_id,
                 'user_id' => auth()->user()->id,
                 'kind_id' => $oldExpense->kind_id,
+                'tree_account_id' => $oldExpense->tree_account_id,
                 'expens_statement' => $oldExpense->expens_statement,
                 'amount' => -$oldExpense->amount,
                 'note' => $oldExpense->note,
@@ -633,7 +700,7 @@ class ExpenseController extends Controller
                 'expense_image' => ''
             ]);
 
-            $expenseKind = ExpenseKind::find($oldExpense->kind_id);
+            $debitLabel = $this->debitAccountNameForExpense($oldExpense);
             $paid = (double) -$oldExpense->amount;
 
             if ($oldExpense->bank_id) {
@@ -644,7 +711,7 @@ class ExpenseController extends Controller
                     $bank->save();
                     DB::table('bank_details')->insert([
                         'bank_id' => $oldExpense->bank_id,
-                        'details' => ' حذف ' . $oldExpense->expense_type . ' - ' . $expenseKind->expense_kind . ' الخاص برقم ' . $oldExpense->expense_number,
+                        'details' => ' حذف ' . $oldExpense->expense_type . ' - ' . $debitLabel . ' الخاص برقم ' . $oldExpense->expense_number,
                         'ref' => $oldExpense->expense_number,
                         'type' => 'المصروفات',
                         'amount' => $paid,
@@ -727,7 +794,9 @@ class ExpenseController extends Controller
 
         $paginator = $search->with([
             'kind.treeAccount',
+            'treeAccount',
             'lines.kind',
+            'lines.treeAccount',
             'bank.asset',
             'safe.account',
             'serviceAccount.account',
@@ -745,7 +814,9 @@ class ExpenseController extends Controller
     {
         $expense = Expense::with([
             'kind.treeAccount',
+            'treeAccount',
             'lines.kind.treeAccount',
+            'lines.treeAccount',
             'bank.asset',
             'safe.account',
             'serviceAccount.account',
@@ -771,8 +842,12 @@ class ExpenseController extends Controller
         }
 
         foreach ($expenses as $expense) {
-            if ($expense->relationLoaded('lines') && $expense->lines->count() > 1) {
+            if ($expense->relationLoaded('lines') && $expense->lines->count() > 0) {
                 foreach ($expense->lines as $line) {
+                    if ($line->tree_account_id && $line->relationLoaded('treeAccount') && $line->treeAccount) {
+                        $line->setRelation('debit_tree_account', $line->treeAccount);
+                        continue;
+                    }
                     $lineKind = $line->relationLoaded('kind') ? $line->kind : null;
                     $line->setRelation(
                         'debit_tree_account',
@@ -782,12 +857,20 @@ class ExpenseController extends Controller
                         )
                     );
                 }
-                $expense->setRelation('debit_tree_account', null);
-                $expense->setAttribute('debit_tree_accounts_split', true);
+                $expense->setRelation('debit_tree_account', $expense->lines->count() === 1 ? $expense->lines->first()?->debit_tree_account : null);
+                $expense->setAttribute('debit_tree_accounts_split', $expense->lines->count() > 1);
                 continue;
             }
 
-            $kid = (int) $expense->kind_id;
+            if ($expense->tree_account_id) {
+                $acc = $expense->relationLoaded('treeAccount') && $expense->treeAccount
+                    ? $expense->treeAccount
+                    : TreeAccount::query()->find($expense->tree_account_id);
+                $expense->setRelation('debit_tree_account', $acc);
+                $expense->setAttribute('debit_tree_accounts_split', false);
+                continue;
+            }
+
             $kind = $expense->relationLoaded('kind') ? $expense->kind : null;
             $expense->setRelation(
                 'debit_tree_account',
@@ -798,6 +881,146 @@ class ExpenseController extends Controller
             );
             $expense->setAttribute('debit_tree_accounts_split', false);
         }
+    }
+
+    protected function resolveLeafTreeAccount(int $treeAccountId): TreeAccount
+    {
+        $account = TreeAccount::query()->find($treeAccountId);
+        if (! $account) {
+            throw new \Exception('الحساب المختار غير موجود في شجرة الحسابات');
+        }
+        if ($account->children()->exists()) {
+            throw new \Exception('يجب اختيار حساب فرعي (ورقة) وليس حساباً رئيسياً: ' . $account->name);
+        }
+
+        return $account;
+    }
+
+    /**
+     * @return array<int, array{tree_account_id:int, amount:float, label?:string}>
+     */
+    protected function buildDebitPostingsFromExpense(Expense $expense): array
+    {
+        $postings = [];
+        $lines = $expense->relationLoaded('lines') ? $expense->lines : $expense->lines()->with('treeAccount', 'kind')->get();
+
+        if ($lines->count() > 0) {
+            foreach ($lines as $line) {
+                if ($line->tree_account_id) {
+                    $postings[] = [
+                        'tree_account_id' => (int) $line->tree_account_id,
+                        'amount' => (float) $line->amount,
+                        'label' => $line->treeAccount?->name ?? '',
+                        'statement' => (string) ($line->statement ?? ''),
+                    ];
+                    continue;
+                }
+                $kind = $line->kind;
+                $debitTree = TreeAccount::resolveExpenseDebitForKind(
+                    $kind instanceof ExpenseKind ? $kind : null,
+                    (string) ($line->expense_type ?? $expense->expense_type ?? '')
+                );
+                if ($debitTree) {
+                    $postings[] = [
+                        'tree_account_id' => $debitTree->id,
+                        'amount' => (float) $line->amount,
+                        'label' => $kind?->expense_kind ?? $debitTree->name,
+                        'statement' => (string) ($line->statement ?? ''),
+                    ];
+                }
+            }
+
+            return $postings;
+        }
+
+        if ($expense->tree_account_id) {
+            $acc = TreeAccount::query()->find($expense->tree_account_id);
+            if ($acc) {
+                $postings[] = [
+                    'tree_account_id' => $acc->id,
+                    'amount' => (float) $expense->amount,
+                    'label' => $acc->name,
+                ];
+            }
+
+            return $postings;
+        }
+
+        $kind = $expense->kind;
+        $debitTree = TreeAccount::resolveExpenseDebitForKind(
+            $kind instanceof ExpenseKind ? $kind : null,
+            (string) ($expense->expense_type ?? '')
+        );
+        if ($debitTree) {
+            $postings[] = [
+                'tree_account_id' => $debitTree->id,
+                'amount' => (float) $expense->amount,
+                'label' => $kind?->expense_kind ?? $debitTree->name,
+            ];
+        }
+
+        return $postings;
+    }
+
+    protected function debitLineRef(string $expenseRef, int $treeAccountId): string
+    {
+        return $expenseRef . '-DR-' . $treeAccountId;
+    }
+
+    /**
+     * @param  array<int, array{tree_account_id:int, amount:float, label?:string}>  $debitPostings
+     */
+    protected function applyExpenseDebitOperationalSync(
+        array $debitPostings,
+        string $expenseRef,
+        string $entryDate,
+        bool $reverse
+    ): void {
+        $sync = app(ExpenseDebitOperationalSyncService::class);
+        foreach ($debitPostings as $posting) {
+            $lineRef = $this->debitLineRef($expenseRef, (int) $posting['tree_account_id']);
+            $label = trim((string) ($posting['label'] ?? ''));
+            $lineStatement = trim((string) ($posting['statement'] ?? ''));
+            if ($lineStatement !== '') {
+                $details = 'مصروف - ' . $lineStatement . ' - ' . $expenseRef;
+            } elseif ($label !== '') {
+                $details = 'مصروف - ' . $label . ' - ' . $expenseRef;
+            } else {
+                $details = 'مصروف - ' . $expenseRef;
+            }
+            $sync->syncDebitLine(
+                (int) $posting['tree_account_id'],
+                (float) $posting['amount'],
+                $details,
+                $lineRef,
+                $entryDate,
+                $reverse
+            );
+        }
+    }
+
+    /**
+     * @param  array<int, array{tree_account_id:int, amount:float, label?:string}>  $debitPostings
+     */
+    protected function reverseExpenseDebitOperationalSync(
+        array $debitPostings,
+        string $expenseRef,
+        string $entryDate
+    ): void {
+        $this->applyExpenseDebitOperationalSync($debitPostings, $expenseRef, $entryDate, true);
+    }
+
+    protected function debitAccountNameForExpense(Expense $expense): string
+    {
+        $postings = $this->buildDebitPostingsFromExpense($expense);
+        if ($postings === []) {
+            return $expense->kind?->expense_kind ?? '—';
+        }
+        if (count($postings) === 1) {
+            return (string) ($postings[0]['label'] ?? '—');
+        }
+
+        return 'تقسيم (' . count($postings) . ' بنود)';
     }
 
 

@@ -610,15 +610,20 @@ export class AddOrderComponent implements OnInit {
 
 
   calc(e: any) {
-    // this.totalInvoice = (this.productsPrice + this.shipping_cost) * (1+this.vatPercent/100);
-    this.totalInvoice = (this.productsPrice + this.shipping_cost + this.maintenanceAmount);
+    this.productsPrice = 0;
+    this.order_details.forEach(elm => {
+      this.productsPrice += elm.total;
+    });
     if (e?.target?.id == 'vat') {
       this.changedVat = true;
     }
     if (!this.changedVat) {
-      this.vat = this.totalInvoice * this.vatPercent / 100;
+      this.vat = this.productsPrice * this.vatPercent / 100;
     }
-    this.totalInvoice = this.totalInvoice + this.vat;
+    this.totalInvoice = this.productsPrice + this.shipping_cost + this.maintenanceAmount;
+    if (this.customerTypeVal === 'شركة') {
+      this.totalInvoice += this.vat;
+    }
     this.net_total = this.totalInvoice - this.prepaid_amount - this.discount;
   }
 

@@ -975,3 +975,147 @@ app-daily-entries .modal-overlay,
 app-accounting-tree .modal-overlay {
   z-index: 100100 !important;
 }
+
+/* ===== HR — سجل تعديلات كشف الحضور (SweetAlert) ===== */
+.fp-log-popup {
+  border-radius: 14px !important;
+  padding: 0 0 1rem !important;
+  direction: rtl;
+}
+
+.fp-log-title {
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  color: var(--clr-primary) !important;
+  padding: 1.25rem 1.25rem 0.25rem !important;
+}
+
+.fp-log-container {
+  margin: 0 !important;
+  padding: 0 1.25rem !important;
+  text-align: right;
+}
+
+.fp-log-popup-date {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--clr-text-secondary);
+  background: var(--clr-primary-bg);
+  border-radius: 20px;
+  padding: 0.25rem 0.75rem;
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  direction: ltr;
+}
+
+.fp-log-list {
+  max-height: 380px;
+  overflow-y: auto;
+  text-align: right;
+}
+
+.fp-log-item {
+  background: var(--clr-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.fp-log-item:last-child {
+  margin-bottom: 0;
+}
+
+.fp-log-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.fp-log-action {
+  font-weight: 700;
+  color: var(--clr-navy);
+  font-size: 0.92rem;
+}
+
+.fp-log-user {
+  font-size: 0.82rem;
+  color: var(--clr-primary);
+  background: var(--clr-primary-bg);
+  padding: 0.15rem 0.55rem;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.fp-log-when {
+  font-size: 0.78rem;
+  color: var(--clr-text-muted);
+  margin-bottom: 0.5rem;
+  direction: ltr;
+  text-align: right;
+}
+
+.fp-log-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fp-log-change-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.fp-log-field {
+  color: var(--clr-text-secondary);
+  font-weight: 600;
+}
+
+.fp-log-old {
+  color: var(--clr-danger);
+  text-decoration: line-through;
+  direction: ltr;
+  text-align: center;
+}
+
+.fp-log-arrow {
+  color: var(--clr-text-muted);
+  font-size: 0.75rem;
+}
+
+.fp-log-new {
+  color: var(--clr-success);
+  font-weight: 700;
+  direction: ltr;
+  text-align: center;
+}
+
+.fp-log-note {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.5rem;
+}
+
+.fp-log-confirm-btn {
+  background: var(--clr-primary) !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 2rem !important;
+  font-size: 0.9rem !important;
+}
+
+.fp-log-close-btn {
+  color: var(--clr-text-muted) !important;
+}
+

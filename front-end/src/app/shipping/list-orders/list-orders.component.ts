@@ -37,6 +37,7 @@ import {
   isRefuseEligibleOrderStatus,
 } from '../utils/order-refuse.utils';
 import { canShowCollectOrderMenu as isCollectOrderMenuVisible } from '../utils/order-collect-eligibility.utils';
+import { orderStatusFilterOptions } from '../utils/order-status-visibility.utils';
 
 @Component({
   selector: 'app-list-orders',
@@ -66,6 +67,11 @@ export class ListOrdersComponent implements OnDestroy {
 
   canShopifyReview(): boolean {
     return this.rbac.canAny([...RBAC_ROUTE.shopifyOrderReview]);
+  }
+
+  /** خيارات فلتر حالة الطلب حسب صلاحيات RBAC والقسم. */
+  get statusFilterOptions() {
+    return orderStatusFilterOptions(this.user, (slug) => this.rbac.can(slug));
   }
 
   canPostponeOrder(): boolean {
@@ -128,17 +134,36 @@ export class ListOrdersComponent implements OnDestroy {
   }
 
   canRefuseOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  /** إلغاء الطلب: صلاحية orders.change_status أو أقسام التشغيل/الإدخال/خدمة العملاء. */
+  canCancelOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  canCancelOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    return ['طلب جديد', 'طلب مؤكد', 'مؤجل'].includes(status);
+  }
+
+  private canChangeOrderStatusMenu(): boolean {
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
     const allowed = new Set([
-      'Admin',
-      'Shipping Management',
-      'Operation Management',
-      'Finance and operations management',
-      'Operation Specialist',
-      'Logistics Specialist',
-      'Data Entry',
-      'Review Management',
+      'admin',
+      'shipping management',
+      'operation management',
+      'finance and operations management',
+      'operation specialist',
+      'logistics specialist',
+      'data entry',
+      'review management',
+      'customer service',
     ]);
-    return allowed.has(this.user) || this.rbac.can('orders.change_status');
+    const dept = String(this.user || '').trim().toLowerCase();
+    return allowed.has(dept);
   }
 
   /** رفض استلام: متاح لكل الحالات باستثناء المحصّل / الملغي / المرفوض / الأرشيف. */

@@ -52,6 +52,13 @@ export class CashPayToSupplierComponent implements OnInit {
         this.voucher.account_id = null;
     }
 
+    get selectedSupplier(): any | null {
+        if (!this.voucher.supplier_id) {
+            return null;
+        }
+        return this.suppliers.find((s) => s.id === this.voucher.supplier_id) ?? null;
+    }
+
     private resolveAccountId(): number | null {
         const list =
             this.paymentPlace === 'safe'

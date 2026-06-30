@@ -36,37 +36,24 @@ class ShippingCompany extends Model
 
     /**
      * صافي المركز: موجب = المندوب مدين للشركة (تحصيل) | سالب = للمندوب مستحق على الشركة.
+     *
+     * ذمة COD تُحدَّث تشغيلياً عبر shipping_company_procedure (عمود balance).
+     * حساب tree_account_id يعكس مستحقات الشركة للمندوب (إن وُجد).
      */
     public function displayBalance(): float
     {
-        $receivable = 0.0;
+        $operationalReceivable = round((float) ($this->attributes['balance'] ?? 0), 2);
+
         $payable = 0.0;
-        $hasLedger = false;
-
-        if ($this->receivable_tree_account_id) {
-            if (! $this->relationLoaded('receivableTreeAccount')) {
-                $this->load('receivableTreeAccount:id,balance');
-            }
-            if ($this->receivableTreeAccount) {
-                $receivable = (float) $this->receivableTreeAccount->balance;
-                $hasLedger = true;
-            }
-        }
-
         if ($this->tree_account_id) {
             if (! $this->relationLoaded('treeAccount')) {
                 $this->load('treeAccount:id,balance');
             }
             if ($this->treeAccount) {
-                $payable = (float) $this->treeAccount->balance;
-                $hasLedger = true;
+                $payable = round((float) $this->treeAccount->balance, 2);
             }
         }
 
-        if ($hasLedger) {
-            return round($receivable + $payable, 2);
-        }
-
-        return (float) ($this->attributes['balance'] ?? 0);
+        return round($operationalReceivable + $payable, 2);
     }
 }

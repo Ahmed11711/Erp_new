@@ -89,7 +89,7 @@ export class ExpenseDetailsComponent {
   }
 
   lineDebitTreeLabel(line: any): string {
-    const resolved = line?.debit_tree_account;
+    const resolved = line?.debit_tree_account ?? line?.tree_account;
     if (resolved) {
       return this.treeAccountLine(resolved);
     }

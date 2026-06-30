@@ -89,3 +89,18 @@ table.report-data-table tfoot .text-danger {
 .financial-statement-pdf .pdf-summary-row h6 {
   font-size: 0.95rem;
 }
+
+.statement-row--clickable {
+  cursor: pointer;
+}
+
+.statement-row--editable:hover {
+  background-color: rgba(79, 70, 229, 0.06);
+}
+
+.statement-edit-hint {
+  margin-inline-start: 6px;
+  font-size: 0.75rem;
+  color: #4f46e5;
+  opacity: 0.85;
+}

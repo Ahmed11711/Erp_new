@@ -113,6 +113,13 @@ class LogUserActivity
             }
 
             $path = trim($request->path(), '/');
+            // إزالة بادئة api/ حتى يكون القسم والمسار المخزّن نظيفاً (orders بدلاً من api/orders)
+            if (str_starts_with($path, 'api/')) {
+                $path = substr($path, 4);
+            } elseif ($path === 'api') {
+                $path = '';
+            }
+
             foreach (self::SKIP_PREFIXES as $prefix) {
                 if ($path === $prefix || str_starts_with($path, $prefix . '/')) {
                     return;
@@ -151,26 +158,56 @@ class LogUserActivity
     private function resolveModule(string $path): string
     {
         $segments = $this->segments($path);
+        $idx = 0;
         $key = strtolower($segments[0] ?? '');
 
         // تجاوز بادئات الإصدارات مثل v2
         if (in_array($key, ['v1', 'v2', 'api'], true) && isset($segments[1])) {
+            $idx = 1;
             $key = strtolower($segments[1]);
         }
 
-        return self::MODULE_LABELS[$key] ?? ($segments[0] ?? '—');
+        return self::MODULE_LABELS[$key] ?? ($segments[$idx] ?? '—');
     }
+
+    /** كلمات في المسار تدل على نوع العملية حتى لو اختلف نوع الطلب (مثل POST لـ bulk-delete) */
+    private const ACTION_KEYWORD_LABELS = [
+        'purge' => 'حذف نهائي',
+        'delete' => 'حذف',
+        'destroy' => 'حذف',
+        'remove' => 'حذف',
+        'cancel' => 'إلغاء',
+        'reject' => 'رفض',
+        'approve' => 'اعتماد',
+        'confirm' => 'تأكيد',
+        'restore' => 'استرجاع',
+        'merge' => 'دمج',
+        'import' => 'استيراد',
+        'export' => 'تصدير',
+        'undo' => 'تراجع',
+    ];
 
     private function resolveAction(Request $request, string $path): string
     {
         $segments = $this->segments($path);
-        $verb = self::VERB_LABELS[$request->method()] ?? $request->method();
         $module = $this->resolveModule($path);
 
         $last = strtolower((string) end($segments));
-        if ($last !== '' && ! ctype_digit($last) && isset(self::ACTION_SUFFIX_LABELS[$last])) {
-            return self::ACTION_SUFFIX_LABELS[$last] . ' — ' . $module;
+        if ($last !== '' && ! ctype_digit($last)) {
+            $normalized = str_replace(['-', '_'], ' ', $last);
+
+            foreach (self::ACTION_KEYWORD_LABELS as $keyword => $label) {
+                if (str_contains($normalized, $keyword)) {
+                    return $label . ' — ' . $module;
+                }
+            }
+
+            if (isset(self::ACTION_SUFFIX_LABELS[$last])) {
+                return self::ACTION_SUFFIX_LABELS[$last] . ' — ' . $module;
+            }
         }
+
+        $verb = self::VERB_LABELS[$request->method()] ?? $request->method();
 
         return $verb . ' — ' . $module;
     }

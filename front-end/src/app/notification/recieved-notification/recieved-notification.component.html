@@ -24,6 +24,7 @@
             <option value="مراجعة مؤقتة">مراجعة مؤقتة</option>
             <option value="تعديل">تعديل</option>
             <option value="استعجال الشحن">استعجال الشحن</option>
+            <option value="كشف حضور">كشف حضور</option>
           </select>
         </div>
         <div class="col-md-2 form-group">
@@ -47,7 +48,7 @@
           </select>
         </div>
         <div class="col-md-2 d-flex form-group">
-          <input id="order_number" (change)="search($event)" type="text" name="orderNumber" class="form-control"  placeholder="رقم الطلب" />
+          <input id="order_number" (input)="search($event)" type="text" name="orderNumber" class="form-control"  placeholder="رقم الطلب / الموظف" />
           <i class="fa-solid fa-xmark m-2" (click)="clearSearch()"></i>
         </div>
       </div>
@@ -63,7 +64,7 @@
           <th scope="col">المرسل</th>
           <th scope="col">التاريخ</th>
           <th scope="col">التوقيت</th>
-          <th scope="col">رقم الطلب</th>
+          <th scope="col">رقم الطلب / الموظف</th>
         </tr>
       </thead>
       <tbody>
@@ -75,7 +76,10 @@
           <td>{{item.created_at | date:'dd/MM/yyyy'}}</td>
           <td dir="ltr">{{item.created_at | date:'hh:mm a'}}</td>
           <td>
-            <span style="cursor: pointer;" [routerLink]="['/dashboard/shipping/orderdetails',item.ref]">
+            <span *ngIf="item?.type === 'كشف حضور'" style="cursor: pointer;" [routerLink]="['/dashboard/hr/workinghoursdetails', item.ref]">
+              كشف موظف #{{item.ref}}
+            </span>
+            <span *ngIf="item?.type !== 'كشف حضور'" style="cursor: pointer;" [routerLink]="['/dashboard/shipping/orderdetails',item.ref]">
               {{item.ref}}
             </span>
           </td>

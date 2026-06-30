@@ -232,9 +232,11 @@
             <span> رفض استلام</span>
           </button>
         </ng-container>
-        <button mat-menu-item *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' " (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel')">
-        <span>الغاء الطلب</span>
-        </button>
+        <ng-container *ngIf="canCancelOrderMenu()">
+          <button mat-menu-item *ngIf="canCancelOrder(item)" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel')">
+            <span>الغاء الطلب</span>
+          </button>
+        </ng-container>
         <button *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' " mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الارشفة','archived')">
           <span>ارشفة الطلب</span>
         </button>

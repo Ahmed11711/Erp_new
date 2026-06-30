@@ -8,6 +8,8 @@ use App\Models\EmployeeFingerPrintSheet;
 use App\Models\EmployeeMerits;
 use App\Models\Approvals;
 use App\Models\EmployeeSubtraction;
+use App\Services\Hr\EmployeeFingerPrintSheetAuditService;
+use App\Services\Hr\EmployeeFingerPrintSheetResolverService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -291,13 +293,43 @@ class EmployeeController extends Controller
         }
 
         try {
-            // Add timestamps to data if needed, or rely on DB defaults for new inserts.
-            // For updates, we explicitly update the fields.
+            $audit = app(EmployeeFingerPrintSheetAuditService::class);
+            $newEntries = [];
+
+            foreach ($data as $entry) {
+                $existing = EmployeeFingerPrintSheet::where('employee_id', $entry['employee_id'])
+                    ->where('date', $entry['date'])
+                    ->first();
+
+                if ($existing) {
+                    $changes = $audit->diffModel($existing, $entry, ['check_in', 'check_out', 'hours']);
+                    if ($changes !== []) {
+                        $audit->log($existing->id, 'استيراد بصمة', $changes);
+                    }
+                } else {
+                    $newEntries[] = $entry;
+                }
+            }
+
             DB::table('employee_finger_print_sheets')->upsert(
                 $data,
-                ['employee_id', 'date'], // Unique constraints
-                ['acc_no', 'check_in', 'check_out', 'hours', 'iso_date', 'time_in', 'time_out', 'times'] // Columns to update if exists
+                ['employee_id', 'date'],
+                ['acc_no', 'check_in', 'check_out', 'hours', 'iso_date', 'time_in', 'time_out', 'times']
             );
+
+            foreach ($newEntries as $entry) {
+                $created = EmployeeFingerPrintSheet::where('employee_id', $entry['employee_id'])
+                    ->where('date', $entry['date'])
+                    ->first();
+
+                if ($created) {
+                    $audit->log($created->id, 'استيراد بصمة', [
+                        'check_in' => ['label' => 'الحضور', 'old' => '—', 'new' => (string) ($entry['check_in'] ?? '—')],
+                        'check_out' => ['label' => 'الانصراف', 'old' => '—', 'new' => (string) ($entry['check_out'] ?? '—')],
+                        'hours' => ['label' => 'ساعات الحضور', 'old' => '—', 'new' => (string) ($entry['hours'] ?? '—')],
+                    ]);
+                }
+            }
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error saving data: ' . $e->getMessage()], 500);
         }
@@ -326,6 +358,7 @@ class EmployeeController extends Controller
         $search = Employee::query();
 
         $search->where('id',$id)->with(['fingerPrint' => function($query) use ($request) {
+            $query->withCount('logs');
             if ($request->has('month')) {
                 $monthYear = explode('-', $request->month);
                 $year = $monthYear[0];
@@ -364,12 +397,22 @@ class EmployeeController extends Controller
     }
 
     public function empHoursPermission(Request $request){
-        $request->validate([
-            'data.id' => 'required|exists:employee_finger_print_sheets,id',
-            'data.hours_permission' => 'required|date_format:H:i'
+        $validated = $request->validate([
+            'data' => 'required|array',
+            'data.hours_permission' => 'required|date_format:H:i',
+            'data.check_in' => 'nullable|string|max:20',
+            'data.check_out' => 'nullable|string|max:20',
+            'data.hours' => 'nullable|string|max:10',
+            'data.id' => 'nullable|integer|exists:employee_finger_print_sheets,id',
+            'data.employee_id' => 'required_without:data.id|integer|exists:employees,id',
+            'data.date' => 'required_without:data.id|date',
         ]);
-        $data = $request->data;
-        $employee = EmployeeFingerPrintSheet::with('employee')->findOrFail($data['id']);
+
+        $data = $validated['data'];
+        $employee = app(EmployeeFingerPrintSheetResolverService::class)->resolve($data);
+        $data['id'] = $employee->id;
+
+        $sheetFields = ['hours_permission', 'check_in', 'check_out', 'hours'];
 
         if (auth()->user()->department != 'Admin') {
             $appData = [
@@ -380,10 +423,25 @@ class EmployeeController extends Controller
                 'user_id' => auth()->user()->id,
             ];
             $approval = Approvals::create($appData);
+            app(EmployeeFingerPrintSheetAuditService::class)->log(
+                $employee->id,
+                'طلب تعديل',
+                app(EmployeeFingerPrintSheetAuditService::class)->diffModel($employee, $data, $sheetFields),
+                'إذن — في انتظار الموافقة'
+            );
+
             return response()->json($approval, 201);
         }
-        $employee->hours_permission = $data['hours_permission'];
+
+        $audit = app(EmployeeFingerPrintSheetAuditService::class);
+        $changes = $audit->diffModel($employee, $data, $sheetFields);
+        foreach ($sheetFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $employee->{$field} = $data[$field];
+            }
+        }
         $employee->save();
+        $audit->log($employee->id, 'إذن', $changes);
 
         return response()->json(['message' => 'Record updated successfully']);
     }
@@ -391,8 +449,10 @@ class EmployeeController extends Controller
     public function empHoursPermissionAll(Request $request){
         $request->validate([
             'data' => 'required|array',
-            'data.*.id' => 'required|exists:employee_finger_print_sheets,id',
-            'data.*.hours_permission' => 'required'
+            'data.*.hours_permission' => 'required',
+            'data.*.id' => 'nullable|integer|exists:employee_finger_print_sheets,id',
+            'data.*.employee_id' => 'nullable|integer|exists:employees,id',
+            'data.*.date' => 'nullable|date',
         ]);
 
         $data = $request->data;
@@ -400,11 +460,39 @@ class EmployeeController extends Controller
         DB::beginTransaction();
 
         try {
+            $audit = app(EmployeeFingerPrintSheetAuditService::class);
+            $resolver = app(EmployeeFingerPrintSheetResolverService::class);
+
             foreach ($data as $item) {
-                $employee = EmployeeFingerPrintSheet::with('employee')->findOrFail($item['id']);
+                $employee = $resolver->resolve($item);
+                $item['id'] = $employee->id;
                 if ($employee) {
                     if (array_key_exists('is_overTime_removed', $item) && $item['is_overTime_removed']) {
+                        if (auth()->user()->department != 'Admin') {
+                            $appData = [
+                                'type' => 'update',
+                                'table_name' => 'employee_finger_print_sheets',
+                                'column_values' => $item,
+                                'details' => $employee,
+                                'user_id' => auth()->user()->id,
+                            ];
+                            Approvals::create($appData);
+                            $audit->log(
+                                $employee->id,
+                                'طلب تعديل',
+                                $audit->diffModel($employee, $item, ['is_overTime_removed', 'hours_permission']),
+                                'إزالة إضافي — في انتظار الموافقة'
+                            );
+                            continue;
+                        }
+
+                        $changes = $audit->diffModel($employee, $item, ['is_overTime_removed', 'hours_permission']);
                         $employee->is_overTime_removed = true;
+                        if (array_key_exists('hours_permission', $item)) {
+                            $employee->hours_permission = $item['hours_permission'];
+                        }
+                        $employee->save();
+                        $audit->log($employee->id, 'إزالة إضافي', $changes);
                     } else {
                         if (auth()->user()->department != 'Admin') {
                             $appData = [
@@ -415,11 +503,24 @@ class EmployeeController extends Controller
                                 'user_id' => auth()->user()->id,
                             ];
                             Approvals::create($appData);
+                            $audit->log(
+                                $employee->id,
+                                'طلب تعديل',
+                                $audit->diffModel($employee, $item, ['hours_permission', 'check_in', 'check_out', 'hours']),
+                                'إذن — في انتظار الموافقة'
+                            );
                             continue;
                         }
-                        $employee->hours_permission = $item['hours_permission'];
+
+                        $changes = $audit->diffModel($employee, $item, ['hours_permission', 'check_in', 'check_out', 'hours']);
+                        foreach (['hours_permission', 'check_in', 'check_out', 'hours'] as $field) {
+                            if (array_key_exists($field, $item)) {
+                                $employee->{$field} = $item[$field];
+                            }
+                        }
+                        $employee->save();
+                        $audit->log($employee->id, 'إذن', $changes);
                     }
-                    $employee->save();
                 }
             }
 

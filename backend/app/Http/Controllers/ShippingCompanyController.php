@@ -10,6 +10,7 @@ use App\Models\shippingCompanyDetails;
 use App\Services\Accounting\AccountLinkingService;
 use App\Services\Accounting\ReceivableReconciliationService;
 use App\Services\Accounting\ReceivableTreeAccountGuard;
+use App\Services\Orders\OrderStatusVisibilityService;
 use App\Services\Shipping\ShippingCompanyDeletionService;
 use App\Services\Shipping\UnlinkedReceivableAccountException;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class ShippingCompanyController extends Controller
         public AccountLinkingService $accountLinkingService,
         public ReceivableTreeAccountGuard $receivableGuard,
         public ReceivableReconciliationService $reconciliationService,
+        protected OrderStatusVisibilityService $orderStatusVisibility,
     ) {
     }
 
@@ -60,7 +62,14 @@ class ShippingCompanyController extends Controller
 
     public function shippingcompanySelect()
     {
-        $data = ShippingCompany::select('id', 'name', 'type')->get();
+        $data = ShippingCompany::with('treeAccount:id,balance')->get()
+            ->map(fn (ShippingCompany $sc) => [
+                'id' => $sc->id,
+                'name' => $sc->name,
+                'type' => $sc->type,
+                'balance' => $sc->displayBalance(),
+            ]);
+
         return response()->json($data, 200);
     }
 
@@ -264,6 +273,13 @@ class ShippingCompanyController extends Controller
         if ($request->has('reviewed')) {
             $search->whereHas('order.order_details', function ($query) use ($request) {
                 $query->where('reviewed', $request->reviewed);
+            });
+        }
+
+        $user = auth()->user();
+        if ($user) {
+            $search->whereHas('order', function ($query) use ($user) {
+                $this->orderStatusVisibility->applySearchScope($query, $user);
             });
         }
 

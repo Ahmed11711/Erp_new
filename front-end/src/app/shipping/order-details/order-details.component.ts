@@ -6,9 +6,12 @@ import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
 import { environment } from 'src/env/env';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { ShippingWayService } from '../services/shipping-way.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
 import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
+import { DialogCancelOrderLineComponent } from '../dialog-cancel-order-line/dialog-cancel-order-line.component';
+import { DialogPrepaidAdjustmentComponent } from '../dialog-prepaid-adjustment/dialog-prepaid-adjustment.component';
 
 @Component({
   selector: 'app-order-details',
@@ -47,6 +50,8 @@ export class OrderDetailsComponent implements OnInit{
 
   /** مراجعة Shopify: نفس صفحة التفاصيل مع تعديل كامل */
   shopifyReviewMode = false;
+  prepaidAdjustFromQuery = false;
+  private prepaidAdjustDialogOpened = false;
   reviewSubmitting = false;
   reviewNote = '';
   reviewDraft: any = {};
@@ -66,6 +71,7 @@ export class OrderDetailsComponent implements OnInit{
     private snackBar: MatSnackBar,
     private shippingWay: ShippingWayService,
     public rbac: RbacService,
+    private dialog: MatDialog,
   ) {
     this.imgUrl = environment.imgUrl;
   }
@@ -103,45 +109,33 @@ export class OrderDetailsComponent implements OnInit{
 
     this.route.queryParams.subscribe((qp: any) => {
       this.shopifyReviewMode = qp?.shopifyReview === '1' || qp?.shopifyReview === 1 || qp?.shopifyReview === true;
+      this.prepaidAdjustFromQuery = qp?.prepaid_adjust === '1' || qp?.prepaid_adjust === 1 || qp?.prepaid_adjust === true;
     });
 
     this.user = this.authService.getUser();
 
+    this.syncPageMode();
+    this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd)).subscribe((e) => {
+      this.syncPageMode(e.urlAfterRedirects);
+    });
 
     this.getOrder();
-
-    const currentUrl = this.router.url;
-    const lastSlashIndex = currentUrl.lastIndexOf('/');
-    let checkUrl;
-
-    const modifiedUrl = currentUrl.substring(0, lastSlashIndex);
-
-    if (Number(currentUrl.slice(lastSlashIndex+1))) {
-      checkUrl = modifiedUrl;
-
-
-    }
-    else{
-      checkUrl = currentUrl;
-    }
-    console.log(checkUrl);
-
-
-    if (checkUrl == '/dashboard/shipping/orderdetails') {
-      this.isDetails = true;
-    }
 
     if (this.shopifyReviewMode) {
       this.shippingWay.data().subscribe((res: any) => this.shippingWays = res || []);
       this.orderService.getProducts().subscribe((res: any) => this.catalogProducts = res || []);
     }
 
-    if (checkUrl == '/dashboard/shipping/shipOrder') {
-      this.isShipCompany =true;
+    const path = this.router.url.split('?')[0];
+    if (path.includes('/shipping/shipOrder')) {
+      this.isShipCompany = true;
     }
+  }
 
-
-
+  private syncPageMode(url: string = this.router.url): void {
+    const path = url.split('?')[0];
+    this.isDetails = /\/shipping\/orderdetails\/\d+/.test(path)
+      || path.endsWith('/shipping/orderdetails');
   }
 
   showImg(e){
@@ -199,19 +193,32 @@ export class OrderDetailsComponent implements OnInit{
 
       this.order_products.forEach(elm=>{
         elm.quantity = Number(elm.quantity);
-        elm.requiredQuantity = elm.quantity-elm.shipped_quantity;
-        if (elm.quantity-elm.shipped_quantity == 0) {
+        elm.shipped_quantity = Number(elm.shipped_quantity || 0);
+        elm.cancelled_quantity = Number(elm.cancelled_quantity || 0);
+        elm.remaining_quantity = Math.max(0, elm.quantity - elm.shipped_quantity - elm.cancelled_quantity);
+        elm.requiredQuantity = elm.remaining_quantity;
+        if (elm.remaining_quantity <= 0) {
           elm.hideinput = true;
         }
       });
       this.special_order = this.order_products.find(elm => elm.special_details);
-      this.shipProducts = this.order_products.filter(elm=>elm.quantity > elm.shipped_quantity);
+      this.shipProducts = this.order_products.filter(elm => elm.remaining_quantity > 0);
       this.dataEvent.emit({shipProducts:this.shipProducts,shippstatus:true , orderType:this.orderType});
 
       if (this.shopifyReviewMode && this.isShopifyOrder) {
         this.initShopifyReviewDraft();
       }
+
+      this.maybeOpenPrepaidAdjustDialog();
     })
+  }
+
+  private maybeOpenPrepaidAdjustDialog(): void {
+    if (!this.prepaidAdjustFromQuery || this.prepaidAdjustDialogOpened || !this.canShowPrepaidAdjustment) {
+      return;
+    }
+    this.prepaidAdjustDialogOpened = true;
+    setTimeout(() => this.openPrepaidAdjustmentDialog(), 300);
   }
 
   initShopifyReviewDraft(): void {
@@ -474,6 +481,100 @@ export class OrderDetailsComponent implements OnInit{
 
   get canManageOrderNotes(): boolean {
     return this.user !== 'Review Management' && this.user !== 'Financial Accounts';
+  }
+
+  get canCancelOrderLines(): boolean {
+    if (this.isFinancialAccountsReadonly || this.shopifyReviewMode) {
+      return false;
+    }
+    if (!this.rbac.canAny(['orders.cancel_line', 'orders.edit'])) {
+      return false;
+    }
+    const status = this.order?.order_status;
+    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'].includes(status);
+  }
+
+  canCancelProduct(product: any): boolean {
+    if (!this.canCancelOrderLines) {
+      return false;
+    }
+    const remaining = Number(product?.remaining_quantity ?? 0);
+    return remaining > 0;
+  }
+
+  openCancelLineDialog(product: any): void {
+    this.dialog.open(DialogCancelOrderLineComponent, {
+      width: '480px',
+      data: {
+        orderId: this.id,
+        product,
+        refresh: () => this.getOrder(),
+      },
+    });
+  }
+
+  get hasPrepaidEditPermission(): boolean {
+    return this.rbac.canAny(['finance.account_statement.edit', 'orders.edit', 'system.rbac'])
+      || this.user === 'Admin';
+  }
+
+  get canShowPrepaidAdjustment(): boolean {
+    if (this.isFinancialAccountsReadonly || this.shopifyReviewMode || !this.order) {
+      return false;
+    }
+
+    if (this.order.can_adjust_prepaid === true) {
+      return true;
+    }
+
+    const prepaid = Number(this.order.prepaid_amount) || 0;
+    if (prepaid <= 0.009) {
+      return false;
+    }
+
+    const status = String(this.order.order_status || '');
+    if (status === 'ملغي' || status === 'أرشيف') {
+      return false;
+    }
+
+    if (!this.hasPrepaidEditPermission) {
+      return false;
+    }
+
+    return this.order.can_adjust_prepaid !== false;
+  }
+
+  get canAdjustPrepaid(): boolean {
+    return this.canShowPrepaidAdjustment;
+  }
+
+  prepaidSourceLabel(): string {
+    if (this.order?.bank?.name) {
+      return this.order.bank.name;
+    }
+    const t = this.order?.prepaid_payment_type;
+    if (t === 'safe') return 'خزينة';
+    if (t === 'service_account') return 'حساب خدمي';
+    if (t === 'bank') return 'بنك';
+    return '';
+  }
+
+  openPrepaidAdjustmentDialog(): void {
+    if (!this.canShowPrepaidAdjustment) {
+      return;
+    }
+    this.dialog.open(DialogPrepaidAdjustmentComponent, {
+      width: '560px',
+      data: {
+        orderId: this.id,
+        prepaidAmount: Number(this.order?.prepaid_amount) || 0,
+        currentPaymentType: this.order?.prepaid_payment_type,
+        currentSourceLabel: this.prepaidSourceLabel() || null,
+        defaultAction: 'change_source' as const,
+        defaultPaymentType: 'safe' as const,
+        refresh: () => this.getOrder(),
+      },
+    });
   }
 
   isNoteEdited(note: any): boolean {

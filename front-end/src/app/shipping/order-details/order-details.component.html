@@ -13,6 +13,12 @@
    <p class="order-details-hero__subtitle" *ngIf="order?.order_status">{{ order?.order_status }} · {{ order?.order_type }}</p>
   </div>
   <div class="order-details-hero__actions" *ngIf="!isFinancialAccountsReadonly && !shopifyReviewMode">
+   <button type="button" class="order-details-hero__action-btn order-details-hero__action-btn--prepaid"
+     *ngIf="canShowPrepaidAdjustment && isDetails"
+     (click)="openPrepaidAdjustmentDialog()"
+     title="عكس أو تغيير مصدر الدفعة المقدمة">
+    <i class="fa-solid fa-money-bill-transfer"></i> تحت الحساب
+   </button>
    <button type="button" class="order-details-hero__action-btn" (click)="printSticker()">
     <i class="fa-solid fa-tags"></i> ملصقات
    </button>
@@ -295,6 +301,8 @@
       <th>الكمية المطلوبة</th>
       <!-- <th *ngIf="order?.customer_type=='شركة' && order?.order_status=='طلب جديد' || order?.order_status=='طلب مؤكد'">الكمية التي تم شحنها</th> -->
       <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
+      <th>ملغي</th>
+      <th>المتبقي</th>
       <th>سعر البيع</th>
       <th>اجمالى سعر البيع</th>
       <th>صورة المنتج</th>
@@ -302,7 +310,7 @@
       <th *ngIf="special_order">خاص</th>
       <th *ngIf="shopifyReviewMode">—</th>
       <th *ngIf="order?.customer_type=='شركة' && isShipCompany && user !== 'Financial Accounts'">كمية الشحن المطلوبة</th>
-      <!-- <th>a</th> -->
+      <th *ngIf="canCancelOrderLines && isDetails && !shopifyReviewMode">إجراء</th>
      </tr>
     </thead>
     <tbody>
@@ -311,6 +319,14 @@
       <td>{{product.category.category_name}}</td>
       <td dir="ltr">{{product.quantity}}</td>
       <td *ngIf="order?.customer_type=='شركة'">{{product.shipped_quantity}}</td>
+      <td dir="ltr">
+        <span *ngIf="product.cancelled_quantity > 0">{{ product.cancelled_quantity }}</span>
+        <span *ngIf="!product.cancelled_quantity">—</span>
+        <div class="small text-muted" *ngIf="product.cancellation_reason" [title]="product.cancellation_reason">
+          {{ product.cancellation_reason | slice:0:40 }}<span *ngIf="product.cancellation_reason?.length > 40">…</span>
+        </div>
+      </td>
+      <td dir="ltr">{{ product.remaining_quantity }}</td>
       <td dir="ltr">{{product.price | customNumber}}</td>
       <td dir="ltr">{{product.total_price | customNumber}}</td>
       <td><img class="img-fluid" style="width: 50px;" [src]="imgUrl+product.category.category_image"></td>
@@ -329,9 +345,16 @@
       <td *ngIf="order?.customer_type=='شركة' && isShipCompany && user !== 'Financial Accounts'">
        <input class="form-control" *ngIf="!product.hideinput" [value]="product.requiredQuantity"
         (keyup)="shippedQuantity($event,product.id)" type="number">
-       <p class="text-danger" *ngIf="product.requiredQuantity > ( product.quantity-product.shipped_quantity) ">الكمية
+       <p class="text-danger" *ngIf="product.requiredQuantity > product.remaining_quantity">الكمية
         المطلوبة اكبر من الموجود</p>
-       <p class="text-success" *ngIf="product.quantity-product.shipped_quantity ==0 ">تم الشحن </p>
+       <p class="text-success" *ngIf="product.remaining_quantity == 0">تم الشحن أو الإلغاء</p>
+      </td>
+      <td *ngIf="canCancelOrderLines && isDetails && !shopifyReviewMode">
+       <button type="button" class="btn btn-sm btn-outline-danger"
+         *ngIf="canCancelProduct(product)"
+         (click)="openCancelLineDialog(product)">
+         إلغاء
+       </button>
       </td>
      </tr>
      </ng-container>
@@ -474,8 +497,19 @@
  <div class="row g-3 order-details-footer mb-4">
   <div class="col-lg-8">
    <div class="order-section-card order-financial-card">
-    <div class="order-section-card__header">
+    <div class="order-section-card__header order-financial-card__header">
      <h5 class="order-section-card__title"><i class="fa-solid fa-coins"></i> الملخص المالي</h5>
+     <button type="button" class="btn btn-sm btn-warning order-prepaid-adjust-btn"
+       *ngIf="canShowPrepaidAdjustment"
+       (click)="openPrepaidAdjustmentDialog()">
+      <i class="fa-solid fa-money-bill-transfer me-1"></i>
+      عكس / تغيير مصدر الدفع ({{ order?.prepaid_amount | customNumber }})
+     </button>
+    </div>
+    <div class="alert alert-warning py-2 px-3 mb-2 small" dir="rtl"
+      *ngIf="!canShowPrepaidAdjustment && hasPrepaidEditPermission && (order?.prepaid_amount || 0) > 0 && order?.prepaid_adjust_block_reason">
+     <i class="fa-solid fa-circle-info me-1"></i>
+     {{ order.prepaid_adjust_block_reason }}
     </div>
     <div class="table-responsive text-center">
      <table class="table table-bordered table-hover order-details-table w-100 mb-0">
@@ -496,7 +530,15 @@
       }}</td>
      <td dir="ltr" *ngIf="order?.customer_type == 'شركة'">{{order?.vat || 0 | customNumber }}</td>
      <td dir="ltr">{{order?.total_invoice || 0 | customNumber}}</td>
-     <td dir="ltr">{{order?.prepaid_amount || 0 | customNumber}}</td>
+     <td dir="ltr">
+      {{order?.prepaid_amount || 0 | customNumber}}
+      <button *ngIf="canShowPrepaidAdjustment" type="button"
+        class="btn btn-outline-warning btn-sm ms-2 prepaid-adjust-btn"
+        (click)="openPrepaidAdjustmentDialog()"
+        title="عكس أو تغيير مصدر الدفع">
+        <i class="fa-solid fa-pen-to-square me-1"></i> تعديل
+      </button>
+     </td>
      <td *ngIf="order?.bank">{{order?.bank?.name}}</td>
      <td dir="ltr">{{order?.discount || 0 | customNumber}}</td>
      <td dir="ltr">{{order?.net_total || 0 | customNumber}}</td>

@@ -4,6 +4,7 @@ import { VoucherService } from '../../../accounting/services/voucher.service';
 import { ToastService } from '../../../shared/toast/toast.service';
 import {
   buildClientVoucherFields,
+  CashClientCompanyOption,
   CashClientOptionsResponse,
 } from '../cash-client-selection';
 
@@ -73,6 +74,21 @@ export class CashGiveToClientComponent implements OnInit {
     onPlaceChange(): void {
         this.selectedSourceId = null;
         this.voucher.account_id = null;
+    }
+
+    get selectedClientCompany(): CashClientCompanyOption | null {
+        if (!this.selectedClientKey || !this.selectedClientKey.startsWith('company:')) {
+            return null;
+        }
+        const id = Number(this.selectedClientKey.slice('company:'.length));
+        return this.clientOptions.companies.find((c) => c.id === id) ?? null;
+    }
+
+    get selectedIndividualPhone(): string | null {
+        if (!this.selectedClientKey || !this.selectedClientKey.startsWith('individual:')) {
+            return null;
+        }
+        return this.selectedClientKey.slice('individual:'.length) || null;
     }
 
     private resolveAccountId(): number | null {

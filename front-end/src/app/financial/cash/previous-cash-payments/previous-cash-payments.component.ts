@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { VoucherService } from '../../../accounting/services/voucher.service';
 import { ExpenseService } from '../../services/expense.service';
@@ -86,6 +87,7 @@ export class PreviousCashPaymentsComponent implements OnInit, OnDestroy {
     private rbac: RbacService,
     private toast: ToastService,
     private dialog: MatDialog,
+    private route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
@@ -97,7 +99,33 @@ export class PreviousCashPaymentsComponent implements OnInit, OnDestroy {
         this.loadData();
       });
 
+    this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe((params) => {
+      const voucherId = Number(params.get('edit_voucher') ?? 0);
+      if (voucherId > 0 && this.rbac.can('finance.account_statement.edit')) {
+        this.openVoucherEditDialog(voucherId);
+      }
+    });
+
     this.loadData();
+  }
+
+  private openVoucherEditDialog(voucherId: number): void {
+    const ref = this.dialog.open(CashVoucherEditDialogComponent, {
+      width: '640px',
+      maxWidth: '95vw',
+      disableClose: true,
+      data: { voucherId },
+    });
+
+    ref.afterClosed().subscribe((saved) => {
+      if (!saved) {
+        return;
+      }
+      this.toast.success('تم تحديث السند بنجاح');
+      this.mergedCache = [];
+      this.lastMergeKey = '';
+      this.loadData();
+    });
   }
 
   ngOnDestroy(): void {
@@ -118,22 +146,7 @@ export class PreviousCashPaymentsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const ref = this.dialog.open(CashVoucherEditDialogComponent, {
-      width: '640px',
-      maxWidth: '95vw',
-      disableClose: true,
-      data: { voucherId: row.id },
-    });
-
-    ref.afterClosed().subscribe((saved) => {
-      if (!saved) {
-        return;
-      }
-      this.toast.success('تم تحديث السند بنجاح');
-      this.mergedCache = [];
-      this.lastMergeKey = '';
-      this.loadData();
-    });
+    this.openVoucherEditDialog(row.id);
   }
 
   expenseEditUrl(row: UnifiedTransactionRow): string {

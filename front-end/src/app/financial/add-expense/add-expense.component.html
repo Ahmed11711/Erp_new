@@ -55,34 +55,6 @@
       </div>
     </div>
 
-    <!-- المبلغ الإجمالي -->
-    <div class="exp-card">
-      <div class="exp-card-header">المبلغ الإجمالي</div>
-      <div class="exp-card-body">
-        <div class="row g-3 align-items-end">
-          <div class="col-md-4 col-lg-3">
-            <label class="exp-label" for="total-amount">المبلغ (يُصرف من المصدر)</label>
-            <input id="total-amount" class="form-control exp-amount-input" placeholder="0.00"
-              [class.is-valid]="form.get('amount')?.errors == null && form.get('amount')?.touched"
-              formControlName="amount" type="number" min="0.01" step="0.01">
-            <p *ngIf="form.get('amount')?.errors != null && form.get('amount')?.touched"
-              class="exp-error">مطلوب</p>
-          </div>
-          <div class="col-md-8 col-lg-9">
-            <div class="exp-lines-total" [class.exp-lines-total--error]="amountMismatch"
-              [class.exp-lines-total--ok]="!amountMismatch && linesTotal > 0">
-              <span class="exp-lines-total-label">مجموع البنود</span>
-              <span class="exp-lines-total-value">{{ linesTotal | number:'1.2-2' }}</span>
-              <span class="exp-lines-total-hint" *ngIf="amountMismatch">يجب أن يساوي المبلغ الإجمالي</span>
-              <span class="exp-lines-total-hint exp-lines-total-hint--ok" *ngIf="!amountMismatch && linesTotal > 0">
-                <i class="fa fa-check-circle"></i> متطابق
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- تقسيم المصروف -->
     <div class="exp-card exp-card-table">
       <div class="exp-card-header exp-card-header--flex">
@@ -97,7 +69,8 @@
             <thead>
               <tr>
                 <th>نوع المصروف</th>
-                <th>فئة المصروف</th>
+                <th>الحساب (مدين)</th>
+                <th>بيان</th>
                 <th class="exp-col-amount">المبلغ</th>
                 <th class="exp-col-action"></th>
               </tr>
@@ -105,7 +78,7 @@
             <tbody formArrayName="lines">
               <tr *ngFor="let line of splitLines.controls; let i = index" [formGroupName]="i">
                 <td>
-                  <select formControlName="expense_type" (change)="onLineExpenseTypeChange(i)"
+                  <select formControlName="expense_type"
                     class="form-control exp-select exp-select--sm">
                     <option [ngValue]="null" disabled>— النوع —</option>
                     <option ngValue="مصروف تشغيل">مصروف تشغيل</option>
@@ -114,16 +87,32 @@
                   </select>
                 </td>
                 <td>
-                  <select formControlName="kind_id" class="form-control exp-select exp-select--sm">
-                    <option [ngValue]="null" disabled>— الفئة —</option>
-                    <option *ngFor="let elm of kindsForType(line.get('expense_type')?.value)" [ngValue]="elm.id">
-                      {{ elm.expense_kind }}
-                    </option>
-                  </select>
-                  <small class="exp-hint"
-                    *ngIf="line.get('expense_type')?.value && kindsForType(line.get('expense_type')?.value).length === 0">
-                    لا توجد فئات لهذا النوع
-                  </small>
+                  <input class="form-control exp-select exp-select--sm exp-account-input"
+                    [formControl]="getLineAccountCtrl(i)"
+                    [matAutocomplete]="lineAccAuto"
+                    (focus)="onLineAccountFocus(i)"
+                    (blur)="onLineAccountBlur(i)"
+                    [disabled]="loadingAccounts || leafAccounts.length === 0"
+                    placeholder="ابحث بالاسم أو الكود أو النوع"
+                    autocomplete="off" />
+                  <mat-autocomplete #lineAccAuto="matAutocomplete"
+                    panelClass="exp-account-autocomplete-panel"
+                    [displayWith]="displayAccountOption"
+                    (optionSelected)="onLineAccountSelected(i, $event)"
+                    [autoActiveFirstOption]="true">
+                    <mat-option *ngFor="let acc of getLineFilteredAccounts(i)" [value]="acc">
+                      {{ accountOptionLabel(acc) }}
+                    </mat-option>
+                  </mat-autocomplete>
+                  <small class="exp-hint" *ngIf="loadingAccounts">جاري تحميل شجرة الحسابات...</small>
+                  <small class="exp-hint" *ngIf="!loadingAccounts && leafAccounts.length === 0">لا توجد حسابات متاحة</small>
+                </td>
+                <td>
+                  <input formControlName="statement" type="text"
+                    class="form-control exp-select exp-select--sm"
+                    placeholder="بيان البند">
+                  <p *ngIf="line.get('statement')?.errors?.['required'] && line.get('statement')?.touched"
+                    class="exp-error mb-0">مطلوب</p>
                 </td>
                 <td>
                   <input formControlName="amount" type="number" min="0.01" step="0.01"
@@ -137,6 +126,13 @@
                 </td>
               </tr>
             </tbody>
+            <tfoot>
+              <tr class="exp-table-foot">
+                <td colspan="3" class="exp-table-foot-label">المبلغ الإجمالي (يُصرف من المصدر)</td>
+                <td class="exp-table-foot-amount" dir="ltr">{{ linesTotal | number:'1.2-2' }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
@@ -174,7 +170,7 @@
     </div>
 
     <div class="alert alert-danger exp-alert" *ngIf="errormessage && !canSubmit && !submitError">
-      تحقق من الحقول ومن تطابق مجموع البنود مع المبلغ الإجمالي
+      تحقق من الحقول وأدخل مبالغ البنود
     </div>
 
     <div class="alert alert-info exp-alert" *ngIf="loadingExpense">

@@ -46,6 +46,8 @@
           class="proc-ac"
           [data]="vendors"
           [searchKeyword]="vendorKeyword"
+          [customFilter]="filterVendorSearch"
+          [selectedValueRender]="selectedVendorLabel"
           [minQueryLength]="0"
           [debounceTime]="150"
           notFoundText="لا يوجد مورد بهذا الاسم"
@@ -74,6 +76,8 @@
             class="proc-ac"
             [data]="representatives"
             [searchKeyword]="representativeKeyword"
+            [customFilter]="filterRepresentativeSearch"
+            [selectedValueRender]="selectedRepresentativeLabel"
             [minQueryLength]="0"
             placeholder="اختر مندوباً من قائمة المناديب…"
             (selected)="onRepresentativeSelected($event)"
@@ -113,9 +117,13 @@
                 class="proc-ac proc-ac--table"
                 [data]="categories"
                 [searchKeyword]="categoryKeyword"
-                [minQueryLength]="0"
-                notFoundText="لا يوجد صنف"
-                placeholder="ابحث عن الصنف…"
+                [customFilter]="filterCategorySearch"
+                [selectedValueRender]="selectedCategoryLabel"
+                [minQueryLength]="1"
+                [debounceTime]="200"
+                notFoundText="لا يوجد صنف — اكتب اسم الصنف للبحث"
+                placeholder="ابحث باسم الصنف في مخزن المواد الخام…"
+                (inputChanged)="onCategoryInputChanged($event)"
                 (selected)="onLineCategorySelected(line, $event)"
                 [itemTemplate]="catItemTpl"
                 [notFoundTemplate]="notFoundTpl"
@@ -157,23 +165,23 @@
 
     <ng-template #vendorItemTpl let-item>
       <div class="ac-option">
-        <span class="ac-option__title">{{ item.supplier_name }}</span>
+        <span class="ac-option__title" [innerHTML]="item.supplier_name"></span>
         <span class="ac-option__meta" *ngIf="item.supplierType?.supplier_type">{{ item.supplierType.supplier_type }}</span>
       </div>
     </ng-template>
     <ng-template #catItemTpl let-item>
       <div class="ac-option">
-        <span class="ac-option__title">{{ item.category_name }}</span>
+        <span class="ac-option__title" [innerHTML]="item.category_name"></span>
         <span class="ac-option__meta">متاح: {{ item.quantity | number:'1.0-4' }}</span>
       </div>
     </ng-template>
     <ng-template #representativeItemTpl let-item>
       <div class="ac-option">
-        <span class="ac-option__title">{{ item.name }}</span>
+        <span class="ac-option__title" [innerHTML]="item.name"></span>
       </div>
     </ng-template>
     <ng-template #notFoundTpl let-notFound>
-      <div class="ac-not-found">{{ notFound }}</div>
+      <div class="ac-not-found" [innerHTML]="notFound"></div>
     </ng-template>
   </section>
 
@@ -181,10 +189,42 @@
     <span class="spinner"></span> جاري التحميل...
   </div>
 
+  <section class="list-filters panel" *ngIf="!showForm">
+    <div class="list-filters__row">
+      <div class="list-filters__field list-filters__field--search">
+        <label class="field-label">بحث</label>
+        <input
+          class="field-control"
+          type="text"
+          [(ngModel)]="listSearch"
+          (ngModelChange)="onListSearchInput()"
+          placeholder="رقم الإذن، ID، أو اسم المورد…"
+        />
+      </div>
+      <div class="list-filters__field">
+        <label class="field-label">المورد</label>
+        <select class="field-control" [(ngModel)]="filterSupplierId" (ngModelChange)="loadOrders()">
+          <option [ngValue]="null">الكل</option>
+          <option *ngFor="let v of vendors" [ngValue]="v.id">{{ v.supplier_name }}</option>
+        </select>
+      </div>
+      <div class="list-filters__field">
+        <label class="field-label">الحالة</label>
+        <select class="field-control" [(ngModel)]="filterStatus" (ngModelChange)="loadOrders()">
+          <option value="">الكل</option>
+          <option *ngFor="let s of statusLabels | keyvalue" [value]="s.key">{{ s.value }}</option>
+        </select>
+      </div>
+      <button type="button" class="btn-outline-sm" *ngIf="hasListFilters()" (click)="clearListFilters()">مسح الفلاتر</button>
+    </div>
+    <p class="list-filters__meta" *ngIf="!loading">{{ totalOrders }} نتيجة</p>
+  </section>
+
   <div class="panel orders-panel" *ngIf="!loading && orders.length">
     <table class="proc-table">
       <thead>
         <tr>
+          <th class="col-id">ID</th>
           <th>رقم الإذن</th>
           <th>المورد</th>
           <th>الحالة</th>
@@ -195,10 +235,11 @@
       </thead>
       <tbody>
         <tr *ngFor="let o of orders">
+          <td class="col-id"><span class="id-badge">{{ o.id }}</span></td>
           <td><strong>{{ dispatchNumber(o) }}</strong></td>
           <td>{{ o.supplier?.supplier_name }}</td>
           <td><span class="badge" [ngClass]="statusClass(o.status)">{{ statusLabels[o.status] || o.status }}</span></td>
-          <td>{{ o.expected_return_date || o.created_at | date:'yyyy-MM-dd' }}</td>
+          <td>{{ dispatchDate(o) | date:'yyyy-MM-dd' }}</td>
           <td>{{ o.expected_service_total | number:'1.2-2' }}</td>
           <td class="actions">
             <button type="button" class="btn-text" (click)="openDetail(o)">تفاصيل / استلام</button>
@@ -208,5 +249,7 @@
     </table>
   </div>
 
-  <p *ngIf="!loading && !orders.length && !showForm" class="empty-state">لا توجد إذونات صرف بعد. اضغط «إذن صرف جديد» للبدء.</p>
+  <p *ngIf="!loading && !orders.length && !showForm" class="empty-state">
+    {{ hasListFilters() ? 'لا توجد نتائج مطابقة للبحث.' : 'لا توجد إذونات صرف بعد. اضغط «إذن صرف جديد» للبدء.' }}
+  </p>
 </div>

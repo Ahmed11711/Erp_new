@@ -145,6 +145,10 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/changeCheckIn/${id}`,data);
   }
 
+  getFingerPrintSheetLogs(id:number):Observable<any>{
+    return this.http.get<any>(`${environment.Url}/fingerprint-sheet-logs/${id}`);
+  }
+
   addFixedChangedSalary(formData:any):Observable<any>
   {
     return this.http.post<any>(`${environment.Url}/addFixedChangedSalary`,formData)

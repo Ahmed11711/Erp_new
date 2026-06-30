@@ -243,17 +243,35 @@ export class CustomerCompanyDetailsComponent {
   }
 
   canRefuseOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  canCancelOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  canCancelOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    return ['طلب جديد', 'طلب مؤكد', 'مؤجل'].includes(status);
+  }
+
+  private canChangeOrderStatusMenu(): boolean {
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
     const allowed = new Set([
-      'Admin',
-      'Shipping Management',
-      'Operation Management',
-      'Finance and operations management',
-      'Operation Specialist',
-      'Logistics Specialist',
-      'Data Entry',
-      'Review Management',
+      'admin',
+      'shipping management',
+      'operation management',
+      'finance and operations management',
+      'operation specialist',
+      'logistics specialist',
+      'data entry',
+      'review management',
+      'customer service',
     ]);
-    return allowed.has(this.user) || this.rbac.can('orders.change_status');
+    const dept = String(this.user || '').trim().toLowerCase();
+    return allowed.has(dept);
   }
 
   canRefuseOrder(item: any): boolean {

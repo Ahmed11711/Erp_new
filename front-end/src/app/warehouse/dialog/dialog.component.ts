@@ -11,7 +11,11 @@ import { AssetService } from 'src/app/financial/services/asset.service';
 })
 export class DialogComponent {
 
-  assetData:any[] = [];
+  assetData: any[] = [];
+  assetKeyword = 'name';
+  assetInitialValue = '';
+  assetSearchText = '';
+  assetFieldReady = true;
 
   constructor(@Inject(MAT_DIALOG_DATA) public data: any,
       private dialogRef: MatDialogRef<DialogComponent>,private StockService:StockService, private assetService:AssetService){}
@@ -35,10 +39,114 @@ export class DialogComponent {
     }
   }
 
-  getAssets(){
-    this.assetService.getMainAssets().subscribe(res=>{
-      this.assetData = res.data;
-    })
+  getAssets() {
+    this.assetService.getMainAssets().subscribe(res => {
+      this.assetData = this.parseAssetList(res);
+      this.syncAssetInitialValue();
+    });
+  }
+
+  /** Laravel JsonResource::collection قد يضع الصفوف في data.data */
+  private parseAssetList(res: any): any[] {
+    const payload = res?.data;
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (payload && Array.isArray(payload.data)) {
+      return payload.data;
+    }
+    return [];
+  }
+
+  private syncAssetInitialValue(): void {
+    const id = Number(this.form.get('asset_id')?.value);
+    if (id > 0) {
+      const found = this.findAssetById(id);
+      this.assetInitialValue = found?.name ?? '';
+      this.refreshAssetField();
+    }
+  }
+
+  private refreshAssetField(): void {
+    this.assetFieldReady = false;
+    setTimeout(() => {
+      this.assetFieldReady = true;
+    });
+  }
+
+  onAssetSelected(item: { id?: number | string; name?: string } | string | null | undefined): void {
+    if (!item) {
+      return;
+    }
+
+    if (typeof item === 'string') {
+      const found = this.findAssetByName(item);
+      if (found) {
+        this.setAssetSelection(Number(found.id), found.name);
+      }
+      return;
+    }
+
+    const id = Number(item.id);
+    if (id > 0) {
+      this.setAssetSelection(id, item.name ?? this.findAssetById(id)?.name ?? '');
+    } else {
+      const found = this.findAssetByName(item.name ?? '');
+      if (found) {
+        this.setAssetSelection(Number(found.id), found.name);
+      }
+    }
+  }
+
+  onAssetInputChanged(value: string): void {
+    this.assetSearchText = (value ?? '').toString();
+    const typed = this.assetSearchText.trim();
+    if (!typed) {
+      return;
+    }
+    const found = this.findAssetByName(typed);
+    if (found) {
+      this.setAssetSelection(Number(found.id), found.name, false);
+    }
+  }
+
+  syncAssetFromInput(): void {
+    const typed = (this.assetSearchText || this.assetInitialValue || '').toString().trim();
+    if (!typed) {
+      return;
+    }
+    const found = this.findAssetByName(typed);
+    if (found) {
+      this.setAssetSelection(Number(found.id), found.name, false);
+    }
+  }
+
+  onAssetCleared(): void {
+    this.form.patchValue({ asset_id: 0 });
+    this.form.get('asset_id')?.markAsTouched();
+    this.assetInitialValue = '';
+    this.assetSearchText = '';
+  }
+
+  private findAssetById(id: number): { id: number | string; name: string } | undefined {
+    return this.assetData.find((a: { id: number | string }) => Number(a.id) === id);
+  }
+
+  private findAssetByName(name: string): { id: number | string; name: string } | undefined {
+    const normalized = name.trim();
+    if (!normalized) {
+      return undefined;
+    }
+    return this.assetData.find((a: { name: string }) => (a.name ?? '').trim() === normalized);
+  }
+
+  private setAssetSelection(id: number, name: string, markTouched = true): void {
+    this.form.patchValue({ asset_id: id });
+    if (markTouched) {
+      this.form.get('asset_id')?.markAsTouched();
+    }
+    this.assetInitialValue = name;
+    this.assetSearchText = name;
   }
 
   /** يقبل 0 كرصيد صالح (لا يعتبره فارغاً مثل required مع بعض مدخلات الرقم). */
@@ -63,13 +171,16 @@ export class DialogComponent {
   });
 
   submitform(): void {
+    this.syncAssetFromInput();
+
     if (!this.form.valid) {
+      this.form.markAllAsTouched();
       return;
     }
+
     const raw = this.form.getRawValue();
     const payload = {
-      ...raw,
-      name: typeof raw.name === 'string' ? raw.name : this.data.name,
+      name: (typeof raw.name === 'string' ? raw.name.trim() : this.data.name) || '',
       balance: Number(raw.balance),
       asset_id: Number(raw.asset_id),
     };
@@ -77,20 +188,18 @@ export class DialogComponent {
     if (this.data.id) {
       this.StockService.edit(this.data.id, payload).subscribe({
         next: (result: any) => {
-          if (result?.success !== false && (result?.message || result?.data)) {
+          if (result?.success !== false) {
             this.dialogRef.close(payload);
           }
         },
-        error: () => {},
       });
     } else {
       this.StockService.add(payload).subscribe({
         next: (result: any) => {
-          if (result?.success !== false && (result?.message || result?.data)) {
+          if (result?.success !== false) {
             this.dialogRef.close(payload);
           }
         },
-        error: () => {},
       });
     }
   }

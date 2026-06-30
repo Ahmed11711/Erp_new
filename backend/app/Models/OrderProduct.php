@@ -12,6 +12,12 @@ class OrderProduct extends Model
     protected $primaryKey = 'id';
     protected $guarded=[];
 
+    protected $casts = [
+        'cancelled_quantity' => 'float',
+        'shipped_quantity' => 'float',
+        'quantity' => 'float',
+    ];
+
     protected $appends = ['is_shopify_unmatched'];
 
     /** معرف صنف الـ placeholder لمنتجات Shopify غير المطابقة (يُحلّ مرة واحدة لكل طلب HTTP). */
@@ -28,9 +34,6 @@ class OrderProduct extends Model
         return $this->belongsTo(Category::class);
     }
 
-    /**
-     * true عندما يكون هذا البند مربوطاً بصنف Shopify غير المطابق (يحتاج ربط يدوي بصنف ERP صحيح).
-     */
     public function getIsShopifyUnmatchedAttribute(): bool
     {
         if (! self::$shopifyUnmatchedResolved) {

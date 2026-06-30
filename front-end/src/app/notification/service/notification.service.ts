@@ -52,16 +52,34 @@ export class NotificationService {
     return this.http.post<any>(`${environment.Url}/notification/${id}` , {orders:data});
   }
 
-  recievedNotifiy(items:number,page:number){
-    return this.http.get(`${environment.Url}/recievednotification?itemsPerPage=${items}&page=${page}`,{params:this.recievedParam});
+  recievedNotifiy(items: number, page: number, params: Record<string, string | number | boolean | null | undefined> = {}) {
+    const cleanParams: Record<string, string> = {};
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        cleanParams[key] = String(value);
+      }
+    });
+    return this.http.get(`${environment.Url}/recievednotification?itemsPerPage=${items}&page=${page}`, { params: cleanParams });
   }
 
-  sentNotifiy(items:number,page:number,search:any){
-    return this.http.get(`${environment.Url}/sentnotification?itemsPerPage=${items}&page=${page}`,{params:search});
+  sentNotifiy(items: number, page: number, search: Record<string, string | number | boolean | null | undefined> = {}) {
+    const cleanParams: Record<string, string> = {};
+    Object.entries(search).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        cleanParams[key] = String(value);
+      }
+    });
+    return this.http.get(`${environment.Url}/sentnotification?itemsPerPage=${items}&page=${page}`, { params: cleanParams });
   }
 
-  allNotifiy(items:number,page:number,search:any){
-    return this.http.get(`${environment.Url}/allnotification?itemsPerPage=${items}&page=${page}`,{params:search});
+  allNotifiy(items: number, page: number, search: Record<string, string | number | boolean | null | undefined> = {}) {
+    const cleanParams: Record<string, string> = {};
+    Object.entries(search).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        cleanParams[key] = String(value);
+      }
+    });
+    return this.http.get(`${environment.Url}/allnotification?itemsPerPage=${items}&page=${page}`, { params: cleanParams });
   }
 
   delete(id:number){

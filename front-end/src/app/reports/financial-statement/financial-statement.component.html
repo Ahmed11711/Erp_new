@@ -192,6 +192,11 @@
       </div>
 
       <div *ngIf="data.length > 0" class="report-content-card">
+        <div class="alert alert-info py-2 px-3 mb-2 small statement-edit-hint-banner" dir="rtl"
+          *ngIf="canAdminEditEntries && hasEditableRows">
+          <i class="fa-solid fa-pen-to-square me-1"></i>
+          انقر على أي سطر يظهر بجانبه أيقونة التعديل لفتح المصدر (مصروف، سند، طلب، قيد يومي، بنك/خزينة…).
+        </div>
         <div class="report-table-wrap">
         <table class="table report-data-table financial-statement-pdf-table">
           <thead>
@@ -206,10 +211,18 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of data">
+            <tr
+              *ngFor="let item of data"
+              [class.statement-row--editable]="isEntryEditable(item)"
+              [class.statement-row--clickable]="isEntryEditable(item)"
+              (click)="openEntry(item)"
+              [title]="isEntryEditable(item) ? 'فتح/تعديل المعاملة' : ''">
               <td class="numeric-cell" dir="ltr">{{ (item.entry_date || item.created_at) | date:'dd/MM/yyyy' }} <span class="text-muted small">{{ item.created_at | date:'HH:mm' }}</span></td>
               <td class="pdf-arabic-fix arabic-cell" *ngIf="details?.consolidated">{{ item.account?.code }} — {{ item.account?.name }}</td>
-              <td class="pdf-arabic-fix arabic-cell description-cell">{{ item.description }}</td>
+              <td class="pdf-arabic-fix arabic-cell description-cell">
+                {{ item.description }}
+                <i *ngIf="isEntryEditable(item)" class="fa-solid fa-pen-to-square statement-edit-hint" aria-hidden="true"></i>
+              </td>
               <td class="pdf-arabic-fix arabic-cell">{{ item.user_name || '—' }}</td>
               <td class="text-success numeric-cell">{{ item.debit > 0 ? (item.debit | number:'1.2-2') : '-' }}</td>
               <td class="text-danger numeric-cell">{{ item.credit > 0 ? (item.credit | number:'1.2-2') : '-' }}</td>

@@ -1,6 +1,7 @@
 /** عناوين عربية لوحدات الصلاحيات كما تُرجعها واجهة API (مفتاح المجموعة). */
 export const RBAC_MODULE_AR: Record<string, string> = {
   orders: 'الطلبات',
+  orders_statuses: 'حالات الطلبات (عرض)',
   finance: 'المالية والمحاسبة',
   employees: 'الموارد البشرية',
   inventory: 'المخزون والمخازن',
@@ -24,15 +25,32 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
   'orders.view': 'عرض الطلبات',
   'orders.create': 'إنشاء طلبات',
   'orders.edit': 'تعديل الطلبات',
+  'orders.cancel_line': 'إلغاء أصناف من الطلب',
   'orders.delete': 'حذف الطلبات',
   'orders.change_status': 'تغيير حالة الطلب',
   'orders.export': 'تصدير الطلبات',
   'orders.assign_driver': 'تعيين مندوب توصيل',
   'orders.shopify.review': 'مراجعة طلبات Shopify المستوردة',
+  'orders.fulfillment.view': 'عرض لوحة تنفيذ الطلب',
+  'orders.liability.transfer': 'نقل مسؤولية الطلب إلى المحصّل',
+
+  'orders.view_status.new': 'عرض الطلبات الجديدة',
+  'orders.view_status.confirmed': 'عرض الطلبات المؤكدة',
+  'orders.view_status.partial_ship': 'عرض الطلبات — شحن جزئي',
+  'orders.view_status.shipped': 'عرض الطلبات المشحونة',
+  'orders.view_status.delivered': 'عرض الطلبات المُسلَّمة',
+  'orders.view_status.received': 'عرض الطلبات المُستلمة',
+  'orders.view_status.collected': 'عرض الطلبات المحصّلة',
+  'orders.view_status.postponed': 'عرض الطلبات المؤجلة',
+  'orders.view_status.archived': 'عرض الطلبات المؤرشفة',
+  'orders.view_status.maintained': 'عرض طلبات الصيانة',
+  'orders.view_status.refused': 'عرض طلبات رفض الاستلام',
+  'orders.view_status.cancelled': 'عرض الطلبات الملغاة',
 
   'finance.view': 'عرض الحركات والمالية',
   'finance.create': 'إنشاء قيود وسندات مالية',
   'finance.edit': 'تعديل البيانات المالية',
+  'finance.account_statement.edit': 'فتح وتعديل المعاملات من كشف الحساب التفصيلي',
   'finance.delete': 'حذف البيانات المالية',
   'finance.approve': 'اعتماد العمليات المالية',
 
@@ -53,6 +71,8 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
   'settings.edit': 'تعديل الإعدادات',
 
   'system.rbac': 'إدارة الأدوار والصلاحيات',
+  'system.activity_log': 'عرض سجل النشاط',
+  'system.activity_log.edit': 'فتح الكيان من سجل النشاط للتعديل',
 
   'whatsapp.assign_numbers': 'تعيين المستخدمين على أرقام واتساب',
 
@@ -68,6 +88,7 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
 
   'manufacturing.view': 'عرض التصنيع والوصفات',
   'manufacturing.edit_recipe': 'تعديل وصفات التصنيع',
+  'manufacturing.delete_recipe': 'حذف وصفات التصنيع',
   'manufacturing.delete_order': 'حذف أوامر التصنيع',
   'processing.view': 'عرض التشغيل الخارجي',
   'processing.create': 'إنشاء مستندات التشغيل الخارجي',
@@ -88,6 +109,7 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
   'shipping.companies.manage': 'تعديل وحذف شركات الشحن والمندوبين',
   'shipping.companies.statement': 'كشف حساب شركة شحن أو مندوب',
   'collection_companies.manage': 'إدارة شركات التحصيل',
+  'settlements.manage': 'إدارة تسويات الدفع عند الاستلام',
   'customer_companies.view': 'عرض قائمة عملاء الشركات',
   'customer_companies.manage': 'إضافة وتعديل وربط عملاء الشركات',
   'customer_companies.statement': 'كشف حساب عميل شركة',

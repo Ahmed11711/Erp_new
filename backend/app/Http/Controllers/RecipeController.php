@@ -275,11 +275,20 @@ class RecipeController extends Controller
         ]);
     }
 
+    private function canDeleteRecipe(): bool
+    {
+        return has_permission('manufacturing.delete_recipe') || has_permission('system.rbac');
+    }
+
     /**
      * Delete a recipe and all related data.
      */
     public function destroy(int $id): JsonResponse
     {
+        if (! $this->canDeleteRecipe()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $recipe = Recipe::findOrFail($id);
 
         try {
@@ -317,6 +326,10 @@ class RecipeController extends Controller
      */
     public function bulkDestroy(Request $request): JsonResponse
     {
+        if (! $this->canDeleteRecipe()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $data = $request->validate([
             'ids'   => ['required', 'array', 'min:1'],
             'ids.*' => ['required', 'integer', 'exists:recipes,id'],

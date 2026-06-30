@@ -1,5 +1,5 @@
-import { Component, ViewChild } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Component } from '@angular/core';
+import { Router } from '@angular/router';
 import { AuthService } from 'src/app/auth/auth.service';
 import { UserService } from 'src/app/manage-system/services/user.service';
 import { NotificationService } from 'src/app/notification/service/notification.service';
@@ -26,33 +26,45 @@ export class RecievedNotificationComponent {
 
   userdata:any[]=[];
 
+  param: Record<string, string | number> = {};
+
   constructor(private notificationService:NotificationService , private userService:UserService , private router:Router,
     private orderFilter :FilterOrderService, private authService:AuthService,
     public rbac: RbacService ) { }
 
   ngOnInit(){
     this.user = this.authService.getUser();
-    if (this.notificationService.recievedParam) {
-      if (this.notificationService.recievedParam['type']) {
-        let type:any = document.getElementById('type');
-        type.value = this.notificationService.recievedParam['type'];
-      }
-      if (this.notificationService.recievedParam['send_from']) {
-        let send_from:any = document.getElementById('send_from');
-        send_from.value = this.notificationService.recievedParam['send_from'];
-      }
-      console.log(this.notificationService.recievedParam);
-
-      if (this.notificationService.recievedParam['is_read']) {
-        let status:any = document.getElementById('status');
-        status.value = this.notificationService.recievedParam['is_read'];
-      }
-      if (this.notificationService.recievedParam['order_id']) {
-        document.getElementById('order_number')?.setAttribute('value', this.notificationService.recievedParam['order_id']);
-      }
+    if (this.notificationService.recievedParam && Object.keys(this.notificationService.recievedParam).length) {
+      this.param = { ...this.notificationService.recievedParam };
     }
-    this.search(arguments);
+    this.applyParamToForm();
+    this.loadData();
     this.getUsers();
+  }
+
+  private applyParamToForm(): void {
+    setTimeout(() => {
+      if (this.param['type']) {
+        const type = document.getElementById('type') as HTMLSelectElement | null;
+        if (type) type.value = String(this.param['type']);
+      }
+      if (this.param['send_from']) {
+        const sendFrom = document.getElementById('send_from') as HTMLSelectElement | null;
+        if (sendFrom) sendFrom.value = String(this.param['send_from']);
+      }
+      if (this.param['is_read'] !== undefined) {
+        const status = document.getElementById('status') as HTMLSelectElement | null;
+        if (status) status.value = String(this.param['is_read']);
+      }
+      if (this.param['order_id']) {
+        const orderNumber = document.getElementById('order_number') as HTMLInputElement | null;
+        if (orderNumber) orderNumber.value = String(this.param['order_id']);
+      }
+      if (this.param['review_status_user'] !== undefined) {
+        const reviewStatus = document.getElementById('review_status_user') as HTMLSelectElement | null;
+        if (reviewStatus) reviewStatus.value = String(this.param['review_status_user']);
+      }
+    });
   }
 
   getUsers(){
@@ -62,78 +74,82 @@ export class RecievedNotificationComponent {
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
-    this.search(arguments);
+    this.loadData();
   }
-
 
   onrecieveDateChange(event: Event) {
     const target = event.target as HTMLInputElement;
     this.recieveDate = target.value;
-    this.search(event);
-
-  }
-
-  resetInp(){
-    if ('supplier_id' in this.param) {
-      delete this.param.supplier_id;
-    }
-    this.search(arguments);
+    this.page = 0;
+    this.loadData();
   }
 
   clearSearch() {
+    this.param = {};
     this.notificationService.recievedParam = {};
-    let type:any = document.getElementById('type');
-    type.value = 'نوع الاشعار';
-    let send_from:any = document.getElementById('send_from');
-    send_from.value = 'المرسل';
-    let status:any = document.getElementById('status');
-    status.status = 'الحاله';
-    let order_number:any = document.getElementById('order_number');
-    order_number.value = '';
-    let review_status_user:any = document.getElementById('review_status_user');
-    review_status_user.value = 'حالة المراجعة';
-    this.search(arguments);
+    this.page = 0;
+
+    const type = document.getElementById('type') as HTMLSelectElement | null;
+    if (type) type.selectedIndex = 0;
+    const sendFrom = document.getElementById('send_from') as HTMLSelectElement | null;
+    if (sendFrom) sendFrom.selectedIndex = 0;
+    const status = document.getElementById('status') as HTMLSelectElement | null;
+    if (status) status.selectedIndex = 0;
+    const orderNumber = document.getElementById('order_number') as HTMLInputElement | null;
+    if (orderNumber) orderNumber.value = '';
+    const reviewStatus = document.getElementById('review_status_user') as HTMLSelectElement | null;
+    if (reviewStatus) reviewStatus.selectedIndex = 0;
+
+    this.loadData();
   }
 
-  param = {};
-  search(event:any){
+  search(event?: Event){
+    const target = event?.target as HTMLElement | undefined;
+    if (target?.id === 'type') {
+      this.param['type'] = (target as HTMLSelectElement).value;
+      delete this.param['review_status_user'];
+      this.page = 0;
+    }
+    if (target?.id === 'send_from') {
+      this.param['send_from'] = (target as HTMLSelectElement).value;
+      this.page = 0;
+    }
+    if (target?.id === 'status') {
+      this.param['is_read'] = (target as HTMLSelectElement).value;
+      this.page = 0;
+    }
+    if (target?.id === 'order_number') {
+      this.param['order_id'] = (target as HTMLInputElement).value.trim();
+      this.page = 0;
+    }
+    if (target?.id === 'review_status_user') {
+      this.param['review_status_user'] = (target as HTMLSelectElement).value;
+      this.page = 0;
+    }
 
-    if(event?.target?.id == 'type'){
-      // this.param['type']=event.target.value;
-      this.notificationService.recievedParam['type'] = event.target.value;
-    }
-    if(event?.target?.id == 'send_from'){
-      // this.param['send_from']=event.target.value;
-      this.notificationService.recievedParam['send_from'] = event.target.value;
-    }
-    if(event?.target?.id == 'status'){
-      // this.param['is_read']=event.target.value;
-      this.notificationService.recievedParam['is_read'] = event.target.value;
-    }
-    if(event?.target?.id == 'order_number'){
-      // this.param['order_id']=event.target.value;
-      this.notificationService.recievedParam['order_id'] = event.target.value;
-    }
-    if(event?.target?.id == 'review_status_user'){
-      // this.param['review_status_user']=event.target.value;
-      this.notificationService.recievedParam['review_status_user'] = event.target.value;
-    }
+    this.notificationService.recievedParam = { ...this.param };
+    this.loadData();
+  }
 
-    this.notificationService.recievedNotifiy(this.pageSize,this.page+1).subscribe((res:any)=>{
+  private loadData(): void {
+    this.notificationService.recievedNotifiy(this.pageSize, this.page + 1, this.param).subscribe((res: any) => {
       this.data = res.data;
-      this.length=res.total;
-      this.pageSize=res.per_page;
-    })
+      this.length = res.total;
+      this.pageSize = res.per_page;
+    });
   }
 
   openNotifiy(elm:any){
 
     if (elm?.is_read == 0) {
-      console.log('here');
-
       this.notificationService.readNotify(elm.id).subscribe(res=>{
 
       })
+    }
+
+    if (elm?.type === 'كشف حضور' && elm?.ref) {
+      this.router.navigate(['/dashboard/hr/workinghoursdetails', elm.ref]);
+      return;
     }
 
     this.orderFilter.order_number = elm.ref;

@@ -75,10 +75,11 @@ class VoucherController extends Controller
         }
         $companies = $companiesQuery
             ->limit(500)
-            ->get(['id', 'name'])
+            ->get(['id', 'name', 'balance'])
             ->map(fn ($c) => [
                 'id' => (int) $c->id,
                 'label' => trim((string) ($c->name ?: '')),
+                'balance' => (float) ($c->balance ?? 0),
             ])
             ->filter(fn ($row) => $row['label'] !== '')
             ->values();

@@ -23,4 +23,19 @@ class ProcessingMaterialBalance extends Model
     {
         return $this->belongsTo(ProcessingOrder::class, 'processing_order_id');
     }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    public function atVendorCategory(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'at_vendor_category_id');
+    }
 }

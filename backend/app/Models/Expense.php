@@ -26,6 +26,7 @@ class Expense extends Model
         'safe_id',
         'service_account_id',
         'kind_id',
+        'tree_account_id',
         'expens_statement',
         'amount',
         'note',
@@ -51,6 +52,11 @@ class Expense extends Model
 
     public function kind(){
         return $this->belongsTo(ExpenseKind::class);
+    }
+
+    public function treeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
     }
 
     public function user()

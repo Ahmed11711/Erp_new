@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { BankService } from '../services/bank.service';
 import { TreeAccountService } from '../services/tree-account.service';
@@ -198,7 +199,8 @@ export class BankDepositWithdrawComponent implements OnInit {
 
   constructor(
     private bankService: BankService,
-    private treeAccountService: TreeAccountService
+    private treeAccountService: TreeAccountService,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit(): void {
@@ -206,6 +208,39 @@ export class BankDepositWithdrawComponent implements OnInit {
     this.getTreeAccounts();
     this.counterAccountCtrl.valueChanges.subscribe(v => {
       this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+    });
+    this.route.queryParamMap.subscribe(params => {
+      const editId = Number(params.get('edit') ?? 0);
+      if (editId > 0) {
+        this.pendingEditId = editId;
+        this.tryOpenPendingEdit();
+      }
+    });
+  }
+
+  private pendingEditId: number | null = null;
+
+  private tryOpenPendingEdit(): void {
+    if (!this.pendingEditId || this.historyLoading) {
+      return;
+    }
+    const row = this.historyRows.find(r => Number(r.id) === this.pendingEditId);
+    if (row) {
+      this.startEdit(row);
+      this.pendingEditId = null;
+      return;
+    }
+    this.bankService.getDirectTransaction(this.pendingEditId).subscribe({
+      next: res => {
+        const data = res?.data;
+        if (data) {
+          this.startEdit(data as DirectTxnRow);
+        }
+        this.pendingEditId = null;
+      },
+      error: () => {
+        this.pendingEditId = null;
+      }
     });
   }
 
@@ -231,6 +266,7 @@ export class BankDepositWithdrawComponent implements OnInit {
       next: res => {
         this.historyRows = res.data || [];
         this.historyLoading = false;
+        this.tryOpenPendingEdit();
       },
       error: () => {
         this.historyRows = [];

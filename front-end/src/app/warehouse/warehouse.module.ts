@@ -14,6 +14,7 @@ import { MonthlyInventoryComponent } from './monthly-inventory/monthly-inventory
 import { InventoryImportComponent } from './inventory-import/inventory-import.component';
 import { DialogComponent } from './dialog/dialog.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 
 
 @NgModule({
@@ -34,7 +35,8 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
      MatPaginatorModule,
      MatIconModule,
      FormsModule,
-     ReactiveFormsModule
+     ReactiveFormsModule,
+     AutocompleteLibModule
   ]
 })
 export class WarehouseModule { }

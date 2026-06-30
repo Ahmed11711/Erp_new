@@ -5,6 +5,14 @@ import { EmployeeService } from '../services/employee.service';
 import Swal from 'sweetalert2';
 import { Router } from '@angular/router';
 import { DatePipe } from '@angular/common';
+import {
+  convertMinutesToHours,
+  formatTime12h,
+  normalizeOvernightFingerPrintRecords,
+  OVERNIGHT_CHECKOUT_CUTOFF_HOUR,
+  punchHour24,
+  resolveWorkDayHours
+} from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-working-hours',
@@ -65,11 +73,16 @@ export class WorkingHoursComponent implements OnInit {
         let totalMinutes = 26 * hourPerDay * 60;
         let actualMinutes = 0;
 
-        emp.totalHours = this.convertMinutesToHours(totalMinutes);
+        emp.totalHours = convertMinutesToHours(totalMinutes);
+
+        if (emp.finger_print?.length) {
+          emp.finger_print = normalizeOvernightFingerPrintRecords(emp.finger_print);
+        }
 
         emp.finger_print?.forEach(fp => {
           if (fp.hours) {
-            const [h, m] = fp.hours.split(':').map(Number);
+            const resolved = resolveWorkDayHours(fp);
+            const [h, m] = resolved.split(':').map(Number);
             actualMinutes += h * 60 + m;
           }
           if (fp.hours_permission) {
@@ -78,21 +91,65 @@ export class WorkingHoursComponent implements OnInit {
           }
         });
 
-        emp.actualTotalHours = this.convertMinutesToHours(actualMinutes);
+        emp.actualTotalHours = convertMinutesToHours(actualMinutes);
         const diff = actualMinutes - totalMinutes;
         emp.hoursDifference = diff >= 0
-          ? this.convertMinutesToHours(diff)
-          : '-' + this.convertMinutesToHours(Math.abs(diff));
+          ? convertMinutesToHours(diff)
+          : '-' + convertMinutesToHours(Math.abs(diff));
       });
 
       this.employees = res;
     });
   }
 
-  convertMinutesToHours(minutes: number): string {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  private punchKey(punch: { acc_no: string | number; iso_date: string }): string {
+    return `${String(punch.acc_no).trim()}|${punch.iso_date}`;
+  }
+
+  private punchTimestamp(isoDate: string): number {
+    return new Date(isoDate).getTime();
+  }
+
+  private nextDateStr(dateStr: string): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const next = new Date(y, m - 1, d + 1);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+  }
+
+  private collectDayPunches(
+    accNo: string | number,
+    day: string,
+    sheetRows: { acc_no: string | number; date: string; iso_date: string; hour: string }[],
+    consumedNextDayPunchKeys: Set<string>
+  ): typeof sheetRows {
+    const acc = String(accNo).trim();
+    const punches = sheetRows
+      .filter(p => String(p.acc_no).trim() === acc && p.date === day)
+      .filter(p => !consumedNextDayPunchKeys.has(this.punchKey(p)))
+      .sort((a, b) => this.punchTimestamp(a.iso_date) - this.punchTimestamp(b.iso_date));
+
+    if (!punches.length) return [];
+
+    const nextDay = this.nextDateStr(day);
+    const nextDayCandidates = sheetRows
+      .filter(p =>
+        String(p.acc_no).trim() === acc
+        && p.date === nextDay
+        && !consumedNextDayPunchKeys.has(this.punchKey(p))
+      )
+      .sort((a, b) => this.punchTimestamp(a.iso_date) - this.punchTimestamp(b.iso_date));
+
+    // بصمات بعد منتصف الليل (00:00–07:59) = انصراف لدوام الليلة السابقة
+    const earlyNextDay: typeof sheetRows = [];
+    for (const p of nextDayCandidates) {
+      if (punchHour24(p.iso_date) >= OVERNIGHT_CHECKOUT_CUTOFF_HOUR) {
+        break;
+      }
+      earlyNextDay.push(p);
+    }
+
+    earlyNextDay.forEach(p => consumedNextDayPunchKeys.add(this.punchKey(p)));
+    return [...punches, ...earlyNextDay];
   }
 
   /* ======================================================
@@ -129,7 +186,7 @@ export class WorkingHoursComponent implements OnInit {
           const dateObj = this.parseExcelDate(row.Time);
           if (!dateObj) return null;
 
-          const iso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}T${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:00.000Z`;
+          const iso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}T${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:00`;
 
           return {
             acc_no: row['AC-No.'],
@@ -261,8 +318,10 @@ export class WorkingHoursComponent implements OnInit {
       allowedDates.add(`${selYear}-${String(selMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
     }
 
-    const sheetRows = this.sheetData.filter(r => allowedDates.has(r.date));
-    const daysToProcess = [...new Set(sheetRows.map(row => row.date))].sort();
+    const lastDayStr = `${selYear}-${String(selMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    const nextMonthFirstDay = this.nextDateStr(lastDayStr);
+    const sheetRows = this.sheetData.filter(r => allowedDates.has(r.date) || r.date === nextMonthFirstDay);
+    const daysToProcess = [...new Set(sheetRows.filter(r => allowedDates.has(r.date)).map(row => row.date))].sort();
 
     if (!daysToProcess.length) {
       Swal.fire({
@@ -274,29 +333,28 @@ export class WorkingHoursComponent implements OnInit {
     }
 
     this.data = [];
+    const consumedNextDayPunchKeys = new Set<string>();
 
     daysToProcess.forEach(day => {
       this.employees.forEach(emp => {
-        const punches = sheetRows
-          .filter(p => String(p.acc_no).trim() === String(emp.acc_no).trim() && p.date === day)
-          .sort((a, b) => new Date(a.iso_date).getTime() - new Date(b.iso_date).getTime());
+        const punches = this.collectDayPunches(emp.acc_no, day, sheetRows, consumedNextDayPunchKeys);
 
         if (!punches.length) return;
 
         const first = punches[0];
         const last = punches[punches.length - 1];
 
-        const diffMin = (new Date(last.iso_date).getTime() - new Date(first.iso_date).getTime()) / 60000;
+        const diffMin = (this.punchTimestamp(last.iso_date) - this.punchTimestamp(first.iso_date)) / 60000;
 
         this.data.push({
           acc_no: emp.acc_no,
           employee_id: emp.id,
           date: day,
-          check_in: first.hour,
+          check_in: first.hour || formatTime12h(first.iso_date),
           time_in: first.iso_date,
-          check_out: last.hour,
+          check_out: last.hour || formatTime12h(last.iso_date),
           time_out: last.iso_date,
-          hours: this.convertMinutesToHours(Math.max(diffMin, 0)),
+          hours: convertMinutesToHours(Math.max(diffMin, 0)),
           iso_date: first.iso_date,
           times: JSON.stringify(punches.map(p => p.iso_date))
         });

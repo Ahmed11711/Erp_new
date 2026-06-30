@@ -439,6 +439,47 @@ class OrderRollbackIntegrationTest extends TestCase
         );
     }
 
+    public function test_collect_order_reduces_shipping_company_operational_balance(): void
+    {
+        $balanceBefore = (float) $this->shippingCo?->refresh()->balance;
+
+        ['order' => $order, 'order_product' => $op] = $this->createConfirmedOrderReadyToShip(350.0);
+        $this->shipAndDeliverOrder($order, $op);
+
+        $this->shippingCo?->refresh();
+        $this->assertEqualsWithDelta(
+            $balanceBefore + 350.0,
+            (float) $this->shippingCo?->balance,
+            0.02,
+            'Balance should increase after ship'
+        );
+        $this->assertEqualsWithDelta(
+            $balanceBefore + 350.0,
+            $this->shippingCo?->displayBalance(),
+            0.02,
+            'displayBalance should reflect operational COD after ship'
+        );
+
+        $this->actingAs($this->adminUser, 'api')->postJson("/api/collectorder/{$order->id}", [
+            'payment_type' => 'bank',
+            'bank_id' => $this->bank?->id,
+        ])->assertOk();
+
+        $this->shippingCo?->refresh();
+        $this->assertEqualsWithDelta(
+            $balanceBefore,
+            (float) $this->shippingCo?->balance,
+            0.02,
+            'Operational balance must decrease by collected amount'
+        );
+        $this->assertEqualsWithDelta(
+            $balanceBefore,
+            $this->shippingCo?->displayBalance(),
+            0.02,
+            'displayBalance must decrease after collect'
+        );
+    }
+
     public function test_collected_order_rollback_reverses_collection_and_preserves_gl(): void
     {
         ['order' => $order, 'order_product' => $op] = $this->createConfirmedOrderReadyToShip(300.0);

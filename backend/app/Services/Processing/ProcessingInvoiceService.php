@@ -100,6 +100,7 @@ class ProcessingInvoiceService
             DB::table('supplier_balance')->insert([
                 'invoice_id' => null,
                 'supplierpay_id' => null,
+                'processing_invoice_id' => $invoice->id,
                 'balance_before' => $balanceBefore,
                 'balance_after' => (float) $supplier->balance,
                 'user_id' => auth()->id(),

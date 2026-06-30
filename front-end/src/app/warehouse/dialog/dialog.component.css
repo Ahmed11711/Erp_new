@@ -19,3 +19,17 @@ input{
 form p{
   margin: 0.5rem;
 }
+
+::ng-deep .asset-ac.ng-autocomplete {
+  width: 100%;
+}
+
+::ng-deep .asset-ac .input-container input {
+  direction: rtl;
+  text-align: right;
+}
+
+::ng-deep .asset-ac .input-container input:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 0.1rem #82225e !important;
+}

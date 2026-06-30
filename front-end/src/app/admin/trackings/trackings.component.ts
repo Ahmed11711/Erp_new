@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl } from '@angular/forms';
 import { UserService } from 'src/app/manage-system/services/user.service';
 import { OrderService } from 'src/app/shipping/services/order.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -24,7 +25,22 @@ export class TrackingsComponent implements OnInit {
   constructor(
     private OrderService: OrderService,
     private userService: UserService,
+    public rbac: RbacService,
   ) {}
+
+  /** فتح الأوردر في شاشة التعديل — للأدمن فقط */
+  get canEditTracking(): boolean {
+    return this.rbac.can('system.activity_log.edit');
+  }
+
+  editLink(elm: any): any[] | null {
+    const id = Number(elm?.order_id ?? 0);
+    return id ? ['/dashboard/shipping/editorder', id] : null;
+  }
+
+  canOpenEdit(elm: any): boolean {
+    return this.canEditTracking && !!this.editLink(elm);
+  }
 
   form: FormGroup = new FormGroup({
     created_at: new FormControl(''),

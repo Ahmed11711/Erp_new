@@ -214,6 +214,13 @@ export class AuthService {
     return parsed.name;
   }
 
+  fetchMe(): Observable<{ id?: number; name?: string; department?: string }> {
+    return this.http.post<{ id?: number; name?: string; department?: string }>(
+      `${environment.Url}/auth/me`,
+      {}
+    );
+  }
+
   logOut(): void {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.STORAGE_KEY);

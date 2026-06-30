@@ -19,10 +19,9 @@
                 *ngIf="rbac.can('orders.view')">
                 <p> يوجد عدد ( {{confirmedOrderCount}} ) طلب مؤكد اكثر من 3 أيام ولم تتغير الحالة.</p>
             </button>
-            <div *ngFor="let elm of notifications" [ngClass]="elm.is_read === 0 ? 'bg-gray' : ''"
-                (click)="clickNotification(elm)">
-                <button mat-menu-item (click)="openNotifiy(elm?.ref)">
-                    <p>{{elm?.type}} من {{elm?.sender?.name}} لي {{elm?.ref}} و {{elm?.note}}</p>
+            <div *ngFor="let elm of notifications" [ngClass]="elm.is_read === 0 ? 'bg-gray' : ''">
+                <button mat-menu-item (click)="openNotification(elm)">
+                    <p>{{elm?.type}} — {{elm?.note}} <span *ngIf="elm?.sender?.name">({{elm?.sender?.name}})</span></p>
                 </button>
                 <mat-divider></mat-divider>
             </div>
@@ -371,9 +370,11 @@
                                 <a mat-list-item routerLink="/dashboard/financial/cash-out" routerLinkActive="active">
                                     <span>نقد صادر <small class="text-muted">(Cash Out)</small></span>
                                 </a>
+                                <!--
                                 <a mat-list-item routerLink="/dashboard/financial/expenseskind" routerLinkActive="active">
                                     <span>فئات المصروف</span>
                                 </a>
+                                -->
                             </mat-nav-list>
                         </mat-expansion-panel>
 
@@ -696,14 +697,15 @@
                         <a mat-list-item routerLink="/dashboard/system/powers" routerLinkActive="active">
                             <span>صلاحيات المستخدمين (كاملة)</span>
                         </a>
-                        <a mat-list-item routerLink="/dashboard/system/followusers" routerLinkActive="active">
-                            <span>تتبع المستخدمين</span>
-                        </a>
                         <a mat-list-item routerLink="/dashboard/admin/adminorder" routerLinkActive="active">
                             <span>الأوردرات</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/admin/tracking" routerLinkActive="active">
                             <span>التتبع</span>
+                        </a>
+                        <a mat-list-item routerLink="/dashboard/admin/activity-log" routerLinkActive="active"
+                            *ngIf="rbac.can('system.activity_log')">
+                            <span>سجل النشاط</span>
                         </a>
                         <a mat-list-item routerLink="/dashboard/admin/whatsapp-management" routerLinkActive="active">
                             <span>إدارة أرقام الواتساب</span>

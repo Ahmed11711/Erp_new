@@ -29,6 +29,61 @@
         يمكنك قبض جزء من المبلغ (حتى مجموع ذمم الطلبات المحددة).
         <span class="d-block small text-muted mt-1">يُخصَم المبلغ من «مطلوب تحصيله» ويُحدَّث رصيد الشجرة. الطلبات تُغلق بالكامل فقط عند سداد ذمتها كاملة.</span>
       </div>
+      <div class="party-balance-bar"
+           *ngIf="selectedSupplier || selectedClientCompany || selectedIndividualPhone || selectedShippingPartner || selectedCollectionCompany"
+           dir="rtl">
+        <div class="party-balance-bar__info">
+          <span class="party-balance-bar__name">
+            {{ selectedSupplier?.supplier_name
+               || selectedClientCompany?.label
+               || selectedShippingPartner?.name
+               || selectedCollectionCompany?.name
+               || (selectedIndividualPhone ? 'عميل فرد — ' + selectedIndividualPhone : '') }}
+          </span>
+          <ng-container *ngIf="!selectedIndividualPhone">
+            <span class="party-balance-bar__label">الرصيد الحالي:</span>
+            <span class="party-balance-bar__value" dir="ltr">
+              {{ (selectedSupplier?.balance
+                  ?? selectedClientCompany?.balance
+                  ?? selectedShippingPartner?.balance
+                  ?? selectedCollectionCompany?.balance
+                  ?? 0) | number:'1.2-2' }}
+            </span>
+          </ng-container>
+          <span class="party-balance-bar__label" *ngIf="selectedIndividualPhone">يظهر الرصيد في كشف الحساب</span>
+        </div>
+        <a *ngIf="selectedSupplier"
+           class="btn btn-outline-primary btn-sm party-balance-bar__btn"
+           [routerLink]="['/dashboard/suppliers/supplier_details', selectedSupplier.id]"
+           target="_blank">
+          <i class="fas fa-file-invoice"></i> عرض كشف الحساب
+        </a>
+        <a *ngIf="selectedClientCompany"
+           class="btn btn-outline-primary btn-sm party-balance-bar__btn"
+           [routerLink]="['/dashboard/shipping/companydetails', selectedClientCompany.id]"
+           target="_blank">
+          <i class="fas fa-file-invoice"></i> عرض كشف الحساب
+        </a>
+        <a *ngIf="selectedIndividualPhone"
+           class="btn btn-outline-primary btn-sm party-balance-bar__btn"
+           [routerLink]="['/dashboard/financial/customer-accounts/customer-account-details']"
+           [queryParams]="{ customer: selectedIndividualPhone }"
+           target="_blank">
+          <i class="fas fa-file-invoice"></i> عرض كشف الحساب
+        </a>
+        <a *ngIf="selectedShippingPartner"
+           class="btn btn-outline-primary btn-sm party-balance-bar__btn"
+           [routerLink]="['/dashboard/shipping/shippingcompanydetails', selectedShippingPartner.id]"
+           target="_blank">
+          <i class="fas fa-file-invoice"></i> عرض كشف الحساب
+        </a>
+        <a *ngIf="selectedCollectionCompany"
+           class="btn btn-outline-primary btn-sm party-balance-bar__btn"
+           [routerLink]="['/dashboard/shipping/collection-accounts-report']"
+           target="_blank">
+          <i class="fas fa-file-invoice"></i> عرض كشف الحساب
+        </a>
+      </div>
       <div class="row">
         <div class="col-md-6 form-group" *ngIf="party === 'shipping_company' || party === 'collection_company'">
           <label>نوع الحركة</label>

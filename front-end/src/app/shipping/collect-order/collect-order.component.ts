@@ -6,8 +6,10 @@ import Swal from 'sweetalert2';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service'; // Import
 import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
 import {
-  allowsManualShippingCollection,
+  allowsManualOrderCollection,
+  collectAmountBreakdownLabel,
   manualCollectionBlockedMessage,
+  orderCollectAmount,
 } from '../utils/order-collect-eligibility.utils';
 
 @Component({
@@ -22,6 +24,7 @@ export class CollectOrderComponent {
   safes: any[] = [];
   serviceAccounts: any[] = [];
   total_balance: number = 0;
+  collectBreakdownLabel: string | null = null;
   order_type = '';
   collectType: string = 'تحصيل في الخزينة';
   paymentType: string = 'bank'; // Default to bank
@@ -49,7 +52,7 @@ export class CollectOrderComponent {
           return;
         }
 
-        if (!allowsManualShippingCollection(res)) {
+        if (!allowsManualOrderCollection(res)) {
           Swal.fire({
             icon: 'info',
             title: 'لا يمكن تحصيل هذا الطلب من هنا',
@@ -58,15 +61,9 @@ export class CollectOrderComponent {
           return;
         }
 
-        this.total_balance = Number(res?.net_total ?? 0);
+        this.total_balance = orderCollectAmount(res);
+        this.collectBreakdownLabel = collectAmountBreakdownLabel(res);
         this.order_type = res?.order_type ?? '';
-        if (this.total_balance <= 0.0001 && Number(res?.prepaid_amount ?? 0) > 0) {
-          Swal.fire({
-            icon: 'info',
-            title: 'الطلب مدفوع بالكامل مسبقاً',
-            text: 'صافي التحصيل من الشحن صفر — تُسوَّى ذمة شركة التحصيل عبر «نقد وارد / شركة تحصيل».',
-          });
-        }
       },
       error: () => {
         Swal.fire({ icon: 'error', title: 'تعذر تحميل بيانات الطلب' });

@@ -240,6 +240,26 @@ html[dir='ltr'] .expense-form-page .exp-select {
   background: #fafbfc;
 }
 
+.expense-form-page .exp-table-foot td {
+  padding: 0.85rem 0.65rem;
+  border-top: 2px solid var(--exp-primary);
+  background: linear-gradient(180deg, #fdf2f8 0%, #f8fafc 100%);
+}
+
+.expense-form-page .exp-table-foot-label {
+  text-align: end;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--exp-primary);
+}
+
+.expense-form-page .exp-table-foot-amount {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--exp-text);
+}
+
 .expense-form-page .exp-col-amount {
   width: 140px;
 }
@@ -251,6 +271,21 @@ html[dir='ltr'] .expense-form-page .exp-select {
 .expense-form-page .exp-amount-cell {
   text-align: center;
   font-weight: 700;
+}
+
+.expense-form-page .exp-account-input {
+  min-width: 220px;
+  text-align: start;
+}
+
+::ng-deep .exp-account-autocomplete-panel {
+  max-height: 280px !important;
+  direction: rtl;
+}
+
+::ng-deep .exp-account-autocomplete-panel .mat-mdc-option {
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 /* أزرار */

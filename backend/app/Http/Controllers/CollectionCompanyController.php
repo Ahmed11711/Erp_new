@@ -40,7 +40,16 @@ class CollectionCompanyController extends Controller
     public function select()
     {
         return response()->json(
-            CollectionCompany::active()->select('id', 'name', 'linked_shipping_company_id')->orderBy('name')->get()
+            CollectionCompany::active()
+                ->with('receivableTreeAccount:id,balance')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (CollectionCompany $c) => [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'linked_shipping_company_id' => $c->linked_shipping_company_id,
+                    'balance' => (float) ($c->receivableTreeAccount->balance ?? 0),
+                ])
         );
     }
 

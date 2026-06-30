@@ -4,6 +4,7 @@ import { AdminOrderComponent } from './admin-order/admin-order.component';
 import { departmentGuard } from '../guards/department.guard';
 import { assignWhatsAppNumbersGuard } from '../guards/assign-whatsapp-numbers.guard';
 import { TrackingsComponent } from './trackings/trackings.component';
+import { ActivityLogComponent } from './activity-log/activity-log.component';
 import { WhatsappManagementComponent } from './whatsapp-management/whatsapp-management.component';
 import { RBAC_ROUTE } from '../guards/rbac-route-data';
 
@@ -12,6 +13,7 @@ const adm = [...RBAC_ROUTE.systemAdmin];
 const routes: Routes = [
   { path: 'adminorder', component: AdminOrderComponent, canActivate: [departmentGuard], data: { rbacPermissions: adm } },
   { path: 'tracking', component: TrackingsComponent, canActivate: [departmentGuard], data: { rbacPermissions: adm } },
+  { path: 'activity-log', component: ActivityLogComponent, canActivate: [departmentGuard], data: { rbacPermissions: [...RBAC_ROUTE.activityLog] } },
   { path: 'whatsapp-management', component: WhatsappManagementComponent, canActivate: [assignWhatsAppNumbersGuard] },
 ];
 

@@ -49,27 +49,25 @@
         <th>مكان الدفع</th>
         <th>مصدر الدفع</th>
         <th>نوع المصروف</th>
-        <th>فئة المصروف</th>
+        <th>الحساب (مدين)</th>
         <th>بيان المصروف</th>
         <th>المبلغ</th>
-        <th>حساب المصروف <span class="fw-normal text-white-50">(مدين)</span></th>
         <th>حساب مصدر الدفع <span class="fw-normal text-white-50">(دائن)</span></th>
         <th>ملاحظات</th>
         <th>المستخدم</th>
         <th>-</th>
       </thead>
       <tbody>
-        <ng-container *ngFor="let elm of data" >
+        <ng-container *ngFor="let elm of displayRows" >
           <tr *ngIf="elm?.status != 1" [class]="status(elm.status)">
             <td>{{elm.expense_number}}</td>
             <td>{{elm.created_at}}</td>
             <td>{{ paymentPlaceLabel(elm) }}</td>
             <td>{{ paymentSourceName(elm) }}</td>
             <td>{{ expenseTypeLabel(elm) }}</td>
-            <td>{{ expenseKindLabel(elm) }}</td>
+            <td class="text-start small">{{ debitAccountLabel(elm) }}</td>
             <td class="text-start">{{ elm.expens_statement }}</td>
             <td dir="ltr">{{elm.amount | customNumber}}</td>
-            <td class="text-start small text-muted">{{ debitAccountLabel(elm) }}</td>
             <td class="text-start small text-muted">{{ treeAccountLine(creditTreeFromRow(elm)) }}</td>
             <td class="text-start small">{{ truncateNote(elm.note) }}</td>
             <td>{{ elm.user?.name || '—' }}</td>

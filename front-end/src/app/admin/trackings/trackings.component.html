@@ -40,11 +40,12 @@
                 <th>date</th>
                 <th>user</th>
                 <th>undo</th>
+                <th *ngIf="canEditTracking">فتح</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngIf="!dataList.length && !loadError">
-                <td colspan="6">لا توجد سجلات للعرض.</td>
+                <td [attr.colspan]="canEditTracking ? 7 : 6">لا توجد سجلات للعرض.</td>
               </tr>
               <tr *ngFor="let elm of dataList">
                 <td>
@@ -65,6 +66,15 @@
                       <mat-icon>more_vert</mat-icon>
                     </span>
                   </div>
+                </td>
+                <td *ngIf="canEditTracking">
+                  <a *ngIf="canOpenEdit(elm)"
+                     [routerLink]="editLink(elm)"
+                     title="فتح الأوردر للتعديل"
+                     style="cursor: pointer;">
+                    <mat-icon>open_in_new</mat-icon>
+                  </a>
+                  <span *ngIf="!canOpenEdit(elm)">—</span>
                 </td>
               </tr>
             </tbody>

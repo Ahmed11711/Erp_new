@@ -19,13 +19,30 @@
           class="error mb-0 text-danger">مطلوب</p>
       </div>
       <div class="mb-3">
-        <select dir="rtl" class="form-control"   placeholder="الاصل"
-          [class.is-valid]="form.get('asset_id')?.errors ==null && form.get('asset_id')?.touched"
-          formControlName='asset_id' type="text" class="form-control">
-          <option value="0" disabled selected>الاصل</option>
-          <option [value]="elm?.id" *ngFor="let elm of assetData">{{elm?.name}}</option>
-        </select>
-        <p *ngIf="form.get('asset_id')?.errors !=null && form.get('asset_id')?.touched"
+        <div class="ng-autocomplete asset-ac"
+          [class.is-valid]="form.get('asset_id')?.errors == null && form.get('asset_id')?.touched">
+          <ng-autocomplete
+            *ngIf="assetFieldReady"
+            [data]="assetData"
+            [searchKeyword]="assetKeyword"
+            [minQueryLength]="0"
+            [initialValue]="assetInitialValue"
+            placeholder="الاصل — ابحث بالاسم"
+            (selected)="onAssetSelected($event)"
+            (inputChanged)="onAssetInputChanged($event)"
+            (closed)="syncAssetFromInput()"
+            (inputCleared)="onAssetCleared()"
+            [itemTemplate]="assetItemTemplate"
+            [notFoundTemplate]="assetNotFoundTemplate">
+          </ng-autocomplete>
+          <ng-template #assetItemTemplate let-item>
+            <a [innerHTML]="item.name"></a>
+          </ng-template>
+          <ng-template #assetNotFoundTemplate let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+        </div>
+        <p *ngIf="form.get('asset_id')?.errors != null && form.get('asset_id')?.touched"
           class="error mb-0 text-danger">مطلوب</p>
       </div>
       <div class="text-center">

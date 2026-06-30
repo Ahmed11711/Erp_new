@@ -44,6 +44,19 @@ class ProcessingOrderController extends Controller
             $q->where('supplier_id', (int) $request->supplier_id);
         }
 
+        if ($request->filled('q')) {
+            $raw = trim((string) $request->q);
+            $term = '%' . $raw . '%';
+            $q->where(function ($w) use ($term, $raw) {
+                $w->where('order_number', 'like', $term)
+                    ->orWhereHas('supplier', fn ($s) => $s->where('supplier_name', 'like', $term))
+                    ->orWhereHas('dispatchNotes', fn ($d) => $d->where('dispatch_number', 'like', $term));
+                if (ctype_digit($raw)) {
+                    $w->orWhere('id', (int) $raw);
+                }
+            });
+        }
+
         return response()->json($q->paginate((int) ($request->itemsPerPage ?? 15)));
     }
 
@@ -59,7 +72,8 @@ class ProcessingOrderController extends Controller
                 'lines.destinationCategory',
                 'dispatchNotes.lines',
                 'dispatchNotes.shippingCompany:id,name,type',
-                'receipts.lines',
+                'receipts.lines.destinationCategory.measurement',
+                'receipts.lines.category',
                 'invoices.lines',
                 'materialBalances',
             ])

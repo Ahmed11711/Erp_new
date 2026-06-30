@@ -187,10 +187,13 @@ Route::middleware('auth')->group(function () {
     Route::get('shipping_methods', [ShippingMethodsController::class, 'index']);
     Route::get('shippinglines', [ShippingLineController::class, 'index']);
     Route::get('orders/search', [OrdersController::class, 'search']);
+    Route::get('orders/visible-statuses', [OrdersController::class, 'visibleStatuses']);
     Route::post('orders/{id}/shopify-review', [OrdersController::class, 'shopifyReview'])
         ->middleware('permission:orders.shopify.review|nav.shopify.dashboard|nav.shopify|system.rbac')
         ->whereNumber('id');
     Route::get('orders/{id}', [OrdersController::class, 'show']);
+    Route::post('orders/{id}/prepaid-adjustment', [OrdersController::class, 'adjustPrepaid'])
+        ->whereNumber('id');
 
     Route::get('productions', [ProductionController::class, 'index']);
     Route::get('shippingcompanySelect', [ShippingCompanyController::class, 'shippingcompanySelect']);
@@ -440,6 +443,11 @@ Route::middleware('auth')->group(function () {
         Route::get('getActions', [OrdersController::class, 'getActions']);
     });
 
+    Route::middleware(['permission:system.activity_log'])->group(function () {
+        Route::get('activity-logs', [\App\Http\Controllers\ActivityLogController::class, 'index']);
+        Route::get('activity-logs/modules', [\App\Http\Controllers\ActivityLogController::class, 'modules']);
+    });
+
     Route::middleware(['department.access:Admin'])->group(function () {
         Route::get('allnotification', [App\Http\Controllers\NotificationController::class, 'allNotifiy']);
         Route::delete('notification/delete/{id}', [App\Http\Controllers\NotificationController::class, 'destroy']);
@@ -530,6 +538,7 @@ Route::middleware('auth')->group(function () {
         Route::get('employees/accountstatment/reviewed/{id}', [App\Http\Controllers\EmployeeController::class, 'reviewedStatus']);
         Route::post('employees/excelfingerprintdata', [App\Http\Controllers\EmployeeController::class, 'saveExcelFingerPrintData']);
         Route::post('updatefingerprintsheet', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'update']);
+        Route::get('fingerprint-sheet-logs/{id}', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'logs']);
         Route::post('addCheckOut/{id}', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'addCheckOut']);
         Route::post('editCheckInOrOut/{id}', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'editCheckInOrOut']);
         Route::post('changeCheckIn/{id}', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'changeCheckIn']);
@@ -596,6 +605,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(['order.profile:edit_order'])->group(function () {
         Route::post('editorder/{id}', [OrdersController::class, 'edit']);
+        Route::post('orders/{id}/cancel-lines', [OrdersController::class, 'cancelOrderLines'])->whereNumber('id');
     });
 
     Route::middleware(['order.profile:confirm_order'])->group(function () {
@@ -743,6 +753,7 @@ Route::prefix('accounting/')->middleware('auth')->group(function () {
     // Daily Entries
     Route::prefix('daily-entries/')->group(function () {
         Route::get('/', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'index']);
+        Route::get('/users', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'users']);
         Route::post('/', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'store']);
         Route::get('/{id}', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\V2\Accounting\DailyEntryController::class, 'update']);

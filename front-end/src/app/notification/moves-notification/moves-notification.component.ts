@@ -29,7 +29,7 @@ export class MovesNotificationComponent {
 
   ngOnInit(){
     this.user = this.authService.getUser();
-    this.search(arguments);
+    this.search();
     this.getUsers();
   }
 
@@ -40,7 +40,7 @@ export class MovesNotificationComponent {
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
-    this.search(arguments);
+    this.search();
   }
 
 
@@ -55,39 +55,47 @@ export class MovesNotificationComponent {
     if ('supplier_id' in this.param) {
       delete this.param.supplier_id;
     }
-    this.search(arguments);
+    this.search();
   }
 
   param = {};
-  search(event:any){
+  search(event?: Event){
+    const target = event?.target as HTMLElement | undefined;
 
-
-    if(event?.target?.id == 'type'){
-      this.param['type']=event.target.value;
+    if(target?.id == 'type'){
+      this.param['type'] = (target as HTMLSelectElement).value;
+      this.page = 0;
     }
-    if(event?.target?.id == 'send_to'){
-      this.param['send_to']=event.target.value;
+    if(target?.id == 'send_to'){
+      this.param['send_to'] = (target as HTMLSelectElement).value;
+      this.page = 0;
     }
-    if(event?.target?.id == 'send_from'){
-      this.param['send_from']=event.target.value;
+    if(target?.id == 'send_from'){
+      this.param['send_from'] = (target as HTMLSelectElement).value;
+      this.page = 0;
     }
-    if(event?.target?.id == 'status'){
-      this.param['is_read']=event.target.value;
+    if(target?.id == 'status'){
+      this.param['is_read'] = (target as HTMLSelectElement).value;
+      this.page = 0;
     }
-    if(event?.target?.id == 'review_status'){
-      this.param['review_status']=event.target.value;
-    }
-
-    if(event?.target?.id == 'order_number'){
-      this.param['order_id']=event.target.value;
-    }
-
-    if(event?.target?.id == 'review_status_admin'){
-      this.param['review_status_admin']=event.target.value;
+    if(target?.id == 'review_status'){
+      this.param['review_status'] = (target as HTMLSelectElement).value;
+      this.page = 0;
     }
 
-    if(event?.target?.id == 'review_status_user'){
-      this.param['review_status_user']=event.target.value;
+    if(target?.id == 'order_number'){
+      this.param['order_id'] = (target as HTMLInputElement).value.trim();
+      this.page = 0;
+    }
+
+    if(target?.id == 'review_status_admin'){
+      this.param['review_status_admin'] = (target as HTMLSelectElement).value;
+      this.page = 0;
+    }
+
+    if(target?.id == 'review_status_user'){
+      this.param['review_status_user'] = (target as HTMLSelectElement).value;
+      this.page = 0;
     }
 
     this.notificationService.allNotifiy(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{

@@ -227,6 +227,11 @@ class SupplierController extends Controller
         ->whereNotNull('supplierpay_id')
         ->groupBy('supplierpay_id');
 
+    $latestProcessingSb = DB::table('supplier_balance')
+        ->select('processing_invoice_id', DB::raw('MAX(id) as latest_sb_id'))
+        ->whereNotNull('processing_invoice_id')
+        ->groupBy('processing_invoice_id');
+
     $purchases = DB::table('purchases as p')
         ->select(
             'p.id as invoice_id',
@@ -269,7 +274,34 @@ class SupplierController extends Controller
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
         ->where('sp.supplier_id', $supplierId);
 
-    $invoicesAndPays = $purchases->union($pays)->orderBy('created_at', 'desc')->paginate($itemsPerPage);
+    $processingInvoices = DB::table('processing_invoices as pi')
+        ->select(
+            'pi.id as invoice_id',
+            'sb.balance_before as balance_before',
+            'sb.balance_after as balance_after',
+            'u.name as user_name',
+            'pi.invoice_number as invoice_number',
+            'pi.invoice_date as receipt_date',
+            'pi.grand_total as total_price',
+            'pi.paid_amount as paid_amount',
+            'pi.due_amount as due_amount',
+            DB::raw("'تشغيل خارجي' as invoice_type"),
+            'pi.created_at as created_at'
+        )
+        ->leftJoinSub($latestProcessingSb, 'sbpi', function ($join) {
+            $join->on('pi.id', '=', 'sbpi.processing_invoice_id');
+        })
+        ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbpi.latest_sb_id')
+        ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
+        ->where('pi.supplier_id', $supplierId)
+        ->whereNull('pi.deleted_at')
+        ->whereIn('pi.status', ['posted', 'partially_paid', 'paid']);
+
+    $invoicesAndPays = $purchases
+        ->union($pays)
+        ->union($processingInvoices)
+        ->orderBy('created_at', 'desc')
+        ->paginate($itemsPerPage);
 
     $result = [
         'data' => $invoicesAndPays,
@@ -409,10 +441,11 @@ class SupplierController extends Controller
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'bank' => 'nullable|numeric|exists:banks,id',
-            'payment_type' => 'nullable|in:safe,bank,service_account',
+            'payment_type' => 'nullable|in:safe,bank,service_account,tree_account',
             'safe_id' => 'nullable|exists:safes,id',
             'bank_id' => 'nullable|exists:banks,id',
             'service_account_id' => 'nullable|exists:service_accounts,id',
+            'tree_account_id' => 'nullable|exists:tree_accounts,id',
             'processing_invoice_id' => 'nullable|exists:processing_invoices,id',
             'processing_order_id' => 'nullable|exists:processing_orders,id',
         ]);
@@ -422,11 +455,16 @@ class SupplierController extends Controller
         $bankId = $request->bank_id ?? $request->bank;
         $safeId = $request->safe_id;
         $serviceAccountId = $request->service_account_id;
+        $treeAccountId = $request->tree_account_id;
         if ($paymentType === 'bank' && !$bankId) {
             $bankId = $request->bank;
         }
-        if (!$bankId && !$safeId && !$serviceAccountId) {
-            return response()->json(['message' => 'يجب تحديد مصدر الدفع (خزينة أو بنك أو حساب خدمي)'], 422);
+        // مصدر الدفع من شجرة الحسابات مباشرة (ليس خزنة/بنك/حساب خدمي)
+        if ($paymentType !== 'tree_account') {
+            $treeAccountId = null;
+        }
+        if (!$bankId && !$safeId && !$serviceAccountId && !$treeAccountId) {
+            return response()->json(['message' => 'يجب تحديد مصدر الدفع (خزينة أو بنك أو حساب خدمي أو حساب من الشجرة)'], 422);
         }
 
         // Legacy: supplier_pays.bank_id is required; use first bank when paying from safe/service
@@ -472,7 +510,15 @@ class SupplierController extends Controller
             $creditTreeId = null;
             $sourceName = '';
 
-            if ($safeId) {
+            if ($treeAccountId) {
+                $treeAccount = TreeAccount::find($treeAccountId);
+                if (!$treeAccount) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'الحساب المختار من الشجرة غير موجود'], 422);
+                }
+                $creditTreeId = $treeAccount->id;
+                $sourceName = $treeAccount->name;
+            } elseif ($safeId) {
                 $safe = Safe::find($safeId);
                 if (!$safe || !$safe->account_id) {
                     DB::rollBack();

@@ -33,29 +33,38 @@ class OrderFinancialStateService
         $od->amount_to_collect = $remaining <= 0.009 ? 0 : $remaining;
 
         // تحصيل إلكتروني مسبق (Paymob/valU/Sympl/Visa…): المبلغ المدفوع مديونية على شركة التحصيل
-        // وإن كان لا يوجد متبقٍ عند التسليم — لا تُلغِ الربط ولا الذمة.
-        $isElectronicCollection = $od->collection_provider_type === CollectionProviderType::CollectionCompany->value
-            && $od->collection_provider_id;
+        $isElectronicCollection = $this->hasElectronicCollectionReceivable($order, $od);
 
         if ($remaining <= 0.009) {
             if ($isElectronicCollection && $paid > 0.009) {
-                $od->collection_receivable_amount = $paid;
-                if (! in_array($od->collection_status, [
-                    OrderCollectionStatus::Collected->value,
-                    OrderCollectionStatus::Transferred->value,
-                    OrderCollectionStatus::Refused->value,
-                    OrderCollectionStatus::Partial->value,
-                ], true)) {
-                    $od->collection_status = OrderCollectionStatus::Pending->value;
-                }
-                if (! $od->settlement_status || $od->settlement_status === OrderSettlementStatus::NotApplicable->value) {
-                    $od->settlement_status = OrderSettlementStatus::Open->value;
+                $alreadyCollected = $od->collection_status === OrderCollectionStatus::Collected->value
+                    || $od->settlement_status === OrderSettlementStatus::Settled->value
+                    || $order->order_status === 'تم التحصيل';
+
+                if ($alreadyCollected) {
+                    $od->collection_receivable_amount = 0;
+                    $od->amount_to_collect = 0;
+                } else {
+                    $od->collection_receivable_amount = $paid;
+                    if (! in_array($od->collection_status, [
+                        OrderCollectionStatus::Collected->value,
+                        OrderCollectionStatus::Transferred->value,
+                        OrderCollectionStatus::Refused->value,
+                        OrderCollectionStatus::Partial->value,
+                    ], true)) {
+                        $od->collection_status = OrderCollectionStatus::Pending->value;
+                    }
+                    if (! $od->settlement_status || $od->settlement_status === OrderSettlementStatus::NotApplicable->value) {
+                        $od->settlement_status = OrderSettlementStatus::Open->value;
+                    }
                 }
             } else {
-                $od->collection_provider_type = CollectionProviderType::None->value;
-                $od->collection_provider_id = null;
-                $od->collection_status = OrderCollectionStatus::NotRequired->value;
-                $od->settlement_status = OrderSettlementStatus::NotApplicable->value;
+                if (! $this->hasElectronicCollectionReceivable($order, $od)) {
+                    $od->collection_provider_type = CollectionProviderType::None->value;
+                    $od->collection_provider_id = null;
+                    $od->collection_status = OrderCollectionStatus::NotRequired->value;
+                    $od->settlement_status = OrderSettlementStatus::NotApplicable->value;
+                }
             }
         } elseif (! $od->collection_provider_type) {
             $od->collection_status = OrderCollectionStatus::Pending->value;
@@ -105,6 +114,7 @@ class OrderFinancialStateService
             $od->paid_amount = $od->total_amount;
             $od->remaining_amount = 0;
             $od->amount_to_collect = 0;
+            $od->collection_receivable_amount = 0;
             $od->settlement_status = OrderSettlementStatus::Settled->value;
         }
     }
@@ -131,6 +141,12 @@ class OrderFinancialStateService
             $od->collection_provider_type = CollectionProviderType::ShippingCompany->value;
             $od->collection_provider_id = $legacyCollectionCompanyId;
             $od->collection_company_id = $legacyCollectionCompanyId;
+        } elseif ($this->shouldPreserveElectronicCollectionProvider($order, $od)) {
+            if ($od->collection_provider_type !== CollectionProviderType::CollectionCompany->value
+                || ! $od->collection_provider_id) {
+                app(CollectionCompanyForOrderResolver::class)->resolve($order, persistLinkIfMissing: true);
+                $od->refresh();
+            }
         } elseif ((float) ($order->prepaid_amount ?? 0) >= (float) $order->net_total - 0.02) {
             $od->collection_provider_type = CollectionProviderType::None->value;
             $od->collection_provider_id = null;
@@ -152,5 +168,36 @@ class OrderFinancialStateService
         }
 
         $this->syncFromOrder($order, $od);
+    }
+
+    private function shouldPreserveElectronicCollectionProvider(Order $order, OrderDetails $od): bool
+    {
+        return $this->hasElectronicCollectionReceivable($order, $od);
+    }
+
+    private function hasElectronicCollectionReceivable(Order $order, OrderDetails $od): bool
+    {
+        if ($od->collection_provider_type === CollectionProviderType::CollectionCompany->value
+            && $od->collection_provider_id) {
+            return true;
+        }
+
+        if ((float) ($od->collection_receivable_amount ?? 0) > 0.009) {
+            return true;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('orders', 'shopify_payment_gateway')
+            && trim((string) ($order->shopify_payment_gateway ?? '')) !== '') {
+            return true;
+        }
+
+        $prepaid = (float) ($order->prepaid_amount ?? 0);
+        if ($prepaid > 0.009
+            && ! in_array(trim((string) ($order->prepaid_payment_type ?? '')), ['bank', 'safe', 'service_account'], true)
+            && app(CollectionReceivableAccountResolver::class)->receivableAccountIdForOrderDetails($od)) {
+            return true;
+        }
+
+        return false;
     }
 }

@@ -1,6 +1,7 @@
 export interface CashClientCompanyOption {
   id: number;
   label: string;
+  balance?: number;
 }
 
 export interface CashClientIndividualOption {

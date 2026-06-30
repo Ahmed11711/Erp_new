@@ -3,6 +3,21 @@ import { EmployeeService } from '../services/employee.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
+import {
+  applyNormalShiftTimes,
+  convertMinutesToHours,
+  diffMsBetween,
+  fullDayPermissionSavePayload,
+  isFullDayPermission,
+  normalizeOvernightFingerPrintRecords,
+  parseDatetimeLocalValue,
+  parseLocalDateTime,
+  resolveCheckOutDate,
+  resolveWorkDayHours,
+  OVERNIGHT_CHECKOUT_CUTOFF_HOUR,
+  toDatetimeLocalValue,
+  toTimeInputValue
+} from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-working-hours-details',
@@ -75,9 +90,17 @@ export class WorkingHoursDetailsComponent implements OnInit {
       this.name = res.name;
       this.fixedSalary = res.fixed_salary;
       let workingHourPerDay = 8;
-      let hour = '08:00';
       if (res.working_hours) {
         workingHourPerDay = res.working_hours;
+      }
+      if (res.finger_print?.length) {
+        res.finger_print.forEach((r: { working_hours?: number }) => {
+          r.working_hours = workingHourPerDay;
+        });
+        res.finger_print = normalizeOvernightFingerPrintRecords(res.finger_print);
+      }
+      let hour = '08:00';
+      if (res.working_hours) {
         hour = '09:00';
       }
       this.salaryType = res.salary_type;
@@ -146,6 +169,16 @@ export class WorkingHoursDetailsComponent implements OnInit {
 
         elm['working_hours'] = workingHourPerDay;
 
+        const fullDayPermissionEarly = isFullDayPermission(elm.hours_permission, workingHourPerDay)
+          && !elm.vacation
+          && !this.holidayDays.find(hDate => hDate == elm.date);
+
+        if (fullDayPermissionEarly) {
+          applyNormalShiftTimes(elm, workingHourPerDay);
+        } else if (!elm.vacation && elm.check_in && elm.check_out && elm.check_in !== elm.check_out) {
+          elm.hours = resolveWorkDayHours({ ...elm, working_hours: workingHourPerDay });
+        }
+
         let holiday = this.holidayDays.find(hDate => hDate == elm.date);
         if (holiday) {
           elm['holiday'] = true;
@@ -182,6 +215,17 @@ export class WorkingHoursDetailsComponent implements OnInit {
 
         // Calculate minutes - only if there are fingerprints
         if (hasFingerPrints) {
+          const fullDayPermission = isFullDayPermission(elm.hours_permission, workingHourPerDay)
+            && !elm.vacation
+            && !elm.holiday;
+
+          if (fullDayPermission) {
+            applyNormalShiftTimes(elm, workingHourPerDay);
+            elm.hoursDifference = '00:00';
+            elm.salary_type = 0;
+            elm.salary_type2 = 'اذن';
+            actualTotalMinutesPerMonth += workingHourPerDay * 60;
+          } else {
           let [hours, minutes] = (elm.hours || '00:00').split(':').map(Number);
 
           // Accumulate totals
@@ -239,6 +283,7 @@ export class WorkingHoursDetailsComponent implements OnInit {
           elm['hoursDifference'] = hoursDifferenceStr;
           if (elm.holiday && elm.check_in !== elm.check_out) {
             elm['hoursDifference'] = elm.hours;
+          }
           }
         }
 
@@ -311,6 +356,30 @@ export class WorkingHoursDetailsComponent implements OnInit {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
+  private permissionSaveExtra(hoursPermission: string): Record<string, unknown> {
+    return fullDayPermissionSavePayload(hoursPermission, this.dayHours);
+  }
+
+  private showFingerprintMutationSuccess(): void {
+    Swal.fire({
+      icon: 'success',
+      title: 'تم الحفظ',
+      text: this.user === 'Admin' ? undefined : 'تم إبلاغ الإدارة بالتعديل',
+      timer: 2000,
+      showConfirmButton: false,
+    });
+  }
+
+  /** بيانات السجل — ينشئ سجل غياب تلقائياً في الخادم إذا لم يكن id موجوداً */
+  private sheetActionPayload(elm: any, extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: elm.id ?? null,
+      employee_id: elm.employee_id ?? this.id,
+      date: elm.date,
+      ...extra,
+    };
+  }
+
   onMonthChange(event: Event) {
     const target = event.target as HTMLInputElement;
     this.currentMonthValue = target.value;
@@ -347,7 +416,12 @@ export class WorkingHoursDetailsComponent implements OnInit {
         const formattedMinutes = inputMinutes.length === 1 ? '0' + inputMinutes : inputMinutes;
         const formattedValue = formattedHours + ':' + formattedMinutes;
         console.log(formattedValue);
-        this.employeeService.empHoursPermision({ data: { hours_permission: formattedValue, id: e.id } }).subscribe(res => {
+        this.employeeService.empHoursPermision({
+          data: this.sheetActionPayload(e, {
+            hours_permission: formattedValue,
+            ...this.permissionSaveExtra(formattedValue),
+          })
+        }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
             if (this.user == 'Admin') {
@@ -392,7 +466,9 @@ export class WorkingHoursDetailsComponent implements OnInit {
           return 'يجب ادخال قيمة';
         }
         if (value) {
-          this.employeeService.absenceDeduction({ data: { id: e.id, absence_deduction: value } }).subscribe(res => {
+          this.employeeService.absenceDeduction({
+            data: this.sheetActionPayload(e, { absence_deduction: value })
+          }).subscribe(res => {
             if (res) {
               this.getEmpDataPerMonth();
               if (this.user == 'Admin') {
@@ -475,7 +551,10 @@ export class WorkingHoursDetailsComponent implements OnInit {
   permissionAll() {
     let data = this.tableData.filter(elm => elm.selected == true).map(elm => {
       let hours_permission = elm.hoursDifference.split('-')[1];
-      return { hours_permission, id: elm.id }
+      return this.sheetActionPayload(elm, {
+        hours_permission,
+        ...this.permissionSaveExtra(hours_permission),
+      });
     });
     Swal.fire({
       title: ' تاكيد ؟',
@@ -620,80 +699,38 @@ export class WorkingHoursDetailsComponent implements OnInit {
       }
     }).then((result) => {
       if (result.isConfirmed && result.value) {
-        const check_out = result.value; // check_out is in "HH:mm" format
-
-        const [checkInTime, checkInPeriod] = check_in.split(' ');
-        const [checkInHour, checkInMinute] = checkInTime.split(':').map(Number);
-
-        // Convert check_in to 24-hour format
-        let checkInHour24 = checkInHour % 12; // Convert 12-hour to 24-hour format
-        if (checkInPeriod === 'PM') {
-          checkInHour24 += 12;
-        }
-
-        // Parse check_out (in "HH:mm" format)
-        const [checkOutHour, checkOutMinute] = check_out.split(':').map(Number);
-
-        // Create Date objects for check_in and check_out
-        const now = new Date();
-        const checkInDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), checkInHour24, checkInMinute);
-        const checkOutDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), checkOutHour, checkOutMinute);
-
-        if (checkOutDate <= checkInDate) {
-          Swal.fire({
-            icon: 'error',
-            text: 'تاكد من وقت الانصراف',
-          });
+        const check_out = result.value;
+        const checkInDate = parseLocalDateTime(e.date, check_in);
+        if (!checkInDate) {
+          Swal.fire({ icon: 'error', text: 'تعذّر قراءة وقت الحضور' });
           return;
         }
 
-        // Calculate the difference in milliseconds
-        const diffMs = checkOutDate.getTime() - checkInDate.getTime();
+        const [checkOutHour, checkOutMinute] = check_out.split(':').map(Number);
+        let checkOutDate = new Date(checkInDate);
+        checkOutDate.setHours(checkOutHour, checkOutMinute, 0, 0);
 
-        // Calculate the difference in hours and minutes
+        const diffMs = diffMsBetween(checkInDate, checkOutDate);
+        checkOutDate = new Date(checkInDate.getTime() + diffMs);
+
         const hours = Math.floor(diffMs / (1000 * 60 * 60));
         const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        const formattedDifference = `${String(hours).padStart(2, '0')}:${String(diffMinutes).padStart(2, '0')}`;
 
-        // Format the output as "hh:mm"
-        const formattedDifference = `${hours < 10 ? '0' : ''}${hours}:${diffMinutes < 10 ? '0' : ''}${diffMinutes}`;
+        const time_out = `${(checkOutDate.getHours() % 12 || 12).toString().padStart(2, '0')}:${checkOutDate.getMinutes().toString().padStart(2, '0')} ${checkOutDate.getHours() >= 12 ? 'PM' : 'AM'}`;
+        const time_out_iso = toDatetimeLocalValue(checkOutDate) + ':00';
 
-        // Add the difference to time_in
-        const timeInDate = new Date(e.time_in); // time_in in "YYYY-MM-DDTHH:mm:ss.sssZ" format
-        const timeOutDate = new Date(timeInDate.getTime() + diffMs);
-
-        // Format time_out as "YYYY-MM-DDTHH:mm:ss.sssZ"
-        // const time_out = `${checkOutHour % 12 || 12}:${checkOutMinute < 10 ? '0' : ''}${checkOutMinute} ${checkOutHour >= 12 ? 'PM' : 'AM'}`;
-        const time_out = `${(checkOutHour % 12 || 12).toString().padStart(2, '0')}:${checkOutMinute.toString().padStart(2, '0')} ${checkOutHour >= 12 ? 'PM' : 'AM'}`;
-
-        const time_out_iso = timeOutDate.toISOString();
-
-        console.log('Hours between check-in and check-out:', formattedDifference);
-        console.log('Check-out in 12-hour format:', time_out);
-        console.log('Time out:', time_out_iso);
         const data = {
           check_out: time_out,
           hours: formattedDifference,
           time_out: time_out_iso,
-          hours_permission: null
+          hours_permission: null,
+          times: JSON.stringify([toDatetimeLocalValue(checkInDate) + ':00', time_out_iso]),
         }
         this.employeeService.addCheckOut(e.id, { data }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
-            if (this.user == 'Admin') {
-              Swal.fire({
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-              })
-            } else {
-              Swal.fire({
-                icon: 'success',
-                title: 'في انتظار موافقة الادمن',
-                timer: 2000,
-                showConfirmButton: false
-              })
-            }
-
+            this.showFingerprintMutationSuccess();
           }
         })
       }
@@ -757,21 +794,7 @@ export class WorkingHoursDetailsComponent implements OnInit {
             this.employeeService.changeCheckIn(e.id, { data }).subscribe(res => {
               if (res) {
                 this.getEmpDataPerMonth();
-                if (this.user == 'Admin') {
-                  Swal.fire({
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false
-                  })
-                } else {
-                  Swal.fire({
-                    icon: 'success',
-                    title: 'في انتظار موافقة الادمن',
-                    timer: 2000,
-                    showConfirmButton: false
-                  })
-                }
-
+                this.showFingerprintMutationSuccess();
               }
             })
           }
@@ -782,10 +805,11 @@ export class WorkingHoursDetailsComponent implements OnInit {
   }
 
   editCheckIn(e: any) {
-    const check_out = e.check_out;
+    const checkInDate = parseLocalDateTime(e.date, e.check_in);
+    const defaultTime = checkInDate ? toTimeInputValue(checkInDate) : '09:00';
 
     Swal.fire({
-      html: `<input type="time" id="time-input-${e.id}" value="09:00" class="swal2-input" required>`,
+      html: `<input type="time" id="time-input-${e.id}" value="${defaultTime}" class="swal2-input" required>`,
       showCancelButton: true,
       title: `تعديل وقت الحضور`,
       preConfirm: () => {
@@ -799,71 +823,45 @@ export class WorkingHoursDetailsComponent implements OnInit {
     }).then((result) => {
       if (result.isConfirmed && result.value) {
         const check_in = result.value;
-
-        const [checkOutTime, checkOutPeriod] = check_out.split(' ');
-        const [checkOutHour, checkOutMinute] = checkOutTime.split(':').map(Number);
-
-        let checkOutHour24 = checkOutHour % 12;
-        if (checkOutPeriod === 'PM') {
-          checkOutHour24 += 12;
-        }
-
         const [checkInHour, checkInMinute] = check_in.split(':').map(Number);
+        const [y, m, d] = e.date.split('-').map(Number);
+        const checkInDateNew = new Date(y, m - 1, d, checkInHour, checkInMinute, 0);
 
-        const now = new Date();
-        const checkInDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), checkInHour, checkInMinute);
-        const checkOutDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), checkOutHour24, checkOutMinute);
-
-        if (checkOutDate < checkInDate) {
-          Swal.fire({
-            icon: 'error',
-            text: 'تاكد من وقت الحضور ',
-          });
+        let checkOutDate = resolveCheckOutDate(e.date, e.check_in, e.check_out);
+        if (!checkOutDate) {
+          Swal.fire({ icon: 'error', text: 'تعذّر قراءة وقت الانصراف' });
           return;
         }
 
-        const diffMs = checkOutDate.getTime() - checkInDate.getTime();
+        const diffMs = diffMsBetween(checkInDateNew, checkOutDate);
+        if (diffMs <= 0) {
+          Swal.fire({ icon: 'error', text: 'تأكد من وقت الحضور' });
+          return;
+        }
+
+        checkOutDate = new Date(checkInDateNew.getTime() + diffMs);
 
         const hours = Math.floor(diffMs / (1000 * 60 * 60));
         const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-        const formattedDifference = `${hours < 10 ? '0' : ''}${hours}:${diffMinutes < 10 ? '0' : ''}${diffMinutes}`;
+        const formattedDifference = `${String(hours).padStart(2, '0')}:${String(diffMinutes).padStart(2, '0')}`;
 
         const time_in = `${(checkInHour % 12 || 12).toString().padStart(2, '0')}:${checkInMinute.toString().padStart(2, '0')} ${checkInHour >= 12 ? 'PM' : 'AM'}`;
-
-        const dateParts = e.date.split('-');
-        const year = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const day = parseInt(dateParts[2], 10);
-        const time_in_iso = new Date(year, month, day, checkInHour, checkInMinute).toISOString();
+        const time_in_iso = toDatetimeLocalValue(checkInDateNew) + ':00';
 
         const data = {
           check_in: time_in,
           check_out: e.check_out,
           hours: formattedDifference,
           time_in: time_in_iso,
-          time_out: e.time_out,
-          hours_permission: null
+          time_out: toDatetimeLocalValue(checkOutDate) + ':00',
+          hours_permission: null,
+          times: JSON.stringify([time_in_iso, toDatetimeLocalValue(checkOutDate) + ':00']),
         }
 
         this.employeeService.editCheckInOrOut(e.id, { data }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
-            if (this.user == 'Admin') {
-              Swal.fire({
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-              })
-            } else {
-              Swal.fire({
-                icon: 'success',
-                title: 'في انتظار موافقة الادمن',
-                timer: 2000,
-                showConfirmButton: false
-              })
-            }
-
+            this.showFingerprintMutationSuccess();
           }
         })
       }
@@ -871,16 +869,23 @@ export class WorkingHoursDetailsComponent implements OnInit {
   }
 
   editCheckOut(e: any) {
-    const date = new Date(e.time_in);
-    const pad = (number) => (number < 10 ? '0' : '') + number;
+    const checkInDate = parseLocalDateTime(e.date, e.check_in);
+    const checkOutDate = resolveCheckOutDate(e.date, e.check_in, e.check_out);
 
-    const nextDay = new Date(date);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const formattedMaxDate = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}T${pad(nextDay.getHours())}:${pad(nextDay.getMinutes())}`;
-    const formattedDate = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    if (!checkInDate || !checkOutDate) {
+      Swal.fire({ icon: 'error', text: 'تعذّر قراءة أوقات الحضور والانصراف' });
+      return;
+    }
+
+    const formattedDate = toDatetimeLocalValue(checkOutDate);
+    const formattedMin = toDatetimeLocalValue(checkInDate);
+    const maxDate = new Date(checkInDate);
+    maxDate.setDate(maxDate.getDate() + 1);
+    maxDate.setHours(OVERNIGHT_CHECKOUT_CUTOFF_HOUR, 0, 0, 0);
+    const formattedMaxDate = toDatetimeLocalValue(maxDate);
 
     Swal.fire({
-      html: `<input type="datetime-local" id="time-input-${e.id}" value="${formattedDate}" min="${formattedDate}" max="${formattedMaxDate}" class="swal2-input" required>`,
+      html: `<input type="datetime-local" id="time-input-${e.id}" value="${formattedDate}" min="${formattedMin}" max="${formattedMaxDate}" class="swal2-input" required>`,
       showCancelButton: true,
       title: `تعديل وقت الانصراف`,
       preConfirm: () => {
@@ -893,59 +898,119 @@ export class WorkingHoursDetailsComponent implements OnInit {
       }
     }).then((result) => {
       if (result.isConfirmed && result.value) {
-        const check_out = result.value;
-        const checkInDate = new Date(e.time_in);
-        const checkOutDate = new Date(check_out);
-
-        if (checkOutDate < checkInDate) {
-          Swal.fire({
-            icon: 'error',
-            text: 'تاكد من وقت الانصراف ',
-          });
+        const selectedOut = parseDatetimeLocalValue(result.value);
+        if (!selectedOut) {
+          Swal.fire({ icon: 'error', text: 'تأكد من وقت الانصراف' });
           return;
         }
 
-        const diffMs = checkOutDate.getTime() - checkInDate.getTime();
+        const diffMs = diffMsBetween(checkInDate, selectedOut);
+        if (diffMs <= 0 || diffMs > 24 * 60 * 60 * 1000) {
+          Swal.fire({ icon: 'error', text: 'تأكد من وقت الانصراف' });
+          return;
+        }
 
+        const checkOutDateFinal = new Date(checkInDate.getTime() + diffMs);
         const hours = Math.floor(diffMs / (1000 * 60 * 60));
         const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        const formattedDifference = `${String(hours).padStart(2, '0')}:${String(diffMinutes).padStart(2, '0')}`;
 
-        const formattedDifference = `${hours < 10 ? '0' : ''}${hours}:${diffMinutes < 10 ? '0' : ''}${diffMinutes}`;
-
-        const checkOut = `${(checkOutDate.getHours() % 12 || 12).toString().padStart(2, '0')}:${checkOutDate.getMinutes().toString().padStart(2, '0')} ${checkOutDate.getHours() >= 12 ? 'PM' : 'AM'}`;
-
+        const checkOut = `${(checkOutDateFinal.getHours() % 12 || 12).toString().padStart(2, '0')}:${checkOutDateFinal.getMinutes().toString().padStart(2, '0')} ${checkOutDateFinal.getHours() >= 12 ? 'PM' : 'AM'}`;
 
         const data = {
           check_in: e.check_in,
           check_out: checkOut,
           hours: formattedDifference,
-          time_in: e.time_in,
-          time_out: checkOutDate.toISOString(),
-          hours_permission: null
+          time_in: toDatetimeLocalValue(checkInDate) + ':00',
+          time_out: toDatetimeLocalValue(checkOutDateFinal) + ':00',
+          hours_permission: null,
+          times: JSON.stringify([
+            toDatetimeLocalValue(checkInDate) + ':00',
+            toDatetimeLocalValue(checkOutDateFinal) + ':00',
+          ]),
         }
         console.log(data);
 
         this.employeeService.editCheckInOrOut(e.id, { data }).subscribe(res => {
           if (res) {
             this.getEmpDataPerMonth();
-            if (this.user == 'Admin') {
-              Swal.fire({
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-              })
-            } else {
-              Swal.fire({
-                icon: 'success',
-                title: 'في انتظار موافقة الادمن',
-                timer: 2000,
-                showConfirmButton: false
-              })
-            }
-
+            this.showFingerprintMutationSuccess();
           }
         })
       }
+    });
+  }
+
+  showChangeLog(row: { id?: number | null; date: string; logs_count?: number }): void {
+    if (!row.id) {
+      Swal.fire({ icon: 'info', text: 'لا يوجد سجل محفوظ لهذا اليوم بعد' });
+      return;
+    }
+
+    this.employeeService.getFingerPrintSheetLogs(row.id).subscribe({
+      next: (logs) => {
+        if (!logs?.length) {
+          Swal.fire({
+            icon: 'info',
+            title: 'سجل التعديلات',
+            text: 'لا توجد تعديلات مسجّلة على هذا اليوم',
+          });
+          return;
+        }
+
+        const rowsHtml = logs.map((log: any) => {
+          const when = log.created_at
+            ? new Date(log.created_at).toLocaleString('ar-EG', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+              })
+            : '—';
+          const changesHtml = log.changes
+            ? Object.values(log.changes).map((c: any) => `
+                <div class="fp-log-change-row">
+                  <span class="fp-log-field">${c.label}</span>
+                  <span class="fp-log-old">${c.old}</span>
+                  <span class="fp-log-arrow">→</span>
+                  <span class="fp-log-new">${c.new}</span>
+                </div>`
+              ).join('')
+            : '<div class="fp-log-empty-change">—</div>';
+          const noteHtml = log.note ? `<div class="fp-log-note"><i class="fa-solid fa-circle-info"></i> ${log.note}</div>` : '';
+
+          return `
+            <div class="fp-log-item">
+              <div class="fp-log-item-header">
+                <span class="fp-log-action">${log.action}</span>
+                <span class="fp-log-user">${log.user_name}</span>
+              </div>
+              <div class="fp-log-when">${when}</div>
+              <div class="fp-log-changes">${changesHtml}</div>
+              ${noteHtml}
+            </div>
+          `;
+        }).join('');
+
+        Swal.fire({
+          title: `سجل التعديلات`,
+          html: `
+            <div class="fp-log-popup-date">${row.date}</div>
+            <div class="fp-log-list">${rowsHtml}</div>
+          `,
+          width: 680,
+          showCloseButton: true,
+          confirmButtonText: 'إغلاق',
+          customClass: {
+            popup: 'fp-log-popup',
+            title: 'fp-log-title',
+            htmlContainer: 'fp-log-container',
+            confirmButton: 'fp-log-confirm-btn',
+            closeButton: 'fp-log-close-btn',
+          },
+        });
+      },
+      error: () => {
+        Swal.fire({ icon: 'error', text: 'تعذّر تحميل سجل التعديلات' });
+      },
     });
   }
 

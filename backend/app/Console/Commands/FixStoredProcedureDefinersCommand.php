@@ -47,18 +47,20 @@ BEGIN
     DECLARE current_balance DOUBLE;
     DECLARE new_id INT;
 
-    SELECT balance INTO current_balance
+    SELECT IFNULL(balance, 0) INTO current_balance
     FROM shipping_companies
     WHERE id = shipping_company_id;
 
     UPDATE shipping_companies
-    SET balance = current_balance + p_amount
+    SET balance = IFNULL(current_balance, 0) + p_amount
     WHERE id = shipping_company_id;
 
     INSERT INTO shipping_company_details (
-        order_id, shipping_date, status, amount, shipping_company_id, created_at, updated_at, `by`
+        order_id, shipping_date, status, amount, shipping_company_id, is_done, created_at, updated_at, `by`
     ) VALUES (
-        order_id, shipping_date, status, p_amount, shipping_company_id, p_created_at, p_created_at, `by`
+        order_id, shipping_date, status, p_amount, shipping_company_id,
+        IF(status IN ('تم التحصيل', 'رفض استلام', 'سند قبض'), 1, 0),
+        p_created_at, p_created_at, `by`
     );
 
     SET new_id = LAST_INSERT_ID();
@@ -67,9 +69,9 @@ BEGIN
     SET ref = CONCAT('R', new_id)
     WHERE id = new_id;
 
-    IF status = 'تم التحصيل' OR status = 'رفض استلام' THEN
+    IF status = 'تم التحصيل' OR status = 'رفض استلام' OR status = 'سند قبض' THEN
         UPDATE shipping_company_details
-        SET collect_date = DATE(NOW())
+        SET collect_date = DATE(NOW()), is_done = 1
         WHERE id = new_id;
     END IF;
 END

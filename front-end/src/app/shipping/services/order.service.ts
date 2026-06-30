@@ -19,6 +19,14 @@ export class OrderService {
     return this.http.get(`${environment.Url}/tracking` , {params});
   }
 
+  getActivityLogs(params={}){
+    return this.http.get(`${environment.Url}/activity-logs` , {params});
+  }
+
+  getActivityModules(){
+    return this.http.get(`${environment.Url}/activity-logs/modules`);
+  }
+
   getActions(){
     return this.http.get(`${environment.Url}/getActions`);
   }
@@ -49,6 +57,17 @@ export class OrderService {
 
   editOrder(id:number, formData:any){
     return this.http.post(`${environment.Url}/editorder/${id}` , formData);
+  }
+
+  cancelOrderLines(orderId: number, payload: {
+    lines: Array<{ order_product_id: number; quantity: number; reason: string }>;
+    note?: string;
+  }) {
+    return this.http.post(`${environment.Url}/orders/${orderId}/cancel-lines`, payload);
+  }
+
+  adjustPrepaid(orderId: number, payload: Record<string, unknown>) {
+    return this.http.post(`${environment.Url}/orders/${orderId}/prepaid-adjustment`, payload);
   }
 
   chngeStatus(id:number , status:string,note:string , amount:any , bank:any ,receviedOrder:any , param: Record<string, string | number | boolean> = {}){

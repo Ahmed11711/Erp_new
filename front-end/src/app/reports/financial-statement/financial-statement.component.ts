@@ -8,6 +8,14 @@ import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 import { PdfService } from 'src/app/pdf.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { AuthService } from 'src/app/auth/auth.service';
+
+export interface AccountStatementEditLink {
+  source: string;
+  source_id: number;
+  url: string;
+}
 
 @Component({
   selector: 'app-financial-statement',
@@ -79,7 +87,9 @@ export class FinancialStatementComponent implements OnInit {
     private serviceAccountsService: ServiceAccountsService,
     private pdfService: PdfService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private rbac: RbacService,
+    private authService: AuthService,
   ) {
     const today = new Date();
     const year = today.getFullYear();
@@ -160,6 +170,26 @@ export class FinancialStatementComponent implements OnInit {
 
   get canExport(): boolean {
     return !!this.details && !this.loading;
+  }
+
+  get canAdminEditEntries(): boolean {
+    return this.rbac.canAny(['finance.account_statement.edit', 'system.rbac'])
+      || this.authService.getUser() === 'Admin';
+  }
+
+  get hasEditableRows(): boolean {
+    return this.data.some((item) => this.isEntryEditable(item));
+  }
+
+  isEntryEditable(item: { can_edit?: boolean; edit_link?: AccountStatementEditLink | null }): boolean {
+    return item?.can_edit === true && !!item?.edit_link?.url;
+  }
+
+  openEntry(item: { can_edit?: boolean; edit_link?: AccountStatementEditLink | null }): void {
+    if (!this.isEntryEditable(item) || !item.edit_link?.url) {
+      return;
+    }
+    window.open(item.edit_link.url, '_blank', 'noopener');
   }
 
   exportToPdf(): void {

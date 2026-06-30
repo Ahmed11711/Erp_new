@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Services\Orders\OrderStatusVisibilityService;
 
 class Order extends Model
 {
@@ -158,5 +160,15 @@ class Order extends Model
  // Country code
 
  // ]
+
+ /**
+  * يقيّد الاستعلام بالطلبات التي يسمح للمستخدم برؤية حالتها.
+  */
+ public function scopeVisibleToUser(Builder $query, User $user): Builder
+ {
+  app(OrderStatusVisibilityService::class)->applySearchScope($query, $user);
+
+  return $query;
+ }
 
 }

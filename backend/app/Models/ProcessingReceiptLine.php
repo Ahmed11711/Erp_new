@@ -18,6 +18,8 @@ class ProcessingReceiptLine extends Model
         'rejected_qty',
         'material_unit_cost',
         'allocated_service_cost',
+        'dest_unit_cost',
+        'dest_sell_price',
         'rejection_return_category_id',
     ];
 
@@ -27,6 +29,8 @@ class ProcessingReceiptLine extends Model
         'rejected_qty' => 'float',
         'material_unit_cost' => 'float',
         'allocated_service_cost' => 'float',
+        'dest_unit_cost' => 'float',
+        'dest_sell_price' => 'float',
     ];
 
     public function receipt(): BelongsTo
@@ -37,5 +41,15 @@ class ProcessingReceiptLine extends Model
     public function orderLine(): BelongsTo
     {
         return $this->belongsTo(ProcessingOrderLine::class, 'processing_order_line_id');
+    }
+
+    public function destinationCategory(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'destination_category_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'category_id');
     }
 }

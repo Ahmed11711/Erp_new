@@ -2,9 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Models\DepartmentRoleTemplate;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Orders\OrderStatusVisibilityService;
 use Illuminate\Database\Seeder;
 
 class RbacFoundationSeeder extends Seeder
@@ -17,6 +19,7 @@ class RbacFoundationSeeder extends Seeder
             ['module' => 'orders', 'slug' => 'orders.view', 'name' => 'View Orders'],
             ['module' => 'orders', 'slug' => 'orders.create', 'name' => 'Create Orders'],
             ['module' => 'orders', 'slug' => 'orders.edit', 'name' => 'Edit Orders'],
+            ['module' => 'orders', 'slug' => 'orders.cancel_line', 'name' => 'Cancel order line items'],
             ['module' => 'orders', 'slug' => 'orders.delete', 'name' => 'Delete Orders'],
             ['module' => 'orders', 'slug' => 'orders.change_status', 'name' => 'Change Order Status'],
             ['module' => 'orders', 'slug' => 'orders.export', 'name' => 'Export Orders'],
@@ -42,6 +45,8 @@ class RbacFoundationSeeder extends Seeder
             ['module' => 'settings', 'slug' => 'settings.view', 'name' => 'View Settings'],
             ['module' => 'settings', 'slug' => 'settings.edit', 'name' => 'Edit Settings'],
             ['module' => 'system', 'slug' => 'system.rbac', 'name' => 'Manage RBAC'],
+            ['module' => 'system', 'slug' => 'system.activity_log', 'name' => 'View Activity Log'],
+            ['module' => 'system', 'slug' => 'system.activity_log.edit', 'name' => 'Open Activity Log Entity For Edit'],
             ['module' => 'whatsapp', 'slug' => 'whatsapp.assign_numbers', 'name' => 'assign to whatsapp number'],
             ['module' => 'categories', 'slug' => 'categories.view', 'name' => 'View Categories'],
             ['module' => 'categories', 'slug' => 'categories.manage', 'name' => 'Manage Categories'],
@@ -51,6 +56,7 @@ class RbacFoundationSeeder extends Seeder
             ['module' => 'purchases', 'slug' => 'purchases.view', 'name' => 'View Purchases'],
             ['module' => 'manufacturing', 'slug' => 'manufacturing.view', 'name' => 'View Manufacturing'],
             ['module' => 'manufacturing', 'slug' => 'manufacturing.edit_recipe', 'name' => 'Edit Manufacturing Recipes'],
+            ['module' => 'manufacturing', 'slug' => 'manufacturing.delete_recipe', 'name' => 'Delete Manufacturing Recipes'],
             ['module' => 'manufacturing', 'slug' => 'manufacturing.delete_order', 'name' => 'Delete Manufacturing Orders'],
             ['module' => 'processing', 'slug' => 'processing.view', 'name' => 'View External Processing'],
             ['module' => 'processing', 'slug' => 'processing.create', 'name' => 'Create External Processing Documents'],
@@ -79,6 +85,14 @@ class RbacFoundationSeeder extends Seeder
             ['module' => 'nav', 'slug' => 'nav.whatsapp_chat', 'name' => 'Nav: WhatsApp chat without assignment'],
         ];
 
+        foreach (app(OrderStatusVisibilityService::class)->permissionDefinitions() as $statusPerm) {
+            $definitions[] = [
+                'module' => 'orders_statuses',
+                'slug' => $statusPerm['slug'],
+                'name' => $statusPerm['name'],
+            ];
+        }
+
         foreach ($definitions as $def) {
             Permission::query()->firstOrCreate(
                 ['slug' => $def['slug'], 'guard_name' => $guard],
@@ -100,17 +114,32 @@ class RbacFoundationSeeder extends Seeder
 
         $superAdmin->syncPermissions(Permission::query()->where('guard_name', $guard)->pluck('id'));
 
+        // «طلب جديد» مقصورة على خدمة العملاء فقط؛ تُنزع حتى من Super Admin افتراضياً
+        // (يمكن منحها يدوياً لمن يلزم). للوصول الكامل دون قيود استخدم rbac.super_admin_emails.
+        $newStatusPerm = Permission::query()
+            ->where('guard_name', $guard)
+            ->where('slug', 'orders.view_status.new')
+            ->first();
+        if ($newStatusPerm) {
+            $superAdmin->revokePermissionTo($newStatusPerm);
+        }
+
         $adminPreset = Role::query()->firstOrCreate(
             ['slug' => 'admin-preset', 'guard_name' => $guard],
             ['name' => 'Administrator Preset', 'description' => 'Recommended ERP administrator bundle']
         );
 
         $presetSlugs = [
-            'orders.view', 'orders.create', 'orders.edit', 'orders.change_status', 'orders.export', 'orders.shopify.review',
+            'orders.view', 'orders.create', 'orders.edit', 'orders.cancel_line', 'orders.change_status', 'orders.export', 'orders.shopify.review',
+            // «طلب جديد» (orders.view_status.new) مقصورة على خدمة العملاء — غير مشمولة هنا.
+            'orders.view_status.confirmed', 'orders.view_status.partial_ship',
+            'orders.view_status.shipped', 'orders.view_status.delivered', 'orders.view_status.received',
+            'orders.view_status.collected', 'orders.view_status.postponed', 'orders.view_status.archived',
+            'orders.view_status.maintained', 'orders.view_status.refused', 'orders.view_status.cancelled',
             'finance.view', 'finance.edit',
             'employees.view', 'employees.create', 'employees.attendance',
             'inventory.view', 'inventory.transfer',
-            'settings.view', 'system.rbac',
+            'settings.view', 'system.rbac', 'system.activity_log', 'system.activity_log.edit',
             'categories.view', 'categories.manage',
             'suppliers.view', 'purchases.view', 'manufacturing.view', 'manufacturing.edit_recipe', 'processing.view',
             'nav.receipts', 'nav.receipts.quotes', 'nav.receipts.admin',
@@ -127,10 +156,87 @@ class RbacFoundationSeeder extends Seeder
         $presetIds = Permission::query()->where('guard_name', $guard)->whereIn('slug', $presetSlugs)->pluck('id');
         $adminPreset->syncPermissions($presetIds);
 
+        $customerServicePreset = Role::query()->firstOrCreate(
+            ['slug' => 'customer-service-preset', 'guard_name' => $guard],
+            [
+                'name' => 'Customer Service Preset',
+                'description' => 'خدمة العملاء — يشمل عرض الطلبات الجديدة',
+            ]
+        );
+
+        $csSlugs = [
+            'orders.view', 'orders.change_status', 'orders.edit', 'orders.cancel_line',
+            'orders.view_status.new',
+            'nav.receipts.quotes',
+        ];
+        $csIds = Permission::query()->where('guard_name', $guard)->whereIn('slug', $csSlugs)->pluck('id');
+        $customerServicePreset->syncPermissions($csIds);
+
+        DepartmentRoleTemplate::query()->updateOrCreate(
+            ['department' => 'Customer Service'],
+            ['role_id' => $customerServicePreset->id]
+        );
+
+        $this->seedDepartmentStatusVisibility($guard);
+
         $admins = User::query()->where('department', 'Admin')->get();
         foreach ($admins as $admin) {
             if ($admin->roles()->count() === 0) {
                 $admin->assignRole($superAdmin);
+            }
+        }
+
+        app(\App\Services\Rbac\RbacStampService::class)->bumpAfterRolePermissionsChanged();
+    }
+
+    /**
+     * يمنح دور كل قسم حالاته الافتراضية (دمج لا حذف) حتى تتحكم مربعات الصلاحيات
+     * في ظهور الطلبات فعلياً دون تعطيل الأقسام القائمة.
+     */
+    private function seedDepartmentStatusVisibility(string $guard): void
+    {
+        $statusKeyToSlug = [];
+        foreach (config('order_status_visibility.statuses', []) as $key => $def) {
+            $statusKeyToSlug[$key] = strtolower($def['permission']);
+        }
+        $allStatusSlugs = array_values($statusKeyToSlug);
+
+        /** @var array<string, \App\Models\Permission> $statusPermsBySlug */
+        $statusPermsBySlug = Permission::query()
+            ->where('guard_name', $guard)
+            ->whereIn('slug', $allStatusSlugs)
+            ->get()
+            ->keyBy('slug');
+
+        foreach (config('order_status_visibility.department_default_status_keys', []) as $department => $keys) {
+            $template = DepartmentRoleTemplate::query()
+                ->where('department', $department)
+                ->with('role')
+                ->first();
+
+            if (! $template || ! $template->role) {
+                continue;
+            }
+
+            $desiredSlugs = $keys === '*'
+                ? $allStatusSlugs
+                : array_values(array_filter(array_map(
+                    fn ($key) => $statusKeyToSlug[$key] ?? null,
+                    (array) $keys
+                )));
+
+            // حاسم: امنح المطلوب وانزع كل حالة غير مطلوبة (givePermissionTo يدمج فقط).
+            foreach ($allStatusSlugs as $slug) {
+                $perm = $statusPermsBySlug->get($slug);
+                if (! $perm) {
+                    continue;
+                }
+
+                if (in_array($slug, $desiredSlugs, true)) {
+                    $template->role->givePermissionTo($perm);
+                } else {
+                    $template->role->revokePermissionTo($perm);
+                }
             }
         }
     }

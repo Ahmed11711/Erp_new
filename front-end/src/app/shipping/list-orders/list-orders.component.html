@@ -240,18 +240,7 @@
      <div class="form-group">
       <select id="order_status"  class="form-control bg-main" (change)="filter($event)">
         <option selected disabled > حالة الطلب</option>
-        <option value="طلب جديد" *ngIf="user != 'Operation Management' && user != 'Finance and operations management' && this.user != 'Operation Specialist' && this.user != 'Logistics Specialist' && this.user != 'Review Management' && this.user !== 'Financial Accounts'">جديد</option>
-        <option value="طلب مؤكد" *ngIf="this.user != 'Review Management' && this.user !== 'Financial Accounts'">طلب مؤكد</option>
-        <option value="شحن جزئي" *ngIf="this.user != 'Review Management'">شحن جزئي</option>
-        <option value="تم شحن">تم شحن</option>
-        <option value="تم التسليم">تم التسليم</option>
-        <option value="تم الاستلام" *ngIf="this.user != 'Review Management'">تم الاستلام</option>
-        <option value="تم التحصيل" *ngIf="user != 'Operation Management' && user != 'Finance and operations management' && this.user != 'Operation Specialist' && this.user != 'Logistics Specialist'">تم التحصيل</option>
-        <option value="مؤجل" *ngIf="user !== 'Financial Accounts'">مؤجل</option>
-        <option value="أرشيف" *ngIf="user != 'Operation Management' && user != 'Finance and operations management' && this.user != 'Operation Specialist' && this.user != 'Logistics Specialist' && this.user != 'Review Management' && this.user != 'Shipping Management' && user !== 'Financial Accounts'">أرشيف</option>
-        <option value="تم الصيانة" *ngIf="this.user != 'Review Management' && this.user !== 'Financial Accounts'">تم الصيانة</option>
-        <option value="رفض استلام" *ngIf="user !== 'Financial Accounts'">رفض استلام</option>
-        <option value="ملغي" *ngIf="user != 'Operation Management' && user != 'Finance and operations management' && this.user != 'Operation Specialist' && this.user != 'Logistics Specialist' && user !== 'Financial Accounts'">ملغي</option>
+        <option *ngFor="let opt of statusFilterOptions" [value]="opt.value">{{ opt.label }}</option>
       </select>
      </div>
       <div class="form-group" *ngIf="user == 'Review Management' || user == 'Financial Accounts'">
@@ -552,8 +541,8 @@
                 </button>
               </ng-container>
 
-              <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist' || this.user == 'Data Entry'">
-                <button mat-menu-item *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' || item.order_status == 'مؤجل'" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel',item)">
+              <ng-container *ngIf="canCancelOrderMenu()">
+                <button mat-menu-item *ngIf="canCancelOrder(item)" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel',item)">
                   <span>الغاء الطلب</span>
                   </button>
               </ng-container>
@@ -729,8 +718,8 @@
                 <span> رفض استلام</span>
               </button>
             </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist' || this.user == 'Data Entry'">
-              <button mat-menu-item *ngIf="item.order_status == 'طلب جديد' || item.order_status == 'طلب مؤكد' || item.order_status == 'مؤجل'" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel',item)">
+            <ng-container *ngIf="canCancelOrderMenu()">
+              <button mat-menu-item *ngIf="canCancelOrder(item)" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة الالغاء','cancel',item)">
                 <span>الغاء الطلب</span>
               </button>
             </ng-container>

@@ -251,16 +251,21 @@ export class DashboardComponent implements OnDestroy {
 
   clickNotification(elm:any){
     if (elm?.is_read == 0) {
-      console.log('here');
-
       this.notificationService.readNotify(elm.id).subscribe(res=>{
-        console.log(res);
         if (res) {
           this.getNotifiy();
         }
       })
     }
+  }
 
+  openNotification(elm: any): void {
+    this.clickNotification(elm);
+    if (elm?.type === 'كشف حضور' && elm?.ref) {
+      this.route.navigate(['/dashboard/hr/workinghoursdetails', elm.ref]);
+      return;
+    }
+    this.openNotifiy(elm?.ref);
   }
 
   logout(){

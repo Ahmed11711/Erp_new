@@ -1,8 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, FormArray, FormControl, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import { catchError, of } from 'rxjs';
 import { DailyEntryService } from '../services/daily-entry.service';
 import { TreeAccountService } from '../services/tree-account.service';
+import { AuthService } from 'src/app/auth/auth.service';
 import { DailyEntry } from '../interfaces/daily-entry.interface';
 import { TreeAccount } from '../interfaces/tree-account.interface';
 import Swal from 'sweetalert2';
@@ -37,6 +40,8 @@ export class DailyEntriesComponent implements OnInit {
   dateFrom: string = '';
   dateTo: string = '';
   searchTerm: string = '';
+  selectedUserId: number | null = null;
+  users: { id: number; name: string }[] = [];
 
   entryForm: FormGroup;
   Math = Math;
@@ -44,7 +49,9 @@ export class DailyEntriesComponent implements OnInit {
   constructor(
     private dailyEntryService: DailyEntryService,
     private treeAccountService: TreeAccountService,
-    private fb: FormBuilder
+    private authService: AuthService,
+    private fb: FormBuilder,
+    private route: ActivatedRoute
   ) {
     this.entryForm = this.fb.group({
       date: [new Date().toISOString().split('T')[0], Validators.required],
@@ -55,7 +62,65 @@ export class DailyEntriesComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadAccounts();
-    this.loadEntries();
+    this.initFilters();
+    this.route.queryParamMap.subscribe((params) => {
+      const editId = Number(params.get('edit') ?? 0);
+      if (editId > 0) {
+        this.pendingEditEntryId = editId;
+        this.tryOpenPendingEdit();
+      }
+    });
+  }
+
+  private pendingEditEntryId: number | null = null;
+
+  private tryOpenPendingEdit(): void {
+    if (!this.pendingEditEntryId || !this.accountOptions.length) {
+      return;
+    }
+    const editId = this.pendingEditEntryId;
+    this.pendingEditEntryId = null;
+    this.dailyEntryService.getById(editId).subscribe({
+      next: (entry) => {
+        if (entry?.id) {
+          this.openEditForm(entry);
+        }
+      },
+      error: () => {
+        Swal.fire('تنبيه', 'تعذر فتح القيد اليومي للتعديل', 'warning');
+      }
+    });
+  }
+
+  private initFilters(): void {
+    let myId = 0;
+    let myName = '';
+
+    this.authService.fetchMe().pipe(
+      catchError(() => of(null))
+    ).subscribe((me) => {
+      myId = Number(me?.id ?? 0);
+      myName = String(me?.name ?? '').trim();
+      if (myId > 0) {
+        this.selectedUserId = myId;
+      }
+      this.loadEntryUsers(myId, myName);
+    });
+  }
+
+  private loadEntryUsers(currentUserId = 0, currentUserName = ''): void {
+    this.dailyEntryService.getUsers().pipe(
+      catchError(() => of({ data: [] as { id: number; name: string }[] }))
+    ).subscribe((res) => {
+      this.users = Array.isArray(res?.data) ? res.data : [];
+      if (currentUserId > 0 && !this.users.some((u) => u.id === currentUserId)) {
+        this.users.unshift({
+          id: currentUserId,
+          name: currentUserName || 'أنا',
+        });
+      }
+      this.loadEntries();
+    });
   }
 
   get itemsFormArray(): FormArray {
@@ -76,6 +141,7 @@ export class DailyEntriesComponent implements OnInit {
           if (this.showForm) {
             this.rebuildAccountCtrlsFromForm();
           }
+          this.tryOpenPendingEdit();
         }
       },
       error: (error) => {
@@ -188,6 +254,9 @@ export class DailyEntriesComponent implements OnInit {
     if (this.dateFrom) params.date_from = this.dateFrom;
     if (this.dateTo) params.date_to = this.dateTo;
     if (this.searchTerm) params.search = this.searchTerm;
+    if (this.selectedUserId != null && this.selectedUserId > 0) {
+      params.user_id = this.selectedUserId;
+    }
 
     this.dailyEntryService.getAll(params).subscribe({
       next: (response) => {
@@ -269,7 +338,7 @@ export class DailyEntriesComponent implements OnInit {
     this.isEditMode = true;
     this.currentEntryId = entry.id || null;
     this.entryForm.patchValue({
-      date: entry.date,
+      date: this.toDateInputValue(entry.date),
       description: entry.description || ''
     });
 
@@ -300,6 +369,28 @@ export class DailyEntriesComponent implements OnInit {
     this.itemsFormArray.clear();
     this.itemAccountCtrls = [];
     this.rowFilteredAccounts = [];
+  }
+
+  /** input[type=date] يقبل YYYY-MM-DD فقط — Laravel قد يُرجع ISO أو datetime */
+  private toDateInputValue(value: string | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return raw;
+    }
+    if (raw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+      return raw.slice(0, 10);
+    }
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) {
+      return '';
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   onSubmit(): void {
@@ -456,6 +547,7 @@ export class DailyEntriesComponent implements OnInit {
     this.dateFrom = '';
     this.dateTo = '';
     this.searchTerm = '';
+    this.selectedUserId = null;
     this.currentPage = 1;
     this.loadEntries();
   }

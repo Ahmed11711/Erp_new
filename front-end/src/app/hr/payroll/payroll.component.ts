@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { environment } from 'src/env/env';
+import { applyNormalShiftTimes, isFullDayPermission, normalizeOvernightFingerPrintRecords, resolveWorkDayHours } from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-payroll',
@@ -257,16 +258,36 @@ export class PayrollComponent implements OnInit{
     let actualTotalMinutesPerMonth = 0;
     totalHours = this.convertMinutesToHours(totalHoursPerMonth);
     let hourPrice = fixedSalary/30/dayHours
+    if (emp.finger_print?.length) {
+      emp.finger_print.forEach((r: { working_hours?: number }) => {
+        r.working_hours = workingHourPerDay;
+      });
+      emp.finger_print = normalizeOvernightFingerPrintRecords(emp.finger_print);
+    }
     emp.finger_print.forEach(elm=>{
-      elm.times = JSON.parse(elm.times.replace(/\\/g, ''));
+        if (typeof elm.times === 'string') {
+        elm.times = JSON.parse(elm.times.replace(/\\/g, ''));
+      }
       elm['working_hours'] = workingHourPerDay;
       let holiday = this.holidayDays.find(elm2 => elm2 == elm.date);
       if (holiday) {
         elm['holiday'] = true;
       }
+      const fullDayPermission = isFullDayPermission(elm.hours_permission, workingHourPerDay)
+        && !elm.vacation
+        && !holiday;
+      if (fullDayPermission) {
+        applyNormalShiftTimes(elm, workingHourPerDay);
+        elm.hoursDifference = '00:00';
+        elm.salary_type = 0;
+        elm.salary_type2 = 'اذن';
+        actualTotalMinutesPerMonth += workingHourPerDay * 60;
+        tableData.push(elm);
+        return;
+      }
       let actualTotalMinutes = 0;
       hour = this.convertMinutesToHours(totalHours);
-      let [hours, minutes] = elm.hours.split(':').map(Number);
+      let [hours, minutes] = resolveWorkDayHours({ ...elm, working_hours: workingHourPerDay }).split(':').map(Number);
       actualTotalMinutes += hours * 60 + minutes;
       actualTotalMinutesPerMonth += hours * 60 + minutes;
       if (elm.is_overTime_removed) {

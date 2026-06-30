@@ -1,0 +1,103 @@
+<div class="activity-page">
+  <div class="page-head">
+    <div class="head-time"><app-time></app-time></div>
+    <h1 class="page-title">سجل النشاط</h1>
+    <div class="head-spacer"></div>
+  </div>
+
+  <form [formGroup]="form" class="filters-card">
+    <div class="filter-field">
+      <label>التاريخ</label>
+      <input class="form-control" type="date" formControlName="created_at">
+    </div>
+    <div class="filter-field">
+      <label>المستخدم</label>
+      <select class="form-control" formControlName="user_id">
+        <option value="0">كل المستخدمين</option>
+        <option [value]="elm.id" *ngFor="let elm of userdata" [id]="elm.id">{{ elm.name }}</option>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label>القسم</label>
+      <select class="form-control" formControlName="module">
+        <option value="0">كل الأقسام</option>
+        <option [value]="m" *ngFor="let m of modules">{{ m }}</option>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label>نوع العملية</label>
+      <select class="form-control" formControlName="method">
+        <option value="">كل العمليات</option>
+        <option [value]="op.value" *ngFor="let op of methods">{{ op.label }}</option>
+      </select>
+    </div>
+    <div class="filter-field grow">
+      <label>بحث</label>
+      <input class="form-control" type="text" formControlName="search" placeholder="الإجراء / المسار / المستخدم">
+    </div>
+  </form>
+
+  <div class="alert alert-warning text-center" *ngIf="loadError">{{ loadError }}</div>
+
+  <div class="table-wrap">
+    <table class="activity-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>المستخدم</th>
+          <th>التاريخ</th>
+          <th>العملية</th>
+          <th>الإجراء</th>
+          <th>القسم</th>
+          <th>العنصر</th>
+          <th>التفاصيل</th>
+          <th *ngIf="canEditActivity">فتح</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="empty-row" *ngIf="!dataList.length && !loadError">
+          <td [attr.colspan]="canEditActivity ? 9 : 8">لا توجد سجلات للعرض.</td>
+        </tr>
+        <tr *ngFor="let elm of dataList">
+          <td data-label="#"><span class="cell-id">{{ elm?.id }}</span></td>
+          <td data-label="المستخدم">
+            <span class="user-chip">{{ elm?.user?.name || elm?.user_name || '—' }}</span>
+          </td>
+          <td data-label="التاريخ" class="date-cell" dir="ltr">
+            {{ elm?.created_at | date: 'yyyy-MM-dd · hh:mm a' }}
+          </td>
+          <td data-label="العملية">
+            <span class="badge-method" [ngClass]="methodClass(elm?.method)">{{ methodLabel(elm?.method) }}</span>
+          </td>
+          <td data-label="الإجراء" class="action-cell">{{ elm?.action || '—' }}</td>
+          <td data-label="القسم"><span class="module-chip">{{ elm?.module || '—' }}</span></td>
+          <td data-label="العنصر">{{ elm?.subject_id || '—' }}</td>
+          <td data-label="التفاصيل" class="meta-cell" [title]="metaPreview(elm?.meta)">
+            {{ elm?.description || '—' }}
+          </td>
+          <td data-label="فتح" *ngIf="canEditActivity" class="open-cell">
+            <a *ngIf="canOpenEntity(elm)"
+               class="open-btn"
+               [routerLink]="entityLink(elm)"
+               title="فتح العنصر للتعديل">
+              <mat-icon>open_in_new</mat-icon>
+            </a>
+            <span class="muted" *ngIf="!canOpenEntity(elm)">—</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <mat-paginator
+      [length]="length"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
+      showFirstLastButtons
+      (page)="onPageChange($event)"
+      [pageSizeOptions]="pageSizeOptions"
+      aria-label="Select page">
+    </mat-paginator>
+  </div>
+</div>

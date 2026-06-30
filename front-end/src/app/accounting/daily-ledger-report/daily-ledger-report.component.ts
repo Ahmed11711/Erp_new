@@ -1,8 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { AccountingReportService } from '../services/accounting-report.service';
 import { TreeAccountService } from '../services/tree-account.service';
+import { DailyEntryService } from '../services/daily-entry.service';
+import { AuthService } from 'src/app/auth/auth.service';
 import { TreeAccount } from '../interfaces/tree-account.interface';
 import { FormBuilder, FormGroup } from '@angular/forms';
+import { catchError, of } from 'rxjs';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -30,10 +33,13 @@ export class DailyLedgerReportComponent implements OnInit {
   };
 
   filterForm: FormGroup;
+  users: { id: number; name: string }[] = [];
 
   constructor(
     private reportService: AccountingReportService,
     private treeAccountService: TreeAccountService,
+    private dailyEntryService: DailyEntryService,
+    private authService: AuthService,
     private fb: FormBuilder
   ) {
     const today = new Date();
@@ -43,6 +49,7 @@ export class DailyLedgerReportComponent implements OnInit {
       date_from: [firstDay.toISOString().split('T')[0]],
       date_to: [today.toISOString().split('T')[0]],
       account_id: [''],
+      user_id: [null as number | null],
       /** إظهار حركات مرتبطة برأس قيد يومي فقط (مثل القيود من شاشة «القيود اليومية») */
       daily_entry_only: [false]
     });
@@ -50,7 +57,38 @@ export class DailyLedgerReportComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadAccounts();
-    this.loadReport();
+    this.initUserFilter();
+  }
+
+  private initUserFilter(): void {
+    let myId = 0;
+    let myName = '';
+
+    this.authService.fetchMe().pipe(
+      catchError(() => of(null))
+    ).subscribe((me) => {
+      myId = Number(me?.id ?? 0);
+      myName = String(me?.name ?? '').trim();
+      if (myId > 0) {
+        this.filterForm.patchValue({ user_id: myId }, { emitEvent: false });
+      }
+      this.loadEntryUsers(myId, myName);
+    });
+  }
+
+  private loadEntryUsers(currentUserId = 0, currentUserName = ''): void {
+    this.dailyEntryService.getUsers().pipe(
+      catchError(() => of({ data: [] as { id: number; name: string }[] }))
+    ).subscribe((res) => {
+      this.users = Array.isArray(res?.data) ? res.data : [];
+      if (currentUserId > 0 && !this.users.some((u) => u.id === currentUserId)) {
+        this.users.unshift({
+          id: currentUserId,
+          name: currentUserName || 'أنا',
+        });
+      }
+      this.loadReport();
+    });
   }
 
   loadAccounts(): void {
@@ -91,6 +129,10 @@ export class DailyLedgerReportComponent implements OnInit {
     };
     if (filters.daily_entry_only) {
       params['daily_entry_only'] = 1;
+    }
+    const userId = Number(filters.user_id ?? 0);
+    if (userId > 0) {
+      params['user_id'] = userId;
     }
 
     this.reportService.getDailyLedger(params).subscribe({

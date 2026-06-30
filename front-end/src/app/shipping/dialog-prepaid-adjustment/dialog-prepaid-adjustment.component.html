@@ -1,0 +1,56 @@
+<h1 mat-dialog-title dir="rtl">مبلغ تحت الحساب — طلب #{{ data.orderId }}</h1>
+<div mat-dialog-content dir="rtl">
+  <p class="mb-3">
+    المبلغ الحالي: <strong dir="ltr">{{ data.prepaidAmount | number:'1.2-2' }}</strong>
+    <span class="text-muted" *ngIf="currentSourceText !== '—'"> — المصدر: {{ currentSourceText }}</span>
+  </p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <div class="form-group mb-3">
+      <label class="form-label d-block mb-2">الإجراء</label>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" id="actionReverse" value="reverse" formControlName="action">
+        <label class="form-check-label" for="actionReverse">عكس الدفعة (إرجاع المبلغ وإلغاء تحت الحساب)</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" id="actionChange" value="change_source" formControlName="action">
+        <label class="form-check-label" for="actionChange">تغيير مصدر الدفع (بنك / خزينة / حساب خدمي)</label>
+      </div>
+    </div>
+
+    <ng-container *ngIf="selectedAction === 'change_source'">
+      <div class="form-row">
+        <div class="form-group col-md-4 mb-3">
+          <label class="form-label">نوع المصدر</label>
+          <select class="form-control" formControlName="paymentType">
+            <option value="safe">خزينة</option>
+            <option value="bank">بنك</option>
+            <option value="service_account">حساب خدمي</option>
+          </select>
+        </div>
+        <div class="form-group col-md-8 mb-3">
+          <label class="form-label">{{ paymentType === 'safe' ? 'الخزينة' : paymentType === 'bank' ? 'البنك' : 'الحساب الخدمي' }}</label>
+          <select class="form-control" formControlName="sourceId">
+            <option [ngValue]="null" disabled>اختر المصدر</option>
+            <option *ngFor="let item of sourceList" [ngValue]="item.id">
+              {{ item.name }} ({{ item.balance | number:'1.2-2' }})
+            </option>
+          </select>
+          <p class="text-danger small mb-0" *ngIf="form.get('sourceId')?.invalid && form.get('sourceId')?.touched">مطلوب</p>
+        </div>
+      </div>
+    </ng-container>
+
+    <div class="form-group mb-3">
+      <label class="form-label">ملاحظة (اختياري)</label>
+      <textarea class="form-control" rows="2" formControlName="note" placeholder="سبب التعديل"></textarea>
+    </div>
+
+    <div class="d-flex justify-content-center gap-2">
+      <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting">
+        {{ submitting ? 'جاري التنفيذ...' : 'تنفيذ' }}
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="onCloseClick()">إلغاء</button>
+    </div>
+  </form>
+</div>

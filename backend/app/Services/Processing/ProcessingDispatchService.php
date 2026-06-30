@@ -11,7 +11,6 @@ use App\Models\ProcessingDispatchNote;
 use App\Models\ProcessingMaterialBalance;
 use App\Models\ProcessingOrder;
 use App\Models\ProcessingOrderLine;
-use App\Models\ShippingCompany;
 use App\Models\TransactionType;
 use App\Services\CategoryInventoryCostService;
 use App\Services\Documents\DocumentNumberService;
@@ -212,7 +211,6 @@ class ProcessingDispatchService
      */
     public function submitVoucher(array $data): array
     {
-        $data = $this->resolveRepresentative($data);
         $this->validateRepresentative($data);
 
         return DB::transaction(function () use ($data) {
@@ -292,27 +290,6 @@ class ProcessingDispatchService
                 'invoice' => $invoice,
             ];
         });
-    }
-
-    private function resolveRepresentative(array $data): array
-    {
-        if (! empty($data['representative_type'])) {
-            return $data;
-        }
-
-        $rep = ShippingCompany::query()
-            ->where('type', 'مندوب')
-            ->whereNotNull('name')
-            ->whereRaw("TRIM(name) <> ''")
-            ->orderBy('name')
-            ->first();
-
-        if ($rep) {
-            $data['representative_type'] = 'internal';
-            $data['shipping_company_id'] = (int) $rep->id;
-        }
-
-        return $data;
     }
 
     private function validateRepresentative(array $data): void

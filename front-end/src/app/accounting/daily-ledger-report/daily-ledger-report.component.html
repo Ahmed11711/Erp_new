@@ -13,19 +13,28 @@
         <!-- Filters -->
         <form [formGroup]="filterForm" (ngSubmit)="search()">
           <div class="row mb-4">
-            <div class="col-md-3">
+            <div class="col-md-2">
               <div class="form-group">
                 <label>من تاريخ</label>
                 <input type="date" class="form-control" formControlName="date_from">
               </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <div class="form-group">
                 <label>إلى تاريخ</label>
                 <input type="date" class="form-control" formControlName="date_to">
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
+              <div class="form-group">
+                <label>المستخدم</label>
+                <select class="form-control" formControlName="user_id">
+                  <option [ngValue]="null">كل المستخدمين</option>
+                  <option *ngFor="let user of users" [ngValue]="user.id">{{ user.name }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-3">
               <div class="form-group">
                 <label>الحساب</label>
                 <input type="text" class="form-control" placeholder="بحث باسم الحساب..." [(ngModel)]="accountSearchTerm"
@@ -33,12 +42,7 @@
                 <datalist id="accountsList">
                   <option *ngFor="let acc of filteredAccounts" [value]="acc.name"></option>
                 </datalist>
-                <!-- Hidden select to actually bind the ID if needed, or we handle it via selection logic. 
-                                     For simplicity with datalist, we might need a better autocomplete. 
-                                     Let's use a standard select for now or a custom one if available. 
-                                     Reverting to standard select for reliability in this context. -->
               </div>
-              <!-- Alternative Select -->
               <select class="form-control" formControlName="account_id">
                 <option value="">كل الحسابات</option>
                 <option *ngFor="let acc of accounts" [value]="acc.id">
@@ -76,6 +80,7 @@
                 <th>التاريخ</th>
                 <th>رقم القيد</th>
                 <th>البيان العام للقيد</th>
+                <th>المستخدم</th>
                 <th>الحساب</th>
                 <th>بيان السطر</th>
                 <th>مدين</th>
@@ -84,24 +89,25 @@
             </thead>
             <tbody>
               <tr *ngIf="loading">
-                <td colspan="7" class="text-center">جاري التحميل...</td>
+                <td colspan="8" class="text-center">جاري التحميل...</td>
               </tr>
               <tr *ngFor="let entry of entries">
                 <td dir="ltr">{{ (entry.entry_date || entry.created_at) | date:'dd/MM/yyyy' }} <span class="text-muted small">{{ entry.created_at | date:'HH:mm' }}</span></td>
                 <td>{{ entry.journal_entry_number || '—' }}</td>
                 <td class="text-right" dir="auto">{{ entry.journal_header_description || entry.daily_entry?.description || '—' }}</td>
+                <td>{{ entry.journal_user_name || entry.daily_entry?.user?.name || entry.voucher?.user?.name || '—' }}</td>
                 <td>{{ entry.account?.name }}</td>
                 <td>{{ entry.description }}</td>
                 <td>{{ entry.debit | number:'1.2-2' }}</td>
                 <td>{{ entry.credit | number:'1.2-2' }}</td>
               </tr>
               <tr *ngIf="entries.length === 0 && !loading">
-                <td colspan="7" class="text-center">لا توجد بيانات</td>
+                <td colspan="8" class="text-center">لا توجد بيانات</td>
               </tr>
             </tbody>
             <tfoot>
               <tr class="font-weight-bold bg-light">
-                <td colspan="5" class="text-center">الإجمالي</td>
+                <td colspan="6" class="text-center">الإجمالي</td>
                 <td>{{ totals.total_debit | number:'1.2-2' }}</td>
                 <td>{{ totals.total_credit | number:'1.2-2' }}</td>
               </tr>

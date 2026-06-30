@@ -12,6 +12,7 @@ import Swal from 'sweetalert2';
 export class ExpensesComponent implements OnInit {
 
   data:any[]=[];
+  displayRows:any[]=[];
   tableData:any[]=[];
   dateFrom:string='';
   dateTo:string='';
@@ -65,9 +66,35 @@ export class ExpensesComponent implements OnInit {
         return elm;
       });
 
+      this.displayRows = this.flattenExpensesForDisplay(this.data);
+
       this.length=res.total;
       this.pageSize=res.per_page;
     })
+  }
+
+  /** يعرض كل بند تقسيم كمصروف مستقل في الجدول */
+  private flattenExpensesForDisplay(expenses: any[]): any[] {
+    const rows: any[] = [];
+    for (const expense of expenses) {
+      const lines = Array.isArray(expense?.lines) ? expense.lines : [];
+      if (lines.length > 0) {
+        for (const line of lines) {
+          rows.push({
+            ...expense,
+            _displayLine: line,
+            expense_type: line.expense_type ?? expense.expense_type,
+            amount: line.amount,
+            expens_statement: line.statement ?? expense.expens_statement,
+            debit_tree_account: line.debit_tree_account ?? line.tree_account,
+            tree_account: line.tree_account,
+          });
+        }
+      } else {
+        rows.push({ ...expense, _displayLine: null });
+      }
+    }
+    return rows;
   }
 
   onPageChange(event: any) {
@@ -207,13 +234,13 @@ export class ExpensesComponent implements OnInit {
   }
 
   expenseKindLabel(row: any): string {
-    if (this.isSplitExpense(row)) {
-      return 'تقسيم (' + row.lines.length + ' بنود)';
-    }
-    return row?.kind?.expense_kind ?? '—';
+    return this.debitAccountLabel(row);
   }
 
   expenseTypeLabel(row: any): string {
+    if (row?._displayLine) {
+      return row._displayLine.expense_type ?? row.expense_type ?? '—';
+    }
     if (this.isSplitExpense(row)) {
       return 'متعدد';
     }
@@ -221,10 +248,29 @@ export class ExpensesComponent implements OnInit {
   }
 
   debitAccountLabel(row: any): string {
-    if (row?.debit_tree_accounts_split || this.isSplitExpense(row)) {
-      return 'عدة حسابات (مدين)';
+    if (row?._displayLine) {
+      const line = row._displayLine;
+      return this.treeAccountLine(line.debit_tree_account ?? line.tree_account);
     }
-    return this.treeAccountLine(row.debit_tree_account);
+    if (row?.debit_tree_accounts_split || this.isSplitExpense(row)) {
+      const lines = row?.lines ?? [];
+      if (lines.length > 1) {
+        return lines
+          .map((line: any) => this.treeAccountLine(line.debit_tree_account ?? line.tree_account))
+          .filter((s: string) => s !== '—')
+          .join(' · ') || 'عدة حسابات (مدين)';
+      }
+    }
+    if (row?.debit_tree_account) {
+      return this.treeAccountLine(row.debit_tree_account);
+    }
+    if (row?.tree_account) {
+      return this.treeAccountLine(row.tree_account);
+    }
+    if (row?.kind?.expense_kind) {
+      return row.kind.expense_kind;
+    }
+    return '—';
   }
 
   truncateNote(text: string | null | undefined, maxLen = 40): string {

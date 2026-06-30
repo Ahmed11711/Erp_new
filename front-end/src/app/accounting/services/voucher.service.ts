@@ -82,12 +82,12 @@ export class VoucherService {
         return this.http.get<any>(`${environment.Url}/suppliers`);
     }
 
-    getShippingCompaniesSelect(): Observable<{ id: number; name: string; type: string }[]> {
-        return this.http.get<{ id: number; name: string; type: string }[]>(`${environment.Url}/shippingcompanySelect`);
+    getShippingCompaniesSelect(): Observable<{ id: number; name: string; type: string; balance?: number }[]> {
+        return this.http.get<{ id: number; name: string; type: string; balance?: number }[]>(`${environment.Url}/shippingcompanySelect`);
     }
 
-    getCollectionCompaniesSelect(): Observable<{ id: number; name: string; linked_shipping_company_id?: number | null }[]> {
-        return this.http.get<{ id: number; name: string; linked_shipping_company_id?: number | null }[]>(
+    getCollectionCompaniesSelect(): Observable<{ id: number; name: string; linked_shipping_company_id?: number | null; balance?: number }[]> {
+        return this.http.get<{ id: number; name: string; linked_shipping_company_id?: number | null; balance?: number }[]>(
             `${environment.Url}/collection-companies/select`
         );
     }

@@ -14,7 +14,9 @@ class ExpenseLine extends Model
         'expense_id',
         'expense_type',
         'kind_id',
+        'tree_account_id',
         'amount',
+        'statement',
         'sort_order',
     ];
 
@@ -30,5 +32,10 @@ class ExpenseLine extends Model
     public function kind(): BelongsTo
     {
         return $this->belongsTo(ExpenseKind::class, 'kind_id');
+    }
+
+    public function treeAccount(): BelongsTo
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
     }
 }

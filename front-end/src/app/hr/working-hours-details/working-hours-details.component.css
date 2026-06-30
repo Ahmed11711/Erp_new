@@ -37,3 +37,63 @@ tr td:last-child , th td:last-child{
   font-size: 0.6rem;
   margin-right: 0.3rem;
 }
+
+.log-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  color: #adb5bd;
+}
+
+.log-icon--has-data {
+  color: #82225e;
+}
+
+tr.row-edited td {
+  background-color: #fff3cd !important;
+}
+
+tr.row-edited td.bg-main,
+tr.row-edited td.bg-success,
+tr.row-edited td.bg-gray,
+tr.row-edited td.bg-danger {
+  background-color: #ffe69c !important;
+}
+
+:host ::ng-deep .fp-log-list {
+  max-height: 360px;
+  overflow-y: auto;
+  text-align: right;
+  direction: rtl;
+}
+
+:host ::ng-deep .fp-log-item {
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.65rem 0;
+  font-size: 0.9rem;
+}
+
+:host ::ng-deep .fp-log-item:last-child {
+  border-bottom: none;
+}
+
+:host ::ng-deep .fp-log-head {
+  margin-bottom: 0.15rem;
+}
+
+:host ::ng-deep .fp-log-when {
+  color: #6c757d;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+:host ::ng-deep .fp-log-change {
+  margin-top: 0.15rem;
+}
+
+:host ::ng-deep .fp-log-note {
+  margin-top: 0.25rem;
+  color: #856404;
+  font-size: 0.82rem;
+}

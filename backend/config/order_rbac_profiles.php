@@ -32,7 +32,7 @@ return [
     ],
     'edit_order' => [
         'departments' => ['Admin', 'Operation Management', 'Shipping Management'],
-        'permissions' => ['orders.edit', 'orders.view'],
+        'permissions' => ['orders.edit', 'orders.cancel_line', 'orders.view'],
     ],
     'confirm_order' => [
         'departments' => ['Admin', 'Operation Management', 'Shipping Management', 'Customer Service'],
@@ -63,7 +63,17 @@ return [
         'permissions' => ['shipping.companies.statement', 'nav.shipping.master', 'orders.view', 'system.rbac'],
     ],
     'change_status' => [
-        'departments' => ['Admin', 'Operation Management', 'Operation Specialist', 'Logistics Specialist', 'Shipping Management', 'Data Entry'],
+        'departments' => [
+            'Admin',
+            'Operation Management',
+            'Operation Specialist',
+            'Logistics Specialist',
+            'Shipping Management',
+            'Data Entry',
+            'Customer Service',
+            'Finance and operations management',
+            'Review Management',
+        ],
         'permissions' => ['orders.change_status', 'orders.view'],
     ],
     'vip_shortage' => [

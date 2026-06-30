@@ -7,7 +7,7 @@
       <div><p class="title header w-75 m-auto">وصفات التصنيع</p></div>
     </div>
     <div class="col-4 d-flex align-items-center justify-content-end" style="gap:10px;">
-      <button class="btn btn-sm btn-danger" *ngIf="selectedIds.size > 0" [disabled]="bulkDeleting"
+      <button class="btn btn-sm btn-danger" *ngIf="canDeleteRecipe() && selectedIds.size > 0" [disabled]="bulkDeleting"
         (click)="bulkDelete()">
         <span *ngIf="!bulkDeleting">حذف المحدد ({{ selectedIds.size }})</span>
         <span *ngIf="bulkDeleting">جاري الحذف…</span>
@@ -42,7 +42,7 @@
     <table class="table table-bordered recipes-master-table" *ngIf="filteredRecipes.length > 0">
       <thead>
         <tr>
-          <th class="text-center" style="width:40px;">
+          <th class="text-center" style="width:40px;" *ngIf="canDeleteRecipe()">
             <input type="checkbox"
               [checked]="isAllFilteredSelected"
               (change)="toggleSelectAll()" title="تحديد الكل (الظاهر)" />
@@ -58,7 +58,7 @@
         <ng-container *ngFor="let r of filteredRecipes; let i = index">
           <!-- Master row -->
           <tr [class.table-active]="expandedRecipeId === r.id">
-            <td class="text-center">
+            <td class="text-center" *ngIf="canDeleteRecipe()">
               <input type="checkbox" [checked]="selectedIds.has(r.id)" (change)="toggleSelect(r.id)" />
             </td>
             <td>{{ i + 1 }}</td>
@@ -78,7 +78,7 @@
                 title="تعديل الوصفة">
                 تعديل
               </a>
-              <button class="btn btn-sm btn-outline-danger mx-1" (click)="askDelete(r.id)"
+              <button *ngIf="canDeleteRecipe()" class="btn btn-sm btn-outline-danger mx-1" (click)="askDelete(r.id)"
                 title="حذف الوصفة">
                 حذف
               </button>
@@ -87,7 +87,7 @@
 
           <!-- Detail row (expandable) -->
           <tr *ngIf="expandedRecipeId === r.id">
-            <td colspan="6" class="detail-cell">
+            <td [attr.colspan]="canDeleteRecipe() ? 6 : 5" class="detail-cell">
               <div *ngIf="loadingDetail" class="text-center py-3 text-muted">جاري تحميل التفاصيل…</div>
 
               <div *ngIf="!loadingDetail && expandedDetail" class="detail-content">

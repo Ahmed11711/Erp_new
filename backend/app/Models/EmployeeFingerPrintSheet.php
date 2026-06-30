@@ -33,4 +33,9 @@ class EmployeeFingerPrintSheet extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function logs()
+    {
+        return $this->hasMany(EmployeeFingerPrintSheetLog::class, 'finger_print_sheet_id')->orderByDesc('created_at');
+    }
+
 }

@@ -1,8 +1,14 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, HostListener, Inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SuppliersService } from '../services/suppliers.service';
 import { PaymentSourcesService, PaymentSourceItem } from 'src/app/accounting/services/payment-sources.service';
+import { TreeAccountService } from 'src/app/accounting/services/tree-account.service';
 import Swal from 'sweetalert2';
+
+interface TreeAccountOption {
+  id: number;
+  label: string;
+}
 
 export interface SupplierPayDialogData {
   supplier: { id: number; supplier_name: string; balance: number };
@@ -23,10 +29,11 @@ export interface SupplierPayDialogData {
 })
 export class DialogPayMoneyForSupplierComponent implements OnInit {
 
-  paymentType: 'bank' | 'safe' | 'service_account' = 'bank';
+  paymentType: 'bank' | 'safe' | 'service_account' | 'tree_account' = 'bank';
   bankId: number | null = null;
   safeId: number | null = null;
   serviceAccountId: number | null = null;
+  treeAccountId: number | null = null;
   payAmount: number | null = null;
   submitting = false;
 
@@ -34,11 +41,16 @@ export class DialogPayMoneyForSupplierComponent implements OnInit {
   banks: PaymentSourceItem[] = [];
   serviceAccounts: PaymentSourceItem[] = [];
 
+  treeAccounts: TreeAccountOption[] = [];
+  treeAccountSearch = '';
+  treePickerOpen = false;
+
   constructor(
     public dialogRef: MatDialogRef<DialogPayMoneyForSupplierComponent>,
     @Inject(MAT_DIALOG_DATA) public data: SupplierPayDialogData,
     private supplierService: SuppliersService,
-    private paymentSources: PaymentSourcesService
+    private paymentSources: PaymentSourcesService,
+    private treeAccountService: TreeAccountService
   ) {}
 
   ngOnInit() {
@@ -52,12 +64,81 @@ export class DialogPayMoneyForSupplierComponent implements OnInit {
       this.banks = res.banks || [];
       this.serviceAccounts = res.service_accounts || [];
     });
+
+    this.treeAccountService.getAll().subscribe((res) => {
+      const list = res?.success && Array.isArray(res.data) ? res.data : [];
+      this.treeAccounts = list
+        .filter((a) => a.id != null && a.name)
+        .map((a) => {
+          const code = a.code != null ? String(a.code) : '';
+          return {
+            id: Number(a.id),
+            label: code ? `${code} - ${a.name}` : String(a.name),
+          };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+    });
+  }
+
+  get filteredTreeAccounts(): TreeAccountOption[] {
+    const raw = String(this.treeAccountSearch ?? '').trim();
+    if (!raw) {
+      return this.treeAccounts;
+    }
+    const q = raw.toLowerCase();
+    return this.treeAccounts.filter(
+      (a) => a.label.toLowerCase().includes(q) || a.label.includes(raw) || String(a.id).includes(raw)
+    );
+  }
+
+  get selectedTreeAccountLabel(): string {
+    if (!this.treeAccountId) {
+      return '';
+    }
+    return this.treeAccounts.find((a) => a.id === this.treeAccountId)?.label ?? '';
+  }
+
+  toggleTreePicker(): void {
+    this.treePickerOpen = !this.treePickerOpen;
+    if (this.treePickerOpen) {
+      this.treeAccountSearch = '';
+    }
+  }
+
+  closeTreePicker(): void {
+    this.treePickerOpen = false;
+    this.treeAccountSearch = '';
+  }
+
+  selectTreeAccount(item: TreeAccountOption): void {
+    this.treeAccountId = item.id;
+    this.closeTreePicker();
+  }
+
+  clearTreeAccountSelection(event: Event): void {
+    event.stopPropagation();
+    this.treeAccountId = null;
+    this.closeTreePicker();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.treePickerOpen) {
+      return;
+    }
+    const target = event.target as HTMLElement;
+    if (!target.closest('.tree-picker')) {
+      this.closeTreePicker();
+    }
   }
 
   paymentTypeChange(): void {
     this.bankId = null;
     this.safeId = null;
     this.serviceAccountId = null;
+    this.treeAccountId = null;
+    this.treeAccountSearch = '';
+    this.treePickerOpen = false;
   }
 
   onCloseClick(): void {
@@ -73,6 +154,9 @@ export class DialogPayMoneyForSupplierComponent implements OnInit {
     }
     if (this.paymentType === 'service_account') {
       return !!this.serviceAccountId && this.serviceAccountId > 0;
+    }
+    if (this.paymentType === 'tree_account') {
+      return !!this.treeAccountId && this.treeAccountId > 0;
     }
     return false;
   }
@@ -104,6 +188,8 @@ export class DialogPayMoneyForSupplierComponent implements OnInit {
       payload.safe_id = this.safeId;
     } else if (this.paymentType === 'service_account') {
       payload.service_account_id = this.serviceAccountId;
+    } else if (this.paymentType === 'tree_account') {
+      payload.tree_account_id = this.treeAccountId;
     } else {
       payload.bank_id = this.bankId;
     }

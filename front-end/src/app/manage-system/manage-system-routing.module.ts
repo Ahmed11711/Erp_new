@@ -3,7 +3,6 @@ import { RouterModule, Routes } from '@angular/router';
 import { AddUserComponent } from './add-user/add-user.component';
 import { UsersComponent } from './users/users.component';
 import { PowersComponent } from './powers/powers.component';
-import { FollowUsersComponent } from './follow-users/follow-users.component';
 import { SettingsComponent } from './settings/settings.component';
 import { RolesManagementComponent } from './roles-management/roles-management.component';
 import { departmentGuard } from '../guards/department.guard';
@@ -16,7 +15,6 @@ const routes: Routes = [
   { path: 'users', component: UsersComponent, canActivate: [departmentGuard], data: { rbacPermissions: sys } },
   { path: 'powers', component: PowersComponent, canActivate: [departmentGuard], data: { rbacPermissions: sys } },
   { path: 'rbac-roles', component: RolesManagementComponent, canActivate: [departmentGuard], data: { rbacPermissions: sys } },
-  { path: 'followusers', component: FollowUsersComponent, canActivate: [departmentGuard], data: { rbacPermissions: sys } },
   { path: 'settings', component: SettingsComponent, canActivate: [departmentGuard], data: { rbacPermissions: [...RBAC_ROUTE.shopifySettings] } },
 ];
 

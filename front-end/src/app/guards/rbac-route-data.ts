@@ -12,6 +12,7 @@ export const RBAC_ROUTE = {
   purchases: ['purchases.view'],
   manufacturingAll: ['manufacturing.view'],
   manufacturingWrite: ['manufacturing.edit_recipe', 'categories.manage', 'system.rbac'],
+  manufacturingDeleteRecipe: ['manufacturing.delete_recipe', 'system.rbac'],
   processingAll: ['processing.view', 'purchases.view', 'suppliers.view'],
   ordersCreate: ['orders.create'],
   ordersView: ['orders.view'],
@@ -45,6 +46,10 @@ export const RBAC_ROUTE = {
   receiptsAdmin: ['nav.receipts.admin', 'system.rbac'],
   receiptsQuotes: ['nav.receipts.quotes', 'orders.view'],
   systemAdmin: ['system.rbac'],
+  /** سجل نشاط المستخدمين — صلاحية مستقلة (متاحة حالياً للأدمن فقط) */
+  activityLog: ['system.activity_log'],
+  /** فتح العنصر المرتبط بالحركة للتعديل — صلاحية مستقلة (الأدمن فقط حالياً) */
+  activityLogEdit: ['system.activity_log.edit'],
   settingsManage: ['settings.view', 'settings.edit', 'system.rbac'],
   hrEmployees: ['employees.view', 'employees.create', 'employees.edit'],
   hrAttendance: ['employees.attendance'],

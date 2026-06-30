@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Approvals;
+use App\Models\EmployeeFingerPrintSheet;
+use App\Services\Hr\EmployeeFingerPrintSheetAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Purchase;
@@ -75,7 +77,16 @@ class ApprovalsController extends Controller
                     $id = $columnValues['id'];
                     unset($columnValues['id']);
 
-                    DB::table($data->table_name)->where('id', $id)->update($columnValues);
+                    if ($data->table_name === 'employee_finger_print_sheets') {
+                        $sheet = EmployeeFingerPrintSheet::findOrFail($id);
+                        $audit = app(EmployeeFingerPrintSheetAuditService::class);
+                        $fields = array_keys($columnValues);
+                        $changes = $audit->diffModel($sheet, $columnValues, $fields);
+                        DB::table($data->table_name)->where('id', $id)->update($columnValues);
+                        $audit->log($sheet->id, 'اعتماد تعديل', $changes);
+                    } else {
+                        DB::table($data->table_name)->where('id', $id)->update($columnValues);
+                    }
                 }
             }
 

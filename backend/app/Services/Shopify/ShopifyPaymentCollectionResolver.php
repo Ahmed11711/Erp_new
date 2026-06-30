@@ -118,6 +118,33 @@ class ShopifyPaymentCollectionResolver
         return (string) config('shopify_collection.default_company', 'Visa');
     }
 
+    /**
+     * يجد شركة تحصيل موجودة من نص وسيلة الدفع (بدون إنشاء).
+     */
+    public function findCompanyForGatewayLabel(?string $gatewayLabel): ?CollectionCompany
+    {
+        $gatewayLabel = trim((string) ($gatewayLabel ?? ''));
+        if ($gatewayLabel === '') {
+            return null;
+        }
+
+        $payload = ['payment_gateway_names' => [$gatewayLabel]];
+        $canonical = $this->resolveCanonicalName($gatewayLabel, $payload);
+        if (trim($canonical) === '') {
+            return null;
+        }
+
+        $lower = mb_strtolower($canonical, 'UTF-8');
+
+        return CollectionCompany::query()
+            ->whereRaw('LOWER(name) = ?', [$lower])
+            ->first()
+            ?? CollectionCompany::query()
+                ->whereRaw('LOWER(name) LIKE ?', ['%' . $lower . '%'])
+                ->orderBy('id')
+                ->first();
+    }
+
     private function looksLikeCardPayment(string $blob, ?string $cardBrand): bool
     {
         if ($cardBrand !== null && $cardBrand !== '') {

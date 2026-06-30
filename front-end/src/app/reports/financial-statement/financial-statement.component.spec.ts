@@ -7,6 +7,9 @@ import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
 
+import { PdfService } from 'src/app/pdf.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+
 import { FinancialStatementComponent } from './financial-statement.component';
 
 describe('FinancialStatementComponent', () => {
@@ -37,7 +40,9 @@ describe('FinancialStatementComponent', () => {
         { provide: BankService, useValue: { getAll: () => of({ data: [] }) } },
         { provide: ServiceAccountsService, useValue: { index: () => of({ data: [] }) } },
         { provide: ActivatedRoute, useValue: routeStub },
-        { provide: Router, useValue: routerStub }
+        { provide: Router, useValue: routerStub },
+        { provide: PdfService, useValue: { generateAccountStatementPdf: () => Promise.resolve() } },
+        { provide: RbacService, useValue: { can: () => false } }
       ]
     });
     fixture = TestBed.createComponent(FinancialStatementComponent);
