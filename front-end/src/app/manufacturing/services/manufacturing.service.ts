@@ -38,6 +38,8 @@ export interface RecipeImportPreviewResponse {
     recipes_total: number;
     missing_items_total: number;
     existing_recipes_total: number;
+    sheets_parsed?: number;
+    parsed_sheet_names?: string[];
   };
   message: string;
 }

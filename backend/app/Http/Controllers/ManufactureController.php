@@ -8,6 +8,7 @@ use App\Models\ConfirmedManfucture;
 use App\Models\Item;
 use App\Models\Manufacture;
 use App\Models\ManufactureProduct;
+use App\Models\Recipe;
 use App\Models\Stock;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
@@ -155,13 +156,14 @@ class ManufactureController extends Controller
         $scope = (string) $request->input('scope', 'manufacture_only');
 
         /**
-         * manufacture_only: أصناف لها صف Manufacture ومخرجاتها في هذا المخزن (سلوك قديم).
+         * manufacture_only: أصناف لها وصفة تصنيع (Recipe و/أو Manufacture) في هذا المخزن.
          * all_categories: كل الأصناف في المخزن — مطلوب لدمج WIP→تام نحو صنف تام أُنشئ من ترقية/تجزئة دون Manufacture يشير إليه.
          */
         if ($scope === 'all_categories') {
             $p = [];
             $rows = Category::query()
                 ->where('warehouse', $warehouse)
+                ->whereNull('parent_item_id')
                 ->orderBy('category_name')
                 ->get(['id', 'category_name', 'quantity', 'category_price', 'unit_price']);
             foreach ($rows as $row) {
@@ -176,33 +178,17 @@ class ManufactureController extends Controller
             return response()->json($p, 200);
         }
 
-        $filteredManufactures = Manufacture::with('product')
-            ->get()
-            ->filter(function ($manufacture) use ($warehouse) {
-                return $manufacture->product
-                    && trim((string) $manufacture->product->warehouse) === trim($warehouse);
-            });
-
-        /** @var list<int> $anchorIds */
-        $anchorIds = $filteredManufactures
-            ->map(fn ($manufacture) => (int) $manufacture->product_id)
-            ->unique()
-            ->values()
-            ->all();
-
-        /** @var \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, Item>> $variantsByAnchor */
-        $variantsByAnchor = collect();
-        if ($anchorIds !== []) {
-            $variantsByAnchor = Item::query()
-                ->whereIn('parent_item_id', $anchorIds)
-                ->where('warehouse', $warehouse)
-                ->orderBy('id')
-                ->get()
-                ->groupBy('parent_item_id');
-        }
-
         $p = [];
         $seenIds = [];
+        $warehouseTrimmed = trim($warehouse);
+
+        // Include any item (base or color variant) that has its own Manufacture row.
+        $filteredManufactures = Manufacture::with('product')
+            ->get()
+            ->filter(function ($manufacture) use ($warehouseTrimmed) {
+                return $manufacture->product
+                    && trim((string) $manufacture->product->warehouse) === $warehouseTrimmed;
+            });
 
         foreach ($filteredManufactures as $manufacture) {
             $base = $manufacture->product;
@@ -210,26 +196,59 @@ class ManufactureController extends Controller
                 continue;
             }
 
-            $rows = collect([$base])->concat(
-                $variantsByAnchor->get((int) $base->id, collect())->all()
-            );
-
-            foreach ($rows as $row) {
-                $id = (int) $row->id;
-                if (isset($seenIds[$id])) {
-                    continue;
-                }
-                $seenIds[$id] = true;
-
-                $data = (object) [
-                    'id' => $id,
-                    'category_name' => $row->category_name,
-                    'cost' => (float) $manufacture->total,
-                    'quantity' => $row->quantity,
-                ];
-                array_push($p, $data);
+            $id = (int) $base->id;
+            if (isset($seenIds[$id])) {
+                continue;
             }
+            $seenIds[$id] = true;
+
+            $p[] = (object) [
+                'id' => $id,
+                'category_name' => $base->category_name,
+                'cost' => (float) $manufacture->total,
+                'quantity' => $base->quantity,
+            ];
         }
+
+        // Include products that have a Recipe (including color variants with their own BOM).
+        $recipeOutputs = Recipe::query()
+            ->with(['outputItem', 'ingredients'])
+            ->whereNotNull('output_item_id')
+            ->get();
+
+        foreach ($recipeOutputs as $recipe) {
+            $base = $recipe->outputItem;
+            if (! $base) {
+                continue;
+            }
+            if (trim((string) $base->warehouse) !== $warehouseTrimmed) {
+                continue;
+            }
+
+            $id = (int) $base->id;
+            if (isset($seenIds[$id])) {
+                continue;
+            }
+            $seenIds[$id] = true;
+
+            $cost = 0.0;
+            foreach ($recipe->ingredients as $ingredient) {
+                $qty = (float) ($ingredient->quantity ?? 0);
+                $unitCost = (float) ($ingredient->unit_cost ?? 0);
+                if ($qty > 0) {
+                    $cost += $qty * $unitCost;
+                }
+            }
+
+            $p[] = (object) [
+                'id' => $id,
+                'category_name' => $base->category_name,
+                'cost' => round($cost, 2),
+                'quantity' => $base->quantity,
+            ];
+        }
+
+        usort($p, fn ($a, $b) => strcmp((string) $a->category_name, (string) $b->category_name));
 
         return response()->json($p, 200);
     }
@@ -352,13 +371,20 @@ class ManufactureController extends Controller
                 || ($isWipSemiFinished && $stayWipOnly && $request->status === 'تم الانتهاء');
 
             $manufactureAnchorProductId = ManufacturingConsumptionResolver::outputAnchorId($productItem);
+            $selectedProductId = (int) $request->product_id;
 
             if ($needsManufactureDefinition) {
-                $manfuctureExists = Manufacture::where('product_id', $manufactureAnchorProductId)->exists();
+                $manfuctureExists = Manufacture::where('product_id', $selectedProductId)->exists()
+                    || Manufacture::where('product_id', $manufactureAnchorProductId)->exists();
+                if (! $manfuctureExists) {
+                    $manfuctureExists = $this->manufactureRecipeSync->ensureLegacyManufactureForProduct($selectedProductId)
+                        || ($manufactureAnchorProductId !== $selectedProductId
+                            && $this->manufactureRecipeSync->ensureLegacyManufactureForProduct($manufactureAnchorProductId));
+                }
                 if (! $manfuctureExists) {
                     DB::rollBack();
 
-                    return response()->json(['message' => 'لا توجد وصفة تصنيع (Manufacture) لهذا الصنف في النظام.'], 422);
+                    return response()->json(['message' => 'لا توجد وصفة تصنيع لهذا الصنف في النظام.'], 422);
                 }
             }
 

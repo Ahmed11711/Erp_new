@@ -11,6 +11,7 @@ use App\Http\Controllers\Inventory\StockCountImportController;
 use App\Http\Controllers\Manufacturing\ProductionOrderController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\MeasurementController;
+use App\Http\Controllers\ItemClassificationController;
 use App\Http\Middleware\MeasurementApiAccess;
 use App\Http\Middleware\CategoriesApiAccess;
 use App\Http\Middleware\InventoryGlSyncApiAccess;
@@ -188,6 +189,7 @@ Route::middleware('auth')->group(function () {
     Route::get('shippinglines', [ShippingLineController::class, 'index']);
     Route::get('orders/search', [OrdersController::class, 'search']);
     Route::get('orders/visible-statuses', [OrdersController::class, 'visibleStatuses']);
+    Route::post('orders/print', [OrdersController::class, 'printOrders']);
     Route::post('orders/{id}/shopify-review', [OrdersController::class, 'shopifyReview'])
         ->middleware('permission:orders.shopify.review|nav.shopify.dashboard|nav.shopify|system.rbac')
         ->whereNumber('id');
@@ -314,6 +316,12 @@ Route::middleware('auth')->group(function () {
         Route::post('measurements', [MeasurementController::class, 'store']);
         Route::put('measurements/{measurement}', [MeasurementController::class, 'update']);
         Route::delete('measurements/{measurement}', [MeasurementController::class, 'destroy']);
+    });
+
+    Route::middleware([MeasurementApiAccess::class])->group(function () {
+        Route::get('item-classifications', [ItemClassificationController::class, 'index']);
+        Route::post('item-classifications', [ItemClassificationController::class, 'store']);
+        Route::delete('item-classifications/{id}', [ItemClassificationController::class, 'destroy']);
     });
 
     /** مسارات الأصناف — RBAC categories.view / categories.manage مع الأقسام السابقة */
@@ -532,11 +540,13 @@ Route::middleware('auth')->group(function () {
         Route::post('empHoursPermission', [App\Http\Controllers\EmployeeController::class, 'empHoursPermission']);
         Route::post('empHoursPermissionall', [App\Http\Controllers\EmployeeController::class, 'empHoursPermissionAll']);
         Route::post('employees/edit/{id}', [App\Http\Controllers\EmployeeController::class, 'edit']);
+        Route::patch('employees/{id}/payable-account', [App\Http\Controllers\EmployeeController::class, 'updatePayableAccount']);
         Route::get('employees/absences', [App\Http\Controllers\EmployeeSubtractionController::class, 'employeesAbsences']);
         Route::post('employee/absencestatus', [App\Http\Controllers\EmployeeSubtractionController::class, 'absenceStatus']);
         Route::get('employees/accountstatment', [App\Http\Controllers\EmployeeController::class, 'accountStatment']);
         Route::get('employees/accountstatment/reviewed/{id}', [App\Http\Controllers\EmployeeController::class, 'reviewedStatus']);
         Route::post('employees/excelfingerprintdata', [App\Http\Controllers\EmployeeController::class, 'saveExcelFingerPrintData']);
+        Route::post('employees/link-payable-accounts', [App\Http\Controllers\EmployeeController::class, 'linkPayableAccounts']);
         Route::post('updatefingerprintsheet', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'update']);
         Route::get('fingerprint-sheet-logs/{id}', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'logs']);
         Route::post('addCheckOut/{id}', [App\Http\Controllers\EmployeeFingerPrintSheetController::class, 'addCheckOut']);
@@ -708,8 +718,15 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
     Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
-    Route::post('tree_accounts/{id}/balance-adjustment', [TreeAccountController::class, 'balanceAdjustment']);
-    Route::post('tree_accounts/bulk-balance-adjustment', [TreeAccountController::class, 'bulkBalanceAdjustment']);
+    Route::middleware(['permission:finance.tree_account.balance_adjustment|system.rbac'])->group(function () {
+        Route::post('tree_accounts/{id}/balance-adjustment', [TreeAccountController::class, 'balanceAdjustment']);
+        Route::post('tree_accounts/bulk-balance-adjustment', [TreeAccountController::class, 'bulkBalanceAdjustment']);
+    });
+    Route::middleware(['department.access:Admin'])->group(function () {
+        Route::get('tree_accounts/trash', [TreeAccountController::class, 'trash']);
+        Route::post('tree_accounts/{id}/restore', [TreeAccountController::class, 'restore']);
+        Route::delete('tree_accounts/{id}/force', [TreeAccountController::class, 'forceDestroy']);
+    });
     Route::get('tree_accounts/{id}/audits', [TreeAccountController::class, 'audits']);
     Route::apiResource('tree_accounts', TreeAccountController::class)->names('tree_account');
 });

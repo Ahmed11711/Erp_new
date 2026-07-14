@@ -8,6 +8,7 @@ use App\Models\EmployeeMonthPaid;
 use App\Models\Safe;
 use App\Models\SafeTransaction;
 use App\Models\ServiceAccount;
+use App\Services\Accounting\AccountLinkingService;
 use App\Services\Accounting\EmployeePaymentAccountingService;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -15,7 +16,9 @@ use InvalidArgumentException;
 class EmployeeSalaryDisbursementService
 {
     public function __construct(
-        private EmployeePaymentAccountingService $employeePaymentAccountingService
+        private EmployeePaymentAccountingService $employeePaymentAccountingService,
+        private EmployeeSalaryAccrualService $employeeSalaryAccrualService,
+        private AccountLinkingService $accountLinkingService,
     ) {}
 
     /**
@@ -80,14 +83,22 @@ class EmployeeSalaryDisbursementService
 
         $this->decrementOperationalBalance($sourceType, $sourceId, $amount, $employeeData, $month, $year);
 
-        $posted = $this->employeePaymentAccountingService->postPaymentToCreditAccount(
+        $payableAccount = $this->accountLinkingService->resolveEmployeePayableAccount($employeeData);
+        if (! $payableAccount) {
+            throw new InvalidArgumentException('لم يُربط الموظف بحساب في شجرة الحسابات — اختر الحساب من بيانات الموظف');
+        }
+
+        $this->employeeSalaryAccrualService->ensureAccruedBeforePayment($employeeId, $month, $year, $amount);
+
+        $posted = $this->employeePaymentAccountingService->postSalaryDisbursement(
             $desc,
             $amount,
+            (int) $payableAccount->id,
             $creditTreeId,
             $glNote
         );
         if (! $posted) {
-            throw new InvalidArgumentException('تعذر تسجيل القيد المحاسبي — تحقق من ربط المصدر بشجرة الحسابات وحساب مصروف الرواتب');
+            throw new InvalidArgumentException('تعذر تسجيل القيد المحاسبي — تحقق من ربط المصدر بشجرة الحسابات وحساب مستحقات الموظف');
         }
 
         return [$paid, $employeeData];

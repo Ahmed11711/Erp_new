@@ -70,7 +70,7 @@ class ShippingCompanyDeletionService
                 }
 
                 $this->purgeTreeAccountLedger($treeAccountId);
-                TreeAccount::query()->whereKey($treeAccountId)->delete();
+                TreeAccount::query()->whereKey($treeAccountId)->forceDelete();
             }
 
             foreach (array_values(array_unique($parentIds)) as $parentId) {

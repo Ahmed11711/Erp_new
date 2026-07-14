@@ -1,137 +1,73 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-md-4 d-flex align-items-center">
+<div class="container-fluid home-page">
+  <div class="row py-3 align-items-center home-topbar">
+    <div class="col-6 col-md-4 d-flex align-items-center order-2 order-md-1">
       <app-time></app-time>
     </div>
-    <div class="col-md-5">
-      <div>
-        <p class="title header w-50 m-auto">الصفحة الرئيسية</p>
-      </div>
+    <div class="col-12 col-md-4 order-1 order-md-2">
+      <p class="title header m-auto">الصفحة الرئيسية</p>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
+    <div class="col-6 col-md-4 d-none d-md-flex align-items-center justify-content-end order-3">
     </div>
   </div>
-
-  <!-- Financial Overview Section -->
-  <!-- <div class="row mb-4" *ngIf="user == 'Admin' || user == 'Account Management'">
-    <div class="col-md-4">
-      <div class="card text-white bg-success mb-3" style="cursor: pointer;" routerLink="/dashboard/accounting/safes">
-        <div class="card-header">إجمالي الخزن</div>
-        <div class="card-body">
-          <h3 class="card-title">{{ totalSafeBalance | number:'1.2-2' }}</h3>
-          <p class="card-text">رصيد جميع الخزائن</p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card text-white bg-primary mb-3" style="cursor: pointer;" routerLink="/dashboard/accounting/banks">
-        <div class="card-header">إجمالي البنوك</div>
-        <div class="card-body">
-          <h3 class="card-title">{{ totalBankBalance | number:'1.2-2' }}</h3>
-          <p class="card-text">رصيد جميع البنوك</p>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card text-white bg-secondary mb-3" style="cursor: pointer;"
-        routerLink="/dashboard/reports/financialstatement">
-        <div class="card-header">كشف حساب تفصيلي</div>
-        <div class="card-body">
-          <h3 class="card-title"><i class="fa fa-list-alt"></i></h3>
-          <p class="card-text">عرض حركات الحسابات</p>
-        </div>
-      </div>
-    </div>
-  </div> -->
 
   <div *ngFor="let notification of notifications">
     {{ notification.message }}
   </div>
 
-  <div class="container-fluid text-center mt-5">
-    <div class="row d-flex justify-content-center">
-      <div class="head" routerLink="/dashboard/shipping/listorders">
-        <h4>الطلبات</h4>
-        <mat-icon>local_shipping</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/financial/expenses" *ngIf="user == 'Admin'">
-        <h4>المصروفات</h4>
-        <mat-icon>commute</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/purchases/list_invoice" *ngIf="user == 'Admin'">
-        <h4>المشتريات</h4>
-        <mat-icon>commute</mat-icon>
-      </div>
+  <div class="home-cards">
+    <div class="head" routerLink="/dashboard/shipping/listorders">
+      <mat-icon>local_shipping</mat-icon>
+      <h4>الطلبات</h4>
     </div>
-    <div class="row d-flex justify-content-center">
-      <div class="head" routerLink="/dashboard/notification">
-        <h4>الاشعارات</h4>
-        <mat-icon>notifications</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/shipping/listorders" *ngIf="user == 'Admin'">
-        <h4>تقرير المخزون</h4>
-        <mat-icon>commute</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/shipping/shippingcompany" *ngIf="user == 'Admin'">
-        <h4>حساب المندوبين وشركات الشحن</h4>
-        <mat-icon>commute</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/shipping/collection-companies"
-        *ngIf="rbac.canAny(['nav.shipping.master', 'shipping.companies.manage', 'collection_companies.manage', 'system.rbac'])">
-        <h4>شركات التحصيل والدفع</h4>
-        <mat-icon>payments</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/shipping/shipping-accounts-report"
-        *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
-        <h4>تقارير ذمم الشحن والتحصيل</h4>
-        <mat-icon>account_balance_wallet</mat-icon>
-      </div>
+    <div class="head" routerLink="/dashboard/financial/expenses" *ngIf="rbac.canAny(RBAC.financeTeam)">
+      <mat-icon>commute</mat-icon>
+      <h4>المصروفات</h4>
     </div>
-    <div class="row d-flex justify-content-center">
-      <div class="head" routerLink="/dashboard/approvals" *ngIf="user == 'Admin'">
-        <h4>الموافقات</h4>
-        <mat-icon>checklist</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/admin/tracking" *ngIf="user == 'Admin'">
-        <h4>تتبع</h4>
-        <mat-icon>checklist</mat-icon>
-      </div>
-      <div class="head" routerLink="/dashboard/shopify" *ngIf="user == 'Admin'">
-        <h4>Shopify</h4>
-        <mat-icon>storefront</mat-icon>
-      </div>
+    <div class="head" routerLink="/dashboard/purchases/list_invoice" *ngIf="user == 'Admin'">
+      <mat-icon>shopping_cart</mat-icon>
+      <h4>المشتريات</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/notification">
+      <mat-icon>notifications</mat-icon>
+      <h4>الاشعارات</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/shipping/listorders" *ngIf="user == 'Admin'">
+      <mat-icon>inventory_2</mat-icon>
+      <h4>تقرير المخزون</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/shipping/shippingcompany" *ngIf="user == 'Admin'">
+      <mat-icon>local_shipping</mat-icon>
+      <h4>حساب المندوبين وشركات الشحن</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/shipping/collection-companies"
+      *ngIf="rbac.canAny(['nav.shipping.master', 'shipping.companies.manage', 'collection_companies.manage', 'system.rbac'])">
+      <mat-icon>payments</mat-icon>
+      <h4>شركات التحصيل والدفع</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/shipping/shipping-accounts-report"
+      *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
+      <mat-icon>account_balance_wallet</mat-icon>
+      <h4>تقارير ذمم الشحن والتحصيل</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/approvals" *ngIf="user == 'Admin'">
+      <mat-icon>checklist</mat-icon>
+      <h4>الموافقات</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/admin/tracking" *ngIf="user == 'Admin'">
+      <mat-icon>my_location</mat-icon>
+      <h4>تتبع</h4>
+    </div>
+    <div class="head" routerLink="/dashboard/shopify" *ngIf="user == 'Admin'">
+      <mat-icon>storefront</mat-icon>
+      <h4>Shopify</h4>
     </div>
   </div>
 
-  <div class="row p-2">
-    <div class="col-md-6">
-      <!-- <div class="card">
-        <div class="card-header card-header-info">
-          <h4 class="card-title">الحسابات الخدمية</h4>
-        </div>
-        <div class="card-body table-responsive">
-          <table class="table table-hover">
-            <thead class="text-info">
-              <th></th>
-              <th>الحساب</th>
-              <th>الرصيد</th>
-            </thead>
-            <tbody>
-              <tr *ngFor="let account of serviceAccounts">
-                <td>
-                  <img *ngIf="account.img" [src]="account.img"
-                    style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
-                </td>
-                <td>{{ account.name }}</td>
-                <td>{{ account.balance }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div> -->
-    </div>
-    <div class="col-md-6 border">
-      <app-categories-report></app-categories-report>
+  <div class="row p-2 mt-3">
+    <div class="col-12">
+      <div class="report-panel">
+        <app-categories-report></app-categories-report>
+      </div>
     </div>
   </div>
 

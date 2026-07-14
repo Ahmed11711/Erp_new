@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Inventory;
 use App\Enums\InventoryMovementType;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\ItemClassification;
 use App\Models\Production;
 use App\Models\Stock;
 use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Inventory\InventoryMovementLedgerService;
 use App\Models\TreeAccount;
+use App\Services\Items\LimitedExcelReadFilter;
 use App\Services\Items\RecipeSheetImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,11 +80,23 @@ class InventoryExcelImportController extends Controller
     /**
      * تحميل ملف Excel/CSV: UTF-8 أو UTF-16؛ CSV يُفصل تلقائياً بـ TAB أو ; أو ,.
      */
-    private function loadSpreadsheet(string $path): Spreadsheet
+    private function loadSpreadsheet(string $path, ?string $sheetName = null): Spreadsheet
     {
         $ext = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
         if (! in_array($ext, ['csv', 'txt'], true)) {
-            return IOFactory::load($path);
+            $reader = IOFactory::createReaderForFile($path);
+            if (method_exists($reader, 'setReadDataOnly')) {
+                $reader->setReadDataOnly(true);
+            }
+            if (method_exists($reader, 'setReadFilter')) {
+                $reader->setReadFilter(new LimitedExcelReadFilter(maxRow: 25000, maxCol: 25));
+            }
+            $target = trim((string) ($sheetName ?? ''));
+            if ($target !== '' && method_exists($reader, 'setLoadSheetsOnly')) {
+                $reader->setLoadSheetsOnly([$target]);
+            }
+
+            return $reader->load($path);
         }
 
         $raw = file_get_contents($path);
@@ -132,7 +146,7 @@ class InventoryExcelImportController extends Controller
             }
         }
 
-        $branchCol = $this->columnIndex($idx, ['فرع الانتاج', 'خط الانتاج', 'production_line']);
+        $branchCol = $this->columnIndex($idx, ['فرع الانتاج', 'خط الانتاج', 'production_line', 'القسم', 'قسم']);
         if ($branchCol !== null) {
             $label = trim((string) ($line[$branchCol] ?? ''));
             if ($label !== '') {
@@ -146,6 +160,41 @@ class InventoryExcelImportController extends Controller
         return $fallback;
     }
 
+    private function resolveClassificationIdFromLine(array $line, array $idx, string $warehouse, ?int $fallback = null): ?int
+    {
+        $idCol = $this->columnIndex($idx, ['item_classification_id', 'رقم التصنيف']);
+        if ($idCol !== null && array_key_exists($idCol, $line)) {
+            $raw = trim((string) ($line[$idCol] ?? ''));
+            $parsed = filter_var($raw, FILTER_VALIDATE_INT);
+            if ($parsed !== false && $parsed > 0 && ItemClassification::query()->whereKey($parsed)->exists()) {
+                return (int) $parsed;
+            }
+        }
+
+        $classCol = $this->columnIndex($idx, ['item_classification', 'التصنيف', 'تصنيف', 'classification']);
+        if ($classCol !== null) {
+            $label = trim((string) ($line[$classCol] ?? ''));
+            if ($label !== '') {
+                $found = ItemClassification::query()
+                    ->where('warehouse', $warehouse)
+                    ->whereRaw('TRIM(classification_name) = ?', [$label])
+                    ->value('id');
+                if ($found) {
+                    return (int) $found;
+                }
+
+                $created = ItemClassification::query()->create([
+                    'warehouse' => $warehouse,
+                    'classification_name' => $label,
+                ]);
+
+                return (int) $created->id;
+            }
+        }
+
+        return $fallback;
+    }
+
     /**
      * حقول اختيارية من الصف إن وُجدت أعمدتها (كود، لون، فرع إنتاج، مرجع، حد أدنى، وحدة قياس).
      */
@@ -153,7 +202,7 @@ class InventoryExcelImportController extends Controller
     {
         $updates = [];
 
-        $codeCol = $this->columnIndex($idx, ['item_code', 'sku', 'كود الصنف', 'الكود', 'الباركود']);
+        $codeCol = $this->columnIndex($idx, ['item_code', 'sku', 'كود الصنف', 'الكود', 'الباركود', 'اكواد كجالس', 'اكواد']);
         if ($codeCol !== null) {
             $v = trim((string) ($line[$codeCol] ?? ''));
             if ($v !== '') {
@@ -175,6 +224,11 @@ class InventoryExcelImportController extends Controller
             if ($v !== '') {
                 $updates['ref'] = $v;
             }
+        }
+
+        $newClassId = $this->resolveClassificationIdFromLine($line, $idx, (string) $cat->warehouse, (int) ($cat->item_classification_id ?? 0) ?: null);
+        if ($newClassId !== null && (int) ($cat->item_classification_id ?? 0) !== $newClassId) {
+            $updates['item_classification_id'] = $newClassId;
         }
 
         $minCol = $this->columnIndex($idx, ['minimum_quantity', 'الحد الأدنى للكمية', 'الحد الأدنى', 'الحد الادنى']);
@@ -204,6 +258,127 @@ class InventoryExcelImportController extends Controller
     {
         return array_map(fn ($c) => is_string($c) ? strtolower(trim($c)) : $c, $row);
     }
+
+    /**
+     * Build a label→columnIndex map from a header row WITHOUT array_flip (which
+     * crashes on null/float cells). Empty / duplicate labels are skipped.
+     *
+     * @return array<string,int>
+     */
+    private function buildHeaderIndex(array $headerCells): array
+    {
+        $map = [];
+        foreach ($headerCells as $pos => $cell) {
+            if ($cell === null) {
+                continue;
+            }
+            $label = is_string($cell) ? strtolower(trim($cell)) : trim((string) $cell);
+            if ($label === '') {
+                continue;
+            }
+            if (! array_key_exists($label, $map)) {
+                $map[$label] = $pos; // first occurrence wins
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Locate the real header row within a set of raw rows. The header is the first
+     * row that has ≥2 non-empty cells AND matches at least one of the given name
+     * aliases. Falls back to the first row with ≥2 non-empty cells.
+     *
+     * @param  list<string>  $nameAliases
+     * @return array{0:int,1:array<string,int>} [headerRowIndex, labelIndexMap]
+     */
+    private function locateHeaderRow(array $rows, array $nameAliases): array
+    {
+        $fallback = null;
+        foreach ($rows as $i => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $nonEmpty = 0;
+            foreach ($row as $c) {
+                if ($c !== null && trim((string) $c) !== '') {
+                    $nonEmpty++;
+                }
+            }
+            if ($nonEmpty < 2) {
+                continue;
+            }
+            $map = $this->buildHeaderIndex($row);
+            if ($fallback === null) {
+                $fallback = [$i, $map];
+            }
+            if ($this->columnIndex($map, $nameAliases) !== null) {
+                return [$i, $map];
+            }
+        }
+
+        return $fallback ?? [0, []];
+    }
+
+    /**
+     * Load the best-matching sheet from a workbook and return its rows + header index.
+     * If $sheetName is provided it is preferred; otherwise every sheet is scanned and
+     * the first one whose header contains a name column is used (active sheet first).
+     *
+     * @param  list<string>  $nameAliases
+     * @return array{0:array<int,array>,1:int,2:array<string,int>} [rows, headerRowIndex, labelIndexMap]
+     */
+    private function loadSheetRows(string $path, array $nameAliases, ?string $sheetName = null): array
+    {
+        $target = trim((string) ($sheetName ?? ''));
+        if ($target !== '') {
+            $spreadsheet = $this->loadSpreadsheet($path, $target);
+            $sheet = $spreadsheet->getSheet(0);
+            $rows = $sheet->toArray(null, true, true, false);
+            if (count($rows) >= 2) {
+                [$hi, $map] = $this->locateHeaderRow($rows, $nameAliases);
+
+                return [$rows, $hi, $map];
+            }
+
+            return [[], 0, []];
+        }
+
+        $spreadsheet = $this->loadSpreadsheet($path);
+
+        $fallback = null;
+        $candidates = [];
+        $active = $spreadsheet->getActiveSheet();
+        $candidates[] = $active;
+        foreach ($spreadsheet->getAllSheets() as $sheet) {
+            if ($sheet !== $active) {
+                $candidates[] = $sheet;
+            }
+        }
+
+        foreach ($candidates as $sheet) {
+            $rows = $sheet->toArray(null, true, true, false);
+            if (count($rows) < 2) {
+                continue;
+            }
+            [$hi, $map] = $this->locateHeaderRow($rows, $nameAliases);
+            if ($fallback === null) {
+                $fallback = [$rows, $hi, $map];
+            }
+            if ($map !== [] && $this->columnIndex($map, $nameAliases) !== null) {
+                return [$rows, $hi, $map];
+            }
+        }
+
+        return $fallback ?? [[], 0, []];
+    }
+
+    /** Aliases for the item name column across all supported Arabic sheets. */
+    private const NAME_ALIASES = [
+        'name', 'category_name', 'match', 'product', 'item',
+        'اسم الصنف', 'الصنف', 'اسم', 'الاصناف', 'البيانات',
+        'الخامات', 'الخامة', 'الخامه', 'كود الصنف', 'الباركود',
+    ];
 
     /**
      * أول عمود يطابق أحد الأسماء (إنجليزي أو عربي). الرؤوس مُطبَّعة بـ headerRow().
@@ -242,6 +417,7 @@ class InventoryExcelImportController extends Controller
         $request->validate([
             'file' => 'required|file|mimes:xlsx,xls,csv,txt',
             'default_warehouse' => 'nullable|string|max:255',
+            'sheet' => 'nullable|string|max:255',
         ]);
 
         try {
@@ -251,14 +427,11 @@ class InventoryExcelImportController extends Controller
         }
 
         $path = $request->file('file')->getRealPath();
-        $sheet = $this->loadSpreadsheet($path)->getActiveSheet();
-        $rows = $sheet->toArray();
-        if (count($rows) < 2) {
-            return response()->json(['message' => 'Empty sheet'], 422);
+        [$rows, $headerIndex, $idx] = $this->loadSheetRows($path, self::NAME_ALIASES, $request->input('sheet'));
+        if (count($rows) < 2 || $idx === []) {
+            return response()->json(['message' => 'الملف فارغ أو لا يحتوي على صف عناوين صالح.'], 422);
         }
 
-        $headers = $this->headerRow($rows[0]);
-        $idx = array_flip($headers);
         $created = 0;
         $updated = 0;
 
@@ -266,14 +439,14 @@ class InventoryExcelImportController extends Controller
 
         DB::beginTransaction();
         try {
-            for ($r = 1; $r < count($rows); $r++) {
+            for ($r = $headerIndex + 1; $r < count($rows); $r++) {
                 $line = $rows[$r];
-                $nameCol = $this->columnIndex($idx, ['name', 'category_name', 'اسم الصنف', 'الصنف', 'اسم']);
+                $nameCol = $this->columnIndex($idx, ['name', 'category_name', 'اسم الصنف', 'الصنف', 'اسم', 'الخامات', 'الخامة', 'الخامه', 'البيانات']);
                 $name = $nameCol !== null ? trim((string) ($line[$nameCol] ?? '')) : '';
                 if ($name === '') {
                     continue;
                 }
-                $priceCol = $this->columnIndex($idx, ['category_price', 'price', 'سعر التكلفة', 'السعر', 'التكلفة']);
+                $priceCol = $this->columnIndex($idx, ['category_price', 'price', 'سعر التكلفة', 'السعر', 'سعر', 'التكلفة']);
                 $price = $priceCol !== null ? (float) ($line[$priceCol] ?? 0) : 0.0;
                 $warehouseCol = $this->columnIndex($idx, ['warehouse', 'المخزن', 'مخزن']);
                 $warehouse = $warehouseCol !== null ? trim((string) ($line[$warehouseCol] ?? '')) : '';
@@ -285,7 +458,7 @@ class InventoryExcelImportController extends Controller
                 $measurementId = $measurementCol !== null && isset($line[$measurementCol])
                     ? (int) $line[$measurementCol]
                     : 1;
-                $skuCol = $this->columnIndex($idx, ['sku', 'item_code', 'كود الصنف', 'الباركود', 'الكود']);
+                $skuCol = $this->columnIndex($idx, ['sku', 'item_code', 'كود الصنف', 'الباركود', 'الكود', 'اكواد كجالس', 'اكواد']);
                 $sku = $skuCol !== null ? trim((string) ($line[$skuCol] ?? '')) : '';
 
                 $colorCol = $this->columnIndex($idx, ['color', 'لون', 'اللون']);
@@ -366,8 +539,10 @@ class InventoryExcelImportController extends Controller
             'file' => ['required', 'file', 'max:20480', 'mimes:xlsx,xls,csv'],
             'warehouse' => ['required', 'string', 'max:255'],
             'sheet' => ['nullable', 'string', 'max:255'],
+            'format' => ['nullable', 'string', 'in:recipe,materials-list'],
             'include_products' => ['sometimes', 'boolean'],
             'include_materials' => ['sometimes', 'boolean'],
+            'import_quantities' => ['sometimes', 'boolean'],
         ]);
 
         try {
@@ -386,17 +561,38 @@ class InventoryExcelImportController extends Controller
             return response()->json(['message' => 'تعذّر قراءة الملف المرفوع.'], 422);
         }
 
+        $format = $data['format'] ?? 'recipe';
+
         try {
-            $result = $import->importItemsOnly(
-                absolutePath: $path,
-                warehouse: $warehouse,
-                sheetName: $data['sheet'] ?? null,
-                includeProducts: $request->boolean('include_products', true),
-                includeMaterials: $request->boolean('include_materials', true),
-            );
+            $result = $format === 'materials-list'
+                ? $import->importFlatMaterialsList(
+                    absolutePath: $path,
+                    warehouse: $warehouse,
+                    sheetName: $data['sheet'] ?? null,
+                    importQuantities: $request->boolean('import_quantities', true),
+                    performer: auth()->user()->name ?? null,
+                    userId: auth()->id(),
+                )
+                : $import->importItemsOnly(
+                    absolutePath: $path,
+                    warehouse: $warehouse,
+                    sheetName: $data['sheet'] ?? null,
+                    includeProducts: $request->boolean('include_products', true),
+                    includeMaterials: $request->boolean('include_materials', true),
+                );
         } catch (\InvalidArgumentException $e) {
+            \Log::warning('[recipe-sheet-items] invalid input', ['message' => $e->getMessage(), 'format' => $format]);
+
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
+            \Log::error('[recipe-sheet-items] import failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'format' => $format,
+                'trace' => collect($e->getTrace())->take(8)->all(),
+            ]);
+
             return response()->json(['message' => 'تعذّر استيراد الأصناف: '.$e->getMessage()], 422);
         }
 
@@ -414,18 +610,17 @@ class InventoryExcelImportController extends Controller
         $request->validate([
             'file' => 'required|file|mimes:xlsx,xls,csv,txt',
             'create_missing_items' => 'sometimes|boolean',
+            'default_warehouse' => 'nullable|string|max:255',
+            'sheet' => 'nullable|string|max:255',
         ]);
 
         $createMissing = $request->boolean('create_missing_items', false);
+        $defaultWarehouse = trim((string) $request->input('default_warehouse', '')) ?: 'مخزن مواد خام';
         $path = $request->file('file')->getRealPath();
-        $sheet = $this->loadSpreadsheet($path)->getActiveSheet();
-        $rows = $sheet->toArray();
-        if (count($rows) < 2) {
-            return response()->json(['message' => 'Empty sheet'], 422);
+        [$rows, $headerIndex, $idx] = $this->loadSheetRows($path, self::NAME_ALIASES, $request->input('sheet'));
+        if (count($rows) < 2 || $idx === []) {
+            return response()->json(['message' => 'الملف فارغ أو لا يحتوي على صف عناوين صالح.'], 422);
         }
-
-        $headers = $this->headerRow($rows[0]);
-        $idx = array_flip($headers);
 
         $ledger = app(InventoryMovementLedgerService::class);
         $gl = app(InventoryGlPostingService::class);
@@ -435,16 +630,19 @@ class InventoryExcelImportController extends Controller
 
         DB::beginTransaction();
         try {
-            for ($r = 1; $r < count($rows); $r++) {
+            for ($r = $headerIndex + 1; $r < count($rows); $r++) {
                 $line = $rows[$r];
-                $matchCol = $this->columnIndex($idx, ['name', 'sku', 'match', 'اسم الصنف', 'الصنف', 'كود الصنف', 'الباركود']);
+                $matchCol = $this->columnIndex($idx, ['name', 'sku', 'match', 'اسم الصنف', 'الصنف', 'كود الصنف', 'الباركود', 'الخامات', 'الخامة', 'الخامه', 'البيانات']);
                 $match = $matchCol !== null ? trim((string) ($line[$matchCol] ?? '')) : '';
-                $qtyCol = $this->columnIndex($idx, ['quantity', 'الكمية']);
+                $qtyCol = $this->columnIndex($idx, ['quantity', 'الكمية', 'الكميه', 'كمية']);
                 $qty = $qtyCol !== null ? (float) ($line[$qtyCol] ?? 0) : 0.0;
-                $costCol = $this->columnIndex($idx, ['unit_cost', 'cost', 'تكلفة الوحدة', 'سعر الوحدة']);
+                $costCol = $this->columnIndex($idx, ['unit_cost', 'cost', 'تكلفة الوحدة', 'سعر الوحدة', 'السعر', 'سعر', 'التكلفة']);
                 $unitCost = $costCol !== null ? (float) ($line[$costCol] ?? 0) : 0.0;
                 $warehouseCol = $this->columnIndex($idx, ['warehouse', 'المخزن', 'مخزن']);
                 $warehouse = $warehouseCol !== null ? trim((string) ($line[$warehouseCol] ?? '')) : '';
+                if ($warehouse === '') {
+                    $warehouse = $defaultWarehouse;
+                }
 
                 if ($match === '' || abs($qty) < 0.0000001) {
                     continue;
@@ -522,17 +720,14 @@ class InventoryExcelImportController extends Controller
     {
         $request->validate([
             'file' => 'required|file|mimes:xlsx,xls,csv,txt',
+            'sheet' => 'nullable|string|max:255',
         ]);
 
         $path = $request->file('file')->getRealPath();
-        $sheet = $this->loadSpreadsheet($path)->getActiveSheet();
-        $rows = $sheet->toArray();
-        if (count($rows) < 2) {
-            return response()->json(['message' => 'Empty sheet'], 422);
+        [$rows, $headerIndex, $idx] = $this->loadSheetRows($path, self::NAME_ALIASES, $request->input('sheet'));
+        if (count($rows) < 2 || $idx === []) {
+            return response()->json(['message' => 'الملف فارغ أو لا يحتوي على صف عناوين صالح.'], 422);
         }
-
-        $headers = $this->headerRow($rows[0]);
-        $idx = array_flip($headers);
 
         $ledger = app(InventoryMovementLedgerService::class);
         $gl = app(InventoryGlPostingService::class);
@@ -541,11 +736,11 @@ class InventoryExcelImportController extends Controller
 
         DB::beginTransaction();
         try {
-            for ($r = 1; $r < count($rows); $r++) {
+            for ($r = $headerIndex + 1; $r < count($rows); $r++) {
                 $line = $rows[$r];
-                $matchCol = $this->columnIndex($idx, ['name', 'sku', 'match', 'اسم الصنف', 'الصنف', 'كود الصنف', 'الباركود']);
+                $matchCol = $this->columnIndex($idx, ['name', 'sku', 'match', 'اسم الصنف', 'الصنف', 'كود الصنف', 'الباركود', 'الخامات', 'الخامة', 'الخامه', 'البيانات']);
                 $match = $matchCol !== null ? trim((string) ($line[$matchCol] ?? '')) : '';
-                $countedCol = $this->columnIndex($idx, ['counted_quantity', 'physical', 'الكمية الفعلية', 'الكمية المجرودة', 'الجرد الفعلي', 'كمية الجرد']);
+                $countedCol = $this->columnIndex($idx, ['counted_quantity', 'physical', 'الكمية الفعلية', 'الكمية المجرودة', 'الجرد الفعلي', 'كمية الجرد', 'الكمية', 'الكميه', 'كمية']);
                 $counted = $countedCol !== null ? (float) ($line[$countedCol] ?? 0) : 0.0;
                 $warehouseCol = $this->columnIndex($idx, ['warehouse', 'المخزن', 'مخزن']);
                 $warehouse = $warehouseCol !== null ? trim((string) ($line[$warehouseCol] ?? '')) : '';

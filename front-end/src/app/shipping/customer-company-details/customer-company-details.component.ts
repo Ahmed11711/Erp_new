@@ -255,6 +255,25 @@ export class CustomerCompanyDetailsComponent {
     return ['طلب جديد', 'طلب مؤكد', 'مؤجل'].includes(status);
   }
 
+  /** تجديد الطلب: صلاحية orders.change_status أو أقسام مسموحة (مع تقييد إدارة الشحن). */
+  canRenewOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    if (!['ملغي', 'أرشيف', 'ارشيف', 'مؤجل', 'رفض استلام', 'طلب مؤكد'].includes(status)) {
+      return false;
+    }
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
+    const dept = String(this.user || '').trim().toLowerCase();
+    if (dept === 'admin' || dept === 'data entry' || dept === 'customer service') {
+      return true;
+    }
+    if (dept === 'shipping management') {
+      return status === 'رفض استلام' || status === 'مؤجل';
+    }
+    return false;
+  }
+
   private canChangeOrderStatusMenu(): boolean {
     if (this.rbac.can('orders.change_status')) {
       return true;

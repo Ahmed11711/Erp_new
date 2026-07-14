@@ -7,6 +7,7 @@ use App\Models\EmployeeFingerPrintSheet;
 use App\Services\Hr\EmployeeFingerPrintSheetAuditService;
 use App\Services\Hr\EmployeeFingerPrintSheetNotificationService;
 use App\Services\Hr\EmployeeFingerPrintSheetResolverService;
+use App\Services\Hr\EmployeeSalaryAccrualService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -63,16 +64,27 @@ class EmployeeFingerPrintSheetController extends Controller
         return response()->json('success', 201);
     }
 
-    public function reviewMonth(Request $request)
+    public function reviewMonth(Request $request, EmployeeSalaryAccrualService $accrualService)
     {
         $monthYear = explode('-', $request->month);
-        $year = $monthYear[0];
-        $month = $monthYear[1];
-        EmployeeFingerPrintSheet::where('employee_id', $request->employee_id)->whereYear('date', $year)
+        $year = (int) $monthYear[0];
+        $month = (int) $monthYear[1];
+        $employeeId = (int) $request->employee_id;
+
+        EmployeeFingerPrintSheet::where('employee_id', $employeeId)->whereYear('date', $year)
             ->whereMonth('date', $month)
             ->update(['reviewed' => true]);
 
-        return response()->json('success', 201);
+        try {
+            $accrual = DB::transaction(fn () => $accrualService->accrueForMonth($employeeId, $month, $year));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'accrual' => $accrual,
+        ], 201);
     }
 
     public function absenceDeduction(Request $request)

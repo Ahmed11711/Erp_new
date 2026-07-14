@@ -8,6 +8,7 @@ use App\Models\EmployeeFingerPrintSheet;
 use App\Models\EmployeeMerits;
 use App\Models\Approvals;
 use App\Models\EmployeeSubtraction;
+use App\Services\Accounting\AccountLinkingService;
 use App\Services\Hr\EmployeeFingerPrintSheetAuditService;
 use App\Services\Hr\EmployeeFingerPrintSheetResolverService;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,13 @@ class EmployeeController extends Controller
         return response()->json($data, 200);
     }
 
+    public function linkPayableAccounts(AccountLinkingService $accountLinkingService)
+    {
+        $result = $accountLinkingService->linkAllUnlinkedEmployees();
+
+        return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
     public function store(Request $request){
 
         $request->validate([
@@ -30,6 +38,7 @@ class EmployeeController extends Controller
             "department"=>"required",
             "fixed_salary"=>"required|numeric",
             "salary_type"=>"required",
+            "payable_tree_account_id" => "nullable|integer|exists:tree_accounts,id",
         ]);
 
         if ($request->code =='' || $request->code == 0 || $request->code) {
@@ -61,6 +70,7 @@ class EmployeeController extends Controller
             "department" => "required",
             "fixed_salary" => "required|numeric",
             "salary_type" => "required",
+            "payable_tree_account_id" => "nullable|integer|exists:tree_accounts,id",
         ]);
 
         // Find the employee by ID
@@ -70,7 +80,25 @@ class EmployeeController extends Controller
             return response()->json(['message' => 'not found'], 404);
         }
         $employee->update($request->all());
+
         return response()->json($employee, 200);
+    }
+
+    public function updatePayableAccount(int $id, Request $request)
+    {
+        $request->validate([
+            'payable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
+        ]);
+
+        $employee = Employee::find($id);
+        if (! $employee) {
+            return response()->json(['message' => 'not found'], 404);
+        }
+
+        $employee->payable_tree_account_id = $request->input('payable_tree_account_id');
+        $employee->save();
+
+        return response()->json($employee->load('payableTreeAccount'), 200);
     }
 
     public function employeePerMonth($id, Request $request)
@@ -245,7 +273,8 @@ class EmployeeController extends Controller
         if($request->has('code')){
             $search->where('code', 'like',$request->code.'%');
         }
-        $search = $search->orderBy('code' , 'asc')->paginate($itemsPerPage);
+        $search = $search->with('payableTreeAccount:id,name,code')
+            ->orderBy('code' , 'asc')->paginate($itemsPerPage);
         return response()->json($search, 200);
     }
 

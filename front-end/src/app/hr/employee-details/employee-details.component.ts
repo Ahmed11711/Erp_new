@@ -168,7 +168,14 @@ export class EmployeeDetailsComponent {
     this.employee['tableData']=data.tableData;
     this.employee['totalActualHoursSalary']=data.totalActualHoursSalary;
     this.employee['totalHours']=data.totalHours;
-    this.employee['hoursDifferenceStr']=data.hoursDifferenceStr.split('-')[1];
+    this.employee['hoursDifferenceStr']=data.hoursDifferenceStr?.split('-')[1] || data.hoursDifferenceStr;
+    if (data.monthAccount) {
+      this.employee['total_merit'] = data.monthAccount.totalMerit;
+      this.employee['total_sub'] = data.monthAccount.totalSub;
+      this.employee['net_total'] = data.monthAccount.netTotal;
+      this.employee['differnceSalary'] = data.monthAccount.hoursDeduction;
+      return;
+    }
     console.log(this.employee);
 
     this.employee['total_merit'] = this.employee['changed_salary']+ this.employee['incentives']+this.employee['suits'] +this.employee['rewards'] + this.employee['fixed_salary'];

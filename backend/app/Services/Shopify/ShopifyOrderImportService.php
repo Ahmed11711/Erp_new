@@ -703,8 +703,81 @@ class ShopifyOrderImportService
     private function normalizePhone(string $phone): string
     {
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        if ($digits === '') {
+            return '';
+        }
 
-        return $digits !== '' ? $digits : '';
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        }
+
+        // تصحيح خطأ شائع: 21010… بدل 2010…
+        if (str_starts_with($digits, '210') && strlen($digits) >= 12) {
+            $digits = '20'.substr($digits, 2);
+        }
+
+        // مصر دولي: 20 + 10 أرقام محلية → 01xxxxxxxxx
+        if (str_starts_with($digits, '20') && strlen($digits) === 12) {
+            return '0'.substr($digits, 2);
+        }
+
+        if (str_starts_with($digits, '200') && strlen($digits) === 13) {
+            return substr($digits, 2);
+        }
+
+        if (strlen($digits) === 11 && str_starts_with($digits, '0')) {
+            return $digits;
+        }
+
+        if (strlen($digits) === 10 && str_starts_with($digits, '1')) {
+            return '0'.$digits;
+        }
+
+        return $digits;
+    }
+
+    private function isUsablePhone(string $normalized): bool
+    {
+        if ($normalized === '') {
+            return false;
+        }
+
+        if (preg_match('/^0+$/', $normalized)) {
+            return false;
+        }
+
+        return strlen($normalized) >= 9;
+    }
+
+    private function isPhoneNoteAttributeName(string $name): bool
+    {
+        $trimmed = trim($name);
+        if ($trimmed === '') {
+            return false;
+        }
+
+        $lower = strtolower($trimmed);
+        if (in_array($lower, [
+            'phone',
+            'mobile',
+            'tel',
+            'telephone',
+            'phone_number',
+            'customer_phone',
+            'mobile_number',
+            'contact_phone',
+        ], true)) {
+            return true;
+        }
+
+        $arabicHints = ['رقم الهاتف', 'رقم الموبايل', 'رقم التليفون', 'موبايل', 'هاتف', 'تليفون'];
+        foreach ($arabicHints as $hint) {
+            if (mb_strpos($trimmed, $hint) !== false) {
+                return true;
+            }
+        }
+
+        return preg_match('/phone|mobile|tel/i', $trimmed) === 1;
     }
 
     /**
@@ -713,22 +786,30 @@ class ShopifyOrderImportService
      */
     private function resolvePhone(array $payload, array $addr): string
     {
-        $candidates = [
-            (string) ($addr['phone'] ?? ''),
-            (string) ($payload['phone'] ?? ''),
-            (string) data_get($payload, 'customer.phone'),
-            (string) data_get($payload, 'customer.default_address.phone'),
-            (string) data_get($payload, 'billing_address.phone'),
-        ];
+        $candidates = [];
+
         foreach ($payload['note_attributes'] ?? [] as $na) {
-            if (strtolower((string) ($na['name'] ?? '')) === 'phone') {
+            if (! is_array($na)) {
+                continue;
+            }
+            if ($this->isPhoneNoteAttributeName((string) ($na['name'] ?? ''))) {
                 $candidates[] = (string) ($na['value'] ?? '');
             }
         }
-        foreach ($candidates as $c) {
-            $n = $this->normalizePhone($c);
-            if ($n !== '') {
-                return $n;
+
+        $candidates = array_merge($candidates, [
+            (string) data_get($payload, 'shipping_address.phone'),
+            (string) ($addr['phone'] ?? ''),
+            (string) ($payload['phone'] ?? ''),
+            (string) data_get($payload, 'customer.phone'),
+            (string) data_get($payload, 'billing_address.phone'),
+            (string) data_get($payload, 'customer.default_address.phone'),
+        ]);
+
+        foreach ($candidates as $candidate) {
+            $normalized = $this->normalizePhone($candidate);
+            if ($this->isUsablePhone($normalized)) {
+                return $normalized;
             }
         }
 

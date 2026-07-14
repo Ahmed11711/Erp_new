@@ -353,7 +353,7 @@ class SupplierPurgeService
 
         $this->countDelete(
             'tree_accounts (موردين)',
-            TreeAccount::query()->whereIn('id', $supplierTreeAccountIds)->delete()
+            TreeAccount::query()->whereIn('id', $supplierTreeAccountIds)->forceDelete()
         );
     }
 

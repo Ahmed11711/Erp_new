@@ -40,9 +40,42 @@ export class TreeAccountService {
     return this.http.delete<{ success: boolean; status: number; message: string; data: null }>(`${environment.Url}/tree_accounts/${id}`);
   }
 
+  /**
+   * إدخال/تعديل الرصيد الافتتاحي أو تسوية رصيد الحساب عبر قيد يومي متوازن بتاريخ محدد.
+   * target_balance = صافي الرصيد المستهدف (مدين − دائن) — يُنشئ الباك-إند قيد الفرق تلقائياً.
+   */
+  balanceAdjustment(
+    id: number,
+    payload: { target_balance: number; counter_account_id: number; date: string; reason?: string }
+  ): Observable<{ success: boolean; status: number; message: string; data: any }> {
+    return this.http.post<{ success: boolean; status: number; message: string; data: any }>(
+      `${environment.Url}/tree_accounts/${id}/balance-adjustment`,
+      payload
+    );
+  }
+
   getAudits(id: number): Observable<{ success: boolean; status: number; message: string; data: TreeAccountAuditEntry[] }> {
     return this.http.get<{ success: boolean; status: number; message: string; data: TreeAccountAuditEntry[] }>(
       `${environment.Url}/tree_accounts/${id}/audits`
+    );
+  }
+
+  getTrash(): Observable<{ success: boolean; status: number; message: string; data: TreeAccount[] }> {
+    return this.http.get<{ success: boolean; status: number; message: string; data: TreeAccount[] }>(
+      `${environment.Url}/tree_accounts/trash`
+    );
+  }
+
+  restore(id: number): Observable<{ success: boolean; status: number; message: string; data: TreeAccount }> {
+    return this.http.post<{ success: boolean; status: number; message: string; data: TreeAccount }>(
+      `${environment.Url}/tree_accounts/${id}/restore`,
+      {}
+    );
+  }
+
+  forceDelete(id: number): Observable<{ success: boolean; status: number; message: string; data: null }> {
+    return this.http.delete<{ success: boolean; status: number; message: string; data: null }>(
+      `${environment.Url}/tree_accounts/${id}/force`
     );
   }
 }

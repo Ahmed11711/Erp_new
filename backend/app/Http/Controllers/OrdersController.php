@@ -43,6 +43,7 @@ use App\Enums\InventoryMovementType;
 use App\Services\Inventory\InventoryMovementLedgerService;
 use App\Services\Shipping\CollectionReceivableAccountResolver;
 use App\Services\Shipping\OrderFinancialStateService;
+use App\Services\Shipping\OrderLiabilityTransferService;
 use App\Services\Shipping\ShipmentReceivableAccountGuard;
 use App\Services\Shipping\ShippingReceivableSplitService;
 use App\Services\Shipping\UnlinkedReceivableAccountException;
@@ -55,6 +56,7 @@ use App\Services\Orders\OrderEditAccountingService;
 use App\Services\Orders\OrderEditApplyService;
 use App\Services\Orders\OrderLineCancellationService;
 use App\Services\Orders\OrderPrepaidAdjustmentService;
+use App\Services\Orders\OrderPrintService;
 use App\Services\Shopify\ShopifyOrderReviewApplyService;
 
 class OrdersController extends Controller
@@ -313,6 +315,30 @@ class OrdersController extends Controller
         return response()->json($order, 200);
     }
 
+    public function printOrders(Request $request, OrderPrintService $orderPrintService)
+    {
+        $validated = $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'integer|min:1',
+        ]);
+
+        $user = auth()->user();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $payload = $orderPrintService->getPrintPayload($validated['order_ids'], $user);
+
+        if ($payload['orders']->isEmpty()) {
+            return response()->json(['message' => 'No printable orders found for the requested IDs.'], 404);
+        }
+
+        return response()->json([
+            'orders' => $payload['orders']->values(),
+            'show_invoice_date' => $payload['show_invoice_date'],
+        ], 200);
+    }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -540,7 +566,7 @@ class OrdersController extends Controller
 
             $canEditShipped = RbacLegacyAccess::passes(auth()->user(), [], ['orders.edit']);
             if (
-                ! (in_array($order->order_type, ['جديد', 'طلب استبدال', 'طلب مرتجع'], true)
+                ! (in_array($order->order_type, ['جديد', 'طلب استبدال', 'طلب مرتجع', 'طلب صيانة'], true)
                     && in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'], true))
                 && ! ($this->isVariableCollectionOrderStatus((string) $order->order_status) && $canEditShipped)
             ) {
@@ -725,6 +751,9 @@ class OrdersController extends Controller
 
             $order_details = OrderDetails::where('order_id', $id)->first();
             $order_details->status_date = date('Y-m-d');
+            if ($order->order_type == 'طلب صيانة' && $request->has('maintenance_cost')) {
+                $order_details->maintenance_cost = $request->maintenance_cost;
+            }
             $order_details->save();
 
             $editorUserId = (int) auth()->user()->id;
@@ -796,10 +825,11 @@ class OrdersController extends Controller
 
         $request->validate([
             'action' => 'required|in:reverse,change_source',
-            'payment_type' => 'required_if:action,change_source|in:bank,safe,service_account',
+            'payment_type' => 'required_if:action,change_source|in:bank,safe,service_account,collection_company',
             'bank_id' => 'nullable|integer|min:1',
             'safe_id' => 'nullable|integer|min:1',
             'service_account_id' => 'nullable|integer|min:1',
+            'collection_company_id' => 'nullable|integer|min:1',
             'note' => 'nullable|string|max:2000',
         ]);
 
@@ -822,11 +852,16 @@ class OrdersController extends Controller
                 $sourceId = match ($paymentType) {
                     'safe' => (int) $request->input('safe_id'),
                     'service_account' => (int) $request->input('service_account_id'),
+                    'collection_company' => (int) $request->input('collection_company_id'),
                     default => (int) $request->input('bank_id'),
                 };
 
                 if ($sourceId <= 0) {
-                    throw new \InvalidArgumentException('يجب اختيار مصدر الدفع');
+                    throw new \InvalidArgumentException(
+                        $paymentType === 'collection_company'
+                            ? 'يجب اختيار شركة التحصيل'
+                            : 'يجب اختيار مصدر الدفع'
+                    );
                 }
 
                 $order = $prepaidAdjustmentService->changePrepaidSource(
@@ -1420,7 +1455,7 @@ class OrdersController extends Controller
                     $this->insertNote($order->id, $user_id, $note, $added_from, now());
                 }
             } else if ($request->query('status') == 'renew') {
-                if (!(in_array($order->order_status, ['رفض استلام', 'أرشيف', 'مؤجل', 'ملغي']))) {
+                if (!(in_array($order->order_status, ['رفض استلام', 'أرشيف', 'مؤجل', 'ملغي', 'طلب مؤكد']))) {
                     return response()->json(['message' => ' حالة الطلب الحاليه ' . $order->order_status], 422);
                 }
 
@@ -2311,41 +2346,58 @@ class OrdersController extends Controller
         DB::beginTransaction();
         try {
             $user_id = auth()->user()->id;
-
-            $deliverySvc = app(DeliveryConfirmationAccountingService::class);
-            $result = $deliverySvc->recordDeliveryReceivableTransfer($order);
-
-            $od = $order->order_details;
-            if ($od) {
-                $od->delivery_date = now()->format('Y-m-d');
-                $od->delivered_by_user_id = $user_id;
-                $od->delivery_batch_code = $result['batch_code'];
-                $od->status_date = now()->format('Y-m-d');
-                $od->reviewed = 0;
-                $od->save();
-            }
-
-            shippingCompanyDetails::where('order_id', $id)
-                ->where('status', 'تم شحن')
-                ->where('is_done', 0)
-                ->update(['status' => 'تم التسليم']);
-
-            $order->order_status = 'تم التسليم';
-            $order->save();
-
-            app(OrderFinancialStateService::class)->syncFromOrder($order->fresh(['order_details']));
-
-            $this->insertTracking($order->id, 'تم التسليم', $user_id, now());
-
-            if ($request->has('note') && $request->note != '') {
-                $this->insertNote($order->id, $user_id, $request->note, 'تأكيد التسليم', now());
-            }
+            $this->finalizeOrderDelivery(
+                $order,
+                $user_id,
+                $request->has('note') && $request->note != '' ? (string) $request->note : null,
+            );
 
             DB::commit();
             return response()->json(['message' => 'success'], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * تأكيد التسليم: قيود GL + نقل الذمة التشغيلي + تحديث بيانات الطلب.
+     */
+    private function finalizeOrderDelivery(Order $order, int $userId, ?string $note = null): void
+    {
+        $deliverySvc = app(DeliveryConfirmationAccountingService::class);
+        $result = $deliverySvc->recordDeliveryReceivableTransfer($order);
+
+        app(OrderLiabilityTransferService::class)->recordOperationalTransferOnDelivery(
+            $order,
+            $result['batch_code'] ?? '',
+            'delivery_confirm',
+        );
+
+        $od = $order->order_details;
+        if ($od) {
+            $od->delivery_date = now()->format('Y-m-d');
+            $od->delivered_by_user_id = $userId;
+            $od->delivery_batch_code = $result['batch_code'];
+            $od->status_date = now()->format('Y-m-d');
+            $od->reviewed = 0;
+            $od->save();
+        }
+
+        shippingCompanyDetails::where('order_id', $order->id)
+            ->where('status', 'تم شحن')
+            ->where('is_done', 0)
+            ->update(['status' => 'تم التسليم']);
+
+        $order->order_status = 'تم التسليم';
+        $order->save();
+
+        app(OrderFinancialStateService::class)->syncFromOrder($order->fresh(['order_details']));
+
+        $this->insertTracking($order->id, 'تم التسليم', $userId, now());
+
+        if ($note !== null && $note !== '') {
+            $this->insertNote($order->id, $userId, $note, 'تأكيد التسليم', now());
         }
     }
 
@@ -2428,29 +2480,7 @@ class OrdersController extends Controller
                 }
 
                 $user_id = auth()->user()->id;
-
-                $deliverySvc = app(DeliveryConfirmationAccountingService::class);
-                $result = $deliverySvc->recordDeliveryReceivableTransfer($order);
-
-                $od = $order->order_details;
-                if ($od) {
-                    $od->delivery_date = now()->format('Y-m-d');
-                    $od->delivered_by_user_id = $user_id;
-                    $od->delivery_batch_code = $result['batch_code'];
-                    $od->status_date = now()->format('Y-m-d');
-                    $od->reviewed = 0;
-                    $od->save();
-                }
-
-                shippingCompanyDetails::where('order_id', $oid)
-                    ->where('status', 'تم شحن')
-                    ->where('is_done', 0)
-                    ->update(['status' => 'تم التسليم']);
-
-                $order->order_status = 'تم التسليم';
-                $order->save();
-
-                $this->insertTracking($order->id, 'تم التسليم', $user_id, now());
+                $this->finalizeOrderDelivery($order, $user_id);
                 $done++;
             }
 
@@ -3677,6 +3707,9 @@ class OrdersController extends Controller
         $orderDetails->shipping_date = null;
         $orderDetails->delivery_date = null;
         $orderDetails->collection_date = null;
+        $orderDetails->confirm_date = null;
+        $orderDetails->need_by_date = null;
+        $orderDetails->reviewed = 0;
         $orderDetails->liability_transferred_at = null;
         $orderDetails->liability_holder_type = null;
         $orderDetails->liability_holder_id = null;

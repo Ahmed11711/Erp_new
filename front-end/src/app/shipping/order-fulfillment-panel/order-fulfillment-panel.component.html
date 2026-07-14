@@ -61,7 +61,7 @@
           <button
             type="button"
             class="btn btn-sm btn-outline-primary w-100"
-            *ngIf="!readonly && data.financial?.remaining_amount > 0 && !data.financial?.liability_transferred_at"
+            *ngIf="!readonly && canTransferLiability()"
             (click)="transferLiability()">
             نقل الذمة للمندوب / شركة التحصيل
           </button>

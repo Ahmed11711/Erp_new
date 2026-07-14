@@ -42,33 +42,20 @@ class DailyEntryController extends Controller
         return response()->json($entries, 200);
     }
 
-    /** مستخدمون لهم حركات في القيود/السندات — للفلتر (بدون صلاحية Admin). */
+    /**
+     * كل مستخدمي النظام لفلتر التقارير المحاسبية (كشف حساب، قيود يومية، إلخ).
+     * لا تُقيَّد بمن لديهم قيود فقط — حتى يظهر الجميع في الـ select.
+     */
     public function users()
     {
-        $userIds = DailyEntry::query()
-            ->whereNotNull('user_id')
-            ->distinct()
-            ->pluck('user_id');
-
-        $voucherUserIds = DB::table('account_entries')
-            ->join('vouchers', 'account_entries.voucher_id', '=', 'vouchers.id')
-            ->whereNotNull('vouchers.user_id')
-            ->distinct()
-            ->pluck('vouchers.user_id');
-
-        $userIds = $userIds->merge($voucherUserIds)->unique()->filter()->values();
-
-        $currentId = auth()->id();
-        if ($currentId && ! $userIds->contains($currentId)) {
-            $userIds->push($currentId);
-        }
-
         $users = User::query()
-            ->whereIn('id', $userIds)
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        return response()->json(['data' => $users], 200);
+        return response()->json([
+            'data' => $users,
+            'meta' => ['total' => $users->count()],
+        ], 200);
     }
 
     public function store(Request $request)

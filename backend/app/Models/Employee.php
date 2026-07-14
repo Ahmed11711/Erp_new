@@ -18,6 +18,7 @@ class Employee extends Model
         "salary_type",
         "working_hours",
         "acc_no",
+        "payable_tree_account_id",
     ];
 
     public function merits()
@@ -48,5 +49,10 @@ class Employee extends Model
     public function salaryPaid()
     {
         return $this->hasMany(EmployeeMonthPaid::class);
+    }
+
+    public function payableTreeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'payable_tree_account_id');
     }
 }

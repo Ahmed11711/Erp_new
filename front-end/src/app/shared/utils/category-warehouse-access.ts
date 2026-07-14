@@ -53,24 +53,33 @@ const CATEGORY_ROW_ACTION_WAREHOUSES = [RAW, WIP, FINISHED];
 /**
  * هل يُعرض زر خيارات الصف (تعديل / حذف) في قائمة الأصناف؟
  * يدمج RBAC (categories.manage) مع قواعد الأقسام القديمة في list-categories.
+ * المخازن الإضافية (مثل «مواد لدى مندوب») تظهر لإدارة النظام فقط.
  */
 export function canShowCategoryRowActions(
   warehouseName: string,
   department: string | false | null | undefined,
   rbac: RbacService
 ): boolean {
-  if (!CATEGORY_ROW_ACTION_WAREHOUSES.includes(warehouseName)) {
-    return false;
-  }
+  const dept = String(department ?? '').trim();
+  const isClassic = CATEGORY_ROW_ACTION_WAREHOUSES.includes(warehouseName);
 
-  if (rbac.can('categories.manage') || rbac.can('system.rbac')) {
+  // الإدارة / صلاحيات النظام: كل المخازن بما فيها الإضافية
+  if (rbac.can('system.rbac') || dept === 'Admin') {
     return true;
   }
 
-  const dept = String(department ?? '').trim();
+  // categories.manage بدون Admin: المخازن الكلاسيكية فقط
+  if (rbac.can('categories.manage')) {
+    return isClassic;
+  }
+
+  if (!isClassic) {
+    return false;
+  }
+
   const finished = warehouseName === FINISHED;
 
-  if (dept === 'Admin' || dept === 'Financial Accounts') {
+  if (dept === 'Financial Accounts') {
     return true;
   }
   if (dept === 'Data Entry' && finished) {

@@ -54,6 +54,21 @@ class TreeAccountObserver
 
     public function deleting(TreeAccount $account): void
     {
+        // SoftDeletes: forceDelete() also fires deleting — skip duplicate audit.
+        if (method_exists($account, 'isForceDeleting') && $account->isForceDeleting()) {
+            return;
+        }
+
         $this->auditService->logDeleted($account);
+    }
+
+    public function restored(TreeAccount $account): void
+    {
+        $this->auditService->logRestored($account);
+    }
+
+    public function forceDeleting(TreeAccount $account): void
+    {
+        $this->auditService->logForceDeleted($account);
     }
 }

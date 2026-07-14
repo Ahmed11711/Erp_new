@@ -75,11 +75,15 @@ class PurchaseDeletionService
         ]);
     }
 
-    public function delete(int $mainPurchaseId, int $userId): void
+    /**
+     * @return array{stock_warnings: list<string>}
+     */
+    public function delete(int $mainPurchaseId, int $userId): array
     {
         ['purchase' => $purchase, 'main' => $main] = $this->resolveForDeletion($mainPurchaseId);
+        $stockWarnings = [];
 
-        DB::transaction(function () use ($purchase, $main, $userId) {
+        DB::transaction(function () use ($purchase, $main, $userId, &$stockWarnings) {
             $lockedMain = Purchase::query()->whereKey($main->id)->lockForUpdate()->firstOrFail();
             if ((string) $lockedMain->status === '1') {
                 throw new \InvalidArgumentException('فاتورة المشتريات محذوفة مسبقاً.');
@@ -87,12 +91,15 @@ class PurchaseDeletionService
 
             $kind = $this->typeResolver->kind($purchase->invoice_type);
             $oldCategories = DB::table('invoice_categories')->where('purchase_id', $purchase->id)->get();
-            $this->purchaseAccounting->reverseProductLines($purchase, $oldCategories, $kind);
+            $reverseResult = $this->purchaseAccounting->reverseProductLines($purchase, $oldCategories, $kind);
+            $stockWarnings = $reverseResult['stock_warnings'] ?? [];
             $this->deleteStockDocuments($purchase);
-            $this->markDeleted($main, $purchase, $userId);
+            $this->markDeleted($main, $purchase, $userId, $stockWarnings);
             $this->reverseSupplierBalance($purchase, $userId);
             $this->reverseAccounting($purchase, $oldCategories, $kind, $userId);
         });
+
+        return ['stock_warnings' => $stockWarnings];
     }
 
     /**
@@ -100,7 +107,8 @@ class PurchaseDeletionService
      * @return array{
      *     deleted: list<int>,
      *     pending: list<array{id:int, approval_id:int}>,
-     *     failed: list<array{id:int, message:string}>
+     *     failed: list<array{id:int, message:string}>,
+     *     warnings: list<string>
      * }
      */
     public function deleteMany(array $mainPurchaseIds, int $userId, bool $isAdmin): array
@@ -109,13 +117,17 @@ class PurchaseDeletionService
             'deleted' => [],
             'pending' => [],
             'failed' => [],
+            'warnings' => [],
         ];
 
         foreach (array_values(array_unique(array_map('intval', $mainPurchaseIds))) as $id) {
             try {
                 if ($isAdmin) {
-                    $this->delete($id, $userId);
+                    $deleteResult = $this->delete($id, $userId);
                     $results['deleted'][] = $id;
+                    foreach ($deleteResult['stock_warnings'] ?? [] as $warning) {
+                        $results['warnings'][] = $warning;
+                    }
                 } else {
                     $approval = $this->requestApproval($id, $userId);
                     $results['pending'][] = [
@@ -150,15 +162,24 @@ class PurchaseDeletionService
             ->delete();
     }
 
-    private function markDeleted(Purchase $main, Purchase $purchase, int $userId): void
+    /**
+     * @param  list<string>  $stockWarnings
+     */
+    private function markDeleted(Purchase $main, Purchase $purchase, int $userId, array $stockWarnings = []): void
     {
         $main->status = '1';
         $main->save();
+
+        $details = null;
+        if ($stockWarnings !== []) {
+            $details = 'المخزون: '.implode(' | ', $stockWarnings);
+        }
 
         PurchasesTracking::create([
             'invoice_id' => $main->id,
             'invoice_number' => $purchase->id,
             'action' => 'حذف فاتورة',
+            'details' => $details,
             'user_id' => $userId,
         ]);
     }

@@ -185,16 +185,9 @@
   margin-bottom: 0.85rem;
 }
 
-.purchase-invoice-page .pi-date-input {
+.purchase-invoice-page .pi-date-field app-date-input {
+  display: block;
   width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.purchase-invoice-page input[type='date'].form-control {
-  appearance: none;
-  -webkit-appearance: none;
 }
 
 .purchase-invoice-page .pi-field-span-2 {

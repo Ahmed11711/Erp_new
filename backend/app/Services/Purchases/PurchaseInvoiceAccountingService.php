@@ -389,19 +389,27 @@ class PurchaseInvoiceAccountingService
         return [$unit, $deltaQty * $unit];
     }
 
-    public function reverseProductLines(Purchase $purchase, Collection $lines, PurchaseInvoiceKind $kind): void
+    /**
+     * @return array{stock_warnings: list<string>}
+     */
+    public function reverseProductLines(Purchase $purchase, Collection $lines, PurchaseInvoiceKind $kind): array
     {
         $wasInbound = $this->typeResolver->isInbound($kind);
         $reversalType = $this->typeResolver->reversalMovementType($kind);
         $actor = auth()->user()->name ?? null;
+        $stockWarnings = [];
 
         foreach ($lines as $product) {
-            $qty = abs((float) $product->product_quantity);
-            if ($qty <= 0.000001) {
+            $requestedQty = abs((float) $product->product_quantity);
+            if ($requestedQty <= 0.000001) {
                 continue;
             }
-            $lineTotal = abs((float) $product->total);
-            $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost($lineTotal, $qty, (float) $product->product_price);
+            $requestedLineTotal = abs((float) $product->total);
+            $effectiveUnit = CategoryInventoryCostService::purchaseLineUnitCost(
+                $requestedLineTotal,
+                $requestedQty,
+                (float) $product->product_price
+            );
 
             $catId = CategoryInventoryCostService::resolveCategoryIdForPurchaseLine($product, $product->product_name);
             if (! $catId) {
@@ -409,7 +417,19 @@ class PurchaseInvoiceAccountingService
             }
 
             $category = Category::query()->findOrFail($catId);
+            $qty = $requestedQty;
+            $lineTotal = $requestedLineTotal;
+            $movementNote = 'حذف فاتورة مشتريات — '.$purchase->invoice_number;
+
             if ($wasInbound) {
+                $availableQty = (float) ($category->quantity ?? 0);
+                if ($availableQty + 0.000001 < $requestedQty) {
+                    $stockWarnings[] = 'تم حذف الفاتورة مع خصم سالب للصنف #'.$catId
+                        .': الرصيد '.$availableQty.' وأُخصم '.$requestedQty
+                        .' (الرصيد بعد الحذف: '.($availableQty - $requestedQty).').';
+                    $movementNote .= ' (خصم سالب)';
+                }
+
                 $this->ledger->recordOutbound(
                     $category,
                     $reversalType,
@@ -417,11 +437,12 @@ class PurchaseInvoiceAccountingService
                     $effectiveUnit,
                     $lineTotal,
                     $kind !== PurchaseInvoiceKind::Amanat,
-                    'purchase_invoice_edit_reversal',
+                    'purchase_invoice_delete_reversal',
                     (int) $purchase->id,
-                    'عكس سطر مشتريات — '.$purchase->invoice_number,
+                    $movementNote,
                     null,
-                    $actor
+                    $actor,
+                    true
                 );
             } else {
                 $this->ledger->recordInbound(
@@ -431,9 +452,9 @@ class PurchaseInvoiceAccountingService
                     $effectiveUnit,
                     $lineTotal,
                     true,
-                    'purchase_invoice_edit_reversal',
+                    'purchase_invoice_delete_reversal',
                     (int) $purchase->id,
-                    'عكس سطر مشتريات — '.$purchase->invoice_number,
+                    $movementNote,
                     null,
                     $actor
                 );
@@ -464,7 +485,7 @@ class PurchaseInvoiceAccountingService
             DB::table('categories_balance')->insert([
                 'invoice_number' => $purchase->invoice_number,
                 'category_id' => $catId,
-                'type' => 'تعديل فواتير مشتريات',
+                'type' => 'حذف فاتورة مشتريات',
                 'quantity' => $signedQty,
                 'balance_before' => $beforeQty,
                 'balance_after' => $afterQty,
@@ -486,6 +507,8 @@ class PurchaseInvoiceAccountingService
                 'created_at' => now(),
             ]);
         }
+
+        return ['stock_warnings' => $stockWarnings];
     }
 
     public function adjustSupplierBalances(

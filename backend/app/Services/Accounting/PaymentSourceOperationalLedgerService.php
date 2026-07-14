@@ -80,6 +80,10 @@ class PaymentSourceOperationalLedgerService
 
             $bank = $this->bankLedger->findByAssetId($treeAccountId);
             if ($bank) {
+                if ($this->bankLedger->hasOperationalDetailForRef($bank, $ref)) {
+                    return;
+                }
+
                 $this->bankLedger->recordOperationalMovement(
                     $bank,
                     $signed,

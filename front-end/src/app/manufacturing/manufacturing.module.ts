@@ -10,8 +10,8 @@ import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { ManufacturingConfirmationComponent } from './manufacturing-confirmation/manufacturing-confirmation.component';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatInputModule } from '@angular/material/input';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { ManufacturingOrdersComponent } from './manufacturing-orders/manufacturing-orders.component';
 import { ManufacturingAdditionsComponent } from './manufacturing-additions/manufacturing-additions.component';
 import { ItemsWithoutRecipeReportComponent } from './items-without-recipe-report/items-without-recipe-report.component';
@@ -37,8 +37,8 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
     AutocompleteLibModule,
     MatFormFieldModule,
     MatDatepickerModule,
-    MatNativeDateModule,
     MatInputModule,
+    MatExpansionModule,
   ],
   providers: [
     DatePipe

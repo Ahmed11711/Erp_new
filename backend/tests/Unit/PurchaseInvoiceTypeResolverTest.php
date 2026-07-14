@@ -24,6 +24,7 @@ class PurchaseInvoiceTypeResolverTest extends TestCase
         $this->assertSame(PurchaseInvoiceKind::SalesReturn, $this->resolver->kind('مرتجع مبيعات'));
         $this->assertSame(PurchaseInvoiceKind::Amanat, $this->resolver->kind('امانات'));
         $this->assertSame(PurchaseInvoiceKind::PurchaseReturn, $this->resolver->kind('مرتجع'));
+        $this->assertSame(PurchaseInvoiceKind::PurchaseReceipt, $this->resolver->kind('اضافة وارد تشغيل'));
     }
 
     public function test_purchase_return_is_outbound_with_negative_supplier_delta(): void

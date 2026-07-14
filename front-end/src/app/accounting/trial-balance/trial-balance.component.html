@@ -41,6 +41,9 @@
                     <select class="form-control" formControlName="level">
                         <option *ngFor="let lvl of levels" [value]="lvl.value">{{ lvl.label }}</option>
                     </select>
+                    <small class="text-muted d-block mt-1" *ngIf="filterForm.value.level">
+                        عند اختيار مستوى: يُعرض كل حساب في هذا المستوى برصيد مجمّع من فروعه.
+                    </small>
                 </div>
                 <div class="filter-field filter-field--search">
                     <label>بحث</label>

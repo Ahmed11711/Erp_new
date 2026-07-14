@@ -6,6 +6,7 @@ import { ServiceAccountsService } from '../financial/services/service-accounts.s
 import { SafeService } from '../accounting/services/safe.service';
 import { BankService } from '../accounting/services/bank.service';
 import { RbacService } from '../core/rbac/rbac.service';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
 
 @Component({
   selector: 'app-home',
@@ -13,6 +14,7 @@ import { RbacService } from '../core/rbac/rbac.service';
   styleUrls: ['./home.component.css']
 })
 export class HomeComponent {
+  readonly RBAC = RBAC_ROUTE;
   notifications: any[] = [];
   user!: string;
 

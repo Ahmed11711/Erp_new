@@ -3,9 +3,11 @@
  * تُظهر أي صلاحية واحدة ضمن المصفوفة دخولاً للمسار (canAny).
  */
 export const RBAC_ROUTE = {
-  financeTeam: ['finance.view', 'finance.edit'],
+  financeTeam: ['finance.view', 'finance.edit', 'system.rbac'],
   /** شاشات كانت مقتصرة سابقاً على قسم Admin */
   financeAdminExclusive: ['system.rbac'],
+  /** إدخال/تعديل رصيد افتتاحي أو تسوية رصيد حساب في شجرة الحسابات (عبر قيد يومي متوازن) */
+  treeAccountBalanceAdjustment: ['finance.tree_account.balance_adjustment', 'system.rbac'],
   inventoryWarehouse: ['inventory.view', 'inventory.transfer', 'inventory.create', 'inventory.edit'],
   categoriesAll: ['categories.view', 'categories.manage'],
   suppliers: ['suppliers.view'],

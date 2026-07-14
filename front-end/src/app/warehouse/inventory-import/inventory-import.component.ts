@@ -8,7 +8,7 @@ import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-r
 
 type ImportStep = 'upload' | 'preview' | 'confirmed';
 type TabType = 'stock-count' | 'items' | 'opening' | 'adjustment';
-type ItemsImportMode = 'simple' | 'recipe-sheet';
+type ItemsImportMode = 'simple' | 'recipe-sheet' | 'materials-list';
 
 @Component({
   selector: 'app-inventory-import',
@@ -34,13 +34,18 @@ export class InventoryImportComponent implements OnInit {
 
   // Legacy sections
   itemsFile: File | null = null;
-  itemsImportMode: ItemsImportMode = 'recipe-sheet';
+  itemsImportMode: ItemsImportMode = 'materials-list';
   itemsWarehouse = 'مخزن مواد خام';
+  itemsSheetName = 'last';
+  importItemQuantities = true;
   includeRecipeProducts = true;
   includeRecipeMaterials = true;
   readonly warehouseOptions = WAREHOUSE_STOCK_ROWS.map((w) => w.nameAr);
   openingFile: File | null = null;
+  openingSheetName = 'last';
+  openingWarehouse = 'مخزن مواد خام';
   adjustmentFile: File | null = null;
+  adjustmentSheetName = 'last';
   createMissingItems = false;
 
   loadingItems = false;
@@ -228,17 +233,31 @@ export class InventoryImportComponent implements OnInit {
     this.messageItems = '';
     this.errorItems = '';
 
-    const onSuccess = (res: { created: number; updated: number; skipped?: number; message?: string }) => {
+    const onSuccess = (res: {
+      created: number;
+      updated: number;
+      skipped?: number;
+      message?: string;
+      warnings?: string[];
+    }) => {
       this.loadingItems = false;
       const skippedPart =
         res.skipped != null && res.skipped > 0 ? `، بدون تغيير ${res.skipped}` : '';
-      this.messageItems =
-        res.message ??
-        `تم: إنشاء ${res.created}، تحديث ${res.updated}${skippedPart} — المخزن: ${this.itemsWarehouse}`;
+      const base = `تم: إنشاء ${res.created}، تحديث ${res.updated}${skippedPart} — المخزن: ${this.itemsWarehouse}`;
+      const warningsPart =
+        res.warnings && res.warnings.length > 0 ? ` — ${res.warnings.join(' ')}` : '';
+      this.messageItems = base + warningsPart;
     };
-    const onError = (err: { error?: { message?: string } }) => {
+    const onError = (err: { error?: { message?: string }; status?: number; statusText?: string }) => {
       this.loadingItems = false;
-      this.errorItems = err?.error?.message || 'فشل الاستيراد';
+      if (err?.error?.message) {
+        this.errorItems = err.error.message;
+      } else if (err?.status === 0) {
+        this.errorItems =
+          'تعذّر الاتصال بالخادم أو انتهت مهلة المعالجة (الملف كبير/معقّد). أعد المحاولة بعد حفظ نسخة جديدة من Excel أو اترك اسم الورقة فارغاً.';
+      } else {
+        this.errorItems = err?.statusText || 'فشل الاستيراد';
+      }
     };
 
     if (this.itemsImportMode === 'recipe-sheet') {
@@ -246,6 +265,21 @@ export class InventoryImportComponent implements OnInit {
         .importRecipeSheetItems(this.itemsFile, this.itemsWarehouse, {
           includeProducts: this.includeRecipeProducts,
           includeMaterials: this.includeRecipeMaterials,
+          sheet: this.itemsSheetName.trim() || undefined,
+          format: 'recipe',
+        })
+        .subscribe({ next: onSuccess, error: onError });
+      return;
+    }
+
+    if (this.itemsImportMode === 'materials-list') {
+      this.importApi
+        .importRecipeSheetItems(this.itemsFile, this.itemsWarehouse, {
+          includeProducts: false,
+          includeMaterials: false,
+          sheet: this.itemsSheetName.trim() || undefined,
+          format: 'materials-list',
+          importQuantities: this.importItemQuantities,
         })
         .subscribe({ next: onSuccess, error: onError });
       return;
@@ -260,7 +294,10 @@ export class InventoryImportComponent implements OnInit {
     this.messageOpening = '';
     this.errorOpening = '';
     this.importApi
-      .importOpeningBalances(this.openingFile, this.createMissingItems)
+      .importOpeningBalances(this.openingFile, this.createMissingItems, {
+        sheet: this.openingSheetName,
+        defaultWarehouse: this.openingWarehouse,
+      })
       .subscribe({
         next: (res) => {
           this.loadingOpening = false;
@@ -278,7 +315,7 @@ export class InventoryImportComponent implements OnInit {
     this.loadingAdjustment = true;
     this.messageAdjustment = '';
     this.errorAdjustment = '';
-    this.importApi.importAdjustments(this.adjustmentFile).subscribe({
+    this.importApi.importAdjustments(this.adjustmentFile, { sheet: this.adjustmentSheetName }).subscribe({
       next: (res) => {
         this.loadingAdjustment = false;
         this.messageAdjustment = `تمت معالجة ${res.processed_lines} سطراً (تسوية جرد)`;

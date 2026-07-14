@@ -31,7 +31,13 @@ class PurchasePrintController extends Controller
         $shipping = (float) ($invoice->shipping_total ?? $invoice->transport_cost ?? 0);
         $grand = $subtotal + $shipping;
 
-        $company = config('app.name', 'Company');
+        $logoUrl = null;
+        foreach (['images/iconmaga.png', 'images/logo.png'] as $relativePath) {
+            if (file_exists(public_path($relativePath))) {
+                $logoUrl = asset($relativePath);
+                break;
+            }
+        }
 
         return response()->view('documents.purchase-print', [
             'invoice' => $invoice,
@@ -41,8 +47,7 @@ class PurchasePrintController extends Controller
             'grand' => $grand,
             'tax_rate' => 0,
             'tax_amount' => 0,
-            'company' => $company,
-            'logoUrl' => asset('images/logo.png'),
+            'logoUrl' => $logoUrl,
         ]);
     }
 }

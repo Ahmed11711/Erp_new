@@ -4,7 +4,6 @@ import { CommonModule } from '@angular/common';
 import { AdminRoutingModule } from './admin-routing.module';
 import { AdminOrderComponent } from './admin-order/admin-order.component';
 import { ReactiveFormsModule, FormsModule } from '@angular/forms';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -39,7 +38,6 @@ import { MatDividerModule } from '@angular/material/divider';
     FormsModule,
     SharedModule,
     AutocompleteLibModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     MatDatepickerModule,

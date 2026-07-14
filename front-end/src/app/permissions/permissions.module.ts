@@ -14,7 +14,6 @@ import { DescriptionsComponent } from './descriptions/descriptions.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { OrderCodingComponent } from './order-coding/order-coding.component';
 import { OrderDocumentComponent } from './order-document/order-document.component';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
@@ -53,7 +52,6 @@ import { Offer2DetailsComponent } from './offer2-details/offer2-details.componen
     FormsModule,
     ReactiveFormsModule,
     AutocompleteLibModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     NgxPaginationModule,

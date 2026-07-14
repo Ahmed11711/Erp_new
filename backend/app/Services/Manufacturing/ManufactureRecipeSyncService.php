@@ -125,14 +125,30 @@ final class ManufactureRecipeSyncService
 
     /**
      * Keep legacy manufacture_products rows aligned with recipe ingredient decimals.
+     * Creates the Manufacture row when missing so confirmation / consumption can use it.
      *
      * @param  array<int, array{id:mixed, quantity:mixed, total_price:mixed}>  $products
      */
     public function syncLegacyManufactureLines(int $anchorId, array $products): void
     {
+        $total = 0.0;
+        foreach ($products as $product) {
+            $qty = (float) ($product['quantity'] ?? 0);
+            if ($qty <= 0) {
+                continue;
+            }
+            $total += (float) ($product['total_price'] ?? 0);
+        }
+
         $manufacture = Manufacture::query()->where('product_id', $anchorId)->first();
         if ($manufacture === null) {
-            return;
+            $manufacture = Manufacture::create([
+                'product_id' => $anchorId,
+                'total' => round($total, 2),
+            ]);
+        } else {
+            $manufacture->total = round($total, 2);
+            $manufacture->save();
         }
 
         foreach ($products as $product) {
@@ -155,6 +171,10 @@ final class ManufactureRecipeSyncService
         }
     }
 
+    /**
+     * Materialize / refresh legacy Manufacture (+ BOM lines) from a Recipe.
+     * No-op when the recipe has no output product or no usable ingredients.
+     */
     public function syncLegacyManufactureLinesFromRecipe(Recipe $recipe): void
     {
         $outputItemId = (int) ($recipe->output_item_id ?? 0);
@@ -162,6 +182,8 @@ final class ManufactureRecipeSyncService
             return;
         }
 
+        // Keep Manufacture on the recipe's actual output SKU (including color variants).
+        // Do not collapse to parent — many BOMs are owned by the variant itself.
         $recipe->loadMissing('ingredients');
         $products = [];
         foreach ($recipe->ingredients as $ingredient) {
@@ -180,5 +202,49 @@ final class ManufactureRecipeSyncService
         if ($products !== []) {
             $this->syncLegacyManufactureLines($outputItemId, $products);
         }
+    }
+
+    /**
+     * Ensure a legacy Manufacture exists for confirmation when only a Recipe is present.
+     */
+    public function ensureLegacyManufactureForProduct(int $productId): bool
+    {
+        $item = Item::query()->find($productId);
+        if ($item === null) {
+            return false;
+        }
+
+        if (Manufacture::query()->where('product_id', $productId)->exists()) {
+            return true;
+        }
+
+        // Color variants often own their Recipe/BOM directly.
+        $recipe = Recipe::query()->where('output_item_id', $productId)->first();
+        if ($recipe === null && $item->recipe_id) {
+            $recipe = Recipe::query()->find((int) $item->recipe_id);
+        }
+
+        if ($recipe === null) {
+            $anchorId = ManufacturingConsumptionResolver::outputAnchorId($item);
+            if ($anchorId !== $productId && Manufacture::query()->where('product_id', $anchorId)->exists()) {
+                return true;
+            }
+            $recipe = Recipe::query()->where('output_item_id', $anchorId)->first();
+            if ($recipe === null) {
+                return false;
+            }
+        }
+
+        if (! $recipe->output_item_id) {
+            $recipe->output_item_id = $productId;
+            $recipe->save();
+        }
+
+        $this->syncLegacyManufactureLinesFromRecipe($recipe->fresh(['ingredients']));
+
+        $outputId = (int) ($recipe->output_item_id ?: $productId);
+
+        return Manufacture::query()->where('product_id', $outputId)->exists()
+            || Manufacture::query()->where('product_id', $productId)->exists();
     }
 }

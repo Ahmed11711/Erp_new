@@ -1,3 +1,10 @@
+:host {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: min-content;
+}
+
 .header{
   background-color: black;
   color: white;
@@ -24,8 +31,31 @@ select , select:focus{
   font-size: 1.3rem;
 }
 
-input{
+input:not(.app-date-input-field){
   font-size: 1.2rem;
+}
+
+.exp-filter-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+
+:host ::ng-deep app-date-input .app-date-input-field {
+  min-height: 44px;
+  font-size: 1rem !important;
+  border-color: #cbd5e1 !important;
+}
+
+:host ::ng-deep app-date-input .app-date-input-field:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15) !important;
+}
+
+:host ::ng-deep app-date-input .app-date-input-toggle {
+  background: #f8fafc;
+  color: #82225e;
 }
 
 i{
@@ -47,8 +77,4 @@ i{
   font-size: 0.95rem;
   white-space: nowrap;
   vertical-align: middle;
-}
-
-.table-expenses tbody td {
-  font-size: 0.95rem;
 }

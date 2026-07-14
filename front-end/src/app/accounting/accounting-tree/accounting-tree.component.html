@@ -31,6 +31,15 @@
           <button class="btn btn-outline-warning" (click)="openInventoryGlSync()" [disabled]="loading || syncingInventoryGl" title="مطابقة أرصدة حسابات المخزون مع التكلفة الفعلية للأصناف في المخازن">
             <i class="fas fa-balance-scale" [class.fa-spin]="syncingInventoryGl"></i> تصحيح أرصدة المخزون
           </button>
+          <button
+            class="btn btn-outline-danger"
+            *ngIf="isAdmin"
+            (click)="openTrashDialog()"
+            [disabled]="loading"
+            title="عرض الحسابات المحذوفة واسترجاعها (أدمن فقط)"
+          >
+            <i class="fas fa-trash-restore"></i> سلة المحذوفات
+          </button>
           <button class="btn btn-primary" (click)="openAddDialog()" [disabled]="loading">
             <i class="fas fa-plus"></i> إضافة حساب رئيسي
           </button>
@@ -83,6 +92,14 @@
         </button>
         <button class="btn btn-sm btn-info" (click)="openEditDialog(node)" title="تعديل">
           <i class="fas fa-edit"></i>
+        </button>
+        <button
+          class="btn btn-sm btn-warning"
+          *ngIf="canBalanceAdjustment"
+          (click)="openBalanceDialog(node)"
+          title="رصيد افتتاحي / تسوية رصيد (قيد متوازن بتاريخ)"
+        >
+          <i class="fas fa-scale-balanced fa-balance-scale"></i>
         </button>
         <button class="btn btn-sm btn-danger" (click)="deleteAccount(node)" title="حذف">
           <i class="fas fa-trash"></i>
@@ -222,6 +239,186 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" (click)="closeDialogs()">إلغاء</button>
       <button class="btn btn-primary" (click)="updateAccount()">حفظ التغييرات</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trash / Recycle bin (Admin only) -->
+<div class="modal-overlay" *ngIf="showTrashDialog && isAdmin" (click)="closeDialogs()">
+  <div class="modal-content trash-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>سلة محذوفات شجرة الحسابات</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="small text-muted mb-3">
+        الحسابات هنا محذوفة مؤقتاً مع فروعها. الاسترجاع يعيدها للشجرة مع القيود المرتبطة.
+        الحذف النهائي يزيل الحساب وقيوده من النظام ولا يمكن التراجع عنه.
+      </p>
+
+      <div class="loading-spinner" *ngIf="loadingTrash">
+        <div class="spinner-border text-primary" role="status">
+          <span class="sr-only">جاري التحميل...</span>
+        </div>
+      </div>
+
+      <div *ngIf="!loadingTrash && trashedAccounts.length === 0" class="empty-state py-3">
+        <p class="mb-0">سلة المحذوفات فارغة.</p>
+      </div>
+
+      <div class="trash-table-wrap" *ngIf="!loadingTrash && trashedAccounts.length > 0">
+        <table class="table table-sm table-bordered trash-table mb-0">
+          <thead>
+            <tr>
+              <th>الكود</th>
+              <th>الاسم</th>
+              <th>النوع</th>
+              <th>الأب</th>
+              <th>تاريخ الحذف</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let acc of trashedAccounts">
+              <td>{{ acc.code }}</td>
+              <td>{{ acc.name }}</td>
+              <td>{{ getAccountTypeLabel(acc.type) }}</td>
+              <td>{{ acc.parent?.name || '—' }}</td>
+              <td>{{ acc.deleted_at || '—' }}</td>
+              <td class="trash-actions">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-success"
+                  (click)="restoreAccount(acc)"
+                  [disabled]="trashActionId === acc.id"
+                  title="استرجاع"
+                >
+                  <i class="fas fa-undo"></i> استرجاع
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-danger"
+                  (click)="forceDeleteAccount(acc)"
+                  [disabled]="trashActionId === acc.id"
+                  title="حذف نهائي"
+                >
+                  <i class="fas fa-times"></i> حذف نهائي
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline-secondary" (click)="loadTrash()" [disabled]="loadingTrash">
+        <i class="fas fa-sync-alt" [class.fa-spin]="loadingTrash"></i> تحديث
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="closeDialogs()">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Opening balance / balance adjustment dialog -->
+<div class="modal-overlay" *ngIf="showBalanceDialog && balanceAccount" (click)="closeDialogs()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>رصيد افتتاحي / تسوية رصيد</h3>
+      <button class="close-btn" (click)="closeDialogs()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="small text-muted mb-2">
+        الحساب: <strong>{{ balanceAccount.code }} — {{ balanceAccount.name }}</strong>
+        ({{ getAccountTypeLabel(balanceAccount.type) }})
+      </p>
+      <p class="small text-info mb-3">
+        لا يُعدَّل الرصيد مباشرةً؛ يُسجَّل <strong>قيد يومي متوازن</strong> بالفرق فقط بينك وبين الحساب المقابل،
+        بالتاريخ الذي تختاره — فيبقى أثر واضح في الدفاتر وقابل للمراجعة.
+      </p>
+
+      <form>
+        <div class="form-group">
+          <label>الرصيد الحالي (من القيود)</label>
+          <p class="form-control-plaintext border rounded px-2 py-1 mb-0 bg-light">
+            {{ getDisplayBalance(balanceAccount) | number:'1.2-2' }}
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label>الرصيد المطلوب (الافتتاحي / بعد التسوية) *</label>
+          <input
+            type="number"
+            step="0.01"
+            class="form-control"
+            [(ngModel)]="baForm.targetDisplay"
+            name="baTargetDisplay"
+            required
+          >
+          <small class="text-muted d-block">
+            أدخل الرصيد كما يظهر في الشجرة لنوع الحساب؛ سيُنشئ النظام قيد الفرق تلقائياً.
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>تاريخ الرصيد / التسوية *</label>
+          <app-date-input id="ba-date" [(ngModel)]="baForm.date" name="baDate"></app-date-input>
+        </div>
+
+        <div class="form-group">
+          <label>الحساب المقابل *</label>
+          <div class="counter-dropdown" [class.open]="counterDropdownOpen" (click)="$event.stopPropagation()">
+            <button type="button" class="form-control counter-dropdown-toggle" (click)="toggleCounterDropdown($event)">
+              <span *ngIf="selectedCounterAccount">
+                {{ selectedCounterAccount.code }} — {{ selectedCounterAccount.name }} ({{ getAccountTypeLabel(selectedCounterAccount.type) }})
+              </span>
+              <span *ngIf="!selectedCounterAccount" class="text-muted">— اختر الحساب المقابل —</span>
+              <i class="fas fa-chevron-down toggle-caret"></i>
+            </button>
+
+            <div class="counter-dropdown-panel" *ngIf="counterDropdownOpen">
+              <input
+                type="search"
+                class="form-control counter-search-input"
+                [(ngModel)]="counterSearch"
+                name="baCounterSearch"
+                placeholder="ابحث بالكود أو الاسم..."
+                autocomplete="off"
+                dir="rtl"
+              >
+              <ul class="counter-options">
+                <li
+                  *ngFor="let acc of filteredCounterAccounts"
+                  class="counter-option"
+                  [class.disabled]="acc.id === balanceAccount.id"
+                  [class.active]="acc.id === baForm.counterAccountId"
+                  (click)="selectCounter(acc)"
+                >
+                  {{ acc.code }} — {{ acc.name }} ({{ getAccountTypeLabel(acc.type) }})
+                </li>
+                <li class="counter-option no-result" *ngIf="filteredCounterAccounts.length === 0">
+                  لا توجد حسابات مطابقة للبحث.
+                </li>
+              </ul>
+            </div>
+          </div>
+          <small class="text-muted d-block">
+            عادةً رأس المال أو أرباح مرحّلة أو حساب «أرصدة افتتاحية» حسب سياستكم المحاسبية.
+          </small>
+        </div>
+
+        <div class="form-group mb-0">
+          <label>سبب / ملاحظة (اختياري)</label>
+          <textarea class="form-control" rows="2" [(ngModel)]="baForm.reason" name="baReason"
+            placeholder="مثال: رصيد افتتاحي لبداية السنة المالية"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeDialogs()" [disabled]="savingBalance">إلغاء</button>
+      <button class="btn btn-primary" (click)="saveBalanceAdjustment()" [disabled]="savingBalance">
+        <i class="fas fa-spinner fa-spin" *ngIf="savingBalance"></i>
+        تسجيل القيد
+      </button>
     </div>
   </div>
 </div>

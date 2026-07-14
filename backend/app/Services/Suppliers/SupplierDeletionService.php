@@ -50,7 +50,7 @@ class SupplierDeletionService
 
             if ($treeAccountId) {
                 $this->purgeTreeAccountLedger($treeAccountId);
-                TreeAccount::query()->whereKey($treeAccountId)->delete();
+                TreeAccount::query()->whereKey($treeAccountId)->forceDelete();
 
                 if ($parentId) {
                     $this->balanceRebuild->rebuildAncestorChain($parentId);

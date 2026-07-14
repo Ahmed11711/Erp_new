@@ -68,6 +68,8 @@ class SalesOrderAccountingService
                     'ORD-PREPAID-' . $order->id . '-%',
                     'ORD-PREPAID-PENDING-' . $order->id . '-%',
                 ] as $prepaidPattern) {
+                    $this->reverseOperationalSyncForDeletedBatches($order->id, $prepaidPattern);
+
                     $affectedAccountIds = array_values(array_unique(array_merge(
                         $affectedAccountIds,
                         $this->collectAccountIdsFromOrderBatches($order->id, $prepaidPattern)
@@ -120,6 +122,62 @@ class SalesOrderAccountingService
                     'account_id' => $accountId,
                     'error' => $e->getMessage(),
                 ]);
+            }
+        }
+    }
+
+    /**
+     * عكس الرصيد التشغيلي المرتبط بقيد محذوف (بنك/خزينة) قبل حذف account_entries.
+     */
+    private function reverseOperationalSyncForDeletedBatches(int $orderId, string $batchPattern): void
+    {
+        $batchCodes = AccountEntry::query()
+            ->where('order_id', $orderId)
+            ->where('entry_batch_code', 'like', $batchPattern)
+            ->whereNotNull('entry_batch_code')
+            ->pluck('entry_batch_code')
+            ->unique()
+            ->values();
+
+        if ($batchCodes->isEmpty()) {
+            return;
+        }
+
+        $bankLedger = app(BankOperationalLedgerService::class);
+        $safeLedger = app(SafeOperationalLedgerService::class);
+
+        foreach ($batchCodes as $batchCode) {
+            $cashLines = AccountEntry::query()
+                ->where('order_id', $orderId)
+                ->where('entry_batch_code', $batchCode)
+                ->where(function ($q) {
+                    $q->where('debit', '>', 0.009)
+                        ->orWhere('credit', '>', 0.009);
+                })
+                ->get(['tree_account_id', 'debit', 'credit']);
+
+            foreach ($cashLines as $line) {
+                $accountId = (int) $line->tree_account_id;
+                $bank = $bankLedger->findByAssetId($accountId);
+                if ($bank) {
+                    $bankLedger->removeOperationalDetailsByRef($bank, (string) $batchCode);
+
+                    continue;
+                }
+
+                $safe = $safeLedger->findByAccountId($accountId);
+                if ($safe && abs((float) $line->debit - (float) $line->credit) > 0.009) {
+                    $signed = -round((float) $line->debit - (float) $line->credit, 2);
+                    $safeLedger->recordOperationalMovement(
+                        $safe,
+                        $signed,
+                        'عكس قيد محذوف — ' . $batchCode,
+                        (string) $batchCode . '-REV',
+                        'قيود',
+                        null,
+                        date('Y-m-d')
+                    );
+                }
             }
         }
     }
@@ -203,10 +261,16 @@ class SalesOrderAccountingService
         }
 
         // الدفعة المقدمة على بنك/خزينة/حساب خدمي تُسجَّل عبر OrderPaymentSourceLedgerService
-        // عند تحديث الرصيد التشغيلي. هنا نُبقي فقط حالة «بانتظار مصدر الدفع».
+        // عند إنشاء الطلب. PARTCOLLECT يُزامن الرصيد التشغيلي تلقائياً.
+        // هنا نُبقي قيود «بانتظار مصدر الدفع» والحالات القديمة فقط.
         if ($order->prepaid_amount > 0) {
             $paymentType = trim((string) ($order->prepaid_payment_type ?? ''));
-            if (in_array($paymentType, ['', 'pending', 'none'], true)) {
+
+            if (in_array($paymentType, ['bank', 'safe', 'service_account'], true)) {
+                return;
+            }
+
+            if (in_array($paymentType, ['', 'pending', 'none', 'collection_company'], true)) {
                 $this->postPrepaidCollectionEntry($order, $customerAccount);
             }
         }
@@ -302,7 +366,10 @@ class SalesOrderAccountingService
                 ],
                 $prepaidDesc,
                 $order->id,
-                $prepaidBatch
+                $prepaidBatch,
+                null,
+                null,
+                true
             );
 
             return;
@@ -439,7 +506,7 @@ class SalesOrderAccountingService
     private function resolveCashAccountIdForPrepaid(Order $order): ?int
     {
         $storedType = trim((string) ($order->prepaid_payment_type ?? ''));
-        if ($storedType === 'pending') {
+        if (in_array($storedType, ['pending', 'collection_company'], true)) {
             return null;
         }
 
@@ -447,7 +514,7 @@ class SalesOrderAccountingService
             ? $storedType
             : request()->input('payment_type', 'bank');
 
-        if ($paymentType === 'pending') {
+        if (in_array($paymentType, ['pending', 'collection_company'], true)) {
             return null;
         }
 

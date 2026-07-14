@@ -31,6 +31,9 @@ import { LoadingSpinnerComponent } from './loading-spinner/loading-spinner.compo
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
 import { LeadStatusService } from './services/lead-status.service';
+import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
+import { CustomDateAdapter } from './shared/date/custom-date-adapter';
+import { APP_DATE_FORMATS } from './shared/date/date-formats';
  
 
 
@@ -74,7 +77,10 @@ import { LeadStatusService } from './services/lead-status.service';
       multi: true
     },
     NotificationService,
-    LeadStatusService
+    LeadStatusService,
+    { provide: MAT_DATE_LOCALE, useValue: 'en-GB' },
+    { provide: DateAdapter, useClass: CustomDateAdapter },
+    { provide: MAT_DATE_FORMATS, useValue: APP_DATE_FORMATS },
   ],
   bootstrap: [AppComponent]
 })

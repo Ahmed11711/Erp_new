@@ -50,7 +50,63 @@ button , button:hover {
   background: #fafafa;
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 1.25rem 1.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.consumption-expansion {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.consumption-expansion ::ng-deep .consumption-expansion-header {
+  position: relative;
+  padding-left: 3.25rem !important;
+  cursor: pointer;
+}
+
+.consumption-toggle-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: #82225e;
+  color: #fff;
+  font-size: 0.95rem;
+  transform: translateY(-50%);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  pointer-events: none;
+}
+
+.consumption-toggle-icon.is-expanded {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.consumption-expansion-header:hover .consumption-toggle-icon {
+  background: #6a1b4b;
+}
+
+.consumption-toggle-hint {
+  margin-inline-start: auto;
+  color: #82225e;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.consumption-expansion .mat-expansion-panel-header-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.consumption-expansion .mat-expansion-panel-header-description {
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .consumption-table thead {

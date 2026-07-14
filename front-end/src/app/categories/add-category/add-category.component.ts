@@ -5,6 +5,7 @@ import { SnackBarComponent } from 'src/app/shared/snack-bar/snack-bar.component'
 import { CategoryService } from '../services/category.service';
 import { ProductionService } from '../services/production.service';
 import { UnitsService } from '../services/units.service';
+import { ItemClassificationService } from '../services/item-classification.service';
 import { catchError, map, startWith } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { AuthService } from 'src/app/auth/auth.service';
@@ -23,6 +24,7 @@ import { canSelectCategoryWarehouse } from 'src/app/shared/utils/category-wareho
 export class AddCategoryComponent implements OnInit {
  user!: string;
  productionData: any;
+ classificationsData: any;
  stockData: any = [];
  unitsData: any;
  warehouse: string = '';
@@ -31,7 +33,7 @@ export class AddCategoryComponent implements OnInit {
  fileopend: boolean = false;
 
  @ViewChild('addCat', { static: false }) addCat!: NgForm;
- constructor(private _snackBar: MatSnackBar, private production: ProductionService, private units: UnitsService, private StockService: StockService,
+ constructor(private _snackBar: MatSnackBar, private production: ProductionService, private units: UnitsService, private classifications: ItemClassificationService, private StockService: StockService,
   private category: CategoryService, private authService: AuthService, private orderService: OrderService, private rbac: RbacService) { }
 
  ngOnInit() {
@@ -103,6 +105,10 @@ export class AddCategoryComponent implements OnInit {
   formData.append('item_code', itemCode);
   const colorVal = (data.value.color ?? '').toString().trim();
   formData.append('color', colorVal);
+  const classificationVal = data.value.item_classification_id;
+  if (classificationVal !== '' && classificationVal !== null && classificationVal !== undefined) {
+   formData.append('item_classification_id', String(classificationVal));
+  }
   const recipeId = data.value.recipe_id;
   if (recipeId !== '' && recipeId !== null && recipeId !== undefined) {
    formData.append('recipe_id', String(recipeId));
@@ -154,6 +160,12 @@ export class AddCategoryComponent implements OnInit {
   })
  }
 
+ getClassifications() {
+  this.classifications.getClassifications().pipe(catchError(() => of([]))).subscribe((data: any) => {
+   this.classificationsData = (Array.isArray(data) ? data : []).filter((item) => item.warehouse == this.warehouse);
+  })
+ }
+
  canSelectWarehouse(warehouseName: string): boolean {
   return canSelectCategoryWarehouse(warehouseName, this.user, this.rbac);
  }
@@ -162,13 +174,16 @@ export class AddCategoryComponent implements OnInit {
   this.warehouse = event.target.value;
   this.unitsData = [];
   this.productionData = [];
+  this.classificationsData = [];
   const form = this.addCat?.form;
   if (form) {
    form.controls['unit']?.setValue('');
    form.controls['production']?.setValue('');
+   form.controls['item_classification_id']?.setValue('');
   }
   this.getProduction();
   this.getUnits();
+  this.getClassifications();
  }
 
  /**

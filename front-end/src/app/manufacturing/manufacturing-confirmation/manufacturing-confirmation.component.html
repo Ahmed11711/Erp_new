@@ -25,7 +25,7 @@
         <ng-autocomplete
           [data]="products"
           [searchKeyword]="catword"
-          placeholder="اسم المنتج"
+          placeholder="اسم المنتج (وصفة)"
           (selected)='productChange($event)'
           (inputCleared)="resetInp()"
           [itemTemplate]="itemTemplates"
@@ -154,14 +154,40 @@
 
   <div class="container-fluid mt-4 mb-4" *ngIf="product_id">
     <div class="consumption-panel w-75 m-auto">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
-        <div>
-          <h5 class="mb-1">مواد الخام المطلوب خصمها</h5>
-          <small class="text-muted" *ngIf="consumptionApplies">
-            يمكنك تعديل الكمية أو استبدال المادة، ثم حفظ التعديل على الوصفة الأصلية أو استخدامه لهذا الأمر فقط.
-          </small>
-        </div>
-        <div class="consumption-actions" *ngIf="consumptionApplies && consumptionLines.length">
+      <mat-expansion-panel
+        class="consumption-expansion"
+        [(expanded)]="consumptionExpanded"
+        hideToggle
+      >
+        <mat-expansion-panel-header class="consumption-expansion-header">
+          <span
+            class="consumption-toggle-icon"
+            [class.is-expanded]="consumptionExpanded"
+            aria-hidden="true"
+          >
+            <i class="fa-solid fa-chevron-down"></i>
+          </span>
+          <mat-panel-title>مواد الخام المطلوب خصمها</mat-panel-title>
+          <mat-panel-description *ngIf="consumptionPreviewPending">
+            جاري الحساب…
+          </mat-panel-description>
+          <mat-panel-description *ngIf="!consumptionPreviewPending && consumptionApplies && consumptionLines.length">
+            {{ consumptionLines.length }} مادة — إجمالي {{ consumptionTotalCost }}
+            <span class="text-warning" *ngIf="!consumptionAllSufficient"> (رصيد غير كافٍ)</span>
+          </mat-panel-description>
+          <mat-panel-description *ngIf="!consumptionPreviewPending && consumptionMessage && !consumptionApplies">
+            {{ consumptionMessage }}
+          </mat-panel-description>
+          <span class="consumption-toggle-hint" *ngIf="!consumptionExpanded">
+            اضغط للعرض
+          </span>
+        </mat-expansion-panel-header>
+
+        <p class="text-muted small mb-3" *ngIf="consumptionApplies">
+          يمكنك تعديل الكمية أو استبدال المادة، ثم حفظ التعديل على الوصفة الأصلية أو استخدامه لهذا الأمر فقط.
+        </p>
+
+        <div class="consumption-actions mb-3" *ngIf="consumptionApplies && consumptionLines.length">
           <button
             type="button"
             class="btn btn-sm consumption-save-recipe-btn"
@@ -179,7 +205,6 @@
             إعادة الكميات الافتراضية
           </button>
         </div>
-      </div>
 
       <div *ngIf="consumptionPreviewPending" class="text-muted py-3">جاري حساب المواد…</div>
       <div *ngIf="consumptionPreviewError" class="alert alert-danger">{{ consumptionPreviewError }}</div>
@@ -318,6 +343,7 @@
           </label>
         </div>
       </div>
+      </mat-expansion-panel>
     </div>
   </div>
 

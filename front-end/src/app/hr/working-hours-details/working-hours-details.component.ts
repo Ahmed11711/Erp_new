@@ -5,11 +5,19 @@ import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
 import {
   applyNormalShiftTimes,
+  baseHourPrice,
   convertMinutesToHours,
+  deductionMultiplier,
   diffMsBetween,
   fullDayPermissionSavePayload,
   isFullDayPermission,
   normalizeOvernightFingerPrintRecords,
+  overtimeDeductionRate,
+  extraDayMeritAmountAction,
+  EXTRA_DAY_WORKING_DAYS,
+  monthlyHoursDivisor,
+  WORKING_DAYS_PER_MONTH,
+  OVERTIME_DEDUCTION_MULTIPLIER,
   parseDatetimeLocalValue,
   parseLocalDateTime,
   resolveCheckOutDate,
@@ -19,6 +27,37 @@ import {
   toTimeInputValue
 } from '../utils/fingerprint-hours.utils';
 
+export interface WorkingHoursMonthAccount {
+  fixedSalary: number;
+  changedSalary: number;
+  incentives: number;
+  suits: number;
+  rewards: number;
+  overtimeFromHours: number;
+  hoursDeduction: number;
+  dailyIncentive: number;
+  dailyDeduction: number;
+  rival: number;
+  absenceSub: number;
+  advancePayment: number;
+  totalMerit: number;
+  totalSub: number;
+  netTotal: number;
+}
+
+export interface WorkingHoursDataEvent {
+  tableData: any[];
+  holidayDays: any[];
+  totalHours: string;
+  actualHours: string;
+  hoursDifferenceStr: string;
+  fixedSalary: number;
+  hourPrice: number;
+  totalActualHoursSalary: number;
+  differnceSalary: number;
+  monthAccount: WorkingHoursMonthAccount | null;
+}
+
 @Component({
   selector: 'app-working-hours-details',
   templateUrl: './working-hours-details.component.html',
@@ -26,7 +65,7 @@ import {
 })
 export class WorkingHoursDetailsComponent implements OnInit {
   @Input() dateFromEmp!: string;
-  @Output() dataEvent = new EventEmitter<{ tableData: any[], holidayDays: any[], totalHours: string, actualHours: string, hoursDifferenceStr: string, fixedSalary: number, hourPrice: number, totalActualHoursSalary: number, differnceSalary: number }>();
+  @Output() dataEvent = new EventEmitter<WorkingHoursDataEvent>();
   id: any;
   currentMonthValue!: any
   month!: any
@@ -61,6 +100,9 @@ export class WorkingHoursDetailsComponent implements OnInit {
 
     if (changes.dateFromEmp) {
       this.currentMonthValue = changes.dateFromEmp.currentValue;
+      const [year, month] = this.currentMonthValue.split('-');
+      this.year = +year;
+      this.month = month;
       this.holidayDaysFn(this.currentMonthValue);
       this.getEmpDataPerMonth();
     }
@@ -71,6 +113,34 @@ export class WorkingHoursDetailsComponent implements OnInit {
   actualHours!: string;
   hoursDifferenceStr!: string;
   dayHours!: number;
+  merits: any[] = [];
+  subtractions: any[] = [];
+  advancePayments: any[] = [];
+  monthAccount: WorkingHoursMonthAccount | null = null;
+
+  get monthlyHoursDivisorValue(): number {
+    return monthlyHoursDivisor(this.dayHours || 8);
+  }
+
+  get overtimeHourRate(): number {
+    return overtimeDeductionRate(this.fixedSalary || 0, this.dayHours || 8);
+  }
+
+  get extraDayFormulaDetail(): string {
+    const salary = Number(this.fixedSalary || 0).toFixed(2);
+    const divisor = EXTRA_DAY_WORKING_DAYS * (this.dayHours || 8);
+    const amount = this.extraDayAmount.toFixed(2);
+    return `(الراتب ${salary} ÷ ${divisor}) × ${OVERTIME_DEDUCTION_MULTIPLIER} × ${this.dayHours} س = ${amount} ج`;
+  }
+
+  get extraDayAmount(): number {
+    return extraDayMeritAmountAction(this.fixedSalary || 0, this.dayHours || 8);
+  }
+
+  get formulaText(): string {
+    return `(الراتب ÷ ${this.monthlyHoursDivisorValue}) × ${OVERTIME_DEDUCTION_MULTIPLIER} × الساعات`;
+  }
+
   getEmpDataPerMonth() {
     this.tableData = [];
     let param = {
@@ -119,7 +189,7 @@ export class WorkingHoursDetailsComponent implements OnInit {
       let totalHoursPerMonth = workingHourPerDay * 26 * 60;
       let actualTotalMinutesPerMonth = 0;
       this.totalHours = this.convertMinutesToHours(totalHoursPerMonth);
-      this.hourPrice = this.fixedSalary / 30 / this.dayHours
+      this.hourPrice = baseHourPrice(this.fixedSalary, this.dayHours);
 
       // --- Generate All Days of Month Logic ---
       const [yearStr, monthStr] = this.currentMonthValue.split('-');
@@ -255,14 +325,12 @@ export class WorkingHoursDetailsComponent implements OnInit {
             elm['salary_type2'] = 'حافز';
           } else {
             hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
-            let salary = hoursDifference / 60 * this.hourPrice;
+            const rateMultiplier = deductionMultiplier(elm.absence_deduction);
+            let salary = hoursDifference / 60 * this.hourPrice * rateMultiplier;
 
-            if (elm.absence_deduction) {
-              salary = salary * Number(elm.absence_deduction);
-            }
             if (elm.hours_permission) {
               let [hp, mp] = elm.hours_permission.split(':').map(Number);
-              salary += ((hp * 60 + mp) / 60 * this.hourPrice);
+              salary += ((hp * 60 + mp) / 60 * this.hourPrice * rateMultiplier);
             }
 
             elm['salary_type'] = salary * -1;
@@ -316,6 +384,7 @@ export class WorkingHoursDetailsComponent implements OnInit {
       }
 
       this.calcSalary();
+      this.loadMonthAccountData();
     });
   }
 
@@ -323,12 +392,199 @@ export class WorkingHoursDetailsComponent implements OnInit {
   hourPrice: number = 0;
   totalActualHoursSalary: number = 0;
   differnceSalary: number = 0;
+
+  private loadMonthAccountData(): void {
+    if (!this.id || !this.month || !this.year) {
+      return;
+    }
+    this.employeeService.dataPerMonth(this.id, this.month, this.year).subscribe((account: any) => {
+      this.merits = account?.merits || [];
+      this.subtractions = account?.subtraction || [];
+      this.advancePayments = account?.advance_payment || [];
+      this.buildMonthAccountSummary();
+    });
+  }
+
+  private buildMonthAccountSummary(): void {
+    let incentives = 0;
+    let suits = 0;
+    let rewards = 0;
+    let changedSalary = 0;
+    for (const item of this.merits) {
+      const amount = Number(item.amount) || 0;
+      if (item.type === 'حوافز') {
+        incentives += amount;
+      } else if (item.type === 'بدلات') {
+        suits += amount;
+      } else if (item.type === 'مكافئات') {
+        rewards += amount;
+      } else if (item.type === 'الراتب المتغير') {
+        changedSalary += amount;
+      }
+    }
+
+    let rival = 0;
+    let absenceSub = 0;
+    for (const item of this.subtractions) {
+      const amount = Number(item.amount) || 0;
+      if (item.type === 'خصومات') {
+        rival += amount;
+      } else if (item.type === 'غياب') {
+        absenceSub += Number(((this.fixedSalary / 30) * amount).toFixed(2));
+      }
+    }
+
+    let advancePayment = 0;
+    for (const item of this.advancePayments) {
+      if (item.type === 'سلف') {
+        advancePayment += Number(item.amount) || 0;
+      }
+    }
+
+    const dailyIncentive = this.tableData.reduce(
+      (sum, row) => (row.salary_type2 === 'حافز' && !row.is_overTime_removed ? sum + Number(row.salary_type || 0) : sum),
+      0
+    );
+    const dailyDeduction = this.tableData.reduce(
+      (sum, row) => (row.salary_type2 === 'خصم' ? sum + Math.abs(Number(row.salary_type || 0)) : sum),
+      0
+    );
+
+    const fixed = Number(this.fixedSalary) || 0;
+    let totalMerit = changedSalary + incentives + suits + rewards + fixed;
+    let hoursDeduction = 0;
+    let overtimeFromHours = 0;
+
+    if (this.actualHours) {
+      if (this.totalActualHoursSalary > fixed) {
+        totalMerit += this.totalActualHoursSalary - fixed;
+        overtimeFromHours = this.differnceSalary > 0 ? this.differnceSalary : this.totalActualHoursSalary - fixed;
+      }
+      if (this.differnceSalary > 0) {
+        overtimeFromHours = this.differnceSalary;
+      } else if (this.differnceSalary < 0) {
+        hoursDeduction = Math.abs(this.differnceSalary);
+      }
+    }
+
+    let totalSub = rival + absenceSub + advancePayment;
+    if (this.differnceSalary <= 0 && this.actualHours) {
+      totalSub += hoursDeduction;
+    }
+    totalSub = Number(totalSub.toFixed(2));
+    totalMerit = Number(totalMerit.toFixed(2));
+
+    this.monthAccount = {
+      fixedSalary: fixed,
+      changedSalary,
+      incentives,
+      suits,
+      rewards,
+      overtimeFromHours: Number(overtimeFromHours.toFixed(2)),
+      hoursDeduction: Number(hoursDeduction.toFixed(2)),
+      dailyIncentive: Number(dailyIncentive.toFixed(2)),
+      dailyDeduction: Number(dailyDeduction.toFixed(2)),
+      rival,
+      absenceSub,
+      advancePayment,
+      totalMerit,
+      totalSub,
+      netTotal: Number((totalMerit - totalSub).toFixed(2)),
+    };
+
+    this.emitDataEvent();
+  }
+
+  private emitDataEvent(): void {
+    this.dataEvent.emit({
+      tableData: this.tableData,
+      holidayDays: this.holidayDays,
+      totalHours: this.totalHours,
+      actualHours: this.actualHours,
+      hoursDifferenceStr: this.hoursDifferenceStr,
+      fixedSalary: this.fixedSalary,
+      hourPrice: this.hourPrice,
+      totalActualHoursSalary: this.totalActualHoursSalary,
+      differnceSalary: this.differnceSalary,
+      monthAccount: this.monthAccount,
+    });
+  }
+
+  addExtraDayMerit(): void {
+    const amount = this.extraDayAmount;
+    Swal.fire({
+      title: 'تأكيد: يوم عمل إضافي',
+      html: `
+        <div style="text-align:right;direction:rtl">
+          <p>سيتم إضافة استحقاق <strong>حوافز</strong> للموظف <strong>${this.name || ''}</strong> عن شهر ${this.currentMonthValue}.</p>
+          <p>المبلغ = يوم كامل (${this.dayHours} س) بمعادلة الإضافي:</p>
+          <p dir="ltr" style="font-weight:600;margin:0.5rem 0">${this.extraDayFormulaDetail}</p>
+          <p class="text-muted" style="font-size:0.9rem">يظهر في كشف الحساب تحت «حوافز» ويزيد إجمالي الاستحقاق.</p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: `نعم، أضف ${amount.toFixed(2)} ج`,
+      cancelButtonText: 'إلغاء',
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+      this.saveMerit('حوافز', amount, 'يوم إضافي');
+    });
+  }
+
+  addBonusMerit(): void {
+    Swal.fire({
+      title: 'إضافة مكافأة',
+      input: 'number',
+      inputPlaceholder: 'المبلغ',
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value || Number(value) <= 0) {
+          return 'يجب إدخال مبلغ صحيح';
+        }
+        return undefined;
+      },
+    }).then((result) => {
+      if (!result.isConfirmed || !result.value) {
+        return;
+      }
+      Swal.fire({
+        title: 'سبب المكافأة (اختياري)',
+        input: 'text',
+        showCancelButton: true,
+      }).then((reasonResult) => {
+        const reason = reasonResult.isConfirmed && reasonResult.value ? String(reasonResult.value) : 'مكافأة';
+        this.saveMerit('مكافئات', Number(result.value), reason);
+      });
+    });
+  }
+
+  private saveMerit(type: string, amount: number, reason: string): void {
+    this.employeeService.addMerit({
+      employee_id: this.id,
+      month: this.month,
+      year: this.year,
+      type,
+      amount,
+      reason,
+    }).subscribe({
+      next: () => {
+        Swal.fire({ icon: 'success', title: 'تمت الإضافة', timer: 1500, showConfirmButton: false });
+        this.loadMonthAccountData();
+      },
+      error: (err) => {
+        Swal.fire({ icon: 'error', title: 'خطأ', text: err?.error?.message || 'تعذر الحفظ' });
+      },
+    });
+  }
+
   calcSalary() {
     // If no actual hours (no fingerprints), set values to 0
     if (!this.actualHours) {
       this.totalActualHoursSalary = 0;
       this.differnceSalary = 0;
-      this.dataEvent.emit({ tableData: this.tableData, holidayDays: this.holidayDays, totalHours: this.totalHours, actualHours: this.actualHours, hoursDifferenceStr: this.hoursDifferenceStr, fixedSalary: this.fixedSalary, hourPrice: this.hourPrice, totalActualHoursSalary: this.totalActualHoursSalary, differnceSalary: this.differnceSalary });
+      this.buildMonthAccountSummary();
       return;
     }
     
@@ -347,7 +603,7 @@ export class WorkingHoursDetailsComponent implements OnInit {
     if (this.is_overTime_removed && this.changedSalary > 0) {
       this.autoRemoveOverTime();
     }
-    this.dataEvent.emit({ tableData: this.tableData, holidayDays: this.holidayDays, totalHours: this.totalHours, actualHours: this.actualHours, hoursDifferenceStr: this.hoursDifferenceStr, fixedSalary: this.fixedSalary, hourPrice: this.hourPrice, totalActualHoursSalary: this.totalActualHoursSalary, differnceSalary: this.differnceSalary });
+    this.buildMonthAccountSummary();
   }
 
   convertMinutesToHours(minutes: number): string {
@@ -640,7 +896,7 @@ export class WorkingHoursDetailsComponent implements OnInit {
           }
           if (value !== '') {
             // let totalMinutes = Math.floor((Math.abs(differnceSalary) - value) / this.hourPrice * 60);
-            let totalMinutes = (Math.abs(differnceSalary) - value) / this.hourPrice * 60;
+            let totalMinutes = (Math.abs(differnceSalary) - value) / (this.hourPrice * OVERTIME_DEDUCTION_MULTIPLIER) * 60;
             let data = this.tableData.filter(elm => elm.hoursDifference < '00:00' && !elm.holiday && elm.salary_type !== 0);
             let changedData: any[] = [];
             data.forEach(elm => {

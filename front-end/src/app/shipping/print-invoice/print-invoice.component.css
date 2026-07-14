@@ -1,8 +1,10 @@
 .invoice{
   padding: 10px 40px;
   border-radius: 10px;
-  background-color: #7b2869;
-  color: white;
+  background-color: #7b2869 !important;
+  color: white !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 p{
@@ -13,9 +15,11 @@ p{
 
 
 .bg-invoice{
-  background-color: #7b2869;
-  color: white;
+  background-color: #7b2869 !important;
+  color: white !important;
   font-weight: 600;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 
@@ -32,10 +36,32 @@ p{
 
 thead th{
   background-color: #7b2869 !important;
+  color: #fff !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 .container{
   padding: 3rem;
+}
+
+.invoice-page {
+  position: relative;
+  padding: 3rem;
+}
+
+.invoice-page-break {
+  page-break-after: always;
+  break-after: page;
+}
+
+.invoice-header-meta {
+  gap: 1rem;
+}
+
+.invoice-date {
+  font-size: 1rem;
+  color: #333;
 }
 
 #capture{
@@ -52,7 +78,7 @@ thead th{
 }
 
 .footer2 {
-  margin-top: 2rem; /* Adjust as needed */
+  margin-top: 2rem;
 }
 
 .connect p,
@@ -70,4 +96,19 @@ input{
   margin-left: 10px;
   padding: 5px 10px;
   font-size: 12px !important;
+}
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  .invoice,
+  .bg-invoice,
+  thead th {
+    background-color: #7b2869 !important;
+    color: #ffffff !important;
+  }
 }

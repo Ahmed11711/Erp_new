@@ -13,6 +13,7 @@ class PurchaseInvoiceTypeResolver
             'مرتجع مبيعات' => PurchaseInvoiceKind::SalesReturn,
             'امانات' => PurchaseInvoiceKind::Amanat,
             'مرتجع' => PurchaseInvoiceKind::PurchaseReturn,
+            'اضافة وارد تشغيل' => PurchaseInvoiceKind::PurchaseReceipt,
             default => PurchaseInvoiceKind::PurchaseReceipt,
         };
     }

@@ -114,6 +114,75 @@
       </tr>
     </tfoot>
   </table>
+
+  <section class="month-sheet-summary" *ngIf="monthAccount && fixedSalary">
+    <div class="month-sheet-summary__formula">
+      <h3 class="month-sheet-summary__title">معادلة الحساب</h3>
+      <p class="month-sheet-summary__formula-main">{{ formulaText }}</p>
+      <div class="month-sheet-summary__formula-details">
+        <span>الراتب: {{ fixedSalary | customNumber }} ج</span>
+        <span>سعر الساعة: {{ hourPrice | customNumber }} ج</span>
+        <span>معدل الإضافي/الخصم: {{ overtimeHourRate | customNumber }} ج/س</span>
+        <span>ساعات اليوم: {{ dayHours }}</span>
+        <span>أيام العمل: {{ 26 }} يوم</span>
+      </div>
+    </div>
+
+    <h3 class="month-sheet-summary__title text-center mt-4">كشف حساب الشهر</h3>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <table class="table table-bordered text-center month-sheet-summary__table">
+          <thead>
+            <tr><th colspan="2" class="bg-navy text-white">الاستحقاقات</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>الراتب الثابت</td><td dir="ltr">{{ monthAccount.fixedSalary | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.changedSalary"><td>الراتب المتغير</td><td dir="ltr">{{ monthAccount.changedSalary | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.incentives"><td>حوافز</td><td dir="ltr">{{ monthAccount.incentives | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.suits"><td>بدلات</td><td dir="ltr">{{ monthAccount.suits | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.rewards"><td>مكافئات</td><td dir="ltr">{{ monthAccount.rewards | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.overtimeFromHours"><td>حافز ساعات (إجمالي الشهر)</td><td dir="ltr">{{ monthAccount.overtimeFromHours | customNumber }}</td></tr>
+            <tr class="fw-bold"><td>إجمالي الاستحقاق</td><td dir="ltr">{{ monthAccount.totalMerit | customNumber }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <table class="table table-bordered text-center month-sheet-summary__table">
+          <thead>
+            <tr><th colspan="2" class="bg-navy text-white">الاستقطاعات</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="monthAccount.rival"><td>خصومات</td><td dir="ltr">{{ monthAccount.rival | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.absenceSub"><td>غياب</td><td dir="ltr">{{ monthAccount.absenceSub | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.advancePayment"><td>سلف</td><td dir="ltr">{{ monthAccount.advancePayment | customNumber }}</td></tr>
+            <tr *ngIf="monthAccount.hoursDeduction"><td>خصم ساعات التأخير</td><td dir="ltr">{{ monthAccount.hoursDeduction | customNumber }}</td></tr>
+            <tr *ngIf="!monthAccount.rival && !monthAccount.absenceSub && !monthAccount.advancePayment && !monthAccount.hoursDeduction">
+              <td colspan="2" class="text-muted">لا توجد استقطاعات</td>
+            </tr>
+            <tr class="fw-bold"><td>إجمالي الاستقطاع</td><td dir="ltr">{{ monthAccount.totalSub | customNumber }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <table class="table table-bordered text-center month-sheet-summary__table month-sheet-summary__net">
+      <tbody>
+        <tr class="fw-bold fs-5">
+          <td class="bg-navy text-white">صافي الشهر</td>
+          <td dir="ltr">{{ monthAccount.netTotal | customNumber }} ج</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="month-sheet-summary__actions text-center my-3" *ngIf="user == 'Admin' && url == 'workinghoursdetails'">
+      <button type="button" class="btn btn-main month-sheet-summary__btn mx-2" (click)="addExtraDayMerit()">
+        إضافة يوم إضافي ({{ extraDayAmount | customNumber }} ج)
+      </button>
+      <button type="button" class="btn btn-outline-dark month-sheet-summary__btn mx-2" (click)="addBonusMerit()">
+        إضافة مكافأة
+      </button>
+    </div>
+  </section>
 </div>
 <div class="text-center" *ngIf="!isReviewed && user == 'Admin'">
   <button *ngIf="url == 'workinghoursdetails'" class="btn btn-success" (click)="reviewMonth()">تم المراجعة</button>

@@ -1,0 +1,30 @@
+<div class="app-date-input-wrap">
+  <input
+    [id]="id"
+    type="text"
+    class="app-date-input-field"
+    [class.app-date-input-field--invalid]="invalidInput"
+    [formControl]="pickerControl"
+    [matDatepicker]="picker"
+    [matDatepickerFilter]="pickerDateFilter"
+    placeholder="dd/mm/yyyy"
+    dir="ltr"
+    inputmode="numeric"
+    maxlength="10"
+    autocomplete="off"
+    (dateChange)="onDateChange($event.value)"
+    (blur)="onBlur()">
+
+  <button
+    type="button"
+    class="app-date-input-toggle"
+    [disabled]="pickerControl.disabled"
+    tabindex="-1"
+    (mousedown)="$event.preventDefault()"
+    (click)="picker?.open()"
+    aria-label="فتح التقويم">
+    <mat-icon>calendar_today</mat-icon>
+  </button>
+
+  <mat-datepicker #picker [startAt]="pickerStartAt"></mat-datepicker>
+</div>

@@ -750,9 +750,14 @@ class PurchasesController extends Controller
                 return response()->json($approval, 201);
             }
 
-            $deletionService->delete((int) $id, (int) auth()->id());
+            $deleteResult = $deletionService->delete((int) $id, (int) auth()->id());
 
-            return response()->json(['success' => true], 200);
+            $response = ['success' => true];
+            if (! empty($deleteResult['stock_warnings'] ?? [])) {
+                $response['warnings'] = $deleteResult['stock_warnings'];
+            }
+
+            return response()->json($response, 200);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
@@ -780,6 +785,7 @@ class PurchasesController extends Controller
         return response()->json([
             'success' => $hasSuccess,
             'results' => $results,
+            'warnings' => $results['warnings'] ?? [],
         ], $status);
     }
 

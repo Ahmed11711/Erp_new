@@ -45,25 +45,130 @@ class EmployeePaymentAccountingService
             return false;
         }
 
-        return $this->postPaymentToCreditAccount($description, $amount, (int) $bank->asset_id, 'صرف من البنك', $date);
+        return $this->postPaymentToCreditAccount($description, $amount, (int) $bank->asset_id, 'صرف من البنك', $date) !== null;
     }
 
     /**
-     * قيد يومية: مدين مصروف رواتب، دائن حساب المصدر النقدي (بنك/خزينة/حساب خدمي مرتبط بشجرة الحسابات).
+     * استحقاق راتب: مدين مصروف رواتب، دائن مستحقات الموظف.
+     *
+     * @return int|null daily_entry_id
      */
-    public function postPaymentToCreditAccount(string $description, float $amount, int $creditTreeAccountId, string $creditSideNotes = 'صرف', ?string $date = null): bool
+    public function postSalaryAccrual(string $description, float $amount, int $employeePayableAccountId, ?string $date = null): ?int
     {
-        $expenseAccountId = $this->getSalaryExpenseAccountId();
-        if (!$expenseAccountId) {
-            Log::warning('EmployeePayment: salary expense account not found');
+        return $this->postTwoLegEntry(
+            $description,
+            $amount,
+            $this->getSalaryExpenseAccountId(),
+            $employeePayableAccountId,
+            'مصروف رواتب — استحقاق',
+            'مستحقات راتب',
+            $date
+        );
+    }
 
-            return false;
+    /**
+     * تعديل استحقاق: increase=true => مدين مصروف دائن مستحقات، وإلا العكس.
+     *
+     * @return int|null daily_entry_id
+     */
+    public function postAccrualAdjustment(
+        string $description,
+        float $amount,
+        int $employeePayableAccountId,
+        bool $increase,
+        ?string $date = null
+    ): ?int {
+        if ($increase) {
+            return $this->postTwoLegEntry(
+                $description,
+                $amount,
+                $this->getSalaryExpenseAccountId(),
+                $employeePayableAccountId,
+                'تعديل استحقاق — زيادة',
+                'مستحقات راتب',
+                $date
+            );
         }
 
-        if (!TreeAccount::find($creditTreeAccountId)) {
-            Log::warning('EmployeePayment: credit tree account missing', ['account_id' => $creditTreeAccountId]);
+        return $this->postTwoLegEntry(
+            $description,
+            $amount,
+            $employeePayableAccountId,
+            $this->getSalaryExpenseAccountId(),
+            'تعديل استحقاق — نقص',
+            'مصروف رواتب',
+            $date
+        );
+    }
 
-            return false;
+    /**
+     * صرف راتب: مدين مستحقات الموظف، دائن المصدر النقدي.
+     *
+     * @return int|null daily_entry_id
+     */
+    public function postSalaryDisbursement(
+        string $description,
+        float $amount,
+        int $employeePayableAccountId,
+        int $creditTreeAccountId,
+        string $creditSideNotes = 'صرف',
+        ?string $date = null
+    ): ?int {
+        return $this->postTwoLegEntry(
+            $description,
+            $amount,
+            $employeePayableAccountId,
+            $creditTreeAccountId,
+            'سداد مستحقات راتب',
+            $creditSideNotes,
+            $date
+        );
+    }
+
+    /**
+     * قيد يومية قديم: مدين مصروف رواتب، دائن حساب المصدر النقدي (سلف / ترحيل بدون ربط موظف).
+     *
+     * @return int|null daily_entry_id
+     */
+    public function postPaymentToCreditAccount(string $description, float $amount, int $creditTreeAccountId, string $creditSideNotes = 'صرف', ?string $date = null): ?int
+    {
+        return $this->postTwoLegEntry(
+            $description,
+            $amount,
+            $this->getSalaryExpenseAccountId(),
+            $creditTreeAccountId,
+            'مصروف رواتب/سلف',
+            $creditSideNotes,
+            $date
+        );
+    }
+
+    /**
+     * @return int|null daily_entry_id
+     */
+    private function postTwoLegEntry(
+        string $description,
+        float $amount,
+        ?int $debitAccountId,
+        ?int $creditAccountId,
+        string $debitNotes,
+        string $creditNotes,
+        ?string $date = null
+    ): ?int {
+        if (! $debitAccountId || ! TreeAccount::find($debitAccountId)) {
+            Log::warning('EmployeePayment: debit tree account missing', ['account_id' => $debitAccountId]);
+
+            return null;
+        }
+
+        if (! $creditAccountId || ! TreeAccount::find($creditAccountId)) {
+            Log::warning('EmployeePayment: credit tree account missing', ['account_id' => $creditAccountId]);
+
+            return null;
+        }
+
+        if ($amount <= 0) {
+            return null;
         }
 
         $date = $date ?: now();
@@ -81,45 +186,45 @@ class EmployeePaymentAccountingService
 
             DailyEntryItem::create([
                 'daily_entry_id' => $dailyEntry->id,
-                'account_id' => $expenseAccountId,
+                'account_id' => $debitAccountId,
                 'debit' => $amount,
                 'credit' => 0,
-                'notes' => 'مصروف رواتب/سلف',
+                'notes' => $debitNotes,
             ]);
             DailyEntryItem::create([
                 'daily_entry_id' => $dailyEntry->id,
-                'account_id' => $creditTreeAccountId,
+                'account_id' => $creditAccountId,
                 'debit' => 0,
                 'credit' => $amount,
-                'notes' => $creditSideNotes,
+                'notes' => $creditNotes,
             ]);
 
             AccountEntry::create([
-                'tree_account_id' => $expenseAccountId,
+                'tree_account_id' => $debitAccountId,
                 'debit' => $amount,
                 'credit' => 0,
                 'description' => $description,
                 'daily_entry_id' => $dailyEntry->id,
             ]);
             AccountEntry::create([
-                'tree_account_id' => $creditTreeAccountId,
+                'tree_account_id' => $creditAccountId,
                 'debit' => 0,
                 'credit' => $amount,
                 'description' => $description,
                 'daily_entry_id' => $dailyEntry->id,
             ]);
 
-            $this->accountingService->updateAccountHierarchyBalances($expenseAccountId);
-            $this->accountingService->updateAccountHierarchyBalances($creditTreeAccountId);
+            $this->accountingService->updateAccountHierarchyBalances($debitAccountId);
+            $this->accountingService->updateAccountHierarchyBalances($creditAccountId);
 
             DB::commit();
 
-            return true;
+            return (int) $dailyEntry->id;
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('EmployeePayment posting failed: '.$e->getMessage());
 
-            return false;
+            return null;
         }
     }
 }

@@ -16,6 +16,8 @@ class TreeAccountAuditResource extends JsonResource
                 'created' => 'إضافة',
                 'updated' => 'تعديل',
                 'deleted' => 'حذف',
+                'restored' => 'استرجاع',
+                'force_deleted' => 'حذف نهائي',
                 default => $this->action,
             },
             'performed_by' => $this->performed_by,

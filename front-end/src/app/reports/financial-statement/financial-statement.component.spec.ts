@@ -6,6 +6,8 @@ import { AccountingReportService } from 'src/app/accounting/services/accounting-
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { DailyEntryService } from 'src/app/accounting/services/daily-entry.service';
+import { AuthService } from 'src/app/auth/auth.service';
 
 import { PdfService } from 'src/app/pdf.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
@@ -39,6 +41,8 @@ describe('FinancialStatementComponent', () => {
         { provide: SafeService, useValue: { getAll: () => of({ data: [] }) } },
         { provide: BankService, useValue: { getAll: () => of({ data: [] }) } },
         { provide: ServiceAccountsService, useValue: { index: () => of({ data: [] }) } },
+        { provide: DailyEntryService, useValue: { getUsers: () => of({ data: [] }) } },
+        { provide: AuthService, useValue: { fetchMe: () => of(null), getUser: () => '' } },
         { provide: ActivatedRoute, useValue: routeStub },
         { provide: Router, useValue: routerStub },
         { provide: PdfService, useValue: { generateAccountStatementPdf: () => Promise.resolve() } },

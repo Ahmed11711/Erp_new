@@ -135,6 +135,9 @@ class RecipeController extends Controller
                         $recipe->fresh(['ingredients.item']),
                         $outputId
                     );
+                    $this->manufactureRecipeSync->syncLegacyManufactureLinesFromRecipe(
+                        $recipe->fresh(['ingredients'])
+                    );
                 }
 
                 return $recipe;

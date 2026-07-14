@@ -5,6 +5,7 @@ import { ExpenseService } from '../services/expense.service';
 import { PaymentSourcesService } from 'src/app/accounting/services/payment-sources.service';
 import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 import { ActivatedRoute, Router } from '@angular/router';
+import { dateToIsoString } from 'src/app/shared/date/date-utils';
 
 interface AccountOption {
   id: number;
@@ -30,9 +31,7 @@ export class AddExpenseComponent implements OnInit{
   private lineAccountCtrls = new Map<number, FormControl<string | AccountOption>>();
   private lineFilteredAccounts = new Map<number, AccountOption[]>();
   readonly accountAutocompleteCap = 400;
-  dateFrom: string = new Date().toISOString().slice(0, 10);
-  minDate!: string;
-  maxDate!: string;
+  dateFrom: string = dateToIsoString(new Date()) || '';
   time!:string;
   paymentType: 'safe' | 'bank' | 'service_account' = 'safe';
   isEditMode = false;
@@ -47,12 +46,6 @@ export class AddExpenseComponent implements OnInit{
     private route: Router,
     private activatedRoute: ActivatedRoute,
   ){
-    const today = new Date();
-    const threeDaysBefore = new Date(today);
-    threeDaysBefore.setDate(today.getDate() - 3);
-
-    this.maxDate = today.toISOString().split('T')[0];
-    this.minDate = threeDaysBefore.toISOString().split('T')[0];
     this.time = this.getCurrentTime();
   }
 
@@ -134,9 +127,6 @@ export class AddExpenseComponent implements OnInit{
         if (res.created_at) {
           const raw = String(res.created_at);
           createdDate = raw.includes('T') ? raw.slice(0, 10) : raw.slice(0, 10);
-        }
-        if (createdDate < this.minDate) {
-          this.minDate = createdDate;
         }
 
         this.form.patchValue({

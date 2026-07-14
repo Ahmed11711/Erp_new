@@ -21,9 +21,11 @@ use Illuminate\Support\Collection;
 
 class ExpenseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $data = Expense::with([
+        $itemsPerPage = (int) ($request->input('itemsPerPage') ?: 50);
+
+        $paginator = Expense::with([
             'kind.treeAccount',
             'treeAccount',
             'lines.kind.treeAccount',
@@ -32,9 +34,13 @@ class ExpenseController extends Controller
             'safe.account',
             'serviceAccount.account',
             'user:id,name',
-        ])->get();
-        $this->hydrateExpenseLedgerContext($data);
-        return response()->json($data);
+        ])
+            ->orderByDesc('id')
+            ->paginate($itemsPerPage);
+
+        $this->hydrateExpenseLedgerContext($paginator->getCollection());
+
+        return response()->json($paginator);
     }
 
     public function store(Request $request)
@@ -785,11 +791,15 @@ class ExpenseController extends Controller
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
         $search = Expense::query();
-        if($request->has('date_to') && $request->has('date_from')){
+        if($request->filled('date_from') && $request->filled('date_to')){
             $search->whereBetween('created_at', [
-                $request->input('date_from'),
-                $request->input('date_to')
+                $request->input('date_from') . ' 00:00:00',
+                $request->input('date_to') . ' 23:59:59',
             ]);
+        } elseif ($request->filled('date_from')) {
+            $search->whereDate('created_at', '>=', $request->input('date_from'));
+        } elseif ($request->filled('date_to')) {
+            $search->whereDate('created_at', '<=', $request->input('date_to'));
         }
 
         $paginator = $search->with([

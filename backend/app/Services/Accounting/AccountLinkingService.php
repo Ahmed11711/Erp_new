@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\ShippingCompany;
 use App\Models\TreeAccount;
 use App\Models\customerCompany;
+use App\Models\Employee;
 use App\Models\Supplier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -663,6 +664,120 @@ class AccountLinkingService
         }
     }
 
+    private const BUCKET_EMPLOYEE_PAYABLE = 'رواتب مستحقة';
+
+    /**
+     * الحساب الأب لذمم رواتب الموظفين (خصوم).
+     */
+    public function getEmployeePayableParent(): ?TreeAccount
+    {
+        $parentId = Setting::where('key', 'employee_payable_parent_account_id')->value('value');
+        if ($parentId) {
+            $fromSetting = TreeAccount::find($parentId);
+            if ($fromSetting) {
+                return $fromSetting;
+            }
+        }
+
+        $byBucket = TreeAccount::query()
+            ->where('type', 'liability')
+            ->where('name', self::BUCKET_EMPLOYEE_PAYABLE)
+            ->orderBy('level')
+            ->first();
+        if ($byBucket) {
+            return $byBucket;
+        }
+
+        return $this->ensureLiabilityBucket(self::BUCKET_EMPLOYEE_PAYABLE);
+    }
+
+    /**
+     * الحصول على حساب الموظف المربوط يدوياً من شجرة الحسابات.
+     */
+    public function resolveEmployeePayableAccount(Employee $employee): ?TreeAccount
+    {
+        if (! $employee->payable_tree_account_id) {
+            return null;
+        }
+
+        return TreeAccount::find($employee->payable_tree_account_id);
+    }
+
+    /**
+     * إنشاء أو الحصول على حساب مستحقات (خصوم) لموظف — للربط الجماعي فقط.
+     */
+    public function ensureEmployeePayableAccount(Employee $employee): ?TreeAccount
+    {
+        $existing = $this->resolveEmployeePayableAccount($employee);
+        if ($existing) {
+            return $existing;
+        }
+
+        $parent = $this->getEmployeePayableParent();
+        if (! $parent) {
+            Log::error('AccountLinkingService: cannot resolve parent for employee payable tree account', [
+                'employee_id' => $employee->id,
+            ]);
+
+            return null;
+        }
+
+        $name = trim((string) ($employee->name ?? '')) !== ''
+            ? $employee->name
+            : ('موظف '.$employee->id);
+
+        $account = $this->createChildAccount($parent, $name, 'liability');
+        $employee->payable_tree_account_id = $account->id;
+        $employee->save();
+
+        return $account;
+    }
+
+    public function syncEmployeePayableTreeAccountName(Employee $employee): void
+    {
+        if (! $employee->payable_tree_account_id) {
+            return;
+        }
+
+        $account = TreeAccount::find($employee->payable_tree_account_id);
+        $desiredName = trim($employee->name ?? '');
+        if (! $account || $desiredName === '') {
+            return;
+        }
+
+        if (trim($account->name) !== $desiredName) {
+            $account->name = $desiredName;
+            $account->save();
+        }
+    }
+
+    /**
+     * @return array{success:bool,message:string,linked:int,failed:int,total:int}
+     */
+    public function linkAllUnlinkedEmployees(): array
+    {
+        $linked = 0;
+        $failed = 0;
+        $employees = Employee::query()->whereNull('payable_tree_account_id')->get();
+
+        foreach ($employees as $employee) {
+            $account = $this->ensureEmployeePayableAccount($employee);
+            if ($account) {
+                $linked++;
+            } else {
+                $failed++;
+            }
+        }
+
+        return [
+            'success' => $failed === 0,
+            'message' => "تم ربط {$linked} موظف".($failed > 0 ? " — فشل {$failed}" : ''),
+            'linked' => $linked,
+            'failed' => $failed,
+            'total' => $employees->count(),
+        ];
+    }
+
     /**
      * إنشاء حساب فرعي تحت الحساب الأب
      */
@@ -948,6 +1063,54 @@ class AccountLinkingService
         }
 
         return $this->createChildAccount($anchor, $bucketName, $anchor->type ?? 'asset');
+    }
+
+    /**
+     * إنشاء أو جلب حساب تجميعي تحت الخصوم المتداولة (مثل رواتب مستحقة).
+     */
+    private function ensureLiabilityBucket(string $bucketName): ?TreeAccount
+    {
+        $anchor = $this->findCurrentLiabilitiesAnchor();
+        if (! $anchor) {
+            return null;
+        }
+
+        $existing = TreeAccount::query()
+            ->where('parent_id', $anchor->id)
+            ->where('name', $bucketName)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return $this->createChildAccount($anchor, $bucketName, $anchor->type ?? 'liability');
+    }
+
+    private function findCurrentLiabilitiesAnchor(): ?TreeAccount
+    {
+        $currentLiabilities = TreeAccount::query()
+            ->where('name', 'الخصوم المتداولة')
+            ->where('type', 'liability')
+            ->first();
+
+        if (! $currentLiabilities) {
+            return TreeAccount::query()
+                ->where('type', 'liability')
+                ->where('level', 2)
+                ->orderBy('id')
+                ->first();
+        }
+
+        $accrued = TreeAccount::query()
+            ->where('parent_id', $currentLiabilities->id)
+            ->where(function ($q) {
+                $q->where('name', 'المصروفات المستحقة')
+                    ->orWhere('name', 'like', '%مستحقة%');
+            })
+            ->first();
+
+        return $accrued ?? $currentLiabilities;
     }
 
     private function fallbackCustomerParentByLegacyCodes(string $kind): ?TreeAccount

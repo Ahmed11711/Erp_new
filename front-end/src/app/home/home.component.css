@@ -1,58 +1,183 @@
-.header{
-  background-color: black;
+:host {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: min-content;
+  --brand: #82225e;
+  --brand-dark: #5e1745;
+  --brand-light: #a3357a;
+}
+
+.home-page {
+  padding-bottom: 2rem;
+}
+
+.header {
+  background: linear-gradient(135deg, var(--brand-dark), var(--brand));
   color: white;
   text-align: center;
-  font-size: 2rem;
-  border-radius: 7px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 0.55rem 1.5rem;
+  width: fit-content;
+  min-width: 220px;
+  margin: 0 auto;
+  box-shadow: 0 6px 18px rgba(130, 34, 94, 0.25);
+  letter-spacing: 0.5px;
 }
 
-
-thead{
-  font-size: 1.5rem;
-  background-color: #82225e !important;
+.home-topbar {
+  row-gap: 0.75rem;
 }
 
-.btn-add{
-  border: #82225e solid thin !important;
-  font-size: 1.8rem;
-  padding: 0.1rem 1.5rem !important;
-  border-radius: 2rem;
+/* ===== Cards grid ===== */
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 1.25rem;
+  margin: 2rem auto 0;
+  max-width: 1100px;
+  padding-inline: 0.5rem;
 }
 
-i{
-  color: #82225e;
-  font-size: 1rem;
-}
-
-.head{
-  background-color: #82225e;
-  font-size: 1.4rem;
+.head {
+  background: linear-gradient(150deg, var(--brand) 0%, var(--brand-dark) 100%);
   color: white;
-  border-radius: 1rem;
-  padding: 0.2rem;
-  height: 7rem;
+  border-radius: 18px;
+  padding: 1.25rem 0.75rem;
+  min-height: 130px;
   cursor: pointer;
-  margin: 1.5rem;
-  width: 9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  text-align: center;
+  box-shadow: 0 6px 16px rgba(130, 34, 94, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.head h4{
-  font-size: 1.2rem;
+.head::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.head:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 14px 28px rgba(130, 34, 94, 0.32);
+  background: linear-gradient(150deg, var(--brand-light) 0%, var(--brand) 100%);
+}
+
+.head:hover::before {
+  opacity: 1;
+}
+
+.head:active {
+  transform: translateY(-2px) scale(0.99);
+}
+
+.head h4 {
+  font-size: 0.95rem;
   font-weight: 600;
+  margin: 0;
+  line-height: 1.35;
+  z-index: 1;
 }
 
-::ng-deep .mat-mdc-paginator-container{
+.head mat-icon {
+  font-size: 2.6rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  z-index: 1;
+  opacity: 0.95;
+}
+
+/* ===== Report panel ===== */
+.report-panel {
+  border: 1px solid rgba(130, 34, 94, 0.25);
+  padding: 1rem;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+}
+
+::ng-deep .mat-mdc-paginator-container {
   justify-content: center !important;
 }
 
-mat-icon{
-  font-size: 4rem;
-  width: 100%;
-  height: 100%;
+/* ===== Tablet ===== */
+@media (max-width: 768px) {
+  .header {
+    font-size: 1.3rem;
+    min-width: 180px;
+  }
+
+  .home-cards {
+    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+
+  .head {
+    min-height: 115px;
+    border-radius: 16px;
+    padding: 1rem 0.5rem;
+  }
+
+  .head mat-icon {
+    font-size: 2.2rem;
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .head h4 {
+    font-size: 0.85rem;
+  }
 }
 
-.border{
-  border: #82225e solid 2px !important;
-  padding: 10px;
-  border-radius: 20px;
+/* ===== Mobile ===== */
+@media (max-width: 480px) {
+  .header {
+    font-size: 1.15rem;
+    width: 100%;
+    border-radius: 10px;
+  }
+
+  .home-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-inline: 0.25rem;
+  }
+
+  .head {
+    min-height: 100px;
+    border-radius: 14px;
+    padding: 0.85rem 0.4rem;
+    gap: 0.4rem;
+  }
+
+  .head mat-icon {
+    font-size: 2rem;
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .head h4 {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .report-panel {
+    padding: 0.5rem;
+    border-radius: 12px;
+  }
 }

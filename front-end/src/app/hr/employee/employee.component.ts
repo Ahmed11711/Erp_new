@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { EmployeeService } from '../services/employee.service';
+import { MatDialog } from '@angular/material/dialog';
+import { DialogLinkEmployeeAccountComponent } from '../dialog-link-employee-account/dialog-link-employee-account.component';
 
 @Component({
   selector: 'app-employee',
@@ -17,9 +18,10 @@ export class EmployeeComponent {
   page = 0;
   pageSizeOptions = [20,50];
 
-  constructor(private employeeService:EmployeeService){
-
-  }
+  constructor(
+    private employeeService: EmployeeService,
+    private dialog: MatDialog,
+  ) {}
 
   ngOnInit(){
     this.search(arguments);
@@ -62,6 +64,35 @@ search(e:any){
       }
     }
     )
+  }
+
+  accountLabel(elm: any): string {
+    const acc = elm?.payable_tree_account;
+    if (!acc) {
+      return '';
+    }
+    const code = acc.code != null ? String(acc.code) : '';
+    return code ? `${code} - ${acc.name}` : String(acc.name ?? '');
+  }
+
+  openLinkAccountDialog(elm: any): void {
+    const ref = this.dialog.open(DialogLinkEmployeeAccountComponent, {
+      width: '480px',
+      maxHeight: '90vh',
+      panelClass: 'link-employee-account-dialog',
+      autoFocus: false,
+      data: {
+        employeeId: elm.id,
+        employeeName: elm.name,
+        payableTreeAccountId: elm.payable_tree_account_id ?? null,
+      },
+    });
+    ref.afterClosed().subscribe((result) => {
+      if (result) {
+        elm.payable_tree_account_id = result.payable_tree_account_id;
+        elm.payable_tree_account = result.payable_tree_account ?? null;
+      }
+    });
   }
 
 }

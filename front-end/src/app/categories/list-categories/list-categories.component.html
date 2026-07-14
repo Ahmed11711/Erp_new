@@ -16,44 +16,46 @@
    </select>
   </div>
 
-  <div class="col-5">
-   <div class="d-flex align-items-center flex-wrap" style="gap: 10px;">
-    <p class="header"> الاصناف</p>
-    <button type="button" class="btn btn-outline-secondary btn-sm"
-     *ngIf="user == 'Admin'"
-     (click)="openInventoryGlSync()" [disabled]="syncingInventoryGl">
-     {{ syncingInventoryGl ? 'جاري…' : 'تسوية المخزون في الحسابات' }}
-    </button>
-    <!-- <button type="button" class="btn btn-outline-danger btn-sm"
-     *ngIf="user == 'Admin'"
-     (click)="openDuplicateManager()">
-     معالجة الأصناف المكررة
-    </button>
-    <button type="button" class="btn btn-primary btn-sm"
-     *ngIf="selectedCount > 0"
-     (click)="mergeSelected()">
-     دمج المحدد ({{ selectedCount }}) في صنف واحد
-    </button> -->
-    <button type="button" class="btn btn-danger btn-sm"
-     *ngIf="user == 'Admin' && selectedCount > 0"
-     (click)="forceDeleteSelected()">
-     حذف المحدد ({{ selectedCount }}) نهائياً
-    </button>
-    <button type="button" class="btn btn-outline-danger btn-sm"
-     *ngIf="user == 'Admin'"
-     (click)="forceDeleteWarehouse()">
-     حذف كل أصناف المخزن
-    </button>
-    <button type="button" class="btn btn-outline-secondary btn-sm"
-     *ngIf="selectedCount > 0"
-     (click)="clearSelection()">
-     إلغاء التحديد
-    </button>
-    <button type="button" class="btn btn-outline-success btn-sm"
-     (click)="exportItemsToExcel()" [disabled]="exportingExcel">
-     <i class="fa-solid fa-file-excel me-1"></i>
-     {{ exportingExcel ? 'جاري التصدير…' : 'تصدير Excel' }}
-    </button>
+  <div class="col-12">
+   <div class="d-flex align-items-center flex-wrap justify-content-between" style="gap: 10px;">
+    <p class="header mb-0"> الاصناف</p>
+    <div class="d-flex align-items-center flex-wrap justify-content-end" style="gap: 10px;">
+     <button type="button" class="btn btn-outline-secondary btn-sm"
+      *ngIf="user == 'Admin'"
+      (click)="openInventoryGlSync()" [disabled]="syncingInventoryGl">
+      {{ syncingInventoryGl ? 'جاري…' : 'تسوية المخزون في الحسابات' }}
+     </button>
+     <!-- <button type="button" class="btn btn-outline-danger btn-sm"
+      *ngIf="user == 'Admin'"
+      (click)="openDuplicateManager()">
+      معالجة الأصناف المكررة
+     </button>
+     <button type="button" class="btn btn-primary btn-sm"
+      *ngIf="selectedCount > 0"
+      (click)="mergeSelected()">
+      دمج المحدد ({{ selectedCount }}) في صنف واحد
+     </button> -->
+     <button type="button" class="btn btn-danger btn-sm"
+      *ngIf="user == 'Admin' && selectedCount > 0"
+      (click)="forceDeleteSelected()">
+      حذف المحدد ({{ selectedCount }}) نهائياً
+     </button>
+     <button type="button" class="btn btn-outline-danger btn-sm"
+      *ngIf="user == 'Admin'"
+      (click)="forceDeleteWarehouse()">
+      حذف كل أصناف المخزن
+     </button>
+     <button type="button" class="btn btn-outline-secondary btn-sm"
+      *ngIf="selectedCount > 0"
+      (click)="clearSelection()">
+      إلغاء التحديد
+     </button>
+     <button type="button" class="btn btn-outline-success btn-sm"
+      (click)="exportItemsToExcel()" [disabled]="exportingExcel">
+      <i class="fa-solid fa-file-excel me-1"></i>
+      {{ exportingExcel ? 'جاري التصدير…' : 'تصدير Excel' }}
+     </button>
+    </div>
    </div>
   </div>
  </div>
@@ -61,30 +63,46 @@
  <form #listcat="ngForm">
   <div class="form-row">
    <div class="form-group col-md-3">
-    <select (change)="onProductionchange($event)" class="form-control" name="production" ngModel required
+    <label for="productionFilter">خط الانتاج</label>
+    <select id="productionFilter" (change)="onProductionchange($event)" class="form-control" name="production" ngModel required
      #production="ngModel" [(ngModel)]="line">
-     <option selected disabled value="">خط الانتاج</option>
+     <option selected disabled value="">اختر خط الانتاج</option>
      <option *ngFor="let production of productionData" [value]="production.id.toString()">
       {{ production.production_line }}
      </option>
     </select>
    </div>
    <div class="form-group col-md-3">
-    <select (change)="onWarehousechange($event)" class="form-control" name="warehouse" ngModel required
-     #warehouse="ngModel" [(ngModel)]="ware">
-     <option selected disabled value="">المخزن</option>
-     <option value="مخزن مواد خام" *ngIf="user != 'Customer Service' && user !='Data Entry'">مخزن مواد خام</option>
-     <option value="مخزن منتج تحت التشغيل" *ngIf="user != 'Customer Service' && user !='Data Entry'">مخزن منتج تحت
-      التشغيل</option>
-     <option value="مخزن منتج تام">مخزن منتج تام</option>
+    <label for="classificationFilter">التصنيف</label>
+    <select id="classificationFilter" (change)="onClassificationChange($event)" class="form-control" name="classification" ngModel
+     [(ngModel)]="classLine">
+     <option selected value="">الكل</option>
+     <option *ngFor="let row of classificationsData" [value]="row.id.toString()">
+      {{ row.classification_name }} ({{ row.warehouse }})
+     </option>
     </select>
    </div>
    <div class="form-group col-md-3">
-    <input type="text" name="type" placeholder="اسم الصنف أو كود الصنف" autocomplete="off" ngModel #type="ngModel"
-     class="form-control" (ngModelChange)="onCategoryNameInput($event)" [(ngModel)]="category_name" />
+    <label for="warehouseFilter">المخزن</label>
+    <select id="warehouseFilter" (change)="onWarehousechange($event)" class="form-control" name="warehouse" ngModel required
+     #warehouse="ngModel" [(ngModel)]="ware">
+     <option selected disabled value="">اختر المخزن</option>
+     <ng-container *ngFor="let elm of stockData">
+      <option *ngIf="canSelectWarehouse(elm.name)" [value]="elm.name">{{ elm.name }}</option>
+     </ng-container>
+    </select>
    </div>
    <div class="form-group col-md-3">
-    <button class="btn bg-main" type="button" (click)="clearSearch()">clear search</button>
+    <label for="categoryNameFilter">اسم الصنف أو كود الصنف</label>
+    <div class="input-group">
+     <input id="categoryNameFilter" type="text" name="type" placeholder="ابحث..." autocomplete="off" ngModel #type="ngModel"
+      class="form-control" (ngModelChange)="onCategoryNameInput($event)" [(ngModel)]="category_name" />
+     <div class="input-group-append">
+      <button class="btn bg-main" type="button" (click)="clearSearch()" title="مسح البحث" aria-label="مسح البحث">
+       <i class="fas fa-times"></i>
+      </button>
+     </div>
+    </div>
    </div>
   </div>
  </form>
@@ -102,9 +120,10 @@
        <th>#</th>
        <th>اسم الصنف</th>
        <th>كود الصنف</th>
-       <th>اللون</th>
+       <!-- <th>اللون</th> -->
        <th>المخزن</th>
        <th>فرع الانتاج</th>
+       <th>التصنيف</th>
        <th>الوحدة</th>
        <th>التكلفة او سعر البيع</th>
        <th>متوسط التكلفة</th>
@@ -122,16 +141,17 @@
        <th>{{ i + 1 }}</th>
        <td>{{ item.category_name }}</td>
        <td dir="ltr">{{ item.item_code || '—' }}</td>
-       <td>
+       <!-- <td>
         <span *ngIf="item.color" class="d-inline-flex align-items-center" style="gap: 6px;">
          <span class="category-color-swatch" [style.backgroundColor]="item.color" [attr.title]="item.color"></span>
          <span>{{ item.color }}</span>
         </span>
         <span *ngIf="!item.color">—</span>
-       </td>
+       </td> -->
        <td>{{ item.warehouse }}</td>
-       <td>{{ item.production.production_line }}</td>
-       <td>{{ item.measurement.unit }}</td>
+       <td>{{ item.production?.production_line }}</td>
+       <td>{{ item.item_classification?.classification_name || '—' }}</td>
+       <td>{{ item.measurement?.unit }}</td>
        <td>{{ item.category_price | customNumber }}</td>
        <td dir="ltr">{{ averageUnitCost(item) | customNumber }}</td>
 

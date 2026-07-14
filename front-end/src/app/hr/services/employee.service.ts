@@ -22,6 +22,12 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/employees/edit/${id}`,formData)
   }
 
+  updatePayableAccount(id: number, payableTreeAccountId: number | null): Observable<any> {
+    return this.http.patch<any>(`${environment.Url}/employees/${id}/payable-account`, {
+      payable_tree_account_id: payableTreeAccountId,
+    });
+  }
+
 
   getById(id:any){
     return this.http.get<any>(`${environment.Url}/employees/${id}`);

@@ -35,47 +35,70 @@
   <div class="container-fluid p-0">
     <!-- تبويب الشجرة المحاسبية -->
     <div class="report-panel" *ngIf="activeTab === 'ledger'">
-      <form [formGroup]="ledgerForm" (ngSubmit)="submitLedgerForm()">
-        <div class="row align-items-end">
-          <div class="col-md-2">
+      <form [formGroup]="ledgerForm" (ngSubmit)="submitLedgerForm()" class="report-filter">
+        <div class="report-filter__grid">
+          <div class="report-filter__field">
             <label>تصفية حسب الطبيعة</label>
             <select class="form-control" formControlName="source_type">
               <option *ngFor="let opt of accountSourceOptions" [value]="opt.value">{{ opt.label }}</option>
             </select>
           </div>
-          <div class="col-md-2">
-            <label>بحث (كود أو اسم)</label>
+          <div class="report-filter__field report-filter__field--wide">
+            <label>الحساب (الشجرة) — ابحث بالكود أو الاسم</label>
             <input
               type="text"
               class="form-control"
-              [(ngModel)]="accountSearchTerm"
-              [ngModelOptions]="{standalone: true}"
-              (ngModelChange)="onAccountSearchChange()"
-              placeholder="اختياري"
+              [formControl]="accountInputCtrl"
+              [matAutocomplete]="accAuto"
+              placeholder="اكتب كود أو اسم الحساب..."
+              autocomplete="off"
               dir="rtl"
             />
-          </div>
-          <div class="col-md-2">
-            <label>الحساب (الشجرة)</label>
-            <select class="form-control" formControlName="account_id">
-              <option [ngValue]="null">-- اختر الحساب --</option>
-              <option *ngFor="let acc of filteredAccounts" [ngValue]="acc.id">
+            <mat-autocomplete #accAuto="matAutocomplete"
+              [displayWith]="displayAccountOption"
+              (optionSelected)="onAccountOptionSelected($event)"
+              [autoActiveFirstOption]="true">
+              <mat-option *ngFor="let acc of filteredAccounts" [value]="acc">
                 {{ acc.code }} — {{ acc.name }}
-              </option>
-            </select>
+              </mat-option>
+            </mat-autocomplete>
             <small class="text-muted" *ngIf="allTreeAccounts.length && !filteredAccounts.length">
-              لا يوجد حساب يطابق التصفية الحالية.
+              لا يوجد حساب يطابق البحث الحالي.
             </small>
           </div>
-          <div class="col-md-2">
-            <label>من تاريخ</label>
-            <input class="form-control" type="date" formControlName="date_from" (change)="onDateChange('ledger', 'from', $event)">
+          <div class="report-filter__field">
+            <label>المستخدم — ابحث بالاسم</label>
+            <input
+              type="text"
+              class="form-control"
+              [formControl]="ledgerUserInputCtrl"
+              [matAutocomplete]="ledgerUserAuto"
+              placeholder="اكتب اسم المستخدم..."
+              autocomplete="off"
+              dir="rtl"
+              (focus)="onUserFilterFocus(ledgerUserInputCtrl)"
+            />
+            <mat-autocomplete #ledgerUserAuto="matAutocomplete"
+              [displayWith]="displayUserOption"
+              (optionSelected)="onLedgerUserSelected($event)"
+              [autoActiveFirstOption]="true"
+              panelClass="user-filter-autocomplete-panel">
+              <mat-option *ngFor="let user of filteredUsers" [value]="user">
+                {{ user.name }}
+              </mat-option>
+            </mat-autocomplete>
           </div>
-          <div class="col-md-2">
-            <label>الى تاريخ</label>
-            <input class="form-control" type="date" formControlName="date_to" (change)="onDateChange('ledger', 'to', $event)">
+          <div class="report-filter__field report-filter__field--wide report-filter__dates">
+            <div class="report-filter__field">
+              <label>من تاريخ</label>
+              <app-date-input formControlName="date_from"></app-date-input>
+            </div>
+            <div class="report-filter__field">
+              <label>الى تاريخ</label>
+              <app-date-input formControlName="date_to"></app-date-input>
+            </div>
           </div>
-          <div class="col-md-2">
+          <div class="report-filter__field report-filter__field--action">
             <button class="btn btn-primary w-100" type="submit" [disabled]="loading">
               {{ loading ? 'جاري التحميل...' : 'عرض التقرير' }}
             </button>
@@ -86,15 +109,15 @@
 
     <!-- تبويب الخزن / البنوك / الخدمات -->
     <div class="report-panel" *ngIf="activeTab === 'cash'">
-      <form [formGroup]="cashForm" (ngSubmit)="submitCashForm()">
-        <div class="row align-items-end">
-          <div class="col-md-2">
+      <form [formGroup]="cashForm" (ngSubmit)="submitCashForm()" class="report-filter">
+        <div class="report-filter__grid">
+          <div class="report-filter__field">
             <label>نوع الحساب</label>
             <select class="form-control" formControlName="entity_type">
               <option *ngFor="let opt of entityTypeOptions" [value]="opt.value">{{ opt.label }}</option>
             </select>
           </div>
-          <div class="col-md-4">
+          <div class="report-filter__field report-filter__field--wide">
             <label>اختر الخزنة / البنك / الحساب الخدمي</label>
             <select class="form-control" formControlName="entity_id">
               <option [ngValue]="null">-- اختر --</option>
@@ -118,15 +141,39 @@
               لا توجد حسابات خدمية مسجّلة.
             </small>
           </div>
-          <div class="col-md-2">
-            <label>من تاريخ</label>
-            <input class="form-control" type="date" formControlName="date_from" (change)="onDateChange('cash', 'from', $event)">
+          <div class="report-filter__field">
+            <label>المستخدم — ابحث بالاسم</label>
+            <input
+              type="text"
+              class="form-control"
+              [formControl]="cashUserInputCtrl"
+              [matAutocomplete]="cashUserAuto"
+              placeholder="اكتب اسم المستخدم..."
+              autocomplete="off"
+              dir="rtl"
+              (focus)="onUserFilterFocus(cashUserInputCtrl)"
+            />
+            <mat-autocomplete #cashUserAuto="matAutocomplete"
+              [displayWith]="displayUserOption"
+              (optionSelected)="onCashUserSelected($event)"
+              [autoActiveFirstOption]="true"
+              panelClass="user-filter-autocomplete-panel">
+              <mat-option *ngFor="let user of filteredUsers" [value]="user">
+                {{ user.name }}
+              </mat-option>
+            </mat-autocomplete>
           </div>
-          <div class="col-md-2">
-            <label>الى تاريخ</label>
-            <input class="form-control" type="date" formControlName="date_to" (change)="onDateChange('cash', 'to', $event)">
+          <div class="report-filter__field report-filter__field--wide report-filter__dates">
+            <div class="report-filter__field">
+              <label>من تاريخ</label>
+              <app-date-input formControlName="date_from"></app-date-input>
+            </div>
+            <div class="report-filter__field">
+              <label>الى تاريخ</label>
+              <app-date-input formControlName="date_to"></app-date-input>
+            </div>
           </div>
-          <div class="col-md-2">
+          <div class="report-filter__field report-filter__field--action">
             <button class="btn btn-primary w-100" type="submit" [disabled]="loading">
               {{ loading ? 'جاري التحميل...' : 'عرض التقرير' }}
             </button>

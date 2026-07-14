@@ -43,6 +43,12 @@ class OrderFulfillmentController extends Controller
 
         $od = $order->order_details;
 
+        $suggestedHolder = $this->liabilityTransfer->resolveManualTransferHolder($order);
+        if ($suggestedHolder) {
+            $order->refresh()->load('order_details.shipping_company', 'order_details.collection_company');
+            $od = $order->order_details;
+        }
+
         $collectionName = CollectionProviderMorph::resolveName(
             $od?->collection_provider_type,
             $od?->collection_provider_id ? (int) $od->collection_provider_id : null
@@ -66,6 +72,7 @@ class OrderFulfillmentController extends Controller
         $receivableAccount = $receivableAccId ? TreeAccount::find($receivableAccId) : null;
 
         $showCollectionPicker = $this->shouldShowCollectionPicker($order);
+        $isPrepaidCollection = $this->liabilityTransfer->isPrepaidCollectionOrder($order, $od);
 
         return response()->json([
             'order_id' => $order->id,
@@ -90,6 +97,7 @@ class OrderFulfillmentController extends Controller
                 'collection_status' => $od?->collection_status,
                 'collection_status_label' => OrderCollectionStatus::tryFrom($od?->collection_status ?? '')?->labelAr(),
                 'amount_to_collect' => $od?->amount_to_collect,
+                'collection_receivable_amount' => $od?->collection_receivable_amount,
                 'collection_date' => $od?->collection_date,
                 'show_picker' => $showCollectionPicker,
             ],
@@ -97,6 +105,7 @@ class OrderFulfillmentController extends Controller
                 'total_amount' => $od?->total_amount ?? $order->net_total,
                 'paid_amount' => $od?->paid_amount ?? $order->prepaid_amount,
                 'remaining_amount' => $od?->remaining_amount,
+                'collection_receivable_amount' => $od?->collection_receivable_amount,
                 'prepaid_amount' => $order->prepaid_amount,
                 'net_total' => $order->net_total,
                 'settlement_status' => $od?->settlement_status,
@@ -105,6 +114,11 @@ class OrderFulfillmentController extends Controller
                 'liability_holder_id' => $od?->liability_holder_id,
                 'liability_holder_name' => $liabilityName,
                 'liability_transferred_at' => $od?->liability_transferred_at,
+                'liability_transfer_amount' => $this->liabilityTransfer->resolveTransferAmount($order, $od),
+                'can_transfer_liability' => $this->liabilityTransfer->canTransferLiability($order, $od),
+                'is_prepaid_collection' => $isPrepaidCollection,
+                'suggested_liability_holder_type' => $suggestedHolder[0]->value ?? null,
+                'suggested_liability_holder_id' => $suggestedHolder[1] ?? null,
             ],
             'liability_transfers' => $transfers,
         ]);
@@ -160,13 +174,27 @@ class OrderFulfillmentController extends Controller
         ]);
 
         $order = Order::with('order_details')->findOrFail($id);
-        $holder = LiabilityHolderType::from($data['to_holder_type']);
+        $preferred = LiabilityHolderType::from($data['to_holder_type']);
+        $resolved = $this->liabilityTransfer->resolveManualTransferHolder(
+            $order,
+            $preferred,
+            (int) $data['to_holder_id'],
+        );
+        if (! $resolved) {
+            $message = $preferred === LiabilityHolderType::CollectionCompany
+                ? 'تعذر تحديد شركة التحصيل. اختر شركة تحصيل من القائمة أو راجع ربط Paymob/Shopify بشركات التحصيل.'
+                : 'حدد جهة الشحن أو المندوب أولاً من شاشة الشحن.';
+
+            return response()->json(['message' => $message], 422);
+        }
+
+        [$holder, $holderId] = $resolved;
 
         try {
             $result = $this->liabilityTransfer->transfer(
                 $order,
                 $holder,
-                (int) $data['to_holder_id'],
+                $holderId,
                 isset($data['amount']) ? (float) $data['amount'] : null,
                 $data['reason'] ?? null,
             );

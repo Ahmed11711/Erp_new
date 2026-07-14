@@ -3,6 +3,7 @@ import { FormControl } from '@angular/forms';
 import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { SafeService } from '../services/safe.service';
 import { TreeAccountService } from '../services/tree-account.service';
+import { dateToIsoString } from 'src/app/shared/date/date-utils';
 
 interface AccountOption {
   id: number;
@@ -68,7 +69,7 @@ interface AccountOption {
           </div>
           <div class="col-md-6 mb-3">
             <label>التاريخ</label>
-            <input type="date" class="form-control" [(ngModel)]="date" />
+            <app-date-input [(ngModel)]="date"></app-date-input>
           </div>
           <div class="col-12 mb-3">
             <label>ملاحظات</label>
@@ -108,7 +109,7 @@ export class SafeDepositWithdrawComponent implements OnInit {
   type: 'receipt' | 'payment' = 'receipt';
   counterAccountId: number | null = null;
   amount = 0;
-  date = new Date().toISOString().split('T')[0];
+  date = dateToIsoString(new Date()) || '';
   notes = '';
 
   constructor(

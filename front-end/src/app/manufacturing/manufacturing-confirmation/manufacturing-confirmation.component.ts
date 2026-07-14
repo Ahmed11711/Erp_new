@@ -44,6 +44,7 @@ export class ManufacturingConfirmationComponent implements OnInit, OnDestroy {
   consumptionMessage: string | null = null;
   consumptionPreviewPending = false;
   consumptionPreviewError: string | null = null;
+  consumptionExpanded = false;
 
   /** عند التأكيد، حفظ المواد/الكميات الحالية على الوصفة الأصلية */
   updateRecipeOnConfirm = false;

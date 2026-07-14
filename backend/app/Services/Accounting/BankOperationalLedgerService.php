@@ -287,6 +287,56 @@ class BankOperationalLedgerService
     }
 
     /**
+     * يحذف حركات bank_details لمرجع معيّن ويعكس أثرها على banks.balance.
+     *
+     * @return bool true إذا وُجدت سجلات وحُذفت
+     */
+    public function removeOperationalDetailsByRef(Bank $bank, string $ref): bool
+    {
+        if ($ref === '') {
+            return false;
+        }
+
+        $rows = DB::table('bank_details')
+            ->where('bank_id', $bank->id)
+            ->where('ref', $ref)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return false;
+        }
+
+        $netDelta = 0.0;
+        foreach ($rows as $row) {
+            $netDelta += (float) $row->balance_after - (float) $row->balance_before;
+        }
+
+        DB::table('bank_details')
+            ->where('bank_id', $bank->id)
+            ->where('ref', $ref)
+            ->delete();
+
+        if (abs($netDelta) > 0.000001) {
+            $bank->balance = round((float) $bank->balance - $netDelta, 2);
+            $bank->save();
+        }
+
+        return true;
+    }
+
+    public function hasOperationalDetailForRef(Bank $bank, string $ref): bool
+    {
+        if ($ref === '') {
+            return false;
+        }
+
+        return DB::table('bank_details')
+            ->where('bank_id', $bank->id)
+            ->where('ref', $ref)
+            ->exists();
+    }
+
+    /**
      * ترحيل قيد تصحيحي للمحاسبة فقط (بدون تغيير banks.balance) عند وجود فرق تاريخي.
      *
      * @param  float  $glGap  operational_balance − gl_balance_from_entries

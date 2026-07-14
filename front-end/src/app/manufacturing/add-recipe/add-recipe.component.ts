@@ -34,8 +34,11 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
   private activeWarehouse: string | null = null;
   private pendingRoutePreselect: { productId: number; productName?: string } | null = null;
   private pendingEditRecipe: any = null;
+  private pendingDuplicateRecipe: any = null;
 
   editingRecipeId: number | null = null;
+  /** نسخ وصفة قائمة لمنتج نهائي آخر (إنشاء وصفة جديدة بمكونات منسوخة). */
+  duplicateMode = false;
   loadingRecipe = false;
   savingRecipe = false;
   bomLocked = false;
@@ -64,6 +67,11 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
       }
     });
     this.routeParamsSub = this.activatedRoute.queryParamMap.subscribe((params) => {
+      const duplicateFrom = Number(params.get('duplicateFrom') ?? 0);
+      if (duplicateFrom > 0) {
+        this.beginDuplicateRecipe(duplicateFrom);
+        return;
+      }
       this.handleRouteParams(params);
     });
   }
@@ -75,6 +83,10 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
 
   get isEditMode(): boolean {
     return this.editingRecipeId != null;
+  }
+
+  get isDuplicateMode(): boolean {
+    return this.duplicateMode;
   }
 
   canWriteRecipe(): boolean {
@@ -108,6 +120,69 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
         this.route.navigate(['/dashboard/manufacturing/recipes']);
       },
     });
+  }
+
+  /** نسخ وصفة قائمة: نحمّل مكوناتها وتكاليفها ثم نترك المنتج النهائي فارغاً ليختار المستخدم منتجاً آخر. */
+  private beginDuplicateRecipe(id: number): void {
+    if (this.duplicateMode || this.isEditMode) {
+      return;
+    }
+    this.duplicateMode = true;
+    this.loadingRecipe = true;
+    this.manufacturingService.getRecipeDetail(id).subscribe({
+      next: (res) => {
+        const recipe = res.recipe;
+        const warehouse = String(recipe?.output_item?.warehouse ?? '').trim();
+        if (!warehouse) {
+          this.loadingRecipe = false;
+          this.duplicateMode = false;
+          alert('الوصفة المصدر لا ترتبط بمنتج نهائي — لا يمكن تكرارها.');
+          this.route.navigate(['/dashboard/manufacturing/recipes']);
+          return;
+        }
+        this.recipeName = String(recipe?.recipe_name ?? '');
+        this.recipeDescription = String(recipe?.description ?? '');
+        this.pendingDuplicateRecipe = recipe;
+        this.loadWarehouse(warehouse);
+        this.loadingRecipe = false;
+      },
+      error: () => {
+        this.loadingRecipe = false;
+        this.duplicateMode = false;
+        alert('تعذر تحميل الوصفة المراد تكرارها');
+        this.route.navigate(['/dashboard/manufacturing/recipes']);
+      },
+    });
+  }
+
+  private applyDuplicateRecipeData(recipe: any): void {
+    this.tableData = (recipe.ingredients ?? []).map((ing: any) => {
+      const item = ing.item ?? {};
+      const id = Number(item.id ?? ing.item_id ?? 0);
+      const price = Number(ing.unit_cost ?? item.category_price ?? item.unit_price ?? 0);
+      const qty = Number(ing.quantity ?? 1);
+      return this.normalizeCategoryItem({
+        ...item,
+        id,
+        category_price: price,
+        quantity: qty,
+        total_price: qty * price,
+      });
+    });
+
+    this.extraCosts = (recipe.extra_costs ?? []).map((ec: any) => ({
+      id: this.nextLocalExtraCostId--,
+      recipe_id: 0,
+      name: String(ec.name ?? ''),
+      type: ec.type === 'percentage' ? 'percentage' : 'fixed',
+      value: Number(ec.value),
+    }));
+
+    if (this.extraCosts.length > 0) {
+      this.computeLocalCostBreakdown();
+    } else {
+      this.calcTotalPrice();
+    }
   }
 
   private applyEditRecipeData(recipe: any): void {
@@ -293,6 +368,10 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
           this.applyEditRecipeData(this.pendingEditRecipe);
           this.pendingEditRecipe = null;
         }
+        if (this.pendingDuplicateRecipe) {
+          this.applyDuplicateRecipeData(this.pendingDuplicateRecipe);
+          this.pendingDuplicateRecipe = null;
+        }
       },
       error: () => {
         this.loadingWarehouseProducts = false;
@@ -338,10 +417,13 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
     }
     this.selectedProduct = clean;
     this.product_id = id;
-    this.tableData = [];
-    this.extraCosts = [];
-    this.costBreakdown = null;
-    this.imageFailed.clear();
+    // في وضع التكرار نحافظ على المكونات المنسوخة بعد اختيار المنتج الجديد.
+    if (!this.duplicateMode) {
+      this.tableData = [];
+      this.extraCosts = [];
+      this.costBreakdown = null;
+      this.imageFailed.clear();
+    }
     this.calcTotalPrice();
   }
 
@@ -846,7 +928,6 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
   private computeItemsColorSummary(res: RecipeImportPreviewResponse): void {
     const seen = new Set<string>();
     const details: Array<{ name: string; color: string | null; action: string }> = [];
-    let updated = 0;
     let created = 0;
 
     for (const recipe of res.recipes) {
@@ -855,19 +936,16 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
         if (seen.has(key)) continue;
         seen.add(key);
 
-        if (!ing.color) continue;
-
         if (ing.item_exists) {
-          details.push({ name: ing.item_name, color: ing.color, action: 'update' });
-          updated++;
-        } else {
-          details.push({ name: ing.item_name, color: ing.color, action: 'create' });
-          created++;
+          continue;
         }
+
+        details.push({ name: ing.item_name, color: null, action: 'create' });
+        created++;
       }
     }
 
-    this.itemsColorSummary = { updated, created, details };
+    this.itemsColorSummary = { updated: 0, created, details };
   }
 
   private buildSuccessMessage(res: RecipeImportConfirmResponse): string {
@@ -877,7 +955,6 @@ export class AddRecipeComponent implements OnInit, OnDestroy {
       `تم إنشاء ${r.recipes_created} وصفة`,
       `تم تحديث ${r.recipes_updated} وصفة`,
       `أُنشئ ${r.items_created} صنف خام (مخزن مواد خام)`,
-      ...(r.items_updated > 0 ? [`تم تحديث لون ${r.items_updated} صنف موجود`] : []),
       `أُنشئ ${r.products_created} منتج تام (مخزن منتج تام)`,
     ];
     if (r.products_linked > 0) {

@@ -78,6 +78,12 @@
                 title="تعديل الوصفة">
                 تعديل
               </a>
+              <a *ngIf="canEditRecipe()" class="btn btn-sm btn-outline-success mx-1"
+                [routerLink]="['/dashboard/manufacturing/addrecipe']"
+                [queryParams]="{ duplicateFrom: r.id }"
+                title="نسخ الوصفة لمنتج آخر مع إمكانية تعديل المكونات">
+                نسخ لمنتج جديد
+              </a>
               <button *ngIf="canDeleteRecipe()" class="btn btn-sm btn-outline-danger mx-1" (click)="askDelete(r.id)"
                 title="حذف الوصفة">
                 حذف

@@ -120,6 +120,8 @@ class RecipeImportController extends Controller
                 'recipes_total' => count($parsed->recipes),
                 'missing_items_total' => count($parsed->missingItems),
                 'existing_recipes_total' => count($parsed->existingRecipes),
+                'sheets_parsed' => count($parsed->parsedSheetNames),
+                'parsed_sheet_names' => $parsed->parsedSheetNames,
             ],
             'message' => $this->buildPreviewMessage($parsed),
         ]);

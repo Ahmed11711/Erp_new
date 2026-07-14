@@ -153,7 +153,12 @@ export class EditOrderComponent {
       this.prepaid_amount = result?.prepaid_amount;
 
       this.customerTypeVal = result?.customer_type;
+      this.applyVat = this.customerTypeVal === 'شركة' && Number(result?.vat) > 0;
+      this.vatPercent = this.applyVat ? 14 : 0;
+      this.changedVat = true;
       this.orderStatus = result?.order_status;
+      this.orderType = result?.order_type;
+      this.maintenanceAmount = Number(result?.order_details?.maintenance_cost ?? 0);
       this.syncLocationMode(result?.governorate);
 
       this.order_details = result?.order_products.map(elm=>{
@@ -187,7 +192,9 @@ export class EditOrderComponent {
         city: result.city,
         address: result.address,
         shipping_method_id: result.shipping_method_id,
+        maintenance_cost: result?.order_details?.maintenance_cost ?? 0,
       });
+      this.calc(null);
     }, () => {
       this.orderLoading = false;
     })
@@ -259,6 +266,7 @@ export class EditOrderComponent {
     city: new FormControl(null),
     address: new FormControl(null),
     shipping_method_id: new FormControl(null),
+    maintenance_cost: new FormControl(null),
   })
 
   changeProductPrice(e:any){
@@ -329,6 +337,9 @@ export class EditOrderComponent {
     formData.append('address', data.address ?? '');
     formData.append('customer_type', this.customerTypeVal ?? '');
     formData.append('shipping_method_id', data.shipping_method_id ?? '');
+    if (this.orderType === 'طلب صيانة') {
+      formData.append('maintenance_cost', String(this.maintenanceAmount ?? 0));
+    }
     if(this.customerTypeVal == 'شركة'){
       formData.append('company_id', data.customer_company);
     }
@@ -365,6 +376,7 @@ export class EditOrderComponent {
   }
 
   orderStatus!:string ;
+  orderType!:string;
   status(event:any){
     this.orderStatus = event.target.value;
   }
@@ -389,6 +401,9 @@ export class EditOrderComponent {
   addproduct(){
     if (this.category_name &&typeof(this.category_quantity) =='number'   && this.category_price) {
       let oldPrice = this.products.find(elm => elm.id === this.category_id).category_price;
+      const productTotal = this.orderType === 'طلب صيانة'
+        ? 0
+        : Number(this.category_price) * this.category_quantity;
       const product = {
         category_id: this.category_id,
         category_name: this.category_name,
@@ -397,7 +412,7 @@ export class EditOrderComponent {
         price : Number(this.category_price) ,
         oldPrice : oldPrice ,
         imgsrc:this.category_image,
-        total : this.category_price*this.category_quantity
+        total : productTotal
       }
 
       this.order_details.push(product);
@@ -424,28 +439,50 @@ export class EditOrderComponent {
   net_total:number=0;
   vat:number=0;
   changedVat:boolean=false;
+  applyVat:boolean=false;
   customerTypeVal :string = 'افراد';
 
   shipping_cost:number=0;
+  maintenanceAmount:number=0;
   productsPrice:number=0;
   prepaid_amount:number=0;
   discount:number=0;
   vatPercent:number=14;
+
+  onApplyVatChange() {
+    if (this.applyVat) {
+      this.vatPercent = 14;
+      this.changedVat = false;
+    } else {
+      this.vatPercent = 0;
+      this.vat = 0;
+      this.changedVat = true;
+      this.form.patchValue({ vat: 0 });
+    }
+    this.calc(arguments);
+  }
+
   calc(e:any){
     this.productsPrice = 0;
     this.order_details.forEach(elm=>{
       this.productsPrice += elm.total
     });
-    if (e?.target?.id == 'vat') {
-      this.changedVat = true;
+    if (this.customerTypeVal == 'شركة' && this.applyVat) {
+      if (e?.target?.id == 'vat') {
+        this.changedVat = true;
+      }
+      if (!this.changedVat) {
+        this.vat = this.productsPrice * this.vatPercent/100;
+      }
+    } else {
+      this.vat = 0;
     }
-    if (!this.changedVat) {
-      this.vat = this.productsPrice * this.vatPercent/100;
+    this.totalInvoice = this.productsPrice + this.shipping_cost;
+    if (this.orderType === 'طلب صيانة') {
+      this.totalInvoice += this.maintenanceAmount || 0;
     }
-    this.totalInvoice = (this.productsPrice + this.shipping_cost);
-    if(this.customerTypeVal == 'شركة'){
+    if(this.customerTypeVal == 'شركة' && this.applyVat){
       this.totalInvoice = this.totalInvoice + this.vat;
-
     }
     this.net_total = this.totalInvoice - this.prepaid_amount - this.discount;
   }

@@ -1,0 +1,57 @@
+<div class="emp-tree-picker-wrap" dir="rtl">
+  <label class="emp-tree-picker__label">حساب الموظف في شجرة الحسابات</label>
+
+  <p class="emp-tree-picker__error" *ngIf="loadError">{{ loadError }}</p>
+  <p class="emp-tree-picker__loading" *ngIf="loading">جاري تحميل الشجرة...</p>
+
+  <div
+    class="tree-picker"
+    *ngIf="!loading && !loadError"
+    [class.tree-picker--open]="treePickerOpen"
+    [class.tree-picker--inline]="expandInline"
+    (click)="$event.stopPropagation()">
+    <div class="tree-picker__trigger" (click)="toggleTreePicker()">
+      <span class="tree-picker__trigger-text" [class.tree-picker__placeholder]="!accountId">
+        {{ accountId ? selectedLabel : '— اختر حساباً من الشجرة —' }}
+      </span>
+      <span class="tree-picker__actions">
+        <button
+          type="button"
+          class="tree-picker__clear-btn"
+          *ngIf="accountId"
+          (click)="clearSelection(); $event.stopPropagation()"
+          title="إلغاء الربط">
+          ×
+        </button>
+        <i class="fas fa-chevron-down tree-picker__chevron"></i>
+      </span>
+    </div>
+
+    <div class="tree-picker__panel" *ngIf="treePickerOpen">
+      <div class="tree-picker__search">
+        <i class="fas fa-search tree-picker__search-icon"></i>
+        <input
+          type="text"
+          class="tree-picker__search-input"
+          [(ngModel)]="treeAccountSearch"
+          placeholder="ابحث بالاسم أو الكود..."
+          autocomplete="off"
+          (click)="$event.stopPropagation()" />
+      </div>
+      <ul class="tree-picker__list" role="listbox">
+        <li
+          *ngFor="let item of filteredTreeAccounts"
+          class="tree-picker__item"
+          [class.tree-picker__item--active]="accountId === item.id"
+          role="option"
+          (click)="selectTreeAccount(item)">
+          <span class="tree-picker__item-label">{{ item.label }}</span>
+          <i class="fas fa-check tree-picker__item-check" *ngIf="accountId === item.id"></i>
+        </li>
+        <li class="tree-picker__no-result" *ngIf="filteredTreeAccounts.length === 0">
+          لا توجد نتائج
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>

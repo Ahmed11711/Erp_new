@@ -283,7 +283,7 @@
       array (
         'driver' => 'sqlite',
         'url' => NULL,
-        'database' => 'magalis',
+        'database' => 'newerp',
         'prefix' => '',
         'foreign_key_constraints' => true,
       ),
@@ -293,7 +293,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'magalis',
+        'database' => 'newerp',
         'username' => 'root',
         'password' => '',
         'unix_socket' => '',
@@ -313,7 +313,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'magalis',
+        'database' => 'newerp',
         'username' => 'root',
         'password' => '',
         'charset' => 'utf8',
@@ -328,7 +328,7 @@
         'url' => NULL,
         'host' => '127.0.0.1',
         'port' => '3306',
-        'database' => 'magalis',
+        'database' => 'newerp',
         'username' => 'root',
         'password' => '',
         'charset' => 'utf8',
@@ -1377,10 +1377,10 @@
     'meta_whatsapp' => 
     array (
       'phone_number_id' => '992330837294579',
-      'access_token' => 'EAANBfjf5ke8BQj6wDWDwZCXyTCRJuZA2osiOWXm6z7tX1J96Jrc1yVZCxZBJLVlZB8E7EFOqZCcsGQz0ckGGnPHwPQECog1KCgCMwwNyDZAKVrAgXJW7ly8vWDnMWGPrkMOTpZCLomok08VCB7mFbwTmdWPCPlWVgToATbiZBMm1ZB5CZA7vOWzMtcpGQDl9QfL',
+      'access_token' => 'EAAh9ZCktBLlIBRxIB4LZBk47LfYt0KBIAS57JrXGeZCo4T0uWI0RBBueUlRM4Nwo6L3xlq1EmAHekmZCW9XQLqq0e8RB228uyCqMKK8fzevGIeJBblNl5XA6oczxms7avBz5BuaTcI0bX2fK4UR4qhsXgKuYP997LkVFCxwgeuA4KGwIr5FSIZCuOjZBbf',
       'verify_token' => 'K9xT2pLm8QwZ4rNs7VbY1cHd6EfG3uJk',
-      'phone_number_id_2' => 'SECOND_PHONE_NUMBER_ID_HERE',
-      'access_token_2' => NULL,
+      'phone_number_id_2' => '1025013004024992',
+      'access_token_2' => 'EAAh9ZCktBLlIBRxIB4LZBk47LfYt0KBIAS57JrXGeZCo4T0uWI0RBBueUlRM4Nwo6L3xlq1EmAHekmZCW9XQLqq0e8RB228uyCqMKK8fzevGIeJBblNl5XA6oczxms7avBz5BuaTcI0bX2fK4UR4qhsXgKuYP997LkVFCxwgeuA4KGwIr5FSIZCuOjZBbf',
       'verify_token_2' => NULL,
     ),
     'shopify' => 
@@ -1677,9 +1677,9 @@
   ),
   'whatsapp_meta_templates' => 
   array (
-    'media_base_url' => 'http://localhost',
-    'default_header_image_url' => 'http://localhost/images/whatsapp-meta-default.png',
-    'review_feedback_header_image_url' => 'http://localhost/images/whatsapp-meta-review-feedback-header.jpeg',
+    'media_base_url' => 'https://chat.mag-opt.com/backend/public',
+    'default_header_image_url' => 'https://chat.mag-opt.com/backend/public/images/whatsapp-meta-default.png',
+    'review_feedback_header_image_url' => 'https://chat.mag-opt.com/backend/public/images/whatsapp-meta-review-feedback-header.jpeg',
     'templates' => 
     array (
       0 => 

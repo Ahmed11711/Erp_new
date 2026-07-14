@@ -274,6 +274,10 @@
           <label class="form-label fw-semibold">نوع الملف</label>
           <div class="d-flex flex-wrap gap-3">
             <label class="d-flex align-items-center gap-2 mb-0">
+              <input type="radio" name="itemsImportMode" value="materials-list" [(ngModel)]="itemsImportMode" />
+              <span>شيت أسعار خامات (الخامات / السعر / الوحده / اكواد كجالس)</span>
+            </label>
+            <label class="d-flex align-items-center gap-2 mb-0">
               <input type="radio" name="itemsImportMode" value="recipe-sheet" [(ngModel)]="itemsImportMode" />
               <span>شيت الأصناف (Excel) — اسم الصنف / الخامات / الكمية</span>
             </label>
@@ -290,12 +294,40 @@
             <option *ngFor="let wh of warehouseOptions" [value]="wh">{{ wh }}</option>
           </select>
           <p class="small text-muted mb-0 mt-1">
+            <ng-container *ngIf="itemsImportMode === 'materials-list'">
+              كل صف في الشيت يُسجَّل كصنف مستقل في المخزن المحدد (بدون كميات مخزون).
+            </ng-container>
             <ng-container *ngIf="itemsImportMode === 'recipe-sheet'">
               كل الأصناف المستخرجة من الشيت (المنتجات والخامات) تُسجَّل في هذا المخزن.
             </ng-container>
             <ng-container *ngIf="itemsImportMode === 'simple'">
               يُستخدم كمخزن افتراضي إذا لم يُذكر عمود «المخزن» في الملف.
             </ng-container>
+          </p>
+        </div>
+
+        <div class="mb-3" *ngIf="itemsImportMode === 'materials-list' || itemsImportMode === 'recipe-sheet'">
+          <label class="form-label fw-semibold" for="itemsSheetName">اسم ورقة Excel</label>
+          <input
+            id="itemsSheetName"
+            type="text"
+            class="form-control"
+            [(ngModel)]="itemsSheetName"
+            [placeholder]="itemsImportMode === 'materials-list' ? 'last' : 'الورقة الأولى إذا تُرك فارغاً'"
+          />
+          <p class="small text-muted mb-0 mt-1" *ngIf="itemsImportMode === 'materials-list'">
+            اكتب اسم التبويب الذي يحتوي البيانات (مثل <strong>last</strong> في ملف «اسعار خامات 2026»).
+          </p>
+        </div>
+
+        <div class="mb-3" *ngIf="itemsImportMode === 'materials-list'">
+          <label class="d-flex align-items-center gap-2 mb-0">
+            <input type="checkbox" [(ngModel)]="importItemQuantities" />
+            <span>استيراد الكميات من عمود «الكميه» كرصيد افتتاحي (إن وُجد)</span>
+          </label>
+          <p class="small text-muted mb-0 mt-1">
+            عند التفعيل: تُسجَّل كمية كل صنف كحركة رصيد افتتاحي + قيد محاسبي متوازن.
+            اترك الخيار بدون تفعيل لاستيراد الأسماء والأسعار فقط.
           </p>
         </div>
 
@@ -317,6 +349,11 @@
           إلزامي: <strong>اسم الصنف</strong>، <strong>سعر التكلفة</strong>.
           اختياري: <strong>المخزن</strong>، <strong>رقم الوحدة</strong>، <strong>فرع الانتاج</strong>، <strong>كود الصنف</strong>، <strong>اللون</strong>، <strong>المرجع</strong>، <strong>الحد الأدنى</strong>.
         </p>
+        <p class="small text-muted mb-2" *ngIf="itemsImportMode === 'materials-list'">
+          نفس تنسيق ملف «اسعار خامات»: <strong>الخامات</strong>، <strong>الوحده</strong> → وحدة القياس،
+          <strong>القسم</strong> → خط الإنتاج، <strong>التصنيف</strong>، <strong>السعر</strong>،
+          <strong>اكواد كجالس</strong> — اختياري: <strong>الكميه</strong>.
+        </p>
         <p class="small text-muted mb-2" *ngIf="itemsImportMode === 'recipe-sheet'">
           نفس تنسيق شيت التكلفة: <strong>اسم الصنف</strong>، <strong>الخامات</strong>، <strong>الكمية</strong>،
           <strong>الوحدة</strong>، <strong>السعر</strong> — بدون إنشاء وصفات.
@@ -328,7 +365,7 @@
         </p>
         <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('items', $event)" class="form-control mb-2" />
         <button type="button" class="btn btn-primary" [disabled]="!itemsFile || !itemsWarehouse || loadingItems || (itemsImportMode === 'recipe-sheet' && !includeRecipeProducts && !includeRecipeMaterials)" (click)="uploadItems()">
-          {{ loadingItems ? 'جاري الرفع...' : (itemsImportMode === 'recipe-sheet' ? 'استيراد الأصناف من الشيت' : 'رفع ملف الأصناف') }}
+          {{ loadingItems ? 'جاري الرفع...' : (itemsImportMode === 'materials-list' ? 'استيراد الخامات من الشيت' : (itemsImportMode === 'recipe-sheet' ? 'استيراد الأصناف من الشيت' : 'رفع ملف الأصناف')) }}
         </button>
         <p *ngIf="messageItems" class="text-success mt-2 mb-0">{{ messageItems }}</p>
         <p *ngIf="errorItems" class="text-danger mt-2 mb-0">{{ errorItems }}</p>
@@ -342,14 +379,27 @@
       <div class="card-body">
         <h2 class="h5">الأرصدة الافتتاحية (حركات مخزون + قيد محاسبي)</h2>
         <p class="small text-muted mb-2">
-          إلزامي: <strong>اسم الصنف</strong>، <strong>الكمية</strong>، <strong>تكلفة الوحدة</strong>.
-          اختياري: <strong>المخزن</strong>، <strong>الكود</strong>، <strong>فرع الانتاج</strong>.
+          يقبل نفس تنسيق شيت «اسعار خامات»: <strong>الخامات</strong> (الاسم)، <strong>الكميه</strong>،
+          <strong>السعر</strong>، <strong>اكواد كجالس</strong> — أو الأعمدة الإنجليزية.
+          اختياري: <strong>المخزن</strong>، <strong>فرع الانتاج</strong>.
         </p>
         <p class="small mb-2">
           <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/opening-sample.csv" download="نموذج-أرصدة-افتتاحية.csv">
             <i class="fa-solid fa-download me-1"></i> تحميل نموذج CSV
           </a>
         </p>
+        <div class="row g-2 mb-2">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold" for="openingWarehouse">المخزن الافتراضي</label>
+            <select id="openingWarehouse" class="form-select" [(ngModel)]="openingWarehouse">
+              <option *ngFor="let wh of warehouseOptions" [value]="wh">{{ wh }}</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold" for="openingSheetName">اسم ورقة Excel</label>
+            <input id="openingSheetName" type="text" class="form-control" [(ngModel)]="openingSheetName" placeholder="last (أو اتركه فارغاً للبحث تلقائياً)" />
+          </div>
+        </div>
         <label class="d-flex align-items-center gap-2 mb-2">
           <input type="checkbox" [(ngModel)]="createMissingItems" />
           <span>إنشاء صنف جديد إذا لم يُعثر عليه</span>
@@ -370,14 +420,18 @@
       <div class="card-body">
         <h2 class="h5">تسوية يدوية (الكمية الفعلية مقابل النظام)</h2>
         <p class="small text-muted mb-2">
-          إلزامي: <strong>اسم الصنف</strong> أو <strong>الكود</strong>، <strong>الكمية الفعلية</strong>.
-          اختياري: <strong>المخزن</strong>، <strong>الكود</strong>، <strong>فرع الانتاج</strong>.
+          يقبل نفس تنسيق شيت «اسعار خامات»: <strong>الخامات</strong> (الاسم)، <strong>الكميه</strong> (الكمية الفعلية)،
+          <strong>اكواد كجالس</strong>. اختياري: <strong>المخزن</strong>، <strong>فرع الانتاج</strong>.
         </p>
         <p class="small mb-2">
           <a class="btn btn-sm btn-outline-secondary" href="/assets/inventory-import/adjustment-sample.csv" download="نموذج-جرد-وتسوية.csv">
             <i class="fa-solid fa-download me-1"></i> تحميل نموذج CSV
           </a>
         </p>
+        <div class="mb-2">
+          <label class="form-label fw-semibold" for="adjustmentSheetName">اسم ورقة Excel</label>
+          <input id="adjustmentSheetName" type="text" class="form-control" [(ngModel)]="adjustmentSheetName" placeholder="last (أو اتركه فارغاً للبحث تلقائياً)" />
+        </div>
         <input type="file" accept=".xlsx,.xls,.csv,.txt" (change)="onFile('adjustment', $event)" class="form-control mb-2" />
         <button type="button" class="btn btn-primary" [disabled]="!adjustmentFile || loadingAdjustment" (click)="uploadAdjustment()">
           {{ loadingAdjustment ? 'جاري الرفع...' : 'رفع ملف الجرد' }}

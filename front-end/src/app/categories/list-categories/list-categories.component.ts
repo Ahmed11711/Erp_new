@@ -2,15 +2,18 @@ import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { MatPaginator } from '@angular/material/paginator';
 import { CategoryService } from '../services/category.service';
 import { ProductionService } from '../services/production.service';
+import { ItemClassificationService } from '../services/item-classification.service';
 import { NgForm } from '@angular/forms';
 import { AuthService } from 'src/app/auth/auth.service';
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { ExcelService } from 'src/app/excel.service';
-import { Subject, firstValueFrom } from 'rxjs';
-import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Subject, firstValueFrom, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, catchError } from 'rxjs/operators';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
-import { canShowCategoryRowActions } from 'src/app/shared/utils/category-warehouse-access';
+import { canSelectCategoryWarehouse, canShowCategoryRowActions } from 'src/app/shared/utils/category-warehouse-access';
+import { StockService } from 'src/app/warehouse/services/stock.service';
+import { warehouseOptionsFromStocks } from 'src/app/shared/constants/warehouse-stock-rows';
 
 @Component({
  selector: 'app-list-categories',
@@ -25,17 +28,21 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
  selectedQuantityFilter: string = '';
  categories: any;
  productionData: any;
+ classificationsData: any;
+ stockData: { name: string; keyEn: string; id?: number }[] = [];
  imgUrl!: string;
  length = 50;
  pageSize = 100;
  page = 0;
  pageSizeOptions = [100, 5000];
  productionline: string = '';
+ classificationline: string = '';
  warehouse: string = '';
  category_name: string = '';
  user!: string;
  ware = '';
  line = '';
+ classLine = '';
  param: any = {};
  allCategories: any[] = [];
  syncingInventoryGl = false;
@@ -48,6 +55,8 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
  constructor(
   private category: CategoryService,
   private production: ProductionService,
+  private classifications: ItemClassificationService,
+  private stockService: StockService,
   private authService: AuthService,
   private excelService: ExcelService,
   public rbac: RbacService
@@ -64,6 +73,24 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
   this.production.getProductions().subscribe((data: any) => {
    this.productionData = data;
   });
+  this.classifications.getClassifications().subscribe((data: any) => {
+   this.classificationsData = Array.isArray(data) ? data : [];
+  });
+  this.loadStockData();
+ }
+
+ private loadStockData(): void {
+  this.stockService
+   .list()
+   .pipe(catchError(() => of({ data: { data: [] as any[] } })))
+   .subscribe((res) => {
+    const stockList = this.stockService.parseListResponse(res);
+    this.stockData = warehouseOptionsFromStocks(stockList);
+   });
+ }
+
+ canSelectWarehouse(warehouseName: string): boolean {
+  return canSelectCategoryWarehouse(warehouseName, this.user, this.rbac);
  }
 
  ngOnDestroy() {
@@ -217,6 +244,7 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
      'اللون': item.color ?? '',
      'المخزن': item.warehouse ?? '',
      'فرع الانتاج': item.production?.production_line ?? '',
+     'التصنيف': item.item_classification?.classification_name ?? '',
      'الوحدة': item.measurement?.unit ?? '',
      'التكلفة او سعر البيع': Number(item.category_price ?? 0),
      'متوسط التكلفة': this.averageUnitCost(item),
@@ -310,6 +338,9 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
   if (this.productionline && String(item.production_id ?? '') !== String(this.productionline)) {
    return false;
   }
+  if (this.classificationline && String(item.item_classification_id ?? '') !== String(this.classificationline)) {
+   return false;
+  }
 
   return true;
  }
@@ -333,6 +364,11 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
   this.search();
  }
 
+ onClassificationChange(event: any) {
+  this.classificationline = event.target.value;
+  this.search();
+ }
+
  onWarehousechange(event: any) {
   this.warehouse = event.target.value;
   this.search();
@@ -346,6 +382,7 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
  search() {
   this.param = {};
   if (this.productionline) this.param['production_id'] = this.productionline;
+  if (this.classificationline) this.param['item_classification_id'] = this.classificationline;
   if (this.warehouse) this.param['warehouse'] = this.warehouse;
   const name = (this.category_name ?? '').trim();
   if (name) this.param['category_name'] = name;
@@ -369,6 +406,8 @@ export class ListCategoriesComponent implements OnInit, OnDestroy {
   this.category_name = '';
   this.warehouse = '';
   this.productionline = '';
+  this.classificationline = '';
+  this.classLine = '';
 
   if (this.user == 'Customer Service') {
    this.warehouse = 'مخزن منتج تام';

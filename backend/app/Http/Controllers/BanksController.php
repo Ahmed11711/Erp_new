@@ -223,7 +223,7 @@ class BanksController extends Controller
                 if ($treeAccount && $treeAccount->detail_type === 'bank') {
                     $hasEntries = AccountEntry::where('tree_account_id', $accountId)->exists();
                     if (!$hasEntries) {
-                        $treeAccount->delete();
+                        $treeAccount->forceDelete();
                     }
                 }
             }

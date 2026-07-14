@@ -32,7 +32,10 @@ export class AddEmployeeComponent {
     'salary_type' :new FormControl(null , [Validators.required ]),
     'working_hours' :new FormControl(null),
     'acc_no' :new FormControl(null),
+    'payable_tree_account_id' :new FormControl(null),
   })
+
+  payableTreeAccountId: number | null = null;
 
   salarytype!: string;
   salaryType(e){
@@ -47,6 +50,7 @@ export class AddEmployeeComponent {
       if (this.form.value.working_hours == 'عدد ساعات العمل') {
         this.form.value['working_hours'] = null;
       }
+      this.form.patchValue({ payable_tree_account_id: this.payableTreeAccountId });
       this.employeeService.add(this.form.value).subscribe(result=>{
         if (result) {
           this.route.navigate(['/dashboard/hr/employee']);

@@ -1,0 +1,28 @@
+.fa-plus {
+  background-color: black;
+  padding: 5px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+table td {
+  font-size: 20px;
+}
+
+table th {
+  font-size: 25px;
+}
+
+.header2 {
+  background-color: black;
+  color: white;
+  text-align: center;
+  font-size: 2rem;
+  border-radius: 7px;
+  width: fit-content;
+  padding: 10px 20px;
+}
+
+.add-btn {
+  cursor: pointer;
+}

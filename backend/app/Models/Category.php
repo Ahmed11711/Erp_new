@@ -15,6 +15,7 @@ class Category extends Model
   'category_name',
   'item_code',
   'color',
+  'item_classification_id',
   'parent_item_id',
   'supports_color',
   'color_id',
@@ -53,6 +54,11 @@ class Category extends Model
  public function measurement()
  {
   return $this->belongsTo(Measurement::class);
+ }
+
+ public function itemClassification()
+ {
+  return $this->belongsTo(ItemClassification::class);
  }
  public function stock()
  {

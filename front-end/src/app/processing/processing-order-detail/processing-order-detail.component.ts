@@ -18,6 +18,13 @@ import Swal from 'sweetalert2';
 export class ProcessingOrderDetailComponent implements OnInit {
   order: any = null;
   statusLabels: Record<string, string> = {};
+  invoiceStatusLabels: Record<string, string> = {
+    draft: 'مسودة',
+    posted: 'مرحّلة',
+    partially_paid: 'مدفوعة جزئياً',
+    paid: 'مدفوعة',
+    cancelled: 'ملغاة',
+  };
   receiptDate = new Date().toISOString().slice(0, 10);
   receiptLines: any[] = [];
   busy = false;

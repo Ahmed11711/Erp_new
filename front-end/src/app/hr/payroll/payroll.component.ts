@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
 import { environment } from 'src/env/env';
-import { applyNormalShiftTimes, isFullDayPermission, normalizeOvernightFingerPrintRecords, resolveWorkDayHours } from '../utils/fingerprint-hours.utils';
+import { applyNormalShiftTimes, baseHourPrice, deductionMultiplier, isFullDayPermission, normalizeOvernightFingerPrintRecords, OVERTIME_DEDUCTION_MULTIPLIER, resolveWorkDayHours } from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-payroll',
@@ -257,7 +257,7 @@ export class PayrollComponent implements OnInit{
     let totalHoursPerMonth = workingHourPerDay * 26 * 60;
     let actualTotalMinutesPerMonth = 0;
     totalHours = this.convertMinutesToHours(totalHoursPerMonth);
-    let hourPrice = fixedSalary/30/dayHours
+    let hourPrice = baseHourPrice(fixedSalary, dayHours);
     if (emp.finger_print?.length) {
       emp.finger_print.forEach((r: { working_hours?: number }) => {
         r.working_hours = workingHourPerDay;
@@ -313,13 +313,11 @@ export class PayrollComponent implements OnInit{
         elm['salary_type2']='حافز';
       } else {
         hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
-        let salary = hoursDifference/60*hourPrice;
-        if (elm.absence_deduction) {
-          salary = salary * Number(elm.absence_deduction);
-        }
+        const rateMultiplier = deductionMultiplier(elm.absence_deduction);
+        let salary = hoursDifference/60*hourPrice*rateMultiplier;
         if (elm.hours_permission) {
           let [hours, minutes] = elm.hours_permission.split(':').map(Number);
-          salary += ((hours * 60 + minutes)/60 * hourPrice);
+          salary += ((hours * 60 + minutes)/60 * hourPrice * rateMultiplier);
         }
         elm['salary_type']=salary * -1;
         if (salary == 0) {
@@ -369,7 +367,7 @@ export class PayrollComponent implements OnInit{
       return total + day;
     }, 0);
     absenceDaysCount = absenceDaysCount - this.holidayDays.length;
-    let absenceDaysPrice = absenceDaysCount * dayHours * hourPrice;
+    let absenceDaysPrice = absenceDaysCount * dayHours * hourPrice * OVERTIME_DEDUCTION_MULTIPLIER;
     let absenceDetails:any = {};
     if (absenceDaysPrice > 0) {
       absenceDetails['absenceDaysCount'] = absenceDaysCount;
@@ -379,7 +377,7 @@ export class PayrollComponent implements OnInit{
     if (Math.abs(hoursDifference) > absenceDaysCount * dayHours * 60) {
       let absenceHours = this.convertMinutesToHours(Math.abs(hoursDifference) - absenceDaysCount * dayHours * 60);
       let [hours, minutes] = absenceHours.split(':').map(Number);
-      let  absenceHoursPrice = ((hours * 60 + minutes)/60 * hourPrice);
+      let  absenceHoursPrice = ((hours * 60 + minutes)/60 * hourPrice * OVERTIME_DEDUCTION_MULTIPLIER);
       absenceDetails['absenceHours'] = absenceHours;
       absenceDetails['absenceHoursPrice'] = absenceHoursPrice;
     }

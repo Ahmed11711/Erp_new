@@ -94,6 +94,12 @@
             formControlName='acc_no' type="number" min="0" class="form-control">
           </div>
         </div>
+        <div class="col-md-6">
+          <app-employee-payable-account-picker
+            [accountId]="payableTreeAccountId"
+            (accountIdChange)="payableTreeAccountId = $event">
+          </app-employee-payable-account-picker>
+        </div>
       </div>
 
 

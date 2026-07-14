@@ -5,12 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use App\Models\Setting;
 
 class TreeAccount extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     /** أنواع الشجرة: asset, liability, equity, revenue, expense, settlement (تسوية — غالباً طبيعتها دائنة للعرض مثل الخصوم) */
 
@@ -52,7 +54,7 @@ class TreeAccount extends Model
             $resolved = static::resolveNextChildCodeAndLevel($parent, $lastChild);
             $code = $resolved['code'];
 
-            while (static::where('code', $code)->exists()) {
+            while (static::withTrashed()->where('code', $code)->exists()) {
                 $code = (string) ((int) $code + 1);
             }
 
@@ -62,7 +64,7 @@ class TreeAccount extends Model
             return;
         }
 
-        $lastRootQuery = static::query()->whereNull('parent_id')->lockForUpdate();
+        $lastRootQuery = static::withTrashed()->whereNull('parent_id')->lockForUpdate();
         $driver = DB::connection()->getDriverName();
         if ($driver === 'mysql') {
             $lastRoot = $lastRootQuery->orderByRaw('CAST(code AS UNSIGNED) DESC')->first();
@@ -86,7 +88,7 @@ class TreeAccount extends Model
      */
     public static function queryLastChildUnderParentLocked(self $parent): ?self
     {
-        $q = static::query()->where('parent_id', $parent->id)->lockForUpdate();
+        $q = static::withTrashed()->where('parent_id', $parent->id)->lockForUpdate();
         $driver = DB::connection()->getDriverName();
         if ($driver === 'mysql') {
             return $q->orderByRaw('CAST(code AS UNSIGNED) DESC')->first();
@@ -184,7 +186,7 @@ class TreeAccount extends Model
         if ($trimmed === '') {
             return false;
         }
-        $q = static::query()->whereRaw('TRIM(name) = ?', [$trimmed]);
+        $q = static::withTrashed()->whereRaw('TRIM(name) = ?', [$trimmed]);
         if ($exceptId !== null) {
             $q->where('id', '!=', $exceptId);
         }

@@ -333,4 +333,48 @@ class RecipeCrudTest extends TestCase
         $this->assertTrue($isIgnore->invoke($service, 'اجمالي التكاليف المباشرة'));
         $this->assertFalse($isIgnore->invoke($service, 'سعر المكن'));
     }
+
+    public function test_ingredient_color_stripped_when_not_in_excel_finish_colors(): void
+    {
+        $service = app(\App\Services\Items\RecipeSheetImportService::class);
+        $reflection = new \ReflectionClass($service);
+        $method = $reflection->getMethod('sanitizeIngredientColorsForRecipe');
+        $method->setAccessible(true);
+
+        $recipe = [
+            'finish_colors' => ['Black'],
+            'ingredients' => [
+                ['item_name' => 'قماش', 'color' => 'Black', 'supports_color' => false],
+                ['item_name' => 'سوسته', 'color' => 'Maroon', 'supports_color' => false],
+                ['item_name' => 'جلد', 'color' => 'Black', 'supports_color' => true],
+            ],
+        ];
+
+        $method->invokeArgs($service, [&$recipe, true]);
+
+        $this->assertSame('Black', $recipe['ingredients'][0]['color']);
+        $this->assertNull($recipe['ingredients'][1]['color']);
+        $this->assertNull($recipe['ingredients'][2]['color']);
+    }
+
+    public function test_ingredient_colors_cleared_when_sheet_has_no_color_column(): void
+    {
+        $service = app(\App\Services\Items\RecipeSheetImportService::class);
+        $reflection = new \ReflectionClass($service);
+        $method = $reflection->getMethod('sanitizeIngredientColorsForRecipe');
+        $method->setAccessible(true);
+
+        $recipe = [
+            'finish_colors' => [],
+            'ingredients' => [
+                ['item_name' => 'قماش', 'color' => 'Black', 'supports_color' => false],
+                ['item_name' => 'سوسته', 'color' => 'Orange', 'supports_color' => false],
+            ],
+        ];
+
+        $method->invokeArgs($service, [&$recipe, false]);
+
+        $this->assertNull($recipe['ingredients'][0]['color']);
+        $this->assertNull($recipe['ingredients'][1]['color']);
+    }
 }

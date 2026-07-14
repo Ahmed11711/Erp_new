@@ -1,12 +1,15 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { ActivatedRoute, Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import * as XLSX from 'xlsx';
 import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { DailyEntryService } from 'src/app/accounting/services/daily-entry.service';
 import { PdfService } from 'src/app/pdf.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
 import { AuthService } from 'src/app/auth/auth.service';
@@ -33,13 +36,25 @@ export class FinancialStatementComponent implements OnInit {
 
   loading = false;
   errorMessage: string | null = null;
-  lastSearchParams: { date_from?: string | null; date_to?: string | null } | null = null;
+  lastSearchParams: { date_from?: string | null; date_to?: string | null; user_id?: number | null } | null = null;
+
+  users: { id: number; name: string }[] = [];
+  filteredUsers: { id: number | null; name: string }[] = [];
+  /** خيار ثابت أعلى قائمة المستخدمين */
+  readonly allUsersOption: { id: null; name: string } = { id: null, name: 'كل المستخدمين' };
 
   // ——— تبويب الشجرة ———
   /** كل عُقد الشجرة (رئيسية وفرعية) لاختيار كشف الحساب */
   allTreeAccounts: any[] = [];
   filteredAccounts: any[] = [];
   accountSearchTerm = '';
+
+  /** حقل البحث/الاختيار الموحّد لحساب الشجرة (كود أو اسم داخل نفس الـ select) */
+  accountInputCtrl = new FormControl<any>('');
+
+  /** بحث قابل للكتابة في فلتر المستخدم (نفس أسلوب حساب الشجرة) */
+  ledgerUserInputCtrl = new FormControl<any>('');
+  cashUserInputCtrl = new FormControl<any>('');
 
   accountSourceOptions = [
     { value: 'all', label: 'كل الحسابات' },
@@ -60,6 +75,7 @@ export class FinancialStatementComponent implements OnInit {
     account_id: new FormControl<number | null>(null, [Validators.required]),
     date_from: new FormControl<string | null>(null),
     date_to: new FormControl<string | null>(null),
+    user_id: new FormControl<number | null>(null),
   });
 
   // ——— تبويب الخزن/البنوك/الخدمات ———
@@ -78,6 +94,7 @@ export class FinancialStatementComponent implements OnInit {
     entity_id: new FormControl<number | null>(null, [Validators.required]),
     date_from: new FormControl<string | null>(null),
     date_to: new FormControl<string | null>(null),
+    user_id: new FormControl<number | null>(null),
   });
 
   constructor(
@@ -85,6 +102,7 @@ export class FinancialStatementComponent implements OnInit {
     private safeService: SafeService,
     private bankService: BankService,
     private serviceAccountsService: ServiceAccountsService,
+    private dailyEntryService: DailyEntryService,
     private pdfService: PdfService,
     private route: ActivatedRoute,
     private router: Router,
@@ -110,6 +128,7 @@ export class FinancialStatementComponent implements OnInit {
     });
 
     this.loadAccountingTree();
+    this.initUserFilter();
 
     forkJoin({
       safes: this.safeService.getAll(),
@@ -131,14 +150,138 @@ export class FinancialStatementComponent implements OnInit {
 
     this.ledgerForm.get('source_type')?.valueChanges.subscribe(() => {
       this.ledgerForm.patchValue({ account_id: null });
+      this.accountSearchTerm = '';
+      this.accountInputCtrl.setValue('', { emitEvent: false });
       this.updateFilteredAccounts();
       this.clearReportOnly();
+    });
+
+    this.accountInputCtrl.valueChanges.subscribe((val) => {
+      if (typeof val !== 'string') {
+        return;
+      }
+      this.accountSearchTerm = val;
+      this.updateFilteredAccounts();
+      if (!val.trim()) {
+        this.ledgerForm.patchValue({ account_id: null });
+      }
+    });
+
+    this.ledgerUserInputCtrl.valueChanges.subscribe((val) => {
+      if (typeof val !== 'string') {
+        return;
+      }
+      this.updateFilteredUsers(val);
+      if (!val.trim()) {
+        this.ledgerForm.patchValue({ user_id: null });
+      }
+    });
+
+    this.cashUserInputCtrl.valueChanges.subscribe((val) => {
+      if (typeof val !== 'string') {
+        return;
+      }
+      this.updateFilteredUsers(val);
+      if (!val.trim()) {
+        this.cashForm.patchValue({ user_id: null });
+      }
     });
 
     this.cashForm.get('entity_type')?.valueChanges.subscribe(() => {
       this.cashForm.patchValue({ entity_id: null });
       this.clearReportOnly();
     });
+  }
+
+  private initUserFilter(): void {
+    let myId = 0;
+    let myName = '';
+
+    this.authService.fetchMe().pipe(
+      catchError(() => of(null))
+    ).subscribe((me) => {
+      myId = Number(me?.id ?? 0);
+      myName = String(me?.name ?? '').trim();
+      if (myId > 0) {
+        this.ledgerForm.patchValue({ user_id: myId }, { emitEvent: false });
+        this.cashForm.patchValue({ user_id: myId }, { emitEvent: false });
+      }
+      this.loadEntryUsers(myId, myName);
+    });
+  }
+
+  private loadEntryUsers(currentUserId = 0, currentUserName = ''): void {
+    this.dailyEntryService.getUsers().pipe(
+      catchError(() => of({ data: [] as { id: number; name: string }[] }))
+    ).subscribe((res) => {
+      const raw = Array.isArray(res?.data)
+        ? res.data
+        : (Array.isArray(res) ? res : []);
+      const byId = new Map<number, { id: number; name: string }>();
+      for (const row of raw) {
+        const id = Number(row?.id ?? 0);
+        const name = String(row?.name ?? '').trim();
+        if (id > 0) {
+          byId.set(id, { id, name: name || `#${id}` });
+        }
+      }
+      if (currentUserId > 0 && !byId.has(currentUserId)) {
+        byId.set(currentUserId, {
+          id: currentUserId,
+          name: currentUserName || 'أنا',
+        });
+      }
+      this.users = Array.from(byId.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, 'ar', { sensitivity: 'base' })
+      );
+      this.updateFilteredUsers('');
+      this.syncUserInputDisplay(this.ledgerUserInputCtrl, this.ledgerForm.get('user_id')?.value ?? null);
+      this.syncUserInputDisplay(this.cashUserInputCtrl, this.cashForm.get('user_id')?.value ?? null);
+    });
+  }
+
+  private syncUserInputDisplay(ctrl: FormControl<any>, userId: number | null): void {
+    if (userId == null || userId <= 0) {
+      ctrl.setValue(this.allUsersOption, { emitEvent: false });
+      return;
+    }
+    const found = this.users.find((u) => u.id === userId);
+    ctrl.setValue(found ?? { id: userId, name: `#${userId}` }, { emitEvent: false });
+  }
+
+  updateFilteredUsers(term: string = ''): void {
+    const q = String(term ?? '').trim().toLowerCase();
+    const matched = !q
+      ? [...this.users]
+      : this.users.filter((u) => String(u.name ?? '').toLowerCase().includes(q));
+    this.filteredUsers = [this.allUsersOption, ...matched];
+  }
+
+  displayUserOption = (value: any): string => {
+    if (!value) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return value.name ?? '';
+  };
+
+  onLedgerUserSelected(event: MatAutocompleteSelectedEvent): void {
+    const user = event.option.value;
+    this.ledgerForm.patchValue({ user_id: user?.id ?? null });
+    this.updateFilteredUsers('');
+  }
+
+  onCashUserSelected(event: MatAutocompleteSelectedEvent): void {
+    const user = event.option.value;
+    this.cashForm.patchValue({ user_id: user?.id ?? null });
+    this.updateFilteredUsers('');
+  }
+
+  onUserFilterFocus(ctrl: FormControl<any>): void {
+    const val = ctrl.value;
+    this.updateFilteredUsers(typeof val === 'string' ? val : '');
   }
 
   setTab(tab: 'ledger' | 'cash'): void {
@@ -472,18 +615,22 @@ export class FinancialStatementComponent implements OnInit {
     );
   }
 
-  onAccountSearchChange(): void {
-    this.updateFilteredAccounts();
-  }
-
-  onDateChange(which: 'ledger' | 'cash', part: 'from' | 'to', event: Event): void {
-    const v = (event.target as HTMLInputElement).value;
-    const g = which === 'ledger' ? this.ledgerForm : this.cashForm;
-    if (part === 'from') {
-      g.patchValue({ date_from: v });
-    } else {
-      g.patchValue({ date_to: v });
+  /** تسمية خيار حساب الشجرة داخل قائمة البحث */
+  displayAccountOption = (value: any): string => {
+    if (!value) {
+      return '';
     }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return `${value.code ?? ''} — ${value.name ?? ''}`;
+  };
+
+  onAccountOptionSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value;
+    this.ledgerForm.patchValue({ account_id: acc?.id ?? null });
+    this.accountSearchTerm = '';
+    this.updateFilteredAccounts();
   }
 
   submitLedgerForm(): void {
@@ -498,7 +645,8 @@ export class FinancialStatementComponent implements OnInit {
     this.runReport({
       account_id: accountId,
       date_from: this.ledgerForm.value.date_from,
-      date_to: this.ledgerForm.value.date_to
+      date_to: this.ledgerForm.value.date_to,
+      user_id: this.ledgerForm.value.user_id,
     });
   }
 
@@ -529,11 +677,12 @@ export class FinancialStatementComponent implements OnInit {
     this.runReport({
       account_id: treeAccountId,
       date_from: this.cashForm.value.date_from,
-      date_to: this.cashForm.value.date_to
+      date_to: this.cashForm.value.date_to,
+      user_id: this.cashForm.value.user_id,
     });
   }
 
-  private runReport(params: { account_id: number; date_from: any; date_to: any }): void {
+  private runReport(params: { account_id: number; date_from: any; date_to: any; user_id?: number | null }): void {
     this.loading = true;
     this.errorMessage = null;
     this.data = [];
@@ -546,10 +695,15 @@ export class FinancialStatementComponent implements OnInit {
     if (params.date_to) {
       httpParams.date_to = params.date_to;
     }
+    const userId = Number(params.user_id ?? 0);
+    if (userId > 0) {
+      httpParams.user_id = userId;
+    }
 
     this.lastSearchParams = {
       date_from: params.date_from,
-      date_to: params.date_to
+      date_to: params.date_to,
+      user_id: userId > 0 ? userId : null,
     };
 
     this.accountingReportService.getAccountStatement(httpParams).subscribe({

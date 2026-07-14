@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { FormGroup, FormControl } from '@angular/forms';
 import { ExpenseService } from '../services/expense.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
 import Swal from 'sweetalert2';
@@ -29,30 +29,37 @@ export class ExpensesComponent implements OnInit {
   }
 
   ngOnInit(){
-    // this.getData();
-    this.search('');
+    this.search();
+  }
+
+  onDateFilterChange(): void {
+    this.page = 0;
+    this.search();
   }
 
   form:FormGroup = new FormGroup({
-    'start' :new FormControl(null , [Validators.required ]),
-    'end' :new FormControl(null , [Validators.required ]),
+    'start' : new FormControl(null),
+    'end' : new FormControl(null),
   })
 
 
-  param = {};
-  search(event:any){
+  param: Record<string, string> = {};
 
-    if(this.dateFrom != ''){
-      this.param['date_from']=this.dateFrom;
+  search(){
+    const start = this.form.get('start')?.value || '';
+    const end = this.form.get('end')?.value || '';
+    this.dateFrom = start;
+    this.dateTo = end;
+
+    this.param = {};
+    if (this.dateFrom) {
+      this.param['date_from'] = this.dateFrom;
+    }
+    if (this.dateTo) {
+      this.param['date_to'] = this.dateTo;
     }
 
-    if(this.dateTo != ''){
-      this.param['date_to']=this.dateTo;
-    }
-    console.log(this.param);
-
-
-    this.expenseService.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
+    this.expenseService.search(this.pageSize, this.page + 1, this.param).subscribe((res:any)=>{
 
       this.data = res.data;
       this.data = this.data.map((elm) => {
@@ -100,32 +107,18 @@ export class ExpensesComponent implements OnInit {
   onPageChange(event: any) {
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
-    this.search(arguments);
+    this.search();
   }
 
 
 
   resetInp(){
     this.form.reset();
-    this.param ={};
+    this.param = {};
     this.dateFrom = '';
     this.dateTo = '';
-    this.search('');
-  }
-
-  onDateFromChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.dateFrom = target.value;
-    console.log(this.dateFrom);
-
-    this.search('');
-
-  }
-  onDateToChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.dateTo = target.value;
-    this.search('');
-
+    this.page = 0;
+    this.search();
   }
 
   // filterData(e) {
@@ -154,7 +147,7 @@ export class ExpensesComponent implements OnInit {
       console.log(result);
 
       if (result) {
-        this.search('');
+        this.search();
       }
     },
     (error)=>{
@@ -323,7 +316,7 @@ export class ExpensesComponent implements OnInit {
 
           this.expenseService.purgeAll().subscribe({
             next: () => {
-              this.search('');
+              this.search();
               Swal.fire({ icon: 'success', title: 'تم حذف جميع المصروفات', timer: 3000, showConfirmButton: false });
             },
             error: (err) => {

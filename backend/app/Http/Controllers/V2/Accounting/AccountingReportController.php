@@ -60,11 +60,7 @@ class AccountingReportController extends Controller
         }
 
         if ($request->filled('user_id')) {
-            $userId = (int) $request->user_id;
-            $query->where(function ($q) use ($userId) {
-                $q->where('de.user_id', $userId)
-                    ->orWhere('v.user_id', $userId);
-            });
+            $this->applyAccountEntryUserFilter($query, (int) $request->user_id);
         }
 
         // إجمالي المدين/الدائن لكل النتائج المصفّاة — وليس للصفحة الحالية فقط
@@ -188,6 +184,8 @@ class AccountingReportController extends Controller
         $dateTo = $request->date_to ?? now()->format('Y-m-d');
         $leafOnly = $request->boolean('leaf_only', false);
         $includeZeroBalance = $request->boolean('include_zero_balance', false);
+        // عند فلترة مستوى معيّن: الأرصدة = الحساب + كل الفروع (تجميع شجري)
+        $rollupSubtree = $request->filled('level');
 
         // Build accounts query - include ALL accounts (roots + children)
         $accountsQuery = TreeAccount::with(['parent']);
@@ -201,7 +199,7 @@ class AccountingReportController extends Controller
         }
 
         if ($request->filled('level')) {
-            $accountsQuery->where('level', $request->level);
+            $accountsQuery->where('level', (int) $request->level);
         }
 
         if ($request->filled('search')) {
@@ -234,42 +232,77 @@ class AccountingReportController extends Controller
                 ],
                 'validation' => ['is_balanced' => true, 'message' => 'ميزان المراجعة متوازن'],
                 'count' => 0,
-                'options' => ['leaf_only' => $leafOnly, 'include_zero_balance' => $includeZeroBalance],
+                'options' => [
+                    'leaf_only' => $leafOnly,
+                    'include_zero_balance' => $includeZeroBalance,
+                    'rollup_subtree' => $rollupSubtree,
+                ],
             ], 200);
         }
 
+        $childrenMap = [];
+        if ($rollupSubtree) {
+            $childrenMap = $this->buildTreeAccountChildrenMap();
+        }
+
+        // قيود كل الحسابات عند التجميع (حتى تُحسب حركة الأبناء تحت المستوى المختار)
+        $entryAccountScope = $rollupSubtree
+            ? null
+            : $accountIds;
+
         // Optimized: single query for all opening balances (before date_from)
         $openingRows = collect();
-        if ($dateFrom && !empty($accountIds)) {
-            $openingRows = AccountEntry::whereIn('tree_account_id', $accountIds)
+        if ($dateFrom) {
+            $openingQuery = AccountEntry::query()
                 ->where('created_at', '<', $dateFrom . ' 00:00:00')
                 ->selectRaw('tree_account_id, COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
-                ->groupBy('tree_account_id')
-                ->get()
-                ->keyBy('tree_account_id');
+                ->groupBy('tree_account_id');
+            if ($entryAccountScope !== null) {
+                $openingQuery->whereIn('tree_account_id', $entryAccountScope);
+            }
+            $openingRows = $openingQuery->get()->keyBy('tree_account_id');
         }
 
         // Optimized: single query for all movement (date_from to date_to)
-        $movementRows = AccountEntry::whereIn('tree_account_id', $accountIds)
+        $movementQuery = AccountEntry::query()
             ->when($dateFrom, fn ($q) => $q->where('created_at', '>=', $dateFrom . ' 00:00:00'))
             ->where('created_at', '<=', $dateTo . ' 23:59:59')
             ->selectRaw('tree_account_id, COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
-            ->groupBy('tree_account_id')
-            ->get()
-            ->keyBy('tree_account_id');
+            ->groupBy('tree_account_id');
+        if ($entryAccountScope !== null) {
+            $movementQuery->whereIn('tree_account_id', $entryAccountScope);
+        }
+        $movementRows = $movementQuery->get()->keyBy('tree_account_id');
 
+        $openingMemo = [];
+        $movementMemo = [];
         $trialBalance = [];
 
         foreach ($accounts as $account) {
-            $openingRow = $openingRows->get($account->id);
-            $openingDebit = (float) ($openingRow?->total_debit ?? 0);
-            $openingCredit = (float) ($openingRow?->total_credit ?? 0);
+            if ($rollupSubtree) {
+                [$openingDebit, $openingCredit] = $this->sumAccountSubtreeTotals(
+                    (int) $account->id,
+                    $childrenMap,
+                    $openingRows,
+                    $openingMemo
+                );
+                [$movementDebit, $movementCredit] = $this->sumAccountSubtreeTotals(
+                    (int) $account->id,
+                    $childrenMap,
+                    $movementRows,
+                    $movementMemo
+                );
+            } else {
+                $openingRow = $openingRows->get($account->id);
+                $openingDebit = (float) ($openingRow?->total_debit ?? 0);
+                $openingCredit = (float) ($openingRow?->total_credit ?? 0);
+
+                $movRow = $movementRows->get($account->id);
+                $movementDebit = (float) ($movRow->total_debit ?? 0);
+                $movementCredit = (float) ($movRow->total_credit ?? 0);
+            }
+
             $openingBalance = $openingDebit - $openingCredit;
-
-            $movRow = $movementRows->get($account->id);
-            $movementDebit = (float) ($movRow->total_debit ?? 0);
-            $movementCredit = (float) ($movRow->total_credit ?? 0);
-
             $closingBalance = $openingBalance + ($movementDebit - $movementCredit);
 
             $hasActivity = $openingBalance != 0 || $movementDebit != 0 || $movementCredit != 0 || $closingBalance != 0;
@@ -329,8 +362,63 @@ class AccountingReportController extends Controller
             'options' => [
                 'leaf_only' => $leafOnly,
                 'include_zero_balance' => $includeZeroBalance,
+                'rollup_subtree' => $rollupSubtree,
             ],
         ], 200);
+    }
+
+    /**
+     * خريطة parent_id => [child_id, ...] لكل شجرة الحسابات.
+     *
+     * @return array<int, list<int>>
+     */
+    private function buildTreeAccountChildrenMap(): array
+    {
+        $map = [];
+        $rows = TreeAccount::query()->get(['id', 'parent_id']);
+        foreach ($rows as $row) {
+            if ($row->parent_id) {
+                $map[(int) $row->parent_id][] = (int) $row->id;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * مجموع مدين/دائن الحساب + كل الأبناء (مع memo).
+     *
+     * @param  array<int, list<int>>  $childrenMap
+     * @param  \Illuminate\Support\Collection<int|string, object>  $rowsByAccountId
+     * @param  array<int, array{0: float, 1: float}>  $memo
+     * @return array{0: float, 1: float}
+     */
+    private function sumAccountSubtreeTotals(
+        int $accountId,
+        array $childrenMap,
+        $rowsByAccountId,
+        array &$memo
+    ): array {
+        if (isset($memo[$accountId])) {
+            return $memo[$accountId];
+        }
+
+        $row = $rowsByAccountId->get($accountId);
+        $debit = (float) ($row->total_debit ?? 0);
+        $credit = (float) ($row->total_credit ?? 0);
+
+        foreach ($childrenMap[$accountId] ?? [] as $childId) {
+            [$childDebit, $childCredit] = $this->sumAccountSubtreeTotals(
+                (int) $childId,
+                $childrenMap,
+                $rowsByAccountId,
+                $memo
+            );
+            $debit += $childDebit;
+            $credit += $childCredit;
+        }
+
+        return $memo[$accountId] = [$debit, $credit];
     }
 
     /**
@@ -459,13 +547,21 @@ class AccountingReportController extends Controller
             'account_id' => 'required|exists:tree_accounts,id',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date',
+            'user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $accountId = (int) $request->input('account_id');
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
+        $userId = $request->filled('user_id') ? (int) $request->user_id : null;
 
-        $account = TreeAccount::find($accountId);
+        // Soft-deleted accounts still exist in tree_accounts (exists validation passes) but
+        // TreeAccount::find() excludes them — keep statements available for historical review.
+        $account = TreeAccount::withTrashed()->find($accountId);
+        if (! $account) {
+            return response()->json(['message' => 'الحساب غير موجود'], 404);
+        }
+
         $scopeAccountIds = $this->descendantTreeAccountIdsIncludingSelf($accountId);
         $consolidated = count($scopeAccountIds) > 1;
 
@@ -485,6 +581,10 @@ class AccountingReportController extends Controller
                 ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
                 ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
                 ->whereRaw("{$effectiveDateExpr} < ?", [$dateFrom]);
+
+            if ($userId !== null) {
+                $this->applyAccountEntryUserFilter($openingQuery, $userId);
+            }
 
             $totalDebit = (clone $openingQuery)->sum(DB::raw('account_entries.debit'));
             $totalCredit = (clone $openingQuery)->sum(DB::raw('account_entries.credit'));
@@ -512,6 +612,10 @@ class AccountingReportController extends Controller
         }
         if ($dateTo) {
             $query->whereRaw("{$effectiveDateExpr} <= ?", [$dateTo]);
+        }
+
+        if ($userId !== null) {
+            $this->applyAccountEntryUserFilter($query, $userId);
         }
 
         $entries = $query->orderByRaw("{$effectiveDateExpr} ASC")
@@ -554,6 +658,40 @@ class AccountingReportController extends Controller
             'total_debit' => $entries->sum('debit'),
             'total_credit' => $entries->sum('credit'),
         ], 200);
+    }
+
+    private function applyAccountEntryUserFilter($query, int $userId): void
+    {
+        $opsPrefix = BankOperationalLedgerService::BATCH_PREFIX;
+
+        $query->where(function ($q) use ($userId, $opsPrefix) {
+            $q->where('de.user_id', $userId)
+                ->orWhere('v.user_id', $userId)
+                ->orWhereIn('account_entries.entry_batch_code', function ($sub) use ($userId) {
+                    $sub->select('entry_batch_code')
+                        ->from('bank_transactions')
+                        ->where('user_id', $userId)
+                        ->whereNotNull('entry_batch_code');
+                })
+                ->orWhereIn('account_entries.entry_batch_code', function ($sub) use ($userId) {
+                    $sub->select('entry_batch_code')
+                        ->from('safe_transactions')
+                        ->where('user_id', $userId)
+                        ->whereNotNull('entry_batch_code');
+                })
+                ->orWhere(function ($q2) use ($userId, $opsPrefix) {
+                    $q2->where('account_entries.entry_batch_code', 'like', $opsPrefix . '%')
+                        ->whereExists(function ($exists) use ($userId, $opsPrefix) {
+                            $exists->select(DB::raw(1))
+                                ->from('bank_details')
+                                ->where('bank_details.user_id', $userId)
+                                ->whereRaw(
+                                    'account_entries.entry_batch_code LIKE CONCAT(?, \'%-\', bank_details.ref)',
+                                    [$opsPrefix]
+                                );
+                        });
+                });
+        });
     }
 
     private function userCanEditAccountStatementEntries(): bool
@@ -648,7 +786,8 @@ class AccountingReportController extends Controller
     private function descendantTreeAccountIdsIncludingSelf(int $rootId): array
     {
         $byParent = [];
-        foreach (TreeAccount::query()->select('id', 'parent_id')->get() as $row) {
+        // Include soft-deleted children so consolidated statements still cover deleted subtrees.
+        foreach (TreeAccount::withTrashed()->select('id', 'parent_id')->get() as $row) {
             $p = $row->parent_id;
             if (! isset($byParent[$p])) {
                 $byParent[$p] = [];

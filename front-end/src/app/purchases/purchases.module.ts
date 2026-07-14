@@ -8,7 +8,6 @@ import {AutocompleteLibModule} from 'angular-ng-autocomplete';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatInputModule} from '@angular/material/input';
 import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatNativeDateModule} from '@angular/material/core';
 import { ListInvoiceComponent } from './list-invoice/list-invoice.component';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
@@ -28,7 +27,6 @@ import { PurchaseDetailsComponent } from './purchase-details/purchase-details.co
     PurchaseDetailsComponent
   ],
   imports: [
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     MatDatepickerModule,

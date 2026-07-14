@@ -89,11 +89,7 @@
 
           <div class="form-group pi-date-field">
             <label for="receipt_date">تاريخ الاستلام</label>
-            <input id="receipt_date" type="date" class="form-control pi-date-input"
-              name="receiptDate"
-              [min]="minReceiptDate" [max]="maxReceiptDate"
-              [ngModel]="toDateInputValue(date)"
-              (ngModelChange)="onReceiptDateModelChange($event)">
+            <app-date-input id="receipt_date" name="receiptDate" [(ngModel)]="date"></app-date-input>
           </div>
         </div>
 

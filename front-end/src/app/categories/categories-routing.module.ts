@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { AddCategoryComponent } from './add-category/add-category.component';
 import { ProductionComponent } from './production/production.component';
 import { UnitsComponent } from './units/units.component';
+import { ClassificationsComponent } from './classifications/classifications.component';
 import { ListCategoriesComponent } from './list-categories/list-categories.component';
 import { EditCategoryComponent } from './edit-category/edit-category.component';
 import { departmentGuard } from '../guards/department.guard';
@@ -12,6 +13,7 @@ const cat = [...RBAC_ROUTE.categoriesAll];
 
 const routes: Routes = [
   { path: 'units', component: UnitsComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
+  { path: 'classifications', component: ClassificationsComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
   { path: 'production', component: ProductionComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
   { path: 'add_category', component: AddCategoryComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },
   { path: 'edit_category/:id', component: EditCategoryComponent, canActivate: [departmentGuard], data: { rbacPermissions: cat } },

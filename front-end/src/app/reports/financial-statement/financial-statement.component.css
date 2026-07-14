@@ -4,6 +4,81 @@
   border-radius: 12px 12px 0 0;
 }
 
+/* ---------- فلتر التقرير (تخطيط شبكي متجاوب) ---------- */
+.report-filter__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 14px;
+  align-items: end;
+}
+
+.report-filter__field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.report-filter__field--wide {
+  grid-column: span 2;
+}
+
+.report-filter__field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+/* توحيد ارتفاع كل عناصر الفلتر لتناسق بصري مع حقل التاريخ */
+.report-filter__field .form-control {
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.report-filter__field .form-control:focus {
+  border-color: #82225e;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15);
+}
+
+/* حقلا التاريخ جنباً إلى جنب داخل خلية واحدة */
+.report-filter__dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.report-filter__dates .report-filter__field {
+  margin: 0;
+}
+
+.report-filter__field--action {
+  justify-content: flex-end;
+}
+
+.report-filter__field--action .btn {
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.report-filter__field app-date-input {
+  display: block;
+}
+
+/* قائمة بحث المستخدمين — ارتفاع أكبر لعرض المزيد */
+::ng-deep .user-filter-autocomplete-panel {
+  max-height: 320px !important;
+}
+
+@media (max-width: 720px) {
+  .report-filter__field--wide {
+    grid-column: span 1;
+  }
+}
+
 table.report-data-table tfoot .text-success {
   color: #15803d !important;
 }

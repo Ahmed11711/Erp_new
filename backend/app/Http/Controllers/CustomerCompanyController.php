@@ -264,23 +264,24 @@ class CustomerCompanyController extends Controller
     public function customerCompanyBalance($id , Request $request){
         $itemsPerPage = $request->input('itemsPerPage', 15);
 
-        $name = customerCompany::where('id', $id)->value('name');
+        $company = customerCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
 
         $data = DB::table('customer_company_details')
         ->join('users', 'customer_company_details.user_id', '=', 'users.id')
         ->select('customer_company_details.*', 'users.name')
         ->where('customer_company_id', $id)
-        // ->orderBy('customer_company_details.created_at', 'desc')
         ->orderBy('customer_company_details.id', 'desc')
         ->paginate($itemsPerPage);
 
-
-        $result = [
+        return response()->json([
             'data' => $data,
-            $name,
-        ];
-
-        return response()->json($result, 200);
+            'name' => $company->name,
+            'balance' => (float) $company->balance,
+            $company->name,
+        ], 200);
     }
 
     public function companyCollect($id, Request $request)

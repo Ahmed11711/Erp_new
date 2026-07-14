@@ -112,6 +112,7 @@ class InventoryMovementLedgerService
      * Outbound: decreases quantity.
      *
      * @param  bool  $adjustCategoryValuation  When false, only quantity changes (e.g. some shipment flows rely on COGS elsewhere).
+     * @param  bool  $allowNegative  When true, quantity may go below zero (e.g. purchase invoice delete reversal).
      */
     public function recordOutbound(
         Category $category,
@@ -125,6 +126,7 @@ class InventoryMovementLedgerService
         ?string $reason = null,
         ?int $dailyEntryId = null,
         ?string $performedBy = null,
+        bool $allowNegative = false,
     ): InventoryMovement {
         return DB::transaction(function () use (
             $category,
@@ -137,7 +139,8 @@ class InventoryMovementLedgerService
             $referenceId,
             $reason,
             $dailyEntryId,
-            $performedBy
+            $performedBy,
+            $allowNegative
         ) {
             $cat = Category::query()->lockForUpdate()->findOrFail($category->id);
             $qtyStr = $this->normalizeQty($quantity);
@@ -146,7 +149,7 @@ class InventoryMovementLedgerService
             }
 
             $current = (string) ($cat->quantity ?? '0');
-            if (bccomp($current, $qtyStr, 6) < 0) {
+            if (! $allowNegative && bccomp($current, $qtyStr, 6) < 0) {
                 throw new \RuntimeException('Insufficient quantity for category #' . $cat->id);
             }
 
@@ -156,7 +159,8 @@ class InventoryMovementLedgerService
             $cat->quantity = bcsub($current, $qtyStr, 6);
 
             if ($adjustCategoryValuation && abs($tc) > 0.0000001) {
-                $cat->total_price = round(max(0, ((float) ($cat->total_price ?? 0)) - $tc), 4);
+                $newTotalPrice = ((float) ($cat->total_price ?? 0)) - $tc;
+                $cat->total_price = round($allowNegative ? $newTotalPrice : max(0, $newTotalPrice), 4);
                 CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $cat->id);
             }
 

@@ -6,7 +6,7 @@ export interface TreeAccountUserRef {
 export interface TreeAccountAuditEntry {
   id: number;
   tree_account_id?: number | null;
-  action: 'created' | 'updated' | 'deleted';
+  action: 'created' | 'updated' | 'deleted' | 'restored' | 'force_deleted';
   action_label?: string;
   performed_by?: number | null;
   performer?: TreeAccountUserRef | null;
@@ -63,6 +63,7 @@ export interface TreeAccount {
   updated_by_user?: TreeAccountUserRef | null;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string;
 }
 
 export interface TreeAccountResponse {

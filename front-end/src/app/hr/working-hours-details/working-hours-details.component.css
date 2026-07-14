@@ -97,3 +97,67 @@ tr.row-edited td.bg-danger {
   color: #856404;
   font-size: 0.82rem;
 }
+
+.month-sheet-summary {
+  margin: 2rem 0 1rem;
+  padding: 1.25rem;
+  border: 2px solid #82225e;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.month-sheet-summary__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #82225e;
+  margin-bottom: 0.75rem;
+}
+
+.month-sheet-summary__formula {
+  text-align: center;
+}
+
+.month-sheet-summary__formula-main {
+  font-size: 1.15rem;
+  font-weight: 600;
+  direction: ltr;
+  margin-bottom: 0.75rem;
+}
+
+.month-sheet-summary__formula-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: center;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.month-sheet-summary__table td,
+.month-sheet-summary__table th {
+  vertical-align: middle;
+}
+
+.month-sheet-summary__net {
+  max-width: 480px;
+  margin: 1rem auto 0;
+}
+
+.bg-navy {
+  background-color: #82225e !important;
+}
+
+.month-sheet-summary__actions {
+  margin-top: 1rem;
+}
+
+.month-sheet-summary__btn {
+  border: 2px solid #82225e !important;
+  border-radius: 8px;
+  padding: 0.5rem 1.25rem;
+  font-weight: 600;
+}
+
+.btn-outline-dark.month-sheet-summary__btn {
+  border-color: #333 !important;
+}

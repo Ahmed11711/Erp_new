@@ -1,6 +1,7 @@
 import { Component, ElementRef, HostListener, Inject, OnDestroy, Renderer2 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { OrderService } from '../services/order.service';
+import { OrderInvoicePrintService } from '../services/order-invoice-print.service';
 import {MatDialog, MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import { NavigationEnd, Router } from '@angular/router';
 import { ShippingCompanyService } from '../services/shipping-company.service';
@@ -26,6 +27,7 @@ import { WhatsAppService } from 'src/app/whatsapp/services/whatsapp.service';
 import { RbacService } from 'src/app/core/rbac/rbac.service';
 import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
 import { Subject, firstValueFrom, takeUntil } from 'rxjs';
+import { environment } from 'src/env/env';
 import {
   collectRenewPrepaidParams,
   promptReturnPrepaidAmount,
@@ -97,7 +99,7 @@ export class ListOrdersComponent implements OnDestroy {
     if (item?.order_status === 'تم شحن') {
       return false;
     }
-    const editableTypes = ['جديد', 'طلب استبدال', 'طلب مرتجع'];
+    const editableTypes = ['جديد', 'طلب استبدال', 'طلب مرتجع', 'طلب صيانة'];
     const editableStatuses = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'];
     return editableTypes.includes(item?.order_type) && editableStatuses.includes(item?.order_status);
   }
@@ -145,6 +147,25 @@ export class ListOrdersComponent implements OnDestroy {
   canCancelOrder(item: any): boolean {
     const status = String(item?.order_status ?? '').trim();
     return ['طلب جديد', 'طلب مؤكد', 'مؤجل'].includes(status);
+  }
+
+  /** تجديد الطلب: صلاحية orders.change_status أو أقسام مسموحة (مع تقييد إدارة الشحن). */
+  canRenewOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    if (!['ملغي', 'أرشيف', 'ارشيف', 'مؤجل', 'رفض استلام', 'طلب مؤكد'].includes(status)) {
+      return false;
+    }
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
+    const dept = String(this.user || '').trim().toLowerCase();
+    if (dept === 'admin' || dept === 'data entry' || dept === 'customer service') {
+      return true;
+    }
+    if (dept === 'shipping management') {
+      return status === 'رفض استلام' || status === 'مؤجل';
+    }
+    return false;
   }
 
   private canChangeOrderStatusMenu(): boolean {
@@ -215,6 +236,8 @@ export class ListOrdersComponent implements OnDestroy {
   shippingWays:any[]=[];
   shippingLines:any[]=[];
   products:any[]=[];
+  private productSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private textFilterTimer: ReturnType<typeof setTimeout> | null = null;
 
   length = 50;
   pageSize = 100;
@@ -228,7 +251,8 @@ export class ListOrdersComponent implements OnDestroy {
   private readonly destroy$ = new Subject<void>();
 
   constructor(private orderSource:OrderSourceService ,private shippingWay: ShippingWayService , private datePipe:DatePipe,
-    private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
+    private http:HttpClient ,private order: OrderService, private orderInvoicePrint: OrderInvoicePrintService,
+    public dialog: MatDialog, private company:ShippingCompanyService,
     private filterService:FilterOrderService , private shippingLine:ShippingLinesService,
     private userService:UserService ,private renderer: Renderer2 ,private el: ElementRef, private bankService:BanksService,
     private safeService: SafeService,
@@ -256,7 +280,7 @@ export class ListOrdersComponent implements OnDestroy {
       },
       error: () => { this.hasWhatsAppAccess = false; }
     });
-    this.order.getProducts().subscribe((result:any)=>this.products = result);
+    this.order.getProducts().subscribe((result:any)=>this.allProducts = result || []);
 
     this.filterService.value.subscribe(res=>{
       this.filter(arguments);
@@ -303,6 +327,12 @@ export class ListOrdersComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.productSearchTimer) {
+      clearTimeout(this.productSearchTimer);
+    }
+    if (this.textFilterTimer) {
+      clearTimeout(this.textFilterTimer);
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -335,6 +365,111 @@ export class ListOrdersComponent implements OnDestroy {
   }
 
   catword = 'category_name';
+  allProducts: any[] = [];
+
+  private stripHighlightTags(value: string): string {
+    return String(value ?? '').replace(/<\/?b>/gi, '');
+  }
+
+  selectedCategoryLabel = (item: any): string => {
+    if (!item?.category_name) {
+      return '';
+    }
+    const name = this.stripHighlightTags(String(item.category_name));
+    const code = String(item.item_code ?? '').trim();
+    return code ? `${name} (${code})` : name;
+  };
+
+  filterCategorySearch = (items: any[], query: string) => {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) {
+      return [...items];
+    }
+    return items.filter((item) => {
+      const name = this.stripHighlightTags(String(item.category_name ?? '')).toLowerCase();
+      const code = String(item.item_code ?? '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    });
+  };
+
+  searchOrderProducts(query: string): void {
+    const q = (query ?? '').trim();
+    if (!q) {
+      this.products = [];
+      return;
+    }
+
+    this.http.get<any>(`${environment.Url}/categories/search`, {
+      params: {
+        itemsPerPage: 50,
+        warehouse: 'مخزن منتج تام',
+        category_name: q,
+      },
+    }).subscribe({
+      next: (res) => {
+        this.products = (res?.data || []).map((item: any) => ({
+          ...item,
+          category_name: item.category_name || '',
+        }));
+      },
+      error: () => {
+        this.products = this.filterCategorySearch(this.allProducts, q);
+      },
+    });
+  }
+
+  onProductInputChanged(value: string): void {
+    if (this.productSearchTimer) {
+      clearTimeout(this.productSearchTimer);
+    }
+    const q = (value ?? '').trim();
+    if (!q) {
+      this.products = [];
+      return;
+    }
+    this.productSearchTimer = setTimeout(() => this.searchOrderProducts(q), 300);
+  }
+
+  onTextFilterInput(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    if (!target?.id) {
+      return;
+    }
+
+    if (this.textFilterTimer) {
+      clearTimeout(this.textFilterTimer);
+    }
+
+    this.textFilterTimer = setTimeout(() => {
+      this.applyTextFilter(target.id, target.value);
+      this.page = 0;
+      this.filter(null);
+    }, 400);
+  }
+
+  private applyTextFilter(id: string, rawValue: string): void {
+    const value = String(rawValue ?? '').trim();
+
+    switch (id) {
+      case 'customer_name':
+        this.filterService.customer_name = value;
+        break;
+      case 'customer_phone': {
+        let number = value.replace(/\s+/g, '');
+        if (number.startsWith('+2') || number.startsWith('2')) {
+          number = number.substring(2);
+        }
+        this.filterService.customer_phone = number;
+        break;
+      }
+      case 'order_number':
+        this.filterService.order_number = value;
+        break;
+      case 'shippment_number':
+        this.filterService.shippment_number = value;
+        break;
+    }
+  }
 
   productChange(event: { id?: number } | null): void {
     if (!event?.id) {
@@ -347,6 +482,7 @@ export class ListOrdersComponent implements OnDestroy {
 
   resetProductFilter(): void {
     this.filterService.category_id = null;
+    this.products = [];
     this.page = 0;
     this.filter(null);
   }
@@ -417,38 +553,48 @@ export class ListOrdersComponent implements OnDestroy {
 
   need_by_datekey = false;
   need_by_date:any;
-  OnDateChange(event){
-    const inputDate = new Date(event);
-    this.need_by_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
+  OnDateChange(iso: string | null){
+    if (!iso) {
+      this.need_by_datekey = false;
+      return;
+    }
+    this.need_by_date = iso;
     this.need_by_datekey = true;
     this.filter('');
   }
 
   status_datekey = false;
   status_date:any;
-  OnStatusDateChange(event){
-    const inputDate = new Date(event);
-    this.status_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
+  OnStatusDateChange(iso: string | null){
+    if (!iso) {
+      this.status_datekey = false;
+      return;
+    }
+    this.status_date = iso;
     this.status_datekey = true;
-    console.log(this.status_date);
-
     this.filter('');
   }
 
   order_datekey = false;
   order_date:any;
-  OnOrderDateChange(event){
-    const inputDate = new Date(event);
-    this.order_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
+  OnOrderDateChange(iso: string | null){
+    if (!iso) {
+      this.order_datekey = false;
+      return;
+    }
+    this.order_date = iso;
     this.order_datekey = true;
     this.filter('');
   }
 
   deliver_datekey = false;
   delivery_date:any;
-  OnDeliverDateChange(event){
-    const inputDate = new Date(event);
-    this.delivery_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
+  OnDeliverDateChange(iso: string | null){
+    if (!iso) {
+      this.deliver_datekey = false;
+      return;
+    }
+    this.delivery_date = iso;
     this.deliver_datekey = true;
     this.filter('');
   }
@@ -1321,7 +1467,7 @@ export class ListOrdersComponent implements OnDestroy {
     }
 
     if (event?.target?.id ==="customer_phone") {
-      let number = event.target.value;
+      let number = String(event.target.value ?? '').trim().replace(/\s+/g, '');
       if (number.startsWith('+2') || number.startsWith('2')) {
         number = number.substring(2);
       }
@@ -1376,6 +1522,7 @@ export class ListOrdersComponent implements OnDestroy {
         elm.days = differenceInDays
 
       })
+      this.syncSelectAllState();
     })
 
   }
@@ -1401,6 +1548,70 @@ export class ListOrdersComponent implements OnDestroy {
   }
 
   googleSheetData: any[] = [];
+  allOrdersSelected = false;
+  printSelectedLoading = false;
+
+  isOrderSelected(item: any): boolean {
+    return this.googleSheetData.includes(item);
+  }
+
+  toggleSelectAllPrint(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.allOrdersSelected = checked;
+    if (checked) {
+      this.googleSheetData = [...(this.orders || [])];
+      return;
+    }
+    this.googleSheetData = [];
+  }
+
+  private syncSelectAllState(): void {
+    const visible = this.orders || [];
+    this.allOrdersSelected = visible.length > 0 && visible.every((item) => this.googleSheetData.includes(item));
+  }
+
+  printSelectedOrders(): void {
+    if (!this.googleSheetData.length) {
+      Swal.fire({
+        icon: 'info',
+        text: 'Please select at least one order to print.',
+      });
+      return;
+    }
+
+    const orderIds = this.googleSheetData.map((item) => Number(item.id)).filter((id) => id > 0);
+    if (!orderIds.length) {
+      Swal.fire({
+        icon: 'info',
+        text: 'Please select at least one order to print.',
+      });
+      return;
+    }
+
+    this.printSelectedLoading = true;
+    this.order.printOrders(orderIds).subscribe({
+      next: (res) => {
+        this.printSelectedLoading = false;
+        const opened = this.orderInvoicePrint.openPrintWindow(res.orders || [], {
+          showInvoiceDate: res.show_invoice_date !== false,
+          size: 'A4',
+        });
+        if (!opened) {
+          Swal.fire({
+            icon: 'warning',
+            text: 'تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.',
+          });
+        }
+      },
+      error: (err) => {
+        this.printSelectedLoading = false;
+        Swal.fire({
+          icon: 'error',
+          text: err?.error?.message || 'تعذر تحضير الفواتير للطباعة',
+        });
+      },
+    });
+  }
 
   selectOrder(e: any, item: any) {
     this.sendOneOrder = false;
@@ -1415,6 +1626,7 @@ export class ListOrdersComponent implements OnDestroy {
       this.googleSheetData = this.googleSheetData.filter(elm=> elm !== item);
     }
 
+    this.syncSelectAllState();
   }
 
   googleSheet:any[]=[];

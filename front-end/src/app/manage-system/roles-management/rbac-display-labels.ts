@@ -17,6 +17,7 @@ export const RBAC_MODULE_AR: Record<string, string> = {
   nav: 'القوائم والتنقل في الواجهة',
   shipping: 'شركات الشحن والمندوبين',
   customers: 'عملاء الشركات',
+  offers: 'عروض الأسعار',
   general: 'عام',
 };
 
@@ -99,6 +100,7 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
 
   'nav.receipts': 'قائمة: الإيصالات والأذونات',
   'nav.receipts.quotes': 'قائمة: عروض الأسعار',
+  'offers.view_all': 'عرض كل عروض الأسعار',
   'nav.receipts.admin': 'قائمة: نماذج إدارية للإيصالات',
   'nav.corporate': 'قائمة: مبيعات الشركات',
   'nav.shopify': 'قائمة: تكامل Shopify (كامل — قديم)',

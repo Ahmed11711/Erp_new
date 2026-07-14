@@ -396,7 +396,7 @@
   </div>
 
   <div class="col-lg-5" *ngIf="canManageOrderNotes">
-   <div class="order-notes-panel order-section-card h-100">
+   <div class="order-notes-panel order-section-card">
     <div class="order-notes-panel__header">
      <div class="order-notes-panel__header-text">
       <h5 class="order-notes-panel__title"><i class="fa-solid fa-comments"></i> ملاحظات الطلب</h5>
@@ -451,7 +451,7 @@
   </div>
 
   <div [ngClass]="canManageOrderNotes ? 'col-lg-7' : 'col-12'">
-   <div class="order-section-card order-side-panel order-notifications-panel h-100">
+   <div class="order-section-card order-side-panel order-notifications-panel">
     <div class="order-section-card__header">
      <h5 class="order-section-card__title"><i class="fa-solid fa-bell"></i> الإشعارات</h5>
     </div>
@@ -462,7 +462,7 @@
        <th>النوع</th>
        <th>المرسل</th>
        <th>المرسل اليه</th>
-       <th>الملاحظة</th>
+       <th class="order-notif-note-col">الملاحظة</th>
        <th>تاريخ الارسال</th>
       </thead>
       <tbody class="text-center">
@@ -602,5 +602,5 @@
 
 </div> <br>
 
-<app-print-invoice class="d-none" [data]="data"></app-print-invoice>
+<app-print-invoice class="d-none" [data]="data" [showInvoiceDate]="showInvoiceDate" [reloadAfterPrint]="true"></app-print-invoice>
 <app-sticker class="d-none" [sticker]="sticker"></app-sticker>

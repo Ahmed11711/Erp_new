@@ -2,9 +2,14 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\CollectionProviderType;
+use App\Enums\OrderCollectionStatus;
+use App\Enums\OrderSettlementStatus;
 use App\Models\AccountEntry;
 use App\Models\Bank;
+use App\Models\CollectionCompany;
 use App\Models\Order;
+use App\Models\OrderDetails;
 use App\Models\Safe;
 use App\Models\ServiceAccount;
 use App\Models\TreeAccount;
@@ -17,7 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * عكس الدفعة المقدمة أو نقلها بين بنك/خزينة/حساب خدمي مع تسوية GL والأرصدة التشغيلية.
+ * عكس الدفعة المقدمة أو نقلها بين بنك/خزينة/حساب خدمي/شركة تحصيل مع تسوية GL والأرصدة التشغيلية.
  */
 final class OrderPrepaidAdjustmentService
 {
@@ -84,35 +89,52 @@ final class OrderPrepaidAdjustmentService
         $this->assertCanAdjust($order);
 
         $paymentType = trim($paymentType);
-        if (! in_array($paymentType, ['bank', 'safe', 'service_account'], true)) {
+        if (! in_array($paymentType, ['bank', 'safe', 'service_account', 'collection_company'], true)) {
             throw new \InvalidArgumentException('نوع مصدر الدفع غير صالح');
         }
 
-        $this->assertSourceExists($paymentType, $sourceId);
+        if ($paymentType === 'collection_company') {
+            $this->assertCollectionCompanyExists($sourceId);
+        } else {
+            $this->assertSourceExists($paymentType, $sourceId);
+        }
 
         $amount = round((float) ($order->prepaid_amount ?? 0), 2);
         if ($amount <= 0.009) {
             throw new \InvalidArgumentException('لا يوجد مبلغ تحت الحساب على هذا الطلب');
         }
 
+        $order->loadMissing('order_details');
+        $od = $order->order_details;
+        if (! $od) {
+            throw new \InvalidArgumentException('الطلب بدون تفاصيل شحن');
+        }
+
         $before = $this->orderEditAccounting->snapshotBeforeEdit($order);
         $oldSource = $this->resolveOperationalPrepaidSource($order);
         $oldPaymentType = $this->resolvePaymentType($before, $oldSource);
         $oldSourceId = $oldSource['id'] ?? null;
+        $wasCollection = $this->wasPrepaidOnCollectionCompany($order, $before, $oldSource);
 
-        if ($oldPaymentType === $paymentType && $oldSourceId !== null && (int) $oldSourceId === $sourceId) {
+        if ($paymentType === 'collection_company' && (int) $sourceId === (int) ($od->collection_provider_id ?? 0)
+            && $od->collection_provider_type === CollectionProviderType::CollectionCompany->value
+            && $wasCollection) {
+            throw new \InvalidArgumentException('شركة التحصيل الجديدة مطابقة للمصدر الحالي');
+        }
+
+        if ($paymentType !== 'collection_company' && $oldPaymentType === $paymentType
+            && $oldSourceId !== null && (int) $oldSourceId === $sourceId && ! $wasCollection) {
             throw new \InvalidArgumentException('مصدر الدفع الجديد مطابق للمصدر الحالي');
         }
 
-        if ($oldSource === null) {
+        if ($oldSource === null && ! $wasCollection) {
             throw new \InvalidArgumentException('تعذّر تحديد مصدر الدفع الحالي — استخدم «عكس الدفعة» أو عدّل الطلب من شاشة التعديل');
         }
 
         OrderEditAccountingService::$suppressPrepaidDeltaJournal = true;
 
         try {
-            if ($oldSource !== null) {
-                // أرصدة تشغيلية فقط — قيود ORD-PREPAID تُعاد بناؤها في refreshOrderRecognition
+            if ($oldSource !== null && ! $wasCollection) {
                 $this->recordOperationalBalanceOnly(
                     $oldPaymentType,
                     (int) $oldSource['id'],
@@ -123,25 +145,43 @@ final class OrderPrepaidAdjustmentService
                 );
             }
 
-            $order->prepaid_payment_type = $paymentType;
-            $order->bank_id = $paymentType === 'bank' ? $sourceId : null;
+            if ($paymentType === 'collection_company') {
+                $company = CollectionCompany::findOrFail($sourceId);
+                $order->prepaid_payment_type = 'collection_company';
+                $order->bank_id = null;
+                $this->linkCollectionCompanyOnOrderDetails($od, $company, $amount);
+            } else {
+                if ($wasCollection) {
+                    $this->clearCollectionCompanyOnOrderDetails($od);
+                }
+
+                $order->prepaid_payment_type = $paymentType;
+                $order->bank_id = $paymentType === 'bank' ? $sourceId : null;
+                $order->save();
+                $od->save();
+
+                $this->mergeRequestForCashResolution($paymentType, $sourceId);
+            }
+
             $order->save();
+            $this->salesOrderAccounting->refreshOrderRecognition($order->fresh(['order_details']), true);
 
-            $this->mergeRequestForCashResolution($paymentType, $sourceId);
-            $this->salesOrderAccounting->refreshOrderRecognition($order->fresh(), true);
+            if (in_array($paymentType, ['bank', 'safe', 'service_account'], true)) {
+                $this->recordOperationalBalanceOnly(
+                    $paymentType,
+                    $sourceId,
+                    $amount,
+                    $userId,
+                    'نقل دفعة مقدمة — إيداع في مصدر جديد — طلب رقم ' . $order->id,
+                    (string) $order->id,
+                );
+            }
 
-            $this->recordOperationalBalanceOnly(
-                $paymentType,
-                $sourceId,
-                $amount,
-                $userId,
-                'نقل دفعة مقدمة — إيداع في مصدر جديد — طلب رقم ' . $order->id,
-                (string) $order->id,
-            );
+            $this->financialState->syncFromOrder($order->fresh(['order_details']));
 
-            $this->financialState->syncFromOrder($order->fresh());
-
-            $label = $this->sourceLabel($paymentType, $sourceId);
+            $label = $paymentType === 'collection_company'
+                ? ('شركة تحصيل «' . (CollectionCompany::find($sourceId)?->name ?? '') . '»')
+                : $this->sourceLabel($paymentType, $sourceId);
             $this->insertTracking(
                 $order,
                 'تغيير مصدر مبلغ تحت الحساب إلى ' . $label . ($note ? ' — ' . $note : ''),
@@ -151,7 +191,7 @@ final class OrderPrepaidAdjustmentService
             OrderEditAccountingService::$suppressPrepaidDeltaJournal = false;
         }
 
-        return $order->fresh();
+        return $order->fresh(['order_details', 'bank']);
     }
 
     public function canAdjust(Order $order): bool
@@ -185,15 +225,6 @@ final class OrderPrepaidAdjustmentService
 
         if (in_array((string) $order->order_status, ['ملغي', 'أرشيف'], true)) {
             throw new \InvalidArgumentException('لا يمكن تعديل الدفعة المقدمة لطلب ملغي أو مؤرشف');
-        }
-
-        if ($this->cancellationAccounting->isPrepaidHeldByCollectionIntermediary($order)) {
-            $cashSource = $this->resolveOperationalPrepaidSource($order);
-            if ($cashSource === null) {
-                throw new \InvalidArgumentException(
-                    'الدفعة مسجّلة على ذمة شركة تحصيل/شحن بدون مصدر نقدي (بنك/خزينة) — استخدم تسوية الشركة أو إلغاء الطلب'
-                );
-            }
         }
     }
 
@@ -369,6 +400,10 @@ final class OrderPrepaidAdjustmentService
 
         $stored = trim((string) ($before['prepaid_payment_type'] ?? ''));
 
+        if ($stored === 'collection_company') {
+            return 'collection_company';
+        }
+
         return in_array($stored, ['bank', 'safe', 'service_account'], true) ? $stored : 'bank';
     }
 
@@ -383,6 +418,53 @@ final class OrderPrepaidAdjustmentService
         if (! $exists) {
             throw new \InvalidArgumentException('مصدر الدفع المحدد غير موجود');
         }
+    }
+
+    private function assertCollectionCompanyExists(int $companyId): void
+    {
+        if (! CollectionCompany::query()->whereKey($companyId)->exists()) {
+            throw new \InvalidArgumentException('شركة التحصيل المحددة غير موجودة');
+        }
+    }
+
+    /**
+     * @param  array{prepaid_payment_type?: string|null, bank_id?: mixed}  $before
+     * @param  array{type: string, id: int}|null  $operational
+     */
+    private function wasPrepaidOnCollectionCompany(Order $order, array $before, ?array $operational): bool
+    {
+        if ($this->cancellationAccounting->isPrepaidHeldByCollectionIntermediary($order)) {
+            return true;
+        }
+
+        $stored = trim((string) ($before['prepaid_payment_type'] ?? ''));
+
+        return $stored === 'collection_company'
+            || ($operational === null && $order->order_details?->collection_provider_type === CollectionProviderType::CollectionCompany->value);
+    }
+
+    private function linkCollectionCompanyOnOrderDetails(OrderDetails $od, CollectionCompany $company, float $amount): void
+    {
+        $od->collection_provider_type = CollectionProviderType::CollectionCompany->value;
+        $od->collection_provider_id = (int) $company->id;
+        if ($company->linked_shipping_company_id) {
+            $od->collection_company_id = (int) $company->linked_shipping_company_id;
+        }
+        $od->collection_receivable_amount = round($amount, 3);
+        $od->collection_status = OrderCollectionStatus::Pending->value;
+        $od->settlement_status = OrderSettlementStatus::Open->value;
+        $od->save();
+    }
+
+    private function clearCollectionCompanyOnOrderDetails(OrderDetails $od): void
+    {
+        $od->collection_provider_type = CollectionProviderType::None->value;
+        $od->collection_provider_id = null;
+        $od->collection_company_id = null;
+        $od->collection_receivable_amount = 0;
+        $od->collection_status = OrderCollectionStatus::NotRequired->value;
+        $od->settlement_status = OrderSettlementStatus::NotApplicable->value;
+        $od->save();
     }
 
     private function mergeRequestForCashResolution(string $paymentType, int $sourceId): void

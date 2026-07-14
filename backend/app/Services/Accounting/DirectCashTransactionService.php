@@ -130,8 +130,7 @@ class DirectCashTransactionService
             if ($newBank->id === $oldBank->id) {
                 $balanceAfterUndo = $this->projectedBankBalanceAfterUndo($oldBank, $oldStorageType, $oldAmount);
             } else {
-                $this->undoBankBalanceDelta($oldBank, $oldStorageType, $oldAmount);
-                $balanceAfterUndo = null;
+                $balanceAfterUndo = (float) $newBank->balance;
             }
 
             if ($newStorageType === 'withdrawal') {
@@ -148,7 +147,9 @@ class DirectCashTransactionService
 
             $affectedAccounts = $this->removeActiveEntriesByBatch($txn->entry_batch_code);
 
-            if ($newBank->id === $oldBank->id) {
+            $bankLedger = app(BankOperationalLedgerService::class);
+            $hadOperationalDetail = $bankLedger->removeOperationalDetailsByRef($oldBank, $txn->entry_batch_code);
+            if (! $hadOperationalDetail) {
                 $this->undoBankBalanceDelta($oldBank, $oldStorageType, $oldAmount);
             }
 
@@ -161,6 +162,8 @@ class DirectCashTransactionService
                 'amount' => $newAmount,
                 'notes' => $newNotes,
             ]);
+
+            $newBank->refresh();
 
             $this->postBankEntries($newBank, $newCounter, $newStorageType, $newAmount, $newDate, $newNotes, $txn->entry_batch_code);
             $this->applyBankBalanceDelta($newBank, $newStorageType, $newAmount, $newDate, $newNotes, $txn->entry_batch_code);

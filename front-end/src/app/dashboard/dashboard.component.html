@@ -110,6 +110,10 @@
                             *ngIf="rbac.can('categories.manage')">
                             <span>وحدات القياس</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/categories/classifications" routerLinkActive="active"
+                            *ngIf="rbac.can('categories.manage')">
+                            <span>تصنيفات الأصناف</span>
+                        </a>
                         <a mat-list-item routerLink="/dashboard/categories/production" routerLinkActive="active"
                             *ngIf="rbac.can('categories.manage')">
                             <span>خطوط الإنتاج</span>
@@ -747,7 +751,7 @@
 
     <mat-sidenav-content>
         <i id="back" (click)="backPage()" class="fa-solid fa-arrow-left"></i>
-        <nav mat-tab-nav-bar mat-stretch-tabs="false" class="dash-quick-tabs" *ngIf="showShopifyQuickTabs" dir="rtl">
+        <nav mat-tab-nav-bar [tabPanel]="dashTabPanel" mat-stretch-tabs="false" class="dash-quick-tabs" *ngIf="showShopifyQuickTabs" dir="rtl">
             <a mat-tab-link [routerLink]="['/dashboard']" [active]="isHomeDashTabActive()">
                 الرئيسية
             </a>
@@ -756,7 +760,9 @@
                 تكامل Shopify والشحن
             </a> -->
         </nav>
-        <router-outlet></router-outlet>
+        <mat-tab-nav-panel #dashTabPanel>
+            <router-outlet></router-outlet>
+        </mat-tab-nav-panel>
     </mat-sidenav-content>
 
 </mat-sidenav-container>

@@ -80,13 +80,25 @@ export class InventoryImportService {
   importRecipeSheetItems(
     file: File,
     warehouse: string,
-    options?: { includeProducts?: boolean; includeMaterials?: boolean; sheet?: string },
+    options?: {
+      includeProducts?: boolean;
+      includeMaterials?: boolean;
+      sheet?: string;
+      format?: 'recipe' | 'materials-list';
+      importQuantities?: boolean;
+    },
   ): Observable<{ message: string; created: number; updated: number; skipped: number; warnings: string[] }> {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('warehouse', warehouse);
     if (options?.sheet) {
       fd.append('sheet', options.sheet);
+    }
+    if (options?.format) {
+      fd.append('format', options.format);
+    }
+    if (options?.importQuantities === false) {
+      fd.append('import_quantities', '0');
     }
     if (options?.includeProducts === false) {
       fd.append('include_products', '0');
@@ -100,18 +112,31 @@ export class InventoryImportService {
     );
   }
 
-  importOpeningBalances(file: File, createMissingItems: boolean): Observable<{ processed_lines: number }> {
+  importOpeningBalances(
+    file: File,
+    createMissingItems: boolean,
+    options?: { sheet?: string; defaultWarehouse?: string },
+  ): Observable<{ processed_lines: number }> {
     const fd = new FormData();
     fd.append('file', file);
     if (createMissingItems) {
       fd.append('create_missing_items', '1');
     }
+    if (options?.sheet?.trim()) {
+      fd.append('sheet', options.sheet.trim());
+    }
+    if (options?.defaultWarehouse?.trim()) {
+      fd.append('default_warehouse', options.defaultWarehouse.trim());
+    }
     return this.http.post<{ processed_lines: number }>(`${this.base}/opening-balances`, fd);
   }
 
-  importAdjustments(file: File): Observable<{ processed_lines: number }> {
+  importAdjustments(file: File, options?: { sheet?: string }): Observable<{ processed_lines: number }> {
     const fd = new FormData();
     fd.append('file', file);
+    if (options?.sheet?.trim()) {
+      fd.append('sheet', options.sheet.trim());
+    }
     return this.http.post<{ processed_lines: number }>(`${this.base}/adjustments`, fd);
   }
 

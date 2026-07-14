@@ -42,14 +42,21 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        
         Schema::defaultStringLength(191);
         require_once app_path('Support/rbac_helpers.php');
-         if (class_exists(\Doctrine\DBAL\Types\Type::class)) {
-        $platform = Schema::getConnection()->getDoctrineSchemaManager()->getDatabasePlatform();
-        if (! $platform->hasDoctrineTypeMappingFor('enum')) {
-            $platform->registerDoctrineTypeMapping('enum', 'string');
-        }
+
+        if (class_exists(\Doctrine\DBAL\Types\Type::class)) {
+            // تسجيل enum يُستخدم في migrations فقط — لا نربط Doctrine بقاعدة البيانات على كل طلب HTTP.
+            if (app()->runningInConsole()) {
+                try {
+                    $platform = Schema::getConnection()->getDoctrineSchemaManager()->getDatabasePlatform();
+                    if (! $platform->hasDoctrineTypeMappingFor('enum')) {
+                        $platform->registerDoctrineTypeMapping('enum', 'string');
+                    }
+                } catch (\Throwable) {
+                    // قد تكون قاعدة البيانات غير متاحة أثناء بعض خطوات النشر
+                }
+            }
 
             Order::observe(OrderObserver::class);
             OrderDetails::observe(OrderDetailsObserver::class);

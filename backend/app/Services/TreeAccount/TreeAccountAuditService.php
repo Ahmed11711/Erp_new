@@ -57,6 +57,24 @@ final class TreeAccountAuditService
         $this->insert('deleted', $account, null);
     }
 
+    public function logRestored(TreeAccount $account): void
+    {
+        if (! $this->shouldAudit()) {
+            return;
+        }
+
+        $this->insert('restored', $account, null);
+    }
+
+    public function logForceDeleted(TreeAccount $account): void
+    {
+        if (! $this->shouldAudit()) {
+            return;
+        }
+
+        $this->insert('force_deleted', $account, null);
+    }
+
     public function hasAuditableDirty(TreeAccount $account): bool
     {
         return $this->auditableDirtyKeys($account) !== [];

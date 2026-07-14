@@ -8,7 +8,6 @@ import { SharedModule } from '../shared/shared.module';
 import { EmployeeComponent } from './employee/employee.component';
 import { SalaryCashingComponent } from './salary-cashing/salary-cashing.component';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -28,6 +27,9 @@ import { PrintEmpolyeeDetailsComponent } from './print-empolyee-details/print-em
 import { ExtraHoursComponent } from './extra-hours/extra-hours.component';
 import { WorkingHoursComponent } from './working-hours/working-hours.component';
 import { WorkingHoursDetailsComponent } from './working-hours-details/working-hours-details.component';
+import { EmployeePayableAccountPickerComponent } from './employee-payable-account-picker/employee-payable-account-picker.component';
+import { DialogLinkEmployeeAccountComponent } from './dialog-link-employee-account/dialog-link-employee-account.component';
+import { MatDialogModule } from '@angular/material/dialog';
 
 
 
@@ -47,7 +49,9 @@ import { WorkingHoursDetailsComponent } from './working-hours-details/working-ho
     PrintEmpolyeeDetailsComponent,
     ExtraHoursComponent,
     WorkingHoursComponent,
-    WorkingHoursDetailsComponent
+    WorkingHoursDetailsComponent,
+    EmployeePayableAccountPickerComponent,
+    DialogLinkEmployeeAccountComponent
   ],
   imports: [
     CommonModule,
@@ -56,7 +60,6 @@ import { WorkingHoursDetailsComponent } from './working-hours-details/working-ho
     FormsModule,
     SharedModule,
     AutocompleteLibModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     MatDatepickerModule,
@@ -64,6 +67,7 @@ import { WorkingHoursDetailsComponent } from './working-hours-details/working-ho
     MatMenuModule,
     NgxPaginationModule,
     MatPaginatorModule,
+    MatDialogModule,
   ],
   providers:[
     DatePipe

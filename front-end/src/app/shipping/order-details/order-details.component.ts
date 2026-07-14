@@ -102,6 +102,9 @@ export class OrderDetailsComponent implements OnInit{
     return map[s] || s;
   }
 
+  data:any = {};
+  showInvoiceDate = true;
+
   ngOnInit(): void {
     this.route.params.subscribe((result:any)=>{
       this.id = result?.id;
@@ -120,6 +123,7 @@ export class OrderDetailsComponent implements OnInit{
     });
 
     this.getOrder();
+    this.loadInvoicePrintSettings();
 
     if (this.shopifyReviewMode) {
       this.shippingWay.data().subscribe((res: any) => this.shippingWays = res || []);
@@ -552,10 +556,16 @@ export class OrderDetailsComponent implements OnInit{
     if (this.order?.bank?.name) {
       return this.order.bank.name;
     }
+    const collectionName = this.order?.order_details?.collection_provider_name
+      ?? this.order?.order_details?.collection_company?.name;
     const t = this.order?.prepaid_payment_type;
+    if (t === 'collection_company' && collectionName) {
+      return `شركة تحصيل: ${collectionName}`;
+    }
     if (t === 'safe') return 'خزينة';
     if (t === 'service_account') return 'حساب خدمي';
     if (t === 'bank') return 'بنك';
+    if (collectionName) return `شركة تحصيل: ${collectionName}`;
     return '';
   }
 
@@ -714,7 +724,24 @@ export class OrderDetailsComponent implements OnInit{
     this.dataEvent.emit({shipProducts,shippstatus:status,orderType:this.orderType})
   }
 
-  data:any = {};
+  private loadInvoicePrintSettings(): void {
+    this.orderService.getInvoicePrintSettings().subscribe({
+      next: (settings) => {
+        this.showInvoiceDate = this.parseShowInvoiceDateSetting(settings?.show_invoice_date);
+      },
+      error: () => {
+        this.showInvoiceDate = true;
+      },
+    });
+  }
+
+  private parseShowInvoiceDateSetting(value: unknown): boolean {
+    if (value === undefined || value === null || value === '') {
+      return true;
+    }
+    return !['0', 'false', 'off', 'no'].includes(String(value).toLowerCase());
+  }
+
   printInvoice(size:any) {
     this.data = this.order;
     this.data.size = size;

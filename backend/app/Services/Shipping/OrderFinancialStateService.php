@@ -37,6 +37,8 @@ class OrderFinancialStateService
 
         if ($remaining <= 0.009) {
             if ($isElectronicCollection && $paid > 0.009) {
+                $this->ensureElectronicCollectionProvider($order, $od);
+
                 $alreadyCollected = $od->collection_status === OrderCollectionStatus::Collected->value
                     || $od->settlement_status === OrderSettlementStatus::Settled->value
                     || $order->order_status === 'تم التحصيل';
@@ -173,6 +175,25 @@ class OrderFinancialStateService
     private function shouldPreserveElectronicCollectionProvider(Order $order, OrderDetails $od): bool
     {
         return $this->hasElectronicCollectionReceivable($order, $od);
+    }
+
+    private function ensureElectronicCollectionProvider(Order $order, OrderDetails $od): void
+    {
+        if ($od->collection_provider_type === CollectionProviderType::CollectionCompany->value
+            && $od->collection_provider_id) {
+            return;
+        }
+
+        $company = app(CollectionCompanyForOrderResolver::class)->resolve($order, persistLinkIfMissing: true);
+        if (! $company) {
+            return;
+        }
+
+        $od->collection_provider_type = CollectionProviderType::CollectionCompany->value;
+        $od->collection_provider_id = (int) $company->id;
+        if ($company->linked_shipping_company_id) {
+            $od->collection_company_id = (int) $company->linked_shipping_company_id;
+        }
     }
 
     private function hasElectronicCollectionReceivable(Order $order, OrderDetails $od): bool

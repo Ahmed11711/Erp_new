@@ -35,11 +35,11 @@
     <div class="toolbar__dates">
       <div class="toolbar__date-field">
         <label>من</label>
-        <input type="date" [(ngModel)]="filters.dateFrom" (change)="onDateChange()" />
+        <app-date-input [(ngModel)]="filters.dateFrom" (ngModelChange)="onDateChange()"></app-date-input>
       </div>
       <div class="toolbar__date-field">
         <label>إلى</label>
-        <input type="date" [(ngModel)]="filters.dateTo" (change)="onDateChange()" />
+        <app-date-input [(ngModel)]="filters.dateTo" (ngModelChange)="onDateChange()"></app-date-input>
       </div>
       <button
         class="toolbar__clear-dates"

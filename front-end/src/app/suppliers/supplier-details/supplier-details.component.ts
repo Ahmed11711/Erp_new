@@ -61,6 +61,58 @@ export class SupplierDetailsComponent {
     });
   }
 
+  isPayment(item: any): boolean {
+    return item?.entry_kind === 'payment' || !!item?.is_payment
+      || String(item?.invoice_number ?? '').startsWith('SP');
+  }
+
+  entryKind(item: any): string {
+    if (item?.entry_kind) {
+      return item.entry_kind;
+    }
+    if (this.isPayment(item)) {
+      return 'payment';
+    }
+    const ref = String(item?.invoice_number ?? '');
+    if (ref.startsWith('PVI') || item?.invoice_type === 'تشغيل خارجي') {
+      return 'processing';
+    }
+    return 'purchase';
+  }
+
+  typeBadgeClass(item: any): string {
+    const kind = this.entryKind(item);
+    if (kind === 'payment') {
+      return 'supplier-type-badge--payment';
+    }
+    if (kind === 'processing') {
+      return 'supplier-type-badge--processing';
+    }
+    return 'supplier-type-badge--purchase';
+  }
+
+  rowClass(item: any): string {
+    const kind = this.entryKind(item);
+    if (kind === 'payment') {
+      return 'supplier-row--payment';
+    }
+    if (kind === 'processing') {
+      return 'supplier-row--processing';
+    }
+    return 'supplier-row--purchase';
+  }
+
+  getRouterLink(item: any): any[] | null {
+    const kind = this.entryKind(item);
+    if (kind === 'purchase' && item?.invoice_id) {
+      return ['/dashboard/purchases/invoice', item.invoice_id];
+    }
+    if (kind === 'processing' && item?.related_order_id) {
+      return ['/dashboard/processing/orders', item.related_order_id];
+    }
+    return null;
+  }
+
   openPayDialog(): void {
     if (!this.supplierForPay) {
       return;

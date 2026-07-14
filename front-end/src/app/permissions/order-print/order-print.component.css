@@ -56,3 +56,42 @@ mat-icon{
   cursor: pointer;
   color: #82225e;
 }
+
+.order-print-settings {
+  max-width: 36rem;
+  border: 1px solid rgba(130, 34, 94, 0.2);
+  border-radius: 12px;
+}
+
+.order-print-settings__title {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: #222;
+}
+
+.order-print-settings__toggle {
+  font-size: 1.1rem;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.order-print-settings__toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.order-print-settings__hint,
+.order-print-settings__status {
+  font-size: 0.95rem;
+  color: #666;
+}
+
+.order-print-settings__status {
+  margin-top: 0.75rem;
+  color: #82225e;
+}
+
+.order-print-note p {
+  font-size: 1rem;
+  color: #555;
+}

@@ -95,6 +95,19 @@
   margin: 0.25rem 0 0;
 }
 
+.expense-form-page app-date-input .app-date-input-field {
+  border-color: var(--exp-border) !important;
+}
+
+.expense-form-page app-date-input .app-date-input-field:focus {
+  border-color: var(--exp-primary) !important;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15) !important;
+}
+
+.expense-form-page app-date-input .app-date-input-toggle {
+  color: var(--exp-primary);
+}
+
 .expense-form-page .form-control {
   border-radius: 8px;
   border: 1px solid var(--exp-border);

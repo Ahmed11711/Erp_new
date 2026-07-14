@@ -36,6 +36,7 @@
         <th>المستوي الوظيفي</th>
         <th>عدد ساعات العمل</th>
         <th>البصمة</th>
+        <th>حساب الشجرة</th>
         <th>التاريخ</th>
         <th>-</th>
       </thead>
@@ -47,6 +48,19 @@
           <td>{{elm?.level}}</td>
           <td>{{elm?.working_hours}}</td>
           <td>{{elm?.acc_no}}</td>
+          <td class="account-cell">
+            <button
+              type="button"
+              class="account-link-btn"
+              (click)="openLinkAccountDialog(elm)"
+              [title]="elm?.payable_tree_account_id ? 'تعديل ربط الحساب' : 'ربط بحساب في الشجرة'">
+              <mat-icon *ngIf="!elm?.payable_tree_account_id" class="account-link-icon account-link-icon--empty">account_tree</mat-icon>
+              <span *ngIf="elm?.payable_tree_account_id" class="account-linked-label">
+                <mat-icon class="account-link-icon account-link-icon--linked">check_circle</mat-icon>
+                {{ accountLabel(elm) }}
+              </span>
+            </button>
+          </td>
           <td>{{elm?.created_at | date:'dd-MM-yyyy'}}</td>
           <td>
             <span [matMenuTriggerFor]="menu" style="cursor: pointer;">

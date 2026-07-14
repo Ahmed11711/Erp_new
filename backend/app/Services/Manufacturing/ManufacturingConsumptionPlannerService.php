@@ -20,11 +20,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class ManufacturingConsumptionPlannerService
 {
-    public function __construct(
-        private ManufacturingConsumptionResolver $resolver,
-    ) {
-    }
-
     public function shouldConsumeRawMaterials(Item $outputItem, string $status, bool $stayWipOnly): bool
     {
         $isWipSemiFinished = $outputItem->resolvedProductType() === ProductType::SemiFinished;
@@ -216,11 +211,20 @@ final class ManufacturingConsumptionPlannerService
     private function buildBaseLines(int $outputProductId, float $batchQty): array
     {
         $outputItem = Item::query()->findOrFail($outputProductId);
-        $productionColorId = $outputItem->color_id ? (int) $outputItem->color_id : null;
         $anchorId = ManufacturingConsumptionResolver::outputAnchorId($outputItem);
 
         $manufacture = Manufacture::where('product_id', $anchorId)->first()
             ?: Manufacture::where('product_id', $outputProductId)->first();
+
+        if (! $manufacture) {
+            $sync = app(ManufactureRecipeSyncService::class);
+            if ($sync->ensureLegacyManufactureForProduct($anchorId)
+                || ($outputProductId !== $anchorId && $sync->ensureLegacyManufactureForProduct($outputProductId))
+            ) {
+                $manufacture = Manufacture::where('product_id', $anchorId)->first()
+                    ?: Manufacture::where('product_id', $outputProductId)->first();
+            }
+        }
 
         if (! $manufacture) {
             throw new \RuntimeException('لا توجد وصفة تصنيع لهذا الصنف.');
@@ -247,7 +251,7 @@ final class ManufacturingConsumptionPlannerService
                 continue;
             }
 
-            $resolvedItem = $this->resolver->resolveForProduction($bomLineItem, $productionColorId);
+            $resolvedItem = $bomLineItem;
             $category = Category::find($resolvedItem->id);
             if (! $category) {
                 continue;

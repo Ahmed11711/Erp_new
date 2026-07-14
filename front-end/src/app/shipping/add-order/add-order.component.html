@@ -31,25 +31,13 @@
             <option value="طلب مرتجع">طلب مرتجع</option>
           </select>
         </div>
-        <div class="col-md-3 text-center">
-          <mat-form-field class="w-100">
-            <mat-label>تاريخ الطلب</mat-label>
-            <input formControlName='order_date' matInput [matDatepickerFilter]="myFilter" [matDatepicker]="picker"
-              (dateInput)="OnDateChange($event.value)">
-            <mat-hint>MM/DD/YYYY</mat-hint>
-            <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
-            <mat-datepicker #picker></mat-datepicker>
-          </mat-form-field>
+        <div class="col-md-3">
+          <label class="exp-filter-label d-block text-center mb-1">تاريخ الطلب</label>
+          <app-date-input formControlName="order_date"></app-date-input>
         </div>
-        <div class="col-md-3 text-center">
-          <mat-form-field class="w-100">
-            <mat-label>تاريخ التسليم ( حسب العميل )</mat-label>
-            <input formControlName='delivery_date' matInput [matDatepickerFilter]="deliveryDateFilter"
-              [matDatepicker]="picker2" (dateInput)="OnDeliveryDateChange($event.value)">
-            <mat-hint>MM/DD/YYYY</mat-hint>
-            <mat-datepicker-toggle matIconSuffix [for]="picker2"></mat-datepicker-toggle>
-            <mat-datepicker #picker2></mat-datepicker>
-          </mat-form-field>
+        <div class="col-md-3">
+          <label class="exp-filter-label d-block text-center mb-1">تاريخ التسليم ( حسب العميل )</label>
+          <app-date-input formControlName="delivery_date"></app-date-input>
         </div>
       </div>
 
@@ -254,13 +242,19 @@
             form.get('shipping_cost')?.value !='' && form.get('shipping_cost')?.value !=null"
             formControlName='shipping_cost' type="number" class="form-control">
         </div>
-        <div class="col-md-2 d-flex flex-column justify-content-center" *ngIf="customerTypeVal ==='شركة'">
-          <label for=""> ضريبة القيمة المضافة</label>
-          <div>
-            <input id="vat" class="mx-1 vat" min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)"
+        <div class="col-md-2 d-flex flex-column justify-content-center align-items-center" *ngIf="customerTypeVal ==='شركة'">
+          <label class="vat-toggle" [class.active]="applyVat" for="applyVat">
+            <input id="applyVat" type="checkbox" class="vat-toggle-input"
+              [(ngModel)]="applyVat" [ngModelOptions]="{standalone: true}" (change)="onApplyVatChange()">
+            <span class="vat-toggle-box" aria-hidden="true"></span>
+            <span class="vat-toggle-text">تطبيق الضريبة</span>
+          </label>
+          <ng-container *ngIf="applyVat">
+            <label class="vat-amount-label" for="vat">قيمة الضريبة</label>
+            <input id="vat" class="vat form-control" min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)"
               [class.is-valid]="form.get('vat')?.errors ==null &&
               form.get('vat')?.value !='' && form.get('vat')?.value !=null" formControlName='vat' type="number">
-          </div>
+          </ng-container>
         </div>
 
 

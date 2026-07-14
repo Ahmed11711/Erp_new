@@ -27,38 +27,74 @@
 <div class="container py-2" *ngIf="supplierForPay">
   <div class="supplier-total-bar" dir="rtl">
     <span class="supplier-total-bar__label">إجمالي رصيد الحساب</span>
-    <span class="supplier-total-bar__value" dir="ltr">{{ supplierForPay.balance ?? 0 | customNumber }}</span>
+    <span class="supplier-total-bar__value" dir="ltr">{{ supplierForPay.balance | customNumber }}</span>
   </div>
 </div>
 
 <div class="container table-responsive py-5">
-    <table class="table table-bordered table-hover text-center">
+  <div class="supplier-ledger-legend" dir="rtl" *ngIf="suppliersData?.length">
+    <span class="supplier-type-badge supplier-type-badge--purchase">فاتورة مشتريات</span>
+    <span class="supplier-type-badge supplier-type-badge--processing">فاتورة تشغيل خارجي</span>
+    <span class="supplier-type-badge supplier-type-badge--payment">سند سداد</span>
+    <span class="supplier-ledger-legend__hint">PVI = فاتورة تشغيل · MDN = إذن صرف · PR = إذن استلام · PUR = مشتريات</span>
+  </div>
+
+    <table class="table table-bordered table-hover text-center supplier-ledger-table">
       <thead class="thead-dark">
         <tr>
           <th scope="col">#</th>
-          <th scope="col">  المرجع</th>
-          <th scope="col"> المبلغ </th>
-          <th scope="col">  المدفوع</th>
-          <th scope="col"> الباقي</th>
-          <th scope="col"> الرصيد قبل</th>
-          <th scope="col"> الرصيد بعد</th>
-          <th scope="col">  التاريخ</th>
-          <th scope="col">  بواسطة</th>
+          <th scope="col">المرجع</th>
+          <th scope="col">نوع المستند</th>
+          <th scope="col">التفاصيل</th>
+          <th scope="col">المبلغ</th>
+          <th scope="col">المدفوع</th>
+          <th scope="col">الباقي</th>
+          <th scope="col">الرصيد قبل</th>
+          <th scope="col">الرصيد بعد</th>
+          <th scope="col">التاريخ</th>
+          <th scope="col">بواسطة</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let item of suppliersData; let i = index">
-          <th scope="row">{{i+1}}</th>
-          <td>{{item.invoice_number}}</td>
-          <td [attr.colSpan]="item.invoice_number?.startsWith('SP') ? 3 : null" dir="ltr">{{item.total_price | customNumber}}</td>
-          <!-- <td>{{item.paid_amount | customNumber}}</td> -->
-          <td *ngIf="!item.invoice_number?.startsWith('SP'); " dir="ltr">{{ item.paid_amount | customNumber }}</td>
-          <td *ngIf="!item.invoice_number?.startsWith('SP'); " dir="ltr">{{ item.due_amount | customNumber }}</td>
-          <!-- <ng-template #emptyTd><td></td></ng-template> -->
-          <td dir="ltr">{{item.balance_before | customNumber}}</td>
-          <td dir="ltr">{{item.balance_after | customNumber}}</td>
-          <td>{{item.receipt_date}}</td>
-          <td>{{item.user_name}}</td>
+        <tr *ngFor="let item of suppliersData; let i = index" [ngClass]="rowClass(item)">
+          <th scope="row">{{ i + 1 }}</th>
+          <td>
+            <ng-container *ngIf="getRouterLink(item) as link; else plainRef">
+              <a class="supplier-ref-link" [routerLink]="link">{{ item.invoice_number }}</a>
+            </ng-container>
+            <ng-template #plainRef>
+              <span>{{ item.invoice_number }}</span>
+            </ng-template>
+          </td>
+          <td>
+            <span class="supplier-type-badge" [ngClass]="typeBadgeClass(item)">
+              {{ item.document_type || item.invoice_type || '—' }}
+            </span>
+          </td>
+          <td class="supplier-details-cell text-start" dir="rtl">
+            <div class="supplier-details-main">{{ item.details || '—' }}</div>
+            <div class="supplier-details-meta" *ngIf="item.entry_kind === 'processing'">
+              <span *ngIf="item.dispatch_refs" class="supplier-meta-chip supplier-meta-chip--dispatch">
+                إذن صرف: {{ item.dispatch_refs }}
+              </span>
+              <span *ngIf="item.receipt_refs" class="supplier-meta-chip supplier-meta-chip--receipt">
+                إذن استلام: {{ item.receipt_refs }}
+              </span>
+              <span *ngIf="item.related_order_number" class="supplier-meta-chip">
+                أمر: {{ item.related_order_number }}
+              </span>
+            </div>
+          </td>
+          <td [attr.colSpan]="isPayment(item) ? 3 : null" dir="ltr">{{ item.total_price | customNumber }}</td>
+          <td *ngIf="!isPayment(item)" dir="ltr">{{ item.paid_amount | customNumber }}</td>
+          <td *ngIf="!isPayment(item)" dir="ltr">{{ item.due_amount | customNumber }}</td>
+          <td dir="ltr">{{ item.balance_before | customNumber }}</td>
+          <td dir="ltr">{{ item.balance_after | customNumber }}</td>
+          <td>{{ item.receipt_date }}</td>
+          <td>{{ item.user_name }}</td>
+        </tr>
+        <tr *ngIf="!suppliersData?.length">
+          <td colspan="11" class="text-muted py-4">لا توجد حركات على هذا الحساب</td>
         </tr>
       </tbody>
     </table>

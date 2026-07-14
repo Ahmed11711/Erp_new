@@ -490,6 +490,50 @@ class PurchaseInvoiceAccountingTest extends TestCase
         );
     }
 
+    public function test_delete_purchase_succeeds_when_stock_was_partially_consumed(): void
+    {
+        $purchase = $this->createPurchase('اضافة وارد جديد', 10, 50, 0, 500);
+        $mainId = (int) $purchase->id;
+
+        DB::table('categories')->where('id', $this->category->id)->update(['quantity' => 0]);
+        $this->category->refresh();
+
+        $result = app(PurchaseDeletionService::class)->delete($mainId, (int) $this->user->id);
+
+        $this->assertNotEmpty($result['stock_warnings']);
+
+        $main = Purchase::query()->findOrFail($mainId);
+        $this->assertSame('1', (string) $main->status);
+
+        $tracking = DB::table('purchases_trackings')
+            ->where('invoice_id', $mainId)
+            ->where('action', 'حذف فاتورة')
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($tracking);
+        $this->assertStringContainsString('المخزون:', (string) $tracking->details);
+
+        $this->category->refresh();
+        $this->assertEqualsWithDelta(-10.0, (float) $this->category->quantity, 0.001);
+    }
+
+    public function test_delete_purchase_allows_negative_stock_when_partially_consumed(): void
+    {
+        $purchase = $this->createPurchase('اضافة وارد جديد', 10, 50, 0, 500);
+        $mainId = (int) $purchase->id;
+
+        DB::table('categories')->where('id', $this->category->id)->update(['quantity' => 3]);
+        $this->category->refresh();
+
+        $result = app(PurchaseDeletionService::class)->delete($mainId, (int) $this->user->id);
+
+        $this->assertNotEmpty($result['stock_warnings']);
+        $this->assertStringContainsString('خصم سالب', $result['stock_warnings'][0]);
+
+        $this->category->refresh();
+        $this->assertEqualsWithDelta(-7.0, (float) $this->category->quantity, 0.001);
+    }
+
     public function test_edit_purchase_receipt_succeeds_when_original_qty_was_partially_consumed(): void
     {
         $purchase = $this->createPurchase('اضافة وارد جديد', 100, 50, 0, 5000);

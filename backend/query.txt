@@ -69,3 +69,8 @@ php artisan db:fix-procedure-definers
 php artisan collection:backfill-receivables
 
 php artisan db:seed --class=AccountStatementEditPermissionSeeder
+
+php artisan db:seed --class=TreeAccountBalanceAdjustmentPermissionSeeder
+
+
+php artisan db:seed --class=OffersViewAllPermissionSeeder

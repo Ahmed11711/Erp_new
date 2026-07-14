@@ -40,7 +40,7 @@ class CategoriesController extends Controller
  public function index()
  {
   $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
-  $category = Category::with('production', 'measurement', 'stock:id,name')->paginate($itemsPerPage);
+  $category = Category::with('production', 'measurement', 'itemClassification', 'stock:id,name')->paginate($itemsPerPage);
   return response()->json($category, 200);
  }
 
@@ -66,7 +66,7 @@ class CategoriesController extends Controller
   $stock_id = $request->query('stock_id');
   $itemsPerPage = $request->query('itemsPerPage', 15);
 
-  $categories = Category::with(['production', 'measurement', 'stock:id,name'])
+  $categories = Category::with(['production', 'measurement', 'itemClassification', 'stock:id,name'])
    ->where('stock_id', $stock_id)
    ->paginate($itemsPerPage);
 
@@ -326,6 +326,7 @@ class CategoriesController extends Controller
    'category_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:500',
    'item_code' => 'nullable|string|max:64|unique:categories,item_code',
    'color' => 'nullable|string|max:128',
+   'item_classification_id' => 'nullable|integer|exists:item_classifications,id',
    'recipe_id' => 'nullable|integer|exists:recipes,id',
    'product_type' => 'nullable|string|in:raw_material,semi_finished,finished',
    'shipping_size_tier' => 'nullable|string|in:small,medium,large',
@@ -367,6 +368,9 @@ class CategoriesController extends Controller
    'category_image' => $img_name,
    'stock_id' => $stockId,
    'color' => $request->input('color'),
+   'item_classification_id' => $request->filled('item_classification_id')
+    ? (int) $request->input('item_classification_id')
+    : null,
    'item_code' => $request->filled('item_code') ? trim((string) $request->input('item_code')) : null,
   ];
 
@@ -453,6 +457,7 @@ class CategoriesController extends Controller
    'category_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:500',
    'item_code' => 'nullable|string|max:64|unique:categories,item_code,'.$id,
    'color' => 'nullable|string|max:128',
+   'item_classification_id' => 'nullable|integer|exists:item_classifications,id',
    'recipe_id' => 'nullable|integer|exists:recipes,id',
    'product_type' => 'nullable|string|in:raw_material,semi_finished,finished',
    'shipping_size_tier' => 'nullable|string|in:small,medium,large',
@@ -514,6 +519,13 @@ class CategoriesController extends Controller
    'stock_id' => $stockId,
    'color' => $request->input('color'),
   ];
+
+  if ($request->has('item_classification_id')) {
+   $raw = $request->input('item_classification_id');
+   $update['item_classification_id'] = ($raw !== null && $raw !== '')
+    ? (int) $raw
+    : null;
+  }
 
   if ($img_name !== '') {
    $update['category_image'] = $img_name;
@@ -650,18 +662,26 @@ class CategoriesController extends Controller
   if (!empty($CategoryStatusArray)) {
    $search->whereIn('warehouse', $CategoryStatusArray);
   }
-  if ($request->has('category_name')) {
-   $search->where('category_name', 'like', '%' . $request->category_name . '%');
+  if ($request->has('category_name') && $request->category_name !== '') {
+   $term = trim((string) $request->category_name);
+   $likeTerm = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
+   $search->where(function ($q) use ($likeTerm) {
+    $q->where('category_name', 'like', $likeTerm)
+     ->orWhere('item_code', 'like', $likeTerm);
+   });
   }
   if ($request->has('production_id')) {
    $search->where('production_id', $request->production_id);
+  }
+  if ($request->has('item_classification_id')) {
+   $search->where('item_classification_id', $request->item_classification_id);
   }
   if ($request->has('warehouse')) {
    $search->where('warehouse', 'like', '%' . $request->warehouse . '%');
   }
   $search->orderBy('category_name', 'asc');
 
-  $search = $search->with('production', 'measurement')->paginate($itemsPerPage);
+  $search = $search->with('production', 'measurement', 'itemClassification')->paginate($itemsPerPage);
   return response()->json($search, 200);
  }
 
@@ -1378,7 +1398,8 @@ SQL;
  public function categories_for_orders()
  {
   $data = Category::where('warehouse', 'مخزن منتج تام')
-   ->select('id', 'category_name', 'category_price', 'category_image')
+   ->select('id', 'category_name', 'category_price', 'category_image', 'item_code')
+   ->orderBy('category_name')
    ->get();
   return response()->json($data, 200);
  }

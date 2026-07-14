@@ -217,6 +217,18 @@ export class OrderService {
     return this.http.post(`${environment.Url}/googlesheet/${sheet}` , data);
   }
 
+  /** Printable invoice payload for one or more orders. */
+  printOrders(orderIds: number[]) {
+    return this.http.post<{ orders: any[]; show_invoice_date: boolean }>(
+      `${environment.Url}/orders/print`,
+      { order_ids: orderIds }
+    );
+  }
+
+  getInvoicePrintSettings() {
+    return this.http.get<Record<string, string>>(`${environment.Url}/accounting/settings`);
+  }
+
   /** معاينة عدد الطلبات في نطاق «تاريخ الطلب» قبل تسوية القيود (أدمن فقط — API). */
   previewOrdersAccountingReconcile(body: { date_from: string; date_to: string }) {
     return this.http.post(`${environment.Url}/orders/accounting/reconcile/preview`, body);

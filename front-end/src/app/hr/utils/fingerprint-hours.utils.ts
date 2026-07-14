@@ -1,6 +1,48 @@
 /** بصمات من 00:00 حتى قبل هذه الساعة تُعتبر انصرافاً لدوام الليلة السابقة */
 export const OVERNIGHT_CHECKOUT_CUTOFF_HOUR = 8;
 
+/** أيام العمل الشهرية — 26 يوم × 8 س = 208 ، 26 × 9 س = 234 */
+export const WORKING_DAYS_PER_MONTH = 26;
+
+/** مضاعف الإضافي والخصم: (الراتب ÷ 208 أو 234) × 1.5 × الساعات */
+export const OVERTIME_DEDUCTION_MULTIPLIER = 1.5;
+
+/** سعر الساعة الأساسي = الراتب ÷ (26 × ساعات اليوم) */
+export function baseHourPrice(fixedSalary: number, dayHours: number): number {
+  return fixedSalary / (WORKING_DAYS_PER_MONTH * dayHours);
+}
+
+/** معدل الساعة للإضافي/الخصم = (الراتب ÷ 208 أو 234) × 1.5 */
+export function overtimeDeductionRate(fixedSalary: number, dayHours: number): number {
+  return baseHourPrice(fixedSalary, dayHours) * OVERTIME_DEDUCTION_MULTIPLIER;
+}
+
+/** أيام العمل لزر «يوم إضافي» فقط — 30 يوم */
+export const EXTRA_DAY_WORKING_DAYS = 30;
+
+/** مبلغ يوم إضافي (زر الإضافة فقط) = (الراتب ÷ 30 ÷ ساعات اليوم) × 1.5 × ساعات اليوم */
+export function extraDayMeritAmountAction(fixedSalary: number, dayHours: number): number {
+  const hourlyBase = fixedSalary / (EXTRA_DAY_WORKING_DAYS * dayHours);
+  return dayHours * hourlyBase * OVERTIME_DEDUCTION_MULTIPLIER;
+}
+
+/** مبلغ يوم إضافي (26 يوم — للمرجعية الداخلية) */
+export function extraDayMeritAmount(fixedSalary: number, dayHours: number): number {
+  return dayHours * overtimeDeductionRate(fixedSalary, dayHours);
+}
+
+export function monthlyHoursDivisor(dayHours: number): number {
+  return WORKING_DAYS_PER_MONTH * dayHours;
+}
+
+/** مضاعف الخصم: 1.5 افتراضياً أو absence_deduction عند الغياب بدون إذن */
+export function deductionMultiplier(absenceDeduction?: number | string | null): number {
+  if (absenceDeduction != null && absenceDeduction !== '') {
+    return Number(absenceDeduction);
+  }
+  return OVERTIME_DEDUCTION_MULTIPLIER;
+}
+
 export function convertMinutesToHours(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;

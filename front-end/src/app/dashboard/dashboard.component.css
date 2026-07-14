@@ -96,9 +96,10 @@ button span{
 
 .app-sidenav-content {
     display: flex;
+    flex-direction: column;
     height: 100%;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: flex-start;
 }
 
 
@@ -200,13 +201,24 @@ mat-sidenav-content {
   flex: 1 1 0;
   min-height: 0;
   overflow: auto;
+  align-items: stretch;
 }
 
 /* Routed views fill the drawer so full-height pages (e.g. WhatsApp chat) can use flex + internal scroll */
-mat-sidenav-content > router-outlet + * {
+mat-sidenav-content > router-outlet + *,
+mat-tab-nav-panel > router-outlet + * {
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
+}
+
+mat-tab-nav-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  align-self: stretch;
 }
 
 i{

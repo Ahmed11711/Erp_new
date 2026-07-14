@@ -56,7 +56,6 @@
           <tr>
             <th>صنف الاستلام (المنتج المستلَم عليه)</th>
             <th class="col-num">الكمية المستلمة</th>
-            <th class="col-num">تكلفة المعالجة</th>
             <th class="col-num">تكلفة الوحدة</th>
             <th class="col-num">سعر البيع</th>
           </tr>
@@ -68,7 +67,6 @@
               <span class="receipt-unit" *ngIf="receiptDestUnit(l)">/ {{ receiptDestUnit(l) }}</span>
             </td>
             <td class="col-num">{{ l.good_qty | number:'1.0-4' }}</td>
-            <td class="col-num">{{ l.allocated_service_cost | number:'1.2-2' }}</td>
             <td class="col-num">{{ l.dest_unit_cost | number:'1.2-4' }}</td>
             <td class="col-num">{{ l.dest_sell_price | number:'1.2-4' }}</td>
           </tr>
@@ -77,14 +75,12 @@
           <tr class="totals-row">
             <td><strong>الإجمالي</strong></td>
             <td class="col-num"><strong>{{ receiptTotalQty(rcpt) | number:'1.0-4' }}</strong></td>
-            <td class="col-num"><strong>{{ receiptTotalService(rcpt) | number:'1.2-2' }}</strong></td>
             <td></td>
             <td></td>
           </tr>
         </tfoot>
       </table>
     </div>
-    <p class="hint">«تكلفة المعالجة» هي قيمة الاستلام المُرسمَلة، و«تكلفة الوحدة» و«سعر البيع» هما القيمتان المُسجَّلتان على الصنف المستلَم.</p>
   </section>
 
   <section class="panel voucher-form receipt-form" *ngIf="canReceipt()">
@@ -103,7 +99,6 @@
             <th>صنف الاستلام (المنتج المجهز)</th>
             <th class="col-num">لدى المورد</th>
             <th class="col-num">الكمية المستلمة</th>
-            <th class="col-num">تكلفة الاستلام</th>
           </tr>
         </thead>
         <tbody>
@@ -121,7 +116,6 @@
                     <span><strong>المخزن:</strong> {{ r.destination_meta.warehouse }}</span>
                     <span><strong>الوحدة:</strong> {{ r.destination_meta.measurement }}</span>
                     <span><strong>الرصيد الحالي:</strong> {{ r.destination_meta.quantity | number:'1.0-4' }}</span>
-                    <span><strong>متوسط التكلفة الحالي:</strong> {{ r.destination_meta.avg_cost | number:'1.2-4' }}</span>
                   </div>
                   <div class="dest-edit">
                     <label>تكلفة الوحدة
@@ -176,14 +170,6 @@
               <input class="field-control field-control--sm" type="number" min="0" [max]="r.at_vendor" step="0.0001"
                 [(ngModel)]="r.received_qty" (ngModelChange)="onReceiptQtyChange(r)" />
             </td>
-            <td class="col-num cost-cell">
-              <input class="field-control field-control--sm" type="number" min="0" step="0.01"
-                [(ngModel)]="r.received_total_cost" (ngModelChange)="onReceiptCostChange(r)" placeholder="0.00" />
-              <div class="cost-breakdown">
-                <span>تكلفة المعالجة فقط</span>
-                <span class="cost-breakdown__muted">قيمة المواد: {{ r.cost_material | number:'1.2-2' }}</span>
-              </div>
-            </td>
           </tr>
         </tbody>
         <tfoot>
@@ -192,17 +178,13 @@
             <td></td>
             <td></td>
             <td class="col-num"><strong>{{ totalReceiptQty() | number:'1.0-4' }}</strong></td>
-            <td class="col-num"><strong>{{ totalReceiptCost() | number:'1.2-2' }}</strong></td>
           </tr>
         </tfoot>
       </table>
     </div>
 
     <p class="hint">
-      «تكلفة الاستلام» = تكلفة المعالجة فقط (وليست سعر الصنف). تظهر تكلفة وسعر الصنف المختار لتعديلهما، وتُضبط تكلفة الوحدة بالقيمة التي تدخلها مباشرةً بدون حساب متوسط.
-    </p>
-    <p class="hint" hidden>
-      تكلفة الاستلام تُحسب تلقائياً من (قيمة المواد المصروفة في إذن الصرف + تكلفة المعالجة) وليست سعر الصنف المستلم. يمكنك تعديلها يدوياً. يُحدَّث متوسط تكلفة المخزون على الصنف المستلم عند الترحيل.
+      تكلفة المعالجة مُسجَّلة على ذمة المورد من إذن الصرف. هنا تختار المنتج المستلَم والكمية، ويمكنك ضبط تكلفة الوحدة وسعر البيع للصنف المستلَم.
     </p>
 
     <ng-template #destItemTpl let-item>
@@ -233,7 +215,7 @@
           <td>{{ inv.grand_total | number:'1.2-2' }}</td>
           <td>{{ inv.paid_amount | number:'1.2-2' }}</td>
           <td>{{ inv.due_amount | number:'1.2-2' }}</td>
-          <td>{{ inv.status }}</td>
+          <td>{{ invoiceStatusLabels[inv.status] || inv.status }}</td>
         </tr>
       </tbody>
     </table>

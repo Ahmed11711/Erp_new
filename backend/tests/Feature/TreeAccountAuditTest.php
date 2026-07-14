@@ -66,8 +66,9 @@ class TreeAccountAuditTest extends TestCase
         $deleteResponse = $this->actingAs($user, 'api')->deleteJson("/api/tree_accounts/{$accountId}");
         $deleteResponse->assertOk();
 
+        $this->assertSoftDeleted('tree_accounts', ['id' => $accountId]);
         $this->assertDatabaseHas('tree_account_audits', [
-            'tree_account_id' => null,
+            'tree_account_id' => $accountId,
             'action' => 'deleted',
             'performed_by' => $user->id,
             'account_name' => 'حساب فرعي معدّل',

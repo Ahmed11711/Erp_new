@@ -38,19 +38,49 @@
 }
 
 @media (min-width: 768px) {
+  /*
+   * Desktop lacks the mobile explicit viewport height; without it the flex
+   * chain collapses, sticky filters stay visible, and wa-list-body is clipped.
+   */
+  :host {
+    height: calc(100vh - 64px);
+    max-height: calc(100vh - 64px);
+  }
+
+  .wa-chat-page {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+  }
+
   .wa-chat-row {
+    flex: 1 1 0;
     flex-wrap: nowrap;
+    min-height: 0;
     height: 100%;
   }
 
   .wa-customer-list {
+    min-height: 0;
     height: 100%;
     max-height: 100%;
   }
 
+  .wa-conv-list-sticky {
+    flex-shrink: 0;
+  }
+
   .wa-list-body {
     flex: 1 1 0;
-    min-height: 200px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .wa-chat-main,
+  .wa-empty-bg {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
   }
 }
 

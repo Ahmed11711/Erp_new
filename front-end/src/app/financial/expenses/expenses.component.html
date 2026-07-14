@@ -19,12 +19,14 @@
     <form class="my-5" [formGroup]="form">
       <div class="row">
         <div class="col-md-2">
-          <label for="">من تاريخ</label>
-          <input formControlName="start" class="form-control" type="date" (change)="onDateFromChange($event)" [value]="dateFrom">
+          <label class="exp-filter-label" for="exp-from-date">من تاريخ</label>
+          <app-date-input id="exp-from-date" formControlName="start"
+            (dateValueChange)="onDateFilterChange()"></app-date-input>
         </div>
         <div class="col-md-2">
-          <label for="">الى تاريخ</label>
-          <input formControlName="end" class="form-control" type="date" (change)="onDateToChange($event)" [value]="dateTo">
+          <label class="exp-filter-label" for="exp-to-date">الى تاريخ</label>
+          <app-date-input id="exp-to-date" formControlName="end"
+            (dateValueChange)="onDateFilterChange()"></app-date-input>
         </div>
         <div class="col-md-2 d-flex align-items-end">
           <button class="btn" (click)="resetInp()"><i class="fa-solid fa-rotate-right"></i></button>
@@ -104,4 +106,5 @@
     </mat-paginator>
     </div>
 
+  </div>
 </div>

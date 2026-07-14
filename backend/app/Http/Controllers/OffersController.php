@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Auth;
 
 class OffersController extends Controller
 {
+    /** صلاحية عرض كل عروض الأسعار بغض النظر عن من أنشأها */
+    public const VIEW_ALL_PERMISSION = 'offers.view_all';
+
     private const OFFER_ATTRIBUTES = [
         'offer',
         'quote',
@@ -27,13 +30,14 @@ class OffersController extends Controller
         'transportation',
     ];
 
-    private function isAdminDepartment(?User $user): bool
+    private function canViewAllOffers(?User $user): bool
     {
         if ($user === null) {
             return false;
         }
 
-        return ($user->department ?? '') === 'Admin';
+        return app(\App\Services\Rbac\PermissionResolutionService::class)
+            ->hasPermission($user, self::VIEW_ALL_PERMISSION);
     }
 
     private function canAccessOffer(Offers $offer, ?User $user): bool
@@ -41,7 +45,7 @@ class OffersController extends Controller
         if ($user === null) {
             return false;
         }
-        if ($this->isAdminDepartment($user)) {
+        if ($this->canViewAllOffers($user)) {
             return true;
         }
 
@@ -57,7 +61,8 @@ class OffersController extends Controller
             ->with(['creator:id,name'])
             ->orderBy('id', 'desc');
 
-        if (! $this->isAdminDepartment($user)) {
+        // الافتراضي: عروض المستخدم فقط — إلا مع صلاحية offers.view_all
+        if (! $this->canViewAllOffers($user)) {
             $query->where('user_id', $user->id);
         }
 

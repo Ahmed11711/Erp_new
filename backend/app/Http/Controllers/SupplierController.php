@@ -232,6 +232,13 @@ class SupplierController extends Controller
         ->whereNotNull('processing_invoice_id')
         ->groupBy('processing_invoice_id');
 
+    $purchaseNotes = Schema::hasColumn('purchases', 'notes')
+        ? 'p.notes as notes'
+        : DB::raw('NULL as notes');
+    $purchaseExternal = Schema::hasColumn('purchases', 'external_invoice_no')
+        ? 'p.external_invoice_no as external_ref'
+        : DB::raw('NULL as external_ref');
+
     $purchases = DB::table('purchases as p')
         ->select(
             'p.id as invoice_id',
@@ -244,7 +251,16 @@ class SupplierController extends Controller
             'p.paid_amount as paid_amount',
             'p.due_amount as due_amount',
             'p.invoice_type',
-            'p.created_at as created_at'
+            'p.created_at as created_at',
+            DB::raw("'purchase' as entry_kind"),
+            $purchaseNotes,
+            $purchaseExternal,
+            DB::raw('NULL as related_order_id'),
+            DB::raw('NULL as related_order_number'),
+            DB::raw('NULL as dispatch_refs'),
+            DB::raw('NULL as receipt_refs'),
+            DB::raw('NULL as payment_source'),
+            DB::raw('NULL as linked_processing_invoice')
         )
         ->leftJoinSub($latestPurchaseSb, 'sbm', function ($join) {
             $join->on('p.id', '=', 'sbm.invoice_id');
@@ -252,6 +268,24 @@ class SupplierController extends Controller
         ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbm.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
         ->where('p.supplier_id', $supplierId);
+
+    $hasPaySafe = Schema::hasColumn('supplier_pays', 'safe_id');
+    $hasPayService = Schema::hasColumn('supplier_pays', 'service_account_id');
+    $hasPayProcessingInvoice = Schema::hasColumn('supplier_pays', 'processing_invoice_id');
+
+    $paySourceCases = [];
+    if ($hasPaySafe) {
+        $paySourceCases[] = "WHEN sp.safe_id IS NOT NULL THEN CONCAT('خزينة: ', COALESCE(sf.name, '—'))";
+    }
+    if ($hasPayService) {
+        $paySourceCases[] = "WHEN sp.service_account_id IS NOT NULL THEN CONCAT('حساب خدمي: ', COALESCE(sa.name, '—'))";
+    }
+    $paySourceCases[] = "WHEN sp.bank_id IS NOT NULL THEN CONCAT('بنك: ', COALESCE(b.name, '—'))";
+    $paySourceSql = 'CASE '.implode(' ', $paySourceCases)." ELSE 'سداد نقدي' END";
+
+    $linkedProcessingSelect = $hasPayProcessingInvoice
+        ? 'pvi.invoice_number as linked_processing_invoice'
+        : DB::raw('NULL as linked_processing_invoice');
 
     $pays = DB::table('supplier_pays as sp')
         ->select(
@@ -265,14 +299,36 @@ class SupplierController extends Controller
             'sp.amount as paid_amount',
             'sp.amount as due_amount',
             DB::raw("'سداد' as invoice_type"),
-            'sp.created_at as created_at'
+            'sp.created_at as created_at',
+            DB::raw("'payment' as entry_kind"),
+            DB::raw('NULL as notes'),
+            DB::raw('NULL as external_ref'),
+            DB::raw('NULL as related_order_id'),
+            DB::raw('NULL as related_order_number'),
+            DB::raw('NULL as dispatch_refs'),
+            DB::raw('NULL as receipt_refs'),
+            DB::raw("{$paySourceSql} as payment_source"),
+            $linkedProcessingSelect
         )
         ->leftJoinSub($latestPaySb, 'sbsp', function ($join) {
             $join->on('sp.id', '=', 'sbsp.supplierpay_id');
         })
         ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbsp.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
+        ->leftJoin('banks as b', 'sp.bank_id', '=', 'b.id')
+        ->when($hasPaySafe, fn ($q) => $q->leftJoin('safes as sf', 'sp.safe_id', '=', 'sf.id'))
+        ->when($hasPayService, fn ($q) => $q->leftJoin('service_accounts as sa', 'sp.service_account_id', '=', 'sa.id'))
+        ->when($hasPayProcessingInvoice, fn ($q) => $q->leftJoin('processing_invoices as pvi', 'sp.processing_invoice_id', '=', 'pvi.id'))
         ->where('sp.supplier_id', $supplierId);
+
+    $dispatchRefsSql = '(SELECT GROUP_CONCAT(DISTINCT dn.dispatch_number ORDER BY dn.dispatch_number SEPARATOR ", ")
+            FROM processing_dispatch_notes dn
+            WHERE dn.processing_order_id = pi.processing_order_id
+              AND dn.deleted_at IS NULL)';
+    $receiptRefsSql = '(SELECT GROUP_CONCAT(DISTINCT pr.receipt_number ORDER BY pr.receipt_number SEPARATOR ", ")
+            FROM processing_receipts pr
+            WHERE pr.processing_order_id = pi.processing_order_id
+              AND pr.deleted_at IS NULL)';
 
     $processingInvoices = DB::table('processing_invoices as pi')
         ->select(
@@ -286,13 +342,23 @@ class SupplierController extends Controller
             'pi.paid_amount as paid_amount',
             'pi.due_amount as due_amount',
             DB::raw("'تشغيل خارجي' as invoice_type"),
-            'pi.created_at as created_at'
+            'pi.created_at as created_at',
+            DB::raw("'processing' as entry_kind"),
+            'pi.notes as notes',
+            'pi.external_invoice_no as external_ref',
+            'pi.processing_order_id as related_order_id',
+            'po.order_number as related_order_number',
+            DB::raw("{$dispatchRefsSql} as dispatch_refs"),
+            DB::raw("{$receiptRefsSql} as receipt_refs"),
+            DB::raw('NULL as payment_source'),
+            DB::raw('NULL as linked_processing_invoice')
         )
         ->leftJoinSub($latestProcessingSb, 'sbpi', function ($join) {
             $join->on('pi.id', '=', 'sbpi.processing_invoice_id');
         })
         ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbpi.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
+        ->leftJoin('processing_orders as po', 'pi.processing_order_id', '=', 'po.id')
         ->where('pi.supplier_id', $supplierId)
         ->whereNull('pi.deleted_at')
         ->whereIn('pi.status', ['posted', 'partially_paid', 'paid']);
@@ -302,6 +368,10 @@ class SupplierController extends Controller
         ->union($processingInvoices)
         ->orderBy('created_at', 'desc')
         ->paginate($itemsPerPage);
+
+    $invoicesAndPays->getCollection()->transform(function ($row) {
+        return $this->enrichSupplierLedgerRow($row);
+    });
 
     $result = [
         'data' => $invoicesAndPays,
@@ -315,6 +385,79 @@ class SupplierController extends Controller
 
     return response()->json($result, 200);
 }
+
+    /**
+     * يضيف تسمية النوع ووصف توضيحي لكل حركة في كشف حساب المورد.
+     */
+    private function enrichSupplierLedgerRow(object $row): object
+    {
+        $kind = (string) ($row->entry_kind ?? '');
+        $invoiceType = trim((string) ($row->invoice_type ?? ''));
+
+        $documentType = match ($kind) {
+            'payment' => 'سند سداد',
+            'processing' => 'فاتورة تشغيل خارجي',
+            default => match ($invoiceType) {
+                'مرتجع' => 'مرتجع مشتريات',
+                'مرتجع مبيعات' => 'مرتجع مبيعات',
+                'امانات' => 'أمانات',
+                'اضافة وارد تشغيل' => 'فاتورة مشتريات (وارد تشغيل)',
+                'تم الاستلام' => 'فاتورة مشتريات (تم الاستلام)',
+                'اضافة وارد جديد' => 'فاتورة مشتريات (وارد جديد)',
+                default => $invoiceType !== '' ? 'فاتورة مشتريات ('.$invoiceType.')' : 'فاتورة مشتريات',
+            },
+        };
+
+        $parts = [];
+
+        if ($kind === 'purchase') {
+            $parts[] = 'مستند مشتريات';
+            if ($invoiceType !== '') {
+                $parts[] = 'الحالة: '.$invoiceType;
+            }
+            if (! empty($row->external_ref)) {
+                $parts[] = 'رقم خارجي: '.$row->external_ref;
+            }
+            if (! empty($row->notes)) {
+                $parts[] = (string) $row->notes;
+            }
+        } elseif ($kind === 'payment') {
+            $parts[] = 'سداد لحساب المورد';
+            if (! empty($row->payment_source)) {
+                $parts[] = (string) $row->payment_source;
+            }
+            if (! empty($row->linked_processing_invoice)) {
+                $parts[] = 'على فاتورة تشغيل: '.$row->linked_processing_invoice;
+            }
+        } elseif ($kind === 'processing') {
+            $parts[] = 'فاتورة خدمة تشغيل خارجي (ليست فاتورة مشتريات)';
+            if (! empty($row->related_order_number)) {
+                $parts[] = 'أمر التشغيل: '.$row->related_order_number;
+            }
+            if (! empty($row->dispatch_refs)) {
+                $parts[] = 'إذن الصرف: '.$row->dispatch_refs;
+            } else {
+                $parts[] = 'لا يوجد إذن صرف مرتبط';
+            }
+            if (! empty($row->receipt_refs)) {
+                $parts[] = 'إذن الاستلام: '.$row->receipt_refs;
+            } else {
+                $parts[] = 'لا يوجد إذن استلام مرتبط';
+            }
+            if (! empty($row->external_ref)) {
+                $parts[] = 'رقم فاتورة المورد: '.$row->external_ref;
+            }
+            if (! empty($row->notes)) {
+                $parts[] = (string) $row->notes;
+            }
+        }
+
+        $row->document_type = $documentType;
+        $row->details = implode(' — ', array_filter($parts));
+        $row->is_payment = $kind === 'payment';
+
+        return $row;
+    }
 
 
 

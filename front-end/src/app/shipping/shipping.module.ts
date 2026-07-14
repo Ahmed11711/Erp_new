@@ -5,7 +5,6 @@ import { ShippingRoutingModule } from './shipping-routing.module';
 import { AddOrderComponent } from './add-order/add-order.component';
 import { SharedModule } from '../shared/shared.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -105,7 +104,6 @@ import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review
     ShippingRoutingModule,
     SharedModule,
     ReactiveFormsModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     MatAutocompleteModule,

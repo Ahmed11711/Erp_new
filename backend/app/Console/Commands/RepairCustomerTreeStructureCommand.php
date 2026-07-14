@@ -98,7 +98,7 @@ class RepairCustomerTreeStructureCommand extends Command
                 foreach ($legacyBuckets->fresh() as $bucket) {
                     if ($this->canDeleteBucket($bucket)) {
                         $this->warn("حذف حساب تجميعي فارغ: [{$bucket->code}] {$bucket->name}");
-                        $bucket->delete();
+                        $bucket->forceDelete();
                         $deletedBuckets++;
                     }
                 }
@@ -141,7 +141,7 @@ class RepairCustomerTreeStructureCommand extends Command
             if ($this->isLegacyOnlineBucket($child)) {
                 $this->relocateBucketDescendants($child, $shopifyParent, $balanceRebuild, $moved, $merged);
                 if ($this->canDeleteBucket($child->fresh())) {
-                    $child->delete();
+                    $child->forceDelete();
                 }
 
                 continue;
@@ -150,7 +150,7 @@ class RepairCustomerTreeStructureCommand extends Command
             if (TreeAccount::where('parent_id', $child->id)->exists()) {
                 $this->relocateBucketDescendants($child, $shopifyParent, $balanceRebuild, $moved, $merged);
                 if ($this->canDeleteBucket($child->fresh())) {
-                    $child->delete();
+                    $child->forceDelete();
                 }
 
                 continue;
@@ -186,7 +186,7 @@ class RepairCustomerTreeStructureCommand extends Command
                 ->update(['account_id' => $duplicate->id]);
 
             $balanceRebuild->applyBalanceFromEntries($duplicate->fresh());
-            $account->delete();
+            $account->forceDelete();
 
             return true;
         }

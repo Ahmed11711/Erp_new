@@ -15,8 +15,7 @@
         <div class="row g-3">
           <div class="col-md-3 col-lg-2">
             <label class="exp-label" for="expense-date">التاريخ</label>
-            <input id="expense-date" formControlName="created_at" class="form-control" type="date"
-              [min]="minDate" [max]="maxDate">
+            <app-date-input id="expense-date" formControlName="created_at"></app-date-input>
           </div>
           <div class="col-md-3 col-lg-2">
             <label class="exp-label" for="payment-type">مكان الدفع</label>

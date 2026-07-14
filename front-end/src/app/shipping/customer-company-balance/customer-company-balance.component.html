@@ -4,54 +4,73 @@
       <app-time></app-time>
     </div>
     <div class="col-5">
-      <h1 class="header text-center mx-auto my-4">كشف حساب عميل شركة  ( {{ name ||'' }} )</h1>
+      <h1 class="header text-center mx-auto my-4">كشف حساب عميل شركة  ( {{ name || '' }} )</h1>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
       <!-- <app-time></app-time> -->
     </div>
   </div>
 </div>
-<div class="container table-responsive py-5">
-    <table class="table table-bordered table-hover text-center">
-      <thead class="thead-dark">
-        <tr>
-          <th scope="col">  المرجع</th>
-          <th scope="col">  تفاصيل</th>
-          <th scope="col">  النوع</th>
-          <th scope="col"> المبلغ </th>
-          <th scope="col"> الرصيد قبل</th>
-          <th scope="col"> الرصيد بعد</th>
-          <th scope="col">  التاريخ</th>
-          <th scope="col">  بواسطة</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let item of data; let i = index">
-          <td>
-            {{item.ref}}
-          </td>
-          <td>{{item.details}}</td>
-          <td>{{item.type}}</td>
-          <td dir="ltr">{{item.amount | customNumber}}</td>
-          <td dir="ltr">{{item.balance_before | customNumber}}</td>
-          <td dir="ltr">{{item.balance_after | customNumber}}</td>
-          <td>{{item.date}}</td>
-          <td>{{item.name}}</td>
-        </tr>
-      </tbody>
-    </table>
 
-    <div class="mt-4">
-      <mat-paginator #paginator
+<div class="container py-2" *ngIf="name">
+  <div class="company-total-bar" dir="rtl">
+    <span class="company-total-bar__label">إجمالي رصيد الحساب</span>
+    <span class="company-total-bar__value" dir="ltr">{{ balance | customNumber }}</span>
+  </div>
+</div>
+
+<div class="container table-responsive py-5">
+  <div *ngIf="loadError" class="alert alert-danger text-center">{{ loadError }}</div>
+  <div *ngIf="loading" class="text-center py-4 text-muted">جاري التحميل...</div>
+
+  <table class="table table-bordered table-hover text-center" *ngIf="!loading">
+    <thead class="thead-dark">
+      <tr>
+        <th scope="col">المرجع</th>
+        <th scope="col">تفاصيل</th>
+        <th scope="col">النوع</th>
+        <th scope="col">المبلغ</th>
+        <th scope="col">الرصيد قبل</th>
+        <th scope="col">الرصيد بعد</th>
+        <th scope="col">التاريخ</th>
+        <th scope="col">بواسطة</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let item of data">
+        <td>
+          <a
+            *ngIf="getRouterLink(item.ref).length; else plainRef"
+            class="cursor-pointer"
+            [routerLink]="getRouterLink(item.ref)">
+            {{ item.ref }}
+          </a>
+          <ng-template #plainRef>{{ item.ref }}</ng-template>
+        </td>
+        <td>{{ item.details }}</td>
+        <td>{{ item.type }}</td>
+        <td dir="ltr">{{ item.amount | customNumber }}</td>
+        <td dir="ltr">{{ item.balance_before | customNumber }}</td>
+        <td dir="ltr">{{ item.balance_after | customNumber }}</td>
+        <td>{{ item.date }}</td>
+        <td>{{ item.name }}</td>
+      </tr>
+      <tr *ngIf="!loadError && data.length === 0">
+        <td colspan="8" class="text-muted py-4">لا توجد حركات على هذا الحساب</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="mt-4" *ngIf="!loading && length > 0">
+    <mat-paginator
+      #paginator
       class="demo-paginator"
       [length]="length"
+      [pageSize]="pageSize"
       showFirstLastButtons
       (page)="onPageChange($event)"
       [pageSizeOptions]="pageSizeOptions"
       aria-label="Select page">
     </mat-paginator>
-    </div>
-
-
-
-    </div>
+  </div>
+</div>

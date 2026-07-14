@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { EmployeeService } from '../services/employee.service';
 import Swal from 'sweetalert2';
+import { overtimeDeductionRate } from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-extra-hours',
@@ -39,7 +40,8 @@ export class ExtraHoursComponent {
     this.id = e.id;
     this.name = e.name;
     this.fixed_salary = e.fixed_salary;
-    this.hourPrice = e.fixed_salary/30/9*1.5;
+    const dayHours = e.working_hours || 8;
+    this.hourPrice = overtimeDeductionRate(e.fixed_salary, dayHours);
     this.extraHours = e.extra_hours.reduce((acc, item) => acc + item.hours, 0);
   }
 

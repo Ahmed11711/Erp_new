@@ -1,82 +1,87 @@
-<div id="capture" dir="ltr" class="container" [ngStyle]="{'height': data.size === 'A4' ? '1000px' : '800px'}">
-  <div>
-    <div class="d-flex justify-content-around align-items-center">
-      <p class="invoice">Invoice</p>
-      <p>{{data?.id}}</p>
-    </div>
-
-    <div class="text-center my-5">
-      <img width="150px" src="assets/images/iconmaga.png" alt="">
-    </div>
-
-    <div class="d-flex justify-content-between ">
-      <div>
-        <span class="mr-1"> Invoice To</span>
-        <span ><input id="input" type="text" [value]="data?.customer_name"></span>
-      </div>
-      <div>
-        <span>Phone Number</span>
-        <span ><input id="input" type="text" [value]="data?.customer_phone_1"></span>
-      </div>
-    </div> <br>
-
+<div id="capture" dir="ltr">
+  <div
+    *ngFor="let invoice of invoices; let last = last; let i = index"
+    class="invoice-page container"
+    [class.invoice-page-break]="!last"
+    [ngStyle]="{'min-height': pageHeight(invoice)}">
     <div>
-      <div dir="ltr" class="d-flex align-items-center justify-content-between">
-        <span style="width: 9rem;">Shipping Address</span>
-        <span style="width: 100%;" *ngIf="data?.city"><input style="width: 100%;" type="text" [value]="data?.governorate + ' , '+  data?.city + ' , ' + data?.address"></span>
-        <span style="width: 100%;" *ngIf="!data?.city"><input style="width: 100%;"  type="text" [value]="data?.governorate +' , ' + data?.address"></span>
+      <div class="d-flex justify-content-around align-items-center">
+        <p class="invoice">Invoice</p>
+        <div class="d-flex align-items-center invoice-header-meta">
+          <p class="mb-0">{{ invoice?.id }}</p>
+          <p class="mb-0 invoice-date" *ngIf="showInvoiceDate">{{ formatInvoiceDate(invoice?.order_date) }}</p>
+        </div>
       </div>
+
+      <div class="text-center my-5">
+        <img width="150px" src="assets/images/iconmaga.png" alt="">
+      </div>
+
+      <div class="d-flex justify-content-between ">
+        <div>
+          <span class="mr-1"> Invoice To</span>
+          <span><input id="input" type="text" [value]="invoice?.customer_name"></span>
+        </div>
+        <div>
+          <span>Phone Number</span>
+          <span><input id="input" type="text" [value]="invoice?.customer_phone_1"></span>
+        </div>
+      </div> <br>
+
       <div>
+        <div dir="ltr" class="d-flex align-items-center justify-content-between">
+          <span style="width: 9rem;">Shipping Address</span>
+          <span style="width: 100%;" *ngIf="invoice?.city"><input style="width: 100%;" type="text" [value]="invoice?.governorate + ' , '+  invoice?.city + ' , ' + invoice?.address"></span>
+          <span style="width: 100%;" *ngIf="!invoice?.city"><input style="width: 100%;"  type="text" [value]="invoice?.governorate +' , ' + invoice?.address"></span>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <table class="table w-100 text-center">
+          <thead class="bg-main">
+            <th class="w-50"> Item Description</th>
+            <th>Qty</th>
+            <th> price per item</th>
+            <th> Amount  </th>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of invoice?.order_products">
+              <td>{{ item?.category?.category_name }}</td>
+              <td>{{ item?.quantity }}</td>
+              <td>{{ item.price | customNumber }}</td>
+              <td>{{ item.total_price | customNumber }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between footer ">
+        <div>
+          <p> Discount : {{ invoice?.discount }} </p>
+        </div>
+        <div>
+          <p>Down payment : {{ invoice?.prepaid_amount }}</p>
+        </div>
+      </div> <br>
+      <div class="d-flex justify-content-between footer ">
+        <div>
+          <p>  Shipping Fee : {{ invoice?.shipping_cost }} </p>
+        </div>
+        <div>
+          <p class="bg-invoice">Total Amount : {{ invoice?.net_total }} </p>
+        </div>
       </div>
     </div>
 
-    <div class="mt-4">
-      <table class="table w-100 text-center">
-        <thead class="bg-main">
-          <th class="w-50"> Item Description</th>
-          <th>Qty</th>
-          <th> price per item</th>
-          <th> Amount  </th>
-        </thead>
-        <tbody>
-          <tr *ngFor="let item of data?.order_products">
-            <td>{{item?.category?.category_name}}</td>
-            <td>{{item?.quantity}}</td>
-            <td>{{item.price | customNumber}}</td>
-            <td>{{item.total_price | customNumber}}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="d-flex justify-content-between footer ">
-      <div>
-        <p> Discount : {{data?.discount}} </p>
+    <div class="bottom">
+      <div class="text-center footer2">
+        <p>We Hope You Are Satisfied with tour purchase.</p>
+        <p>Thank you for putting your trust and confidence in our company.</p>
       </div>
-      <div>
-        <p>Down payment : {{data?.prepaid_amount}}</p>
-      </div>
-    </div> <br>
-    <div class="d-flex justify-content-between footer ">
-      <div>
-        <p>  Shipping Fee : {{data?.shipping_cost}} </p>
-      </div>
-      <div>
-        <p class="bg-invoice">Total Amount : {{data?.net_total}} </p>
+      <div class="d-flex justify-content-between mt-2 connect ">
+        <p>info&#64;magalis-egypt.com</p>
+        <p>+201118127345</p>
       </div>
     </div>
   </div>
-
-  <div id="bottom" class="bottom">
-    <div class="text-center footer2">
-      <p>We Hope You Are Satisfied with tour purchase.</p>
-      <p>Thank you for putting your trust and confidence in our company.</p>
-    </div>
-    <div class="d-flex justify-content-between mt-2 connect ">
-      <p>info&#64;magalis-egypt.com</p>
-      <p>+201118127345</p>
-    </div>
-  </div>
-
 </div>
-

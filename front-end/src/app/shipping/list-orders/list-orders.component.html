@@ -108,31 +108,22 @@
       </ng-container>
     </div>
     <div class="col">
-      <mat-form-field class="example-full-width w-100" *ngIf="user != 'Review Management' && !isFinancialAccountsReadonly">
-        <mat-label>تاريخ الشحن المطلوب</mat-label>
-        <input  matInput  [matDatepicker]="picker" (dateInput)="OnDateChange($event.value)">
-        <!-- <mat-hint>MM/DD/YYYY</mat-hint> -->
-        <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
-        <mat-datepicker #picker></mat-datepicker>
-      </mat-form-field>
-      <mat-form-field class="example-full-width w-100">
-        <mat-label>تاريخ  الحالة</mat-label>
-        <input  matInput  [matDatepicker]="picker2" (dateInput)="OnStatusDateChange($event.value)">
-        <mat-datepicker-toggle matIconSuffix [for]="picker2"></mat-datepicker-toggle>
-        <mat-datepicker #picker2></mat-datepicker>
-      </mat-form-field>
-      <mat-form-field class="example-full-width w-100">
-        <mat-label>تاريخ  الطلب</mat-label>
-        <input  matInput  [matDatepicker]="picker3" (dateInput)="OnOrderDateChange($event.value)">
-        <mat-datepicker-toggle matIconSuffix [for]="picker3"></mat-datepicker-toggle>
-        <mat-datepicker #picker3></mat-datepicker>
-      </mat-form-field>
-      <mat-form-field class="example-full-width w-100">
-        <mat-label>تاريخ التسليم ( حسب العميل )</mat-label>
-        <input  matInput  [matDatepicker]="picker4" (dateInput)="OnDeliverDateChange($event.value)">
-        <mat-datepicker-toggle matIconSuffix [for]="picker4"></mat-datepicker-toggle>
-        <mat-datepicker #picker4></mat-datepicker>
-      </mat-form-field>
+      <div class="mb-2" *ngIf="user != 'Review Management' && !isFinancialAccountsReadonly">
+        <label class="exp-filter-label mb-1">تاريخ الشحن المطلوب</label>
+        <app-date-input (dateValueChange)="OnDateChange($event)"></app-date-input>
+      </div>
+      <div class="mb-2">
+        <label class="exp-filter-label mb-1">تاريخ الحالة</label>
+        <app-date-input (dateValueChange)="OnStatusDateChange($event)"></app-date-input>
+      </div>
+      <div class="mb-2">
+        <label class="exp-filter-label mb-1">تاريخ الطلب</label>
+        <app-date-input (dateValueChange)="OnOrderDateChange($event)"></app-date-input>
+      </div>
+      <div class="mb-2">
+        <label class="exp-filter-label mb-1">تاريخ التسليم ( حسب العميل )</label>
+        <app-date-input (dateValueChange)="OnDeliverDateChange($event)"></app-date-input>
+      </div>
     </div>
     <div class="col" *ngIf="user != 'Review Management' && !isFinancialAccountsReadonly">
      <div class="form-group">
@@ -152,6 +143,7 @@
       <div class="form-group">
         <input
           id="customer_name"
+          (input)="onTextFilterInput($event)"
           (change)="filter($event)"
           type="text"
           step="any"
@@ -166,20 +158,22 @@
           <div class="form-group">
             <input
               id="customer_phone"
+              (input)="onTextFilterInput($event)"
               (change)="filter($event)"
-              type="number"
-              step="any"
+              type="text"
+              inputmode="numeric"
+              dir="ltr"
               name="phone"
               ngModel
               #phone="ngModel"
               class="form-control"
-              required
               placeholder="رقم التليفون"
               />
               </div>
               <div class="form-group">
                 <input
                   id="shippment_number"
+                  (input)="onTextFilterInput($event)"
                   (change)="filter($event)"
                   type="text"
                   step="any"
@@ -194,6 +188,7 @@
                   <div class="form-group">
                     <input
                       id="order_number"
+                      (input)="onTextFilterInput($event)"
                       (change)="filter($event)"
                       type="text"
                       step="any"
@@ -212,7 +207,13 @@
                         id="orders-product-filter"
                         [data]="products"
                         [searchKeyword]="catword"
-                        placeholder="ابحث واختر المنتج..."
+                        [customFilter]="filterCategorySearch"
+                        [selectedValueRender]="selectedCategoryLabel"
+                        [minQueryLength]="1"
+                        [debounceTime]="200"
+                        notFoundText="لا يوجد منتج — اكتب اسم أو كود الصنف"
+                        placeholder="ابحث بالاسم أو كود الصنف..."
+                        (inputChanged)="onProductInputChanged($event)"
                         (selected)="productChange($event)"
                         (inputCleared)="resetProductFilter()"
                         [itemTemplate]="productItemTemplate"
@@ -221,6 +222,7 @@
 
                       <ng-template #productItemTemplate let-item>
                         <a [innerHTML]="item.category_name"></a>
+                        <span *ngIf="item.item_code" class="text-muted ms-1">({{ item.item_code }})</span>
                       </ng-template>
 
                       <ng-template #productNotFoundTemplate let-notFound>
@@ -244,10 +246,10 @@
       </select>
      </div>
       <div class="form-group" *ngIf="user == 'Review Management' || user == 'Financial Accounts'">
-        <input id="order_number" (change)="filter($event)" type="text" step="any" name="orderNumber" ngModel #orderNumber="ngModel" class="form-control" required placeholder="رقم الطلب" />
+        <input id="order_number" (input)="onTextFilterInput($event)" (change)="filter($event)" type="text" step="any" name="orderNumber" ngModel #orderNumber="ngModel" class="form-control" required placeholder="رقم الطلب" />
       </div>
       <div class="form-group" *ngIf="user == 'Review Management' || user == 'Financial Accounts'">
-        <input id="customer_phone" (change)="filter($event)" type="number" step="any" name="phone" ngModel #phone="ngModel" class="form-control" required placeholder="رقم التليفون"/>
+        <input id="customer_phone" (input)="onTextFilterInput($event)" (change)="filter($event)" type="text" inputmode="numeric" dir="ltr" name="phone" ngModel #phone="ngModel" class="form-control" placeholder="رقم التليفون"/>
       </div>
 
 
@@ -299,6 +301,12 @@
       <i class="fa-solid fa-clipboard-list" aria-hidden="true"></i>
       عدد الطلبات: <strong>{{ length }}</strong>
     </span>
+    <div class="d-flex align-items-center gap-2 flex-wrap" *ngIf="!isFinancialAccountsReadonly">
+      <button type="button" class="orders-clear-btn list-orders-btn-outline list-orders-print-btn" (click)="printSelectedOrders()" [disabled]="printSelectedLoading">
+        <mat-icon>print</mat-icon>
+        Print Selected
+      </button>
+    </div>
     <button type="button" class="orders-clear-btn list-orders-btn-outline" (click)="clearFilter()">إلغاء الفلاتر</button>
   </div>
 
@@ -308,6 +316,11 @@
       <thead class="list-orders-thead">
         <tr>
           <!-- <th scope="col">#</th> -->
+          <th scope="col" *ngIf="!isFinancialAccountsReadonly">
+            <label class="list-orders-select-all mb-0">
+              <input type="checkbox" [checked]="allOrdersSelected" (change)="toggleSelectAllPrint($event)">
+            </label>
+          </th>
           <th scope="col">  رقم الطلب</th>
           <th scope="col">Shopify</th>
           <th scope="col"> تاريح الطلب</th>
@@ -336,12 +349,14 @@
           <th scope="col" *ngIf="user!= 'Admin' && user != 'Shipping Management' && !isFinancialAccountsReadonly"><span class="vertical-text">طريقة الشحن</span></th>
           <th scope="col" *ngIf="user == 'Admin'"><span class="vertical-text">المراجعة</span> </th>
           <th scope="col"><span class="vertical-text">{{ isFinancialAccountsReadonly ? 'تفاصيل' : 'الاختيارات' }}</span></th>
-          <th scope="col" *ngIf="!isFinancialAccountsReadonly">-</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let item of orders; trackBy: trackById; let i = index" [id]="item?.id" [class.shopify-pending-row]="isShopifyOrder(item) && !isShopifyReviewed(item)">
           <!-- <th scope="row">{{i+1}}</th> -->
+          <td *ngIf="!isFinancialAccountsReadonly">
+            <input [id]="'print-'+item.id" type="checkbox" [checked]="isOrderSelected(item)" (change)="selectOrder($event,item)">
+          </td>
           <td>
             <div class="d-flex align-items-center flex-wrap">
               <!-- <span>{{item.id}}</span> -->
@@ -559,8 +574,8 @@
                 </button>
               </ng-container>
 
-              <ng-container *ngIf="user == 'Admin' || user == 'Data Entry' || (user == 'Shipping Management' && (item.order_status == 'رفض استلام' || item.order_status=='مؤجل'))">
-                <button mat-menu-item *ngIf="item.order_status=='ملغي' || item.order_status=='أرشيف' || item.order_status=='مؤجل' || item.order_status=='رفض استلام'" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew',item)">
+              <ng-container *ngIf="canRenewOrder(item)">
+                <button mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew',item)">
                   <span>تجديد الطلب</span>
                 </button>
               </ng-container>
@@ -599,9 +614,6 @@
 
 
             </mat-menu>
-          </td>
-          <td *ngIf="!isFinancialAccountsReadonly">
-            <input [id]="item.id" type="checkbox"  (change)="selectOrder($event,item)">
           </td>
 
         </tr>
@@ -733,8 +745,8 @@
                 <span>تاجيل الطلب</span>
               </button>
             </ng-container>
-            <ng-container *ngIf="user == 'Admin' || user == 'Data Entry' || (user == 'Shipping Management' && (item.order_status == 'رفض استلام' || item.order_status=='مؤجل'))">
-              <button mat-menu-item *ngIf="item.order_status=='ملغي' || item.order_status=='أرشيف' || item.order_status=='مؤجل' || item.order_status=='رفض استلام'" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew',item)">
+            <ng-container *ngIf="canRenewOrder(item)">
+              <button mat-menu-item (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew',item)">
                 <span>تجديد الطلب</span>
               </button>
             </ng-container>
@@ -846,8 +858,8 @@
         </div>
         <div class="detail list-orders-detail-actions" style="grid-column: 1 / -1;" *ngIf="!isFinancialAccountsReadonly">
           <label class="list-orders-inline-check">
-            <input type="checkbox" (change)="selectOrder($event,item)">
-            <span>تحديد للمراجعة / الشيت</span>
+            <input type="checkbox" [checked]="isOrderSelected(item)" (change)="selectOrder($event,item)">
+            <span>تحديد للطباعة / المراجعة / الشيت</span>
           </label>
         </div>
       </div>

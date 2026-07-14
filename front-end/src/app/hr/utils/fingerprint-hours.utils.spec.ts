@@ -1,11 +1,47 @@
 import {
   applyNormalShiftTimes,
+  baseHourPrice,
   defaultShiftCheckOut,
+  deductionMultiplier,
   fullDayPermissionSavePayload,
   isFullDayPermission,
   normalizeOvernightFingerPrintRecords,
+  overtimeDeductionRate,
+  extraDayMeritAmountAction,
+  extraDayMeritAmount,
+  EXTRA_DAY_WORKING_DAYS,
+  OVERTIME_DEDUCTION_MULTIPLIER,
   resolveWorkDayHours,
+  WORKING_DAYS_PER_MONTH,
 } from './fingerprint-hours.utils';
+
+describe('fingerprint-hours.utils — Ziad hour rates', () => {
+  it('baseHourPrice uses 26 working days (208 / 234)', () => {
+    expect(WORKING_DAYS_PER_MONTH).toBe(26);
+    expect(baseHourPrice(6000, 8)).toBeCloseTo(6000 / 208, 5);
+    expect(baseHourPrice(6000, 9)).toBeCloseTo(6000 / 234, 5);
+  });
+
+  it('overtimeDeductionRate applies 1.5 multiplier', () => {
+    expect(overtimeDeductionRate(6000, 8)).toBeCloseTo((6000 / 208) * OVERTIME_DEDUCTION_MULTIPLIER, 5);
+    expect(overtimeDeductionRate(6000, 9)).toBeCloseTo((6000 / 234) * OVERTIME_DEDUCTION_MULTIPLIER, 5);
+  });
+
+  it('deductionMultiplier defaults to 1.5 or uses absence_deduction', () => {
+    expect(deductionMultiplier()).toBe(1.5);
+    expect(deductionMultiplier(null)).toBe(1.5);
+    expect(deductionMultiplier(2)).toBe(2);
+  });
+
+  it('extraDayMeritAmount uses 26-day overtime rate × day hours', () => {
+    expect(extraDayMeritAmount(6000, 8)).toBeCloseTo((6000 / 208) * 1.5 * 8, 5);
+  });
+
+  it('extraDayMeritAmountAction uses 30 working days for add-extra-day button only', () => {
+    expect(extraDayMeritAmountAction(22000, 8)).toBeCloseTo((22000 / 30) * 1.5, 5);
+    expect(extraDayMeritAmountAction(6000, 9)).toBeCloseTo((6000 / 30) * 1.5, 5);
+  });
+});
 
 describe('fingerprint-hours.utils — full day permission', () => {
   it('detects full day permission for 08:00 on 8-hour shift', () => {

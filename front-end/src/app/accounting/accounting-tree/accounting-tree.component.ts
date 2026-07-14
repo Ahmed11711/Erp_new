@@ -1,7 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener } from '@angular/core';
 import { TreeAccountService } from '../services/tree-account.service';
 import { AccountingReportService } from '../services/accounting-report.service';
 import { TreeAccount, TreeAccountAuditEntry } from '../interfaces/tree-account.interface';
+import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -20,10 +23,33 @@ export class AccountingTreeComponent implements OnInit {
   syncingInventoryGl = false;
   showAddDialog = false;
   showEditDialog = false;
+  showTrashDialog = false;
   selectedAccount: TreeAccount | null = null;
   accountAudits: TreeAccountAuditEntry[] = [];
   loadingAccountMeta = false;
+  trashedAccounts: TreeAccount[] = [];
+  loadingTrash = false;
+  trashActionId: number | null = null;
+  /** سلة المحذوفات / استرجاع / حذف نهائي — للأدمن فقط */
+  isAdmin = false;
   expandedNodes: Set<number> = new Set();
+
+  // ── رصيد افتتاحي / تسوية رصيد ──
+  showBalanceDialog = false;
+  balanceAccount: TreeAccount | null = null;
+  savingBalance = false;
+  /** قائمة مسطّحة بكل الحسابات لاختيار الحساب المقابل */
+  flatAccounts: TreeAccount[] = [];
+  /** نص البحث في قائمة الحساب المقابل */
+  counterSearch = '';
+  /** حالة فتح قائمة الحساب المقابل المنسدلة */
+  counterDropdownOpen = false;
+  baForm = {
+    targetDisplay: 0,
+    date: '',
+    counterAccountId: null as number | null,
+    reason: ''
+  };
 
   accountTypes = [
     { value: 'asset', label: 'أصول' },
@@ -45,10 +71,19 @@ export class AccountingTreeComponent implements OnInit {
 
   constructor(
     private treeAccountService: TreeAccountService,
-    private accountingReportService: AccountingReportService
+    private accountingReportService: AccountingReportService,
+    private authService: AuthService,
+    private rbac: RbacService
   ) { }
 
+  /** صلاحية إدخال/تعديل الرصيد الافتتاحي وتسوية الأرصدة عبر قيد متوازن */
+  get canBalanceAdjustment(): boolean {
+    return this.rbac.canAny(RBAC_ROUTE.treeAccountBalanceAdjustment);
+  }
+
   ngOnInit(): void {
+    const dept = String(this.authService.getUser() || '').trim().toLowerCase();
+    this.isAdmin = dept === 'admin';
     this.loadAccounts();
   }
 
@@ -294,9 +329,221 @@ export class AccountingTreeComponent implements OnInit {
   closeDialogs(): void {
     this.showAddDialog = false;
     this.showEditDialog = false;
+    this.showTrashDialog = false;
+    this.showBalanceDialog = false;
+    this.balanceAccount = null;
     this.selectedAccount = null;
     this.accountAudits = [];
     this.loadingAccountMeta = false;
+  }
+
+  /** إشارة عرض الرصيد الطبيعي: أصول/مصروفات = +، بقية الأنواع = − (تطابق getDisplayBalance) */
+  private displaySign(type: string): number {
+    return (type === 'liability' || type === 'equity' || type === 'revenue' || type === 'settlement') ? -1 : 1;
+  }
+
+  /** يبني قائمة مسطّحة بكل الحسابات (لاختيار الحساب المقابل) */
+  private buildFlatAccounts(): void {
+    const out: TreeAccount[] = [];
+    const walk = (nodes: TreeAccount[]) => {
+      for (const n of nodes) {
+        out.push(n);
+        if (n.children?.length) {
+          walk(n.children);
+        }
+      }
+    };
+    walk(this.treeData);
+    out.sort((a, b) => (a.code ?? 0) - (b.code ?? 0));
+    this.flatAccounts = out;
+  }
+
+  /** الحسابات المطابقة لنص بحث الحساب المقابل (كود/اسم عربي/إنجليزي) */
+  get filteredCounterAccounts(): TreeAccount[] {
+    const q = this.counterSearch.trim().toLowerCase();
+    if (!q) {
+      return this.flatAccounts;
+    }
+    return this.flatAccounts.filter(acc =>
+      String(acc.code ?? '').toLowerCase().includes(q) ||
+      (acc.name || '').toLowerCase().includes(q) ||
+      (acc.name_en || '').toLowerCase().includes(q)
+    );
+  }
+
+  /** الحساب المقابل المختار حالياً (لعرضه في زر القائمة) */
+  get selectedCounterAccount(): TreeAccount | null {
+    if (this.baForm.counterAccountId == null) {
+      return null;
+    }
+    return this.flatAccounts.find(a => a.id === this.baForm.counterAccountId) ?? null;
+  }
+
+  toggleCounterDropdown(event: Event): void {
+    event.stopPropagation();
+    this.counterDropdownOpen = !this.counterDropdownOpen;
+  }
+
+  /** اختيار الحساب المقابل: يثبّت القيمة ويغلق القائمة ويخفي باقي الخيارات */
+  selectCounter(acc: TreeAccount): void {
+    if (!acc.id || acc.id === this.balanceAccount?.id) {
+      return;
+    }
+    this.baForm.counterAccountId = acc.id;
+    this.counterDropdownOpen = false;
+    this.counterSearch = '';
+  }
+
+  /** إغلاق القائمة عند النقر خارجها */
+  @HostListener('document:click')
+  closeCounterDropdown(): void {
+    this.counterDropdownOpen = false;
+  }
+
+  /** يفتح شاشة إدخال/تعديل الرصيد الافتتاحي (تسوية عبر قيد متوازن بتاريخ) */
+  openBalanceDialog(account: TreeAccount): void {
+    if (!this.canBalanceAdjustment || !account.id) {
+      return;
+    }
+    this.buildFlatAccounts();
+    this.counterSearch = '';
+    this.counterDropdownOpen = false;
+    this.balanceAccount = account;
+    this.baForm = {
+      targetDisplay: Number(this.getDisplayBalance(account).toFixed(2)),
+      date: this.todayYmd(),
+      counterAccountId: null,
+      reason: ''
+    };
+    this.showBalanceDialog = true;
+  }
+
+  private todayYmd(): string {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  /** يرسل تسوية الرصيد: يحوّل الرصيد المعروض إلى صافي (مدين−دائن) حسب نوع الحساب */
+  saveBalanceAdjustment(): void {
+    const account = this.balanceAccount;
+    if (!account?.id || this.savingBalance) {
+      return;
+    }
+    if (this.baForm.counterAccountId == null) {
+      alert('الرجاء اختيار الحساب المقابل (مثل رأس المال أو أرباح مرحّلة أو حساب افتتاحي).');
+      return;
+    }
+    if (this.baForm.counterAccountId === account.id) {
+      alert('الحساب المقابل يجب أن يختلف عن الحساب المُعدَّل.');
+      return;
+    }
+    if (!this.baForm.date) {
+      alert('الرجاء اختيار تاريخ الرصيد الافتتاحي / التسوية.');
+      return;
+    }
+
+    const targetNet = Number((this.displaySign(account.type) * Number(this.baForm.targetDisplay || 0)).toFixed(2));
+
+    this.savingBalance = true;
+    this.treeAccountService.balanceAdjustment(account.id, {
+      target_balance: targetNet,
+      counter_account_id: this.baForm.counterAccountId,
+      date: this.baForm.date,
+      reason: this.baForm.reason?.trim() || undefined
+    }).subscribe({
+      next: (res) => {
+        this.savingBalance = false;
+        const entryNo = res?.data?.daily_entry?.entry_number;
+        Swal.fire({
+          icon: 'success',
+          title: 'تم تسجيل الرصيد كقيد يومي متوازن',
+          text: entryNo ? `رقم القيد: ${entryNo}` : (res?.message || ''),
+        });
+        this.closeDialogs();
+        this.loadAccounts();
+      },
+      error: (err) => {
+        this.savingBalance = false;
+        const msg = err?.status === 403
+          ? 'ليست لديك صلاحية إدخال/تعديل الرصيد الافتتاحي.'
+          : this.getHttpErrorMessage(err, 'فشل تسجيل قيد الرصيد');
+        Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+      }
+    });
+  }
+
+  openTrashDialog(): void {
+    if (!this.isAdmin) {
+      return;
+    }
+    this.showTrashDialog = true;
+    this.loadTrash();
+  }
+
+  loadTrash(): void {
+    if (!this.isAdmin) {
+      return;
+    }
+    this.loadingTrash = true;
+    this.treeAccountService.getTrash().subscribe({
+      next: (response) => {
+        this.trashedAccounts = Array.isArray(response?.data) ? response.data : [];
+        this.loadingTrash = false;
+      },
+      error: (error) => {
+        console.error('Error loading trash:', error);
+        this.trashedAccounts = [];
+        this.loadingTrash = false;
+        alert(this.getHttpErrorMessage(error, 'تعذر تحميل سلة المحذوفات'));
+      }
+    });
+  }
+
+  restoreAccount(account: TreeAccount): void {
+    if (!this.isAdmin || !account.id) {
+      return;
+    }
+    if (!confirm(`استرجاع الحساب «${account.name}» وجميع فروعه المحذوفة معه؟`)) {
+      return;
+    }
+
+    this.trashActionId = account.id;
+    this.treeAccountService.restore(account.id).subscribe({
+      next: () => {
+        this.trashActionId = null;
+        this.loadTrash();
+        this.loadAccounts();
+      },
+      error: (error) => {
+        this.trashActionId = null;
+        alert(this.getHttpErrorMessage(error, 'فشل استرجاع الحساب'));
+      }
+    });
+  }
+
+  forceDeleteAccount(account: TreeAccount): void {
+    if (!this.isAdmin || !account.id) {
+      return;
+    }
+    if (!confirm(
+      `حذف نهائي للحساب «${account.name}»؟\nلن يمكن استرجاعه، وقد تُحذف القيود المرتبطة به نهائياً.`
+    )) {
+      return;
+    }
+
+    this.trashActionId = account.id;
+    this.treeAccountService.forceDelete(account.id).subscribe({
+      next: () => {
+        this.trashActionId = null;
+        this.loadTrash();
+      },
+      error: (error) => {
+        this.trashActionId = null;
+        alert(this.getHttpErrorMessage(error, 'فشل الحذف النهائي'));
+      }
+    });
   }
 
   saveAccount(): void {
@@ -362,13 +609,17 @@ export class AccountingTreeComponent implements OnInit {
   }
 
   deleteAccount(account: TreeAccount): void {
-    if (!confirm(`هل أنت متأكد من حذف الحساب "${account.name}" وجميع الحسابات الفرعية؟`)) {
+    if (!confirm(
+      this.isAdmin
+        ? `نقل الحساب «${account.name}» وجميع فروعه إلى سلة المحذوفات؟\nيمكن استرجاعها لاحقاً من زر سلة المحذوفات.`
+        : `نقل الحساب «${account.name}» وجميع فروعه إلى سلة المحذوفات؟\nالاسترجاع متاح لحساب الأدمن فقط.`
+    )) {
       return;
     }
 
     this.loading = true;
     this.treeAccountService.delete(account.id!).subscribe({
-      next: (response) => {
+      next: () => {
         this.loadAccounts();
         this.loading = false;
       },
@@ -562,7 +813,10 @@ export class AccountingTreeComponent implements OnInit {
    * ليتوافق مع «ما على الشركة للمورد» مثل رصيد المورد في شاشة الموردين.
    */
   getDisplayBalance(node: TreeAccount): number {
-    const b = node.balance ?? 0;
+    const b = Number(node.balance ?? 0);
+    if (!Number.isFinite(b)) {
+      return 0;
+    }
     if (node.type === 'liability' || node.type === 'equity' || node.type === 'revenue' || node.type === 'settlement') {
       return -b;
     }

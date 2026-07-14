@@ -7,7 +7,6 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { SharedModule } from '../shared/shared.module';
 import { UsersComponent } from './users/users.component';
 import { PowersComponent } from './powers/powers.component';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
@@ -46,7 +45,6 @@ import { RolesManagementComponent } from './roles-management/roles-management.co
     FormsModule,
     SharedModule,
     AutocompleteLibModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     MatDatepickerModule,

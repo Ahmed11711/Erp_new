@@ -19,7 +19,8 @@ import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
-import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { dateToIsoString } from 'src/app/shared/date/date-utils';
 
 
 @Component({
@@ -40,6 +41,9 @@ export class AddOrderComponent implements OnInit {
   serviceAccountsData: any[] = []; // Service Accounts Data
   imgUrl!: string;
   specialStatus: boolean = false;
+  orderDateMin = '';
+  orderDateMax = '';
+  deliveryDateMin = '';
 
   constructor(private orderSource: OrderSourceService,
     private shippingWay: ShippingWayService,
@@ -76,21 +80,33 @@ export class AddOrderComponent implements OnInit {
     });
     this.safeService.getAll().subscribe((result: any) => this.safesData = result.data || result);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const fourDaysAgo = new Date(today);
+    fourDaysAgo.setDate(today.getDate() - 4);
+    this.orderDateMin = dateToIsoString(fourDaysAgo) || '';
+    this.orderDateMax = dateToIsoString(today) || '';
+    this.deliveryDateMin = this.orderDateMax;
+
     this.form.patchValue({
       customer_type: 'افراد',
       order_type: 'جديد',
       governorate: 'المحافظة',
       order_source_id: 'مصدر الطلب',
       shipping_method_id: 'طريقة الشحن',
-      city: 'المدينة'
+      city: 'المدينة',
+      order_date: this.orderDateMax,
     });
   }
 
   customerTypeVal: string = 'افراد';
+  applyVat: boolean = false;
   customerType(e: any) {
     this.customerTypeVal = e.target.value;
     if (this.customerTypeVal === 'شركة') {
+      this.applyVat = true;
       this.vatPercent = 14;
+      this.changedVat = false;
       this.form.get('customer_name')?.reset();
       this.form.get('customer_phone_1')?.reset();
       this.form.get('customer_phone_2')?.reset();
@@ -101,7 +117,9 @@ export class AddOrderComponent implements OnInit {
       });
       this.getCompanies();
     } else {
+      this.applyVat = false;
       this.vatPercent = 0;
+      this.vat = 0;
       this.changedVat = false;
       this.selectedCompany = false;
       this.form.get('customer_name')?.reset();
@@ -119,6 +137,19 @@ export class AddOrderComponent implements OnInit {
     this.calc(arguments);
   }
 
+  onApplyVatChange() {
+    if (this.applyVat) {
+      this.vatPercent = 14;
+      this.changedVat = false;
+    } else {
+      this.vatPercent = 0;
+      this.vat = 0;
+      this.changedVat = true;
+      this.form.patchValue({ vat: 0 });
+    }
+    this.calc(arguments);
+  }
+
   //govern and city
   location: any[] = [];
   cities: any[] = [];
@@ -132,35 +163,6 @@ export class AddOrderComponent implements OnInit {
     }
   }
   //end
-
-  dateSelected = false;
-  date: any;
-  deliveryDate: any;
-
-  myFilter = (d: Date | null): boolean => {
-    const today = new Date();
-    const selectedDate = d || today;
-    const timeDifference = Math.floor((today.getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24));
-    return timeDifference >= 0 && timeDifference <= 4;
-  };
-
-  deliveryDateFilter = (d: Date | null): boolean => {
-    const today = new Date();
-    const selectedDate = d || today;
-    const timeDifference = Math.floor((today.getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24));
-    return timeDifference <= 0;
-  };
-
-  OnDateChange(event) {
-    const inputDate = new Date(event);
-    this.date = this.datePipe.transform(inputDate, 'yyyy-M-d');
-    this.dateSelected = true;
-  }
-
-  OnDeliveryDateChange(event) {
-    const inputDate = new Date(event);
-    this.deliveryDate = this.datePipe.transform(inputDate, 'yyyy-M-d');
-  }
 
   imgtext: string = "صورة الايصال"
   fileopend: boolean = false;
@@ -222,8 +224,8 @@ export class AddOrderComponent implements OnInit {
       data.prepaid_amount = this.prepaid_amount || 0;
       data.discount = this.discount || 0;
       data.net_total = this.net_total;
-      data.order_date = this.date;
-      data.delivery_date = this.deliveryDate || null;
+      data.order_date = this.toBackendDate(data.order_date);
+      data.delivery_date = this.toBackendDate(data.delivery_date);
       data.vat = this.vat;
       data.companyID = this.companyID;
       const tax_authority = this.totalSum;
@@ -614,14 +616,18 @@ export class AddOrderComponent implements OnInit {
     this.order_details.forEach(elm => {
       this.productsPrice += elm.total;
     });
-    if (e?.target?.id == 'vat') {
-      this.changedVat = true;
-    }
-    if (!this.changedVat) {
-      this.vat = this.productsPrice * this.vatPercent / 100;
+    if (this.customerTypeVal === 'شركة' && this.applyVat) {
+      if (e?.target?.id == 'vat') {
+        this.changedVat = true;
+      }
+      if (!this.changedVat) {
+        this.vat = this.productsPrice * this.vatPercent / 100;
+      }
+    } else {
+      this.vat = 0;
     }
     this.totalInvoice = this.productsPrice + this.shipping_cost + this.maintenanceAmount;
-    if (this.customerTypeVal === 'شركة') {
+    if (this.customerTypeVal === 'شركة' && this.applyVat) {
       this.totalInvoice += this.vat;
     }
     this.net_total = this.totalInvoice - this.prepaid_amount - this.discount;
@@ -653,6 +659,17 @@ export class AddOrderComponent implements OnInit {
 
   resetInp() {
     this.form.get('productprice')?.reset();
+  }
+
+  private toBackendDate(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) {
+      return value;
+    }
+    return `${Number(match[1])}-${Number(match[2])}-${Number(match[3])}`;
   }
 
 }

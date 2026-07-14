@@ -84,16 +84,27 @@ export class ListInvoiceComponent {
       cancelButtonText: 'لا',
     }).then((result:any) => {
       if (result.isConfirmed) {
-        this.invoice.deleteInvoice(id).subscribe(res=>{
+        this.invoice.deleteInvoice(id).subscribe((res: any) => {
           if (res) {
             this.selectedIds.delete(id);
             this.search(arguments);
             if (this.user == 'Admin') {
-              Swal.fire({
-                icon: 'success',
-                timer: 3000,
-                showConfirmButton:false
-              })
+              const warnings = res?.warnings ?? [];
+              if (warnings.length > 0) {
+                Swal.fire({
+                  icon: 'warning',
+                  title: 'تم الحذف مع تنبيه مخزون',
+                  html: warnings.map((w: string) => `<div>${w}</div>`).join(''),
+                  timer: 8000,
+                  showConfirmButton: true,
+                });
+              } else {
+                Swal.fire({
+                  icon: 'success',
+                  timer: 3000,
+                  showConfirmButton:false
+                });
+              }
             } else {
               Swal.fire({
                 icon: 'success',
@@ -195,7 +206,18 @@ export class ListInvoiceComponent {
           }
 
           if (this.user === 'Admin') {
-            Swal.fire({ icon: 'success', title: `تم حذف ${deleted} فاتورة`, timer: 3000, showConfirmButton: false });
+            const warnings = res?.warnings ?? [];
+            if (warnings.length > 0) {
+              Swal.fire({
+                icon: 'warning',
+                title: `تم حذف ${deleted} فاتورة مع تنبيه مخزون`,
+                html: warnings.map((w: string) => `<div>${w}</div>`).join(''),
+                timer: 8000,
+                showConfirmButton: true,
+              });
+            } else {
+              Swal.fire({ icon: 'success', title: `تم حذف ${deleted} فاتورة`, timer: 3000, showConfirmButton: false });
+            }
           } else {
             Swal.fire({
               icon: 'success',

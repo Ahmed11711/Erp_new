@@ -197,13 +197,25 @@
                 <label class="field-label">مصاريف الشحن</label>
                 <input class="form-control" min="0" [(ngModel)]="shipping_cost" (keyup)="calc($event)" formControlName="shipping_cost" type="number">
               </div>
-              <div class="col-md-3" *ngIf="customerTypeVal === 'شركة'">
-                <label class="field-label">ضريبة القيمة المضافة</label>
-                <input id="vat" class="form-control" min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)" formControlName="vat" type="number">
+              <div class="col-md-3 d-flex flex-column align-items-center" *ngIf="customerTypeVal === 'شركة'">
+                <label class="vat-toggle" [class.active]="applyVat" for="editApplyVat">
+                  <input id="editApplyVat" type="checkbox" class="vat-toggle-input"
+                    [(ngModel)]="applyVat" [ngModelOptions]="{standalone: true}" (change)="onApplyVatChange()">
+                  <span class="vat-toggle-box" aria-hidden="true"></span>
+                  <span class="vat-toggle-text">تطبيق الضريبة</span>
+                </label>
+                <ng-container *ngIf="applyVat">
+                  <label class="field-label" for="vat">قيمة الضريبة</label>
+                  <input id="vat" class="form-control vat-amount-input" min="0" [(ngModel)]="vat" (keyup)="calc($event)" (change)="calc($event)" formControlName="vat" type="number">
+                </ng-container>
               </div>
-              <div class="col-md-3" *ngIf="!(orderStatus === 'طلب صيانة')">
+              <div class="col-md-3" *ngIf="order?.order_type !== 'طلب صيانة'">
                 <label class="field-label">الخصم</label>
                 <input class="form-control" min="0" [(ngModel)]="discount" (keyup)="calc($event)" formControlName="discount" type="number">
+              </div>
+              <div class="col-md-3" *ngIf="order?.order_type === 'طلب صيانة'">
+                <label class="field-label">مصاريف الصيانة</label>
+                <input class="form-control" min="0" [(ngModel)]="maintenanceAmount" (keyup)="calc($event)" (change)="calc($event)" formControlName="maintenance_cost" type="number">
               </div>
               <div class="col-md-3">
                 <label class="field-label">المدفوع مسبقاً</label>

@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CategoryService } from 'src/app/categories/services/category.service';
@@ -10,6 +9,7 @@ import { ShippingCompanyService } from 'src/app/shipping/services/shipping-compa
 import { InvoiceService } from '../service/invoice.service';
 import { finalize } from 'rxjs/operators';
 import Swal from 'sweetalert2';
+import { dateToIsoString, isoStringToDate } from 'src/app/shared/date/date-utils';
 
 
 @Component({
@@ -85,14 +85,13 @@ export class AddInvoiceComponent implements OnInit {
     'مرتجع مبيعات',
     'امانات',
     'تم الاستلام',
-    'مرتجع',
+    'اضافة وارد تشغيل',
   ];
   constructor(
     private bank: BanksService,
     private safeService: SafeService,
     private serviceAccountsService: ServiceAccountsService,
     private router: Router,
-    private datePipe: DatePipe,
     private invoice: InvoiceService,
     private suppliersService: SuppliersService,
     private shippingCompanyService: ShippingCompanyService,
@@ -101,15 +100,8 @@ export class AddInvoiceComponent implements OnInit {
     private cdr: ChangeDetectorRef
   ) { }
 
-  maxReceiptDate = '';
-  minReceiptDate = '';
-
   ngOnInit(): void {
     const today = new Date();
-    const minDate = new Date();
-    minDate.setDate(today.getDate() - 3);
-    this.maxReceiptDate = this.formatDateInputValue(today);
-    this.minReceiptDate = this.formatDateInputValue(minDate);
 
     this.invoiceId =
       this.route.snapshot.paramMap.get('id') ||
@@ -117,8 +109,7 @@ export class AddInvoiceComponent implements OnInit {
 
     if (!this.invoiceId) {
       this.status = 'تم الاستلام';
-      this.date = this.formatDateInputValue(today);
-      this.dateSelected = true;
+      this.date = dateToIsoString(today);
     }
 
     this.suppliersService.suppliersname().subscribe({
@@ -200,7 +191,7 @@ export class AddInvoiceComponent implements OnInit {
 
     this.products = this.pendingEditPayload.categories ?? [];
     this.status = inv.invoice_type;
-    this.date = this.toDateInputValue(String(inv.receipt_date ?? '')) || inv.receipt_date;
+    this.date = this.normalizeReceiptDate(inv.receipt_date);
     this.totalInvice = inv.total_price;
     this.paidamount = inv.paid_amount;
     this.dueamount = inv.due_amount;
@@ -218,8 +209,6 @@ export class AddInvoiceComponent implements OnInit {
       ? String(inv.invoice_number).trim()
       : '';
     this.customInvoiceNo = no || num;
-
-    this.dateSelected = !!this.date;
 
     this.supplierId = this.normalizeEntityId(inv.supplier_id);
     this.shippingCompanyId = this.normalizeEntityId(inv.shipping_company_id);
@@ -312,16 +301,17 @@ export class AddInvoiceComponent implements OnInit {
     }
   }
 
-  formatDateInputValue(d: Date): string {
-    return this.datePipe.transform(d, 'yyyy-MM-dd') || '';
-  }
-
-  toDateInputValue(value: string): string {
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return '';
+  normalizeReceiptDate(value: unknown): string | null {
+    if (value == null || value === '') {
+      return null;
     }
-    return this.formatDateInputValue(parsed);
+    const raw = String(value).trim();
+    const iso = isoStringToDate(raw.slice(0, 10));
+    if (iso) {
+      return dateToIsoString(iso);
+    }
+    const parsed = isoStringToDate(raw);
+    return dateToIsoString(parsed);
   }
 
   isLegacyPurchaseReturn(): boolean {
@@ -363,11 +353,7 @@ export class AddInvoiceComponent implements OnInit {
   }
 
   hasValidReceiptDate(): boolean {
-    if (!this.date) {
-      return false;
-    }
-    const normalized = this.toDateInputValue(String(this.date));
-    return normalized !== '';
+    return !!this.normalizeReceiptDate(this.date);
   }
 
   /** شروط تفعيل زر الحفظ — المندوب اختياري */
@@ -426,7 +412,7 @@ export class AddInvoiceComponent implements OnInit {
   bankId:any;
   priceEdited = false;
   originalPrice = 0;
-  date : any;
+  date: string | null = null;
   productSelected = false;
   /** يُرسل مع فاتورة المشتريات لربط السطر بصف واحد في categories (مخزن مواد خام) */
   categoryId: number | null = null;
@@ -446,17 +432,6 @@ export class AddInvoiceComponent implements OnInit {
     this.originalPrice = this.productprice;
     this.productUnit = item.measurement.unit
     this.productSelected = true;
-  }
-  dateSelected = false;
-
-  onReceiptDateModelChange(value: string) {
-    if (!value) {
-      this.dateSelected = false;
-      this.date = null;
-      return;
-    }
-    this.date = value;
-    this.dateSelected = true;
   }
   suplierSelected = false;
 
@@ -708,7 +683,7 @@ export class AddInvoiceComponent implements OnInit {
       invoice.append('shipping_company_id', String(shippingCompanyId));
     }
     invoice.append('invoice_type', this.status);
-    invoice.append('receipt_date', this.toDateInputValue(String(this.date)) || String(this.date));
+    invoice.append('receipt_date', this.normalizeReceiptDate(this.date) || '');
     invoice.append('total_price', this.totalInvice.toString());
     invoice.append('paid_amount', paidamount.toString());
     invoice.append('due_amount', this.dueamount.toString());

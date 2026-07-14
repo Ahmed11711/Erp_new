@@ -2,7 +2,9 @@
 
 namespace App\Services\Items;
 
+use App\Enums\InventoryMovementType;
 use App\Models\Item;
+use App\Models\ItemClassification;
 use App\Models\Manufacture;
 use App\Models\ManufactureProduct;
 use App\Models\Measurement;
@@ -12,6 +14,8 @@ use App\Models\RecipeExtraCost;
 use App\Models\RecipeIngredient;
 use App\Models\Stock;
 use App\Models\TreeAccount;
+use App\Services\Accounting\InventoryGlPostingService;
+use App\Services\Inventory\InventoryMovementLedgerService;
 use App\Services\Manufacturing\RecipeVariantBootstrapService;
 use App\Services\Manufacturing\SupportsColorEstimator;
 use App\Support\ArabicTextNormalizer;
@@ -31,6 +35,10 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
  */
 class RecipeSheetImportService
 {
+    /** Max columns/rows to read from flat price-list workbooks (styled sheets blow up memory). */
+    private const FLAT_SHEET_MAX_COL = 25;
+    private const FLAT_SHEET_MAX_ROW = 25000;
+
     /** Footer / meta labels that must never be treated as ingredients. */
     private const FOOTER_LABELS = [
         'سعر المكن',
@@ -98,7 +106,10 @@ class RecipeSheetImportService
     }
 
     /**
-     * Read & structure the sheet into recipe blocks.
+     * Read & structure worksheet(s) into recipe blocks.
+     *
+     * When $sheetName is omitted, every worksheet with the required columns is parsed
+     * and recipes are merged in tab order.
      */
     public function parse(string $absolutePath, ?string $sheetName = null): ParsedRecipeSheet
     {
@@ -107,17 +118,63 @@ class RecipeSheetImportService
         }
 
         $spreadsheet = IOFactory::load($absolutePath);
-        $sheet = $sheetName !== null && $sheetName !== ''
-            ? ($spreadsheet->getSheetByName($sheetName) ?? $spreadsheet->getSheet(0))
-            : $spreadsheet->getSheet(0);
 
+        /** @var array<int, array<string,mixed>> $recipes */
+        $recipes = [];
+        /** @var array<int, string> $parsedSheetNames */
+        $parsedSheetNames = [];
+
+        if ($sheetName !== null && trim($sheetName) !== '') {
+            $sheet = $spreadsheet->getSheetByName(trim($sheetName));
+            if ($sheet === null) {
+                throw new \InvalidArgumentException('لم يُعثر على ورقة «'.trim($sheetName).'» في ملف Excel.');
+            }
+
+            $sheetRecipes = $this->parseSingleSheet($sheet, strict: true);
+            $recipes = $sheetRecipes;
+            $parsedSheetNames = [$sheet->getTitle()];
+        } else {
+            foreach ($spreadsheet->getAllSheets() as $sheet) {
+                $sheetRecipes = $this->parseSingleSheet($sheet, strict: false);
+                if ($sheetRecipes === null || $sheetRecipes === []) {
+                    continue;
+                }
+
+                $parsedSheetNames[] = $sheet->getTitle();
+                $recipes = $this->mergeRecipesFromSheets($recipes, $sheetRecipes);
+            }
+        }
+
+        if ($recipes === []) {
+            throw new \InvalidArgumentException('لم يتم العثور على وصفات صالحة داخل الملف.');
+        }
+
+        foreach ($recipes as $index => &$recipe) {
+            $recipe['order'] = $index + 1;
+        }
+        unset($recipe);
+
+        return $this->enrichWithExistence($recipes, $parsedSheetNames);
+    }
+
+    /**
+     * Parse one worksheet into recipe blocks.
+     *
+     * @return array<int, array<string,mixed>>|null  null when required columns are missing (non-strict only)
+     */
+    private function parseSingleSheet($sheet, bool $strict = false): ?array
+    {
         $headers = $this->readHeaders($sheet);
         $col = $this->resolveColumns($headers);
 
         if ($col['recipe_name'] === null || $col['ingredient_name'] === null || $col['quantity'] === null) {
-            throw new \InvalidArgumentException(
-                'ملف الإكسيل لا يحتوي على الأعمدة المطلوبة (اسم الصنف / الخامات / الكمية).'
-            );
+            if ($strict) {
+                throw new \InvalidArgumentException(
+                    'ملف الإكسيل لا يحتوي على الأعمدة المطلوبة (اسم الصنف / الخامات / الكمية).'
+                );
+            }
+
+            return null;
         }
 
         $highestRow = (int) $sheet->getHighestDataRow();
@@ -139,7 +196,6 @@ class RecipeSheetImportService
             $unitCostRaw = $this->cell($sheet, $row, $col['unit_cost']);
             $lineCostRaw = $this->cell($sheet, $row, $col['line_cost']);
             $sellPriceRaw = $this->cell($sheet, $row, $col['sell_price']);
-            $colorRaw = $this->cell($sheet, $row, $col['color']);
 
             // --- New recipe block starts when اسم الصنف is filled ---
             if ($recipeName !== '') {
@@ -150,8 +206,7 @@ class RecipeSheetImportService
                     'normalized_name' => $this->normalizeName($recipeName),
                     'sell_price' => $this->parseOptionalDecimal($sellPriceRaw),
                     'total_direct_cost' => null,
-                    // ألوان المنتج التام (عناوين الصنف) — ليست ألوان كل سطر خام
-                    'finish_colors' => $this->splitRecipeHeaderColors($colorRaw),
+                    'finish_colors' => [],
                     'ingredients' => [],
                     'extra_costs' => [],
                     'source_row' => $row,
@@ -179,46 +234,6 @@ class RecipeSheetImportService
                     $currentRecipe = $recipes[$currentRecipe['order']];
                 }
                 continue;
-            }
-
-            /*
-             * بعض ملفات العملاء تضع قائمة ألوان المنتج التام عمودياً أسفل الصنف
-             * (خلية الخامّة فارغة أو كلمة جديد)، وقد كانت هذه الصفوف تُستهلك قبل
-             * هنا بتجاهُل كامل — فكان finish_colors فارغاً ولا يُنشأ التام بولوانه.
-             */
-            if (
-                $currentRecipe !== null
-                && trim($recipeName) === ''
-                && $col['color'] !== null
-                && trim((string) $colorRaw) !== ''
-            ) {
-                $ingTrim = trim((string) $ingredientName);
-                $qtyProbe = $this->parseOptionalDecimal($qtyRaw);
-                $isMeta = $ingTrim !== '' && $this->isManufacturingRecipeMetaLabel($ingredientName);
-
-                $looksLikeIngredientRow = ! $isMeta
-                    && $ingTrim !== ''
-                    && ! $this->isIgnoreLabel($ingredientName)
-                    && ! $this->isFooterLabel($ingredientName)
-                    && ! $this->isExtraCostLabel($ingredientName)
-                    && ! $this->isTotalDirectCostLabel($ingredientName)
-                    && $qtyProbe !== null
-                    && $qtyProbe > 0;
-
-                if (! $looksLikeIngredientRow) {
-                    $chunks = $this->splitRecipeHeaderColors((string) $colorRaw);
-                    $ord = $currentRecipe['order'];
-                    if ($chunks !== []) {
-                        $merged = array_values(array_unique(array_merge(
-                            $recipes[$ord]['finish_colors'] ?? [],
-                            $chunks,
-                        )));
-                        $recipes[$ord]['finish_colors'] = $merged;
-                        $currentRecipe = $recipes[$ord];
-                    }
-
-                    continue;
-                }
             }
 
             // --- Pure totals → ignore completely ---
@@ -264,7 +279,7 @@ class RecipeSheetImportService
                 'unit' => $unitRaw !== '' ? $unitRaw : null,
                 'unit_cost' => $unitCost,
                 'line_cost' => $lineCost,
-                'color' => $colorRaw !== '' ? $colorRaw : null,
+                'color' => null,
                 'supports_color' => SupportsColorEstimator::guessFromLabel($ingredientName),
                 'source_row' => $row,
             ];
@@ -273,43 +288,63 @@ class RecipeSheetImportService
 
         $recipes = array_values(array_filter($recipes, fn ($r) => ! empty($r['ingredients'])));
 
-        if (count($recipes) === 0) {
-            throw new \InvalidArgumentException('لم يتم العثور على وصفات صالحة داخل الملف.');
+        if ($recipes === []) {
+            if ($strict) {
+                throw new \InvalidArgumentException('لم يتم العثور على وصفات صالحة داخل الملف.');
+            }
+
+            return [];
         }
 
-        // --- جمع ألوان المنتج التام من صفوف المكوّنات ---
-        // الألوان المكتوبة على صفوف الخامات (مثل Black, Orange) هي ألوان المنتج
-        // التام التي يُصنَع بها هذا الصنف — نُضيفها لـ finish_colors.
-        foreach ($recipes as &$r) {
-            $ingredientColors = [];
-            foreach ($r['ingredients'] as $ing) {
-                $c = trim((string) ($ing['color'] ?? ''));
-                if ($c !== '') {
-                    $ingredientColors[] = $c;
-                }
-            }
-            if ($ingredientColors !== []) {
-                $existing = $r['finish_colors'] ?? [];
-                $merged = array_values(array_unique(array_merge($existing, $ingredientColors)));
-                // تنقية: استبعاد ما يبدو قياساً أو كلمة وصفية وليس لوناً
-                $merged = array_filter($merged, function (string $label): bool {
-                    $n = $this->normalizeName($label);
-                    if ($n === '') {
-                        return false;
-                    }
-                    // أبعاد مثل 160x45cm ليست لوناً
-                    if (preg_match('/\d+\s*[xX×]\s*\d+/', $label)) {
-                        return false;
-                    }
-                    // كلمات وصفية
-                    return ! $this->isManufacturingRecipeMetaLabel($label);
-                });
-                $r['finish_colors'] = array_values($merged);
+        return $recipes;
+    }
+
+    /**
+     * @param  array<int, array<string,mixed>>  $accumulated
+     * @param  array<int, array<string,mixed>>  $incoming
+     * @return array<int, array<string,mixed>>
+     */
+    private function mergeRecipesFromSheets(array $accumulated, array $incoming): array
+    {
+        $indexByNormalized = [];
+        foreach ($accumulated as $index => $recipe) {
+            $indexByNormalized[$recipe['normalized_name']] = $index;
+        }
+
+        foreach ($incoming as $recipe) {
+            $key = $recipe['normalized_name'];
+            if (isset($indexByNormalized[$key])) {
+                $accumulated[$indexByNormalized[$key]] = $this->mergeDuplicateRecipes(
+                    $accumulated[$indexByNormalized[$key]],
+                    $recipe,
+                );
+            } else {
+                $indexByNormalized[$key] = count($accumulated);
+                $accumulated[] = $recipe;
             }
         }
-        unset($r);
 
-        return $this->enrichWithExistence($recipes);
+        return $accumulated;
+    }
+
+    /**
+     * @param  array<string,mixed>  $base
+     * @param  array<string,mixed>  $incoming
+     * @return array<string,mixed>
+     */
+    private function mergeDuplicateRecipes(array $base, array $incoming): array
+    {
+        $base['ingredients'] = array_merge($base['ingredients'] ?? [], $incoming['ingredients'] ?? []);
+        $base['extra_costs'] = array_merge($base['extra_costs'] ?? [], $incoming['extra_costs'] ?? []);
+
+        if (($base['sell_price'] ?? null) === null && ($incoming['sell_price'] ?? null) !== null) {
+            $base['sell_price'] = $incoming['sell_price'];
+        }
+        if (($base['total_direct_cost'] ?? null) === null && ($incoming['total_direct_cost'] ?? null) !== null) {
+            $base['total_direct_cost'] = $incoming['total_direct_cost'];
+        }
+
+        return $base;
     }
 
     /**
@@ -534,20 +569,8 @@ class RecipeSheetImportService
             ->where('warehouse', self::WAREHOUSE_FINISHED)
             ->first();
         if ($linked) {
-            $dirty = false;
-            if ($sellPrice > 0 && ((float) $linked->category_price) <= 0) {
-                $linked->category_price = $sellPrice;
-                $dirty = true;
-            }
-            if ($cost > 0 && ((float) $linked->unit_price) <= 0) {
-                $linked->unit_price = $cost;
-                $dirty = true;
-            }
             if ($linked->stock_id === null) {
                 $linked->stock_id = $this->resolveStockIdForWarehouse(self::WAREHOUSE_FINISHED);
-                $dirty = true;
-            }
-            if ($dirty) {
                 $linked->save();
             }
 
@@ -579,12 +602,6 @@ class RecipeSheetImportService
                 $model->recipe_id = $recipe->id;
                 if ($model->stock_id === null) {
                     $model->stock_id = $this->resolveStockIdForWarehouse(self::WAREHOUSE_FINISHED);
-                }
-                if ($sellPrice > 0 && ((float) $model->category_price) <= 0) {
-                    $model->category_price = $sellPrice;
-                }
-                if ($cost > 0 && ((float) $model->unit_price) <= 0) {
-                    $model->unit_price = $cost;
                 }
                 $model->save();
                 $result->productsLinked++;
@@ -788,6 +805,389 @@ class RecipeSheetImportService
     }
 
     /**
+     * Import a flat raw-materials price list (e.g. «اسعار خامات» sheet):
+     * one row per item — الخامات، الوحده، الكميه، السعر، اكواد كجالس …
+     *
+     * When $importQuantities is true and a «الكميه» value is present, the quantity
+     * is posted as an opening-balance inventory movement + balanced GL entry.
+     */
+    public function importFlatMaterialsList(
+        string $absolutePath,
+        string $warehouse,
+        ?string $sheetName = null,
+        bool $importQuantities = true,
+        ?string $performer = null,
+        ?int $userId = null,
+    ): RecipeSheetItemsImportResult {
+        $warehouse = trim($warehouse);
+        if ($warehouse === '') {
+            throw new \InvalidArgumentException('يجب تحديد المخزن.');
+        }
+
+        $rows = $this->parseFlatMaterialsList($absolutePath, $sheetName);
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $quantityLines = 0;
+        $warnings = [];
+
+        $ledger = $importQuantities ? app(InventoryMovementLedgerService::class) : null;
+        $gl = $importQuantities ? app(InventoryGlPostingService::class) : null;
+
+        DB::beginTransaction();
+        try {
+            foreach ($rows as $row) {
+                $price = (float) ($row['unit_cost'] ?? 0);
+                $itemCode = $row['item_code'] ?? null;
+                $normalizedName = (string) $row['normalized_name'];
+
+                $defaults = config('items_import.new_item', []);
+                $productionId = $this->resolveProductionIdFromDepartment(
+                    $warehouse,
+                    $row['department'] ?? null,
+                    $defaults,
+                );
+
+                $outcome = $this->upsertSheetItemInWarehouse(
+                    name: (string) $row['name'],
+                    normalizedName: $normalizedName,
+                    warehouse: $warehouse,
+                    unitText: $row['unit'] ?? null,
+                    cost: $price,
+                    sellPrice: $price,
+                    color: null,
+                    supportsColor: false,
+                    itemCode: $itemCode,
+                    productionId: $productionId,
+                    itemClassification: $row['classification'] ?? null,
+                );
+                $this->tallyImportOutcome($outcome, $created, $updated, $skipped);
+
+                $qty = isset($row['quantity']) ? (float) $row['quantity'] : 0.0;
+                if ($importQuantities && $ledger !== null && abs($qty) > 0.0000001) {
+                    $item = $this->locateWarehouseItem($warehouse, $itemCode, $normalizedName);
+                    if ($item !== null) {
+                        $ledger->recordInbound(
+                            $item,
+                            InventoryMovementType::OpeningBalance,
+                            $qty,
+                            $price,
+                            $qty * $price,
+                            true,
+                            'excel_materials_list',
+                            (int) $item->id,
+                            'رصيد افتتاحي — استيراد شيت الخامات',
+                            null,
+                            $performer,
+                        );
+
+                        $inv = TreeAccount::resolveInventoryAccountForCategoryId((int) $item->id);
+                        if ($gl !== null) {
+                            $gl->postOpeningInventory(
+                                $qty * $price,
+                                'افتتاحي شيت الخامات — '.$item->category_name,
+                                $userId,
+                                $inv,
+                            );
+                        }
+                        $quantityLines++;
+                    }
+                }
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        if ($quantityLines > 0) {
+            $warnings[] = 'تم ترحيل كميات افتتاحية لعدد '.$quantityLines.' صنف.';
+        }
+
+        return new RecipeSheetItemsImportResult($created, $updated, $skipped, $warnings);
+    }
+
+    /**
+     * Fetch a warehouse item by item_code first, then by normalized name.
+     */
+    private function locateWarehouseItem(string $warehouse, ?string $itemCode, string $normalizedName): ?Item
+    {
+        if ($itemCode !== null && $itemCode !== '') {
+            $byCode = Item::query()
+                ->where('warehouse', $warehouse)
+                ->where('item_code', $itemCode)
+                ->first();
+            if ($byCode !== null) {
+                return $byCode;
+            }
+        }
+
+        return $this->findExistingItemInWarehouse($warehouse, $normalizedName, null, false);
+    }
+
+    /**
+     * @return list<array{name:string,normalized_name:string,unit:?string,unit_cost:?float,item_code:?string,quantity:?float}>
+     */
+    private function parseFlatMaterialsList(string $absolutePath, ?string $sheetName = null): array
+    {
+        if (! is_readable($absolutePath)) {
+            throw new \InvalidArgumentException('File not readable: '.$absolutePath);
+        }
+
+        $spreadsheet = $this->loadFlatMaterialsSpreadsheet($absolutePath, $sheetName);
+        $sheet = $spreadsheet->getSheet(0);
+
+        [$headerRow, $headers] = $this->locateFlatHeaderRow($sheet);
+        $col = [
+            'name' => $this->matchColumn($headers, [
+                'الخامات', 'الخامة', 'الخامه', 'خامة', 'خامه', 'مادة', 'المادة',
+                'اسم الصنف', 'اسم_الصنف', 'الصنف', 'البيانات', 'الاصناف',
+                'name', 'category_name', 'item_name', 'product_name',
+            ]),
+            'unit_cost' => $this->matchColumn($headers, [
+                'السعر', 'سعر', 'unit_cost', 'price', 'category_price',
+            ]),
+            'unit' => $this->matchColumn($headers, [
+                'الوحده', 'الوحدة', 'unit',
+            ]),
+            'quantity' => $this->matchColumn($headers, [
+                'الكميه', 'الكمية', 'كمية', 'quantity', 'qty',
+            ]),
+            'item_code' => $this->matchColumn($headers, [
+                'اكواد كجالس', 'اكواد', 'اكواد_كجالس', 'codes',
+                'item_code', 'product_code', 'code', 'sku',
+                'كود الصنف', 'كود_الصنف', 'كود', 'الباركود', 'الكود',
+            ]),
+            'classification' => $this->matchColumn($headers, [
+                'التصنيف', 'تصنيف', 'classification', 'item_classification',
+            ]),
+            'department' => $this->matchColumn($headers, [
+                'القسم', 'قسم', 'department', 'خط الانتاج', 'فرع الانتاج', 'production_line',
+            ]),
+        ];
+
+        if ($col['name'] === null) {
+            throw new \InvalidArgumentException(
+                'ملف الإكسيل لا يحتوي على عمود «الخامات» أو «اسم الصنف».'
+            );
+        }
+
+        $highestRow = min(self::FLAT_SHEET_MAX_ROW, (int) $sheet->getHighestDataRow());
+        $rows = [];
+
+        for ($row = $headerRow + 1; $row <= $highestRow; $row++) {
+            if ($this->flatRowIsEmpty($sheet, $row, $col)) {
+                continue;
+            }
+
+            $name = $this->cell($sheet, $row, $col['name']);
+            if ($name === '' || $this->isIgnoreLabel($name) || $this->isFooterLabel($name)) {
+                continue;
+            }
+
+            $unitCostRaw = $this->cell($sheet, $row, $col['unit_cost']);
+            $unitRaw = $this->cell($sheet, $row, $col['unit']);
+            $codeRaw = $this->cell($sheet, $row, $col['item_code']);
+            $qtyRaw = $this->cell($sheet, $row, $col['quantity']);
+            $classRaw = $this->cell($sheet, $row, $col['classification']);
+            $deptRaw = $this->cell($sheet, $row, $col['department']);
+            $unitCost = $this->parseOptionalDecimal($unitCostRaw);
+            $qty = $this->parseOptionalDecimal($qtyRaw);
+
+            $rows[] = [
+                'name' => $name,
+                'normalized_name' => $this->normalizeName($name),
+                'unit' => $unitRaw !== '' ? $unitRaw : null,
+                'unit_cost' => $unitCost,
+                'item_code' => $codeRaw !== '' ? $codeRaw : null,
+                'quantity' => $qty,
+                'classification' => $classRaw !== '' ? $classRaw : null,
+                'department' => $deptRaw !== '' ? $deptRaw : null,
+            ];
+        }
+
+        if ($rows === []) {
+            throw new \InvalidArgumentException('لم يتم العثور على أصناف صالحة داخل الورقة المحددة.');
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Load only the needed sheet with a bounded read filter (prevents 2GB+ memory use).
+     */
+    private function loadFlatMaterialsSpreadsheet(string $absolutePath, ?string $sheetName): \PhpOffice\PhpSpreadsheet\Spreadsheet
+    {
+        $reader = IOFactory::createReaderForFile($absolutePath);
+        $this->applyLightweightReaderOptions($reader);
+
+        $target = trim((string) ($sheetName ?? ''));
+        if ($target !== '') {
+            if (method_exists($reader, 'listWorksheetNames')) {
+                $available = $reader->listWorksheetNames($absolutePath);
+                if ($available !== [] && ! in_array($target, $available, true)) {
+                    throw new \InvalidArgumentException(
+                        'لم يُعثر على ورقة «'.$target.'» في ملف Excel. الأوراق المتاحة: '.implode('، ', $available)
+                    );
+                }
+            }
+            if (method_exists($reader, 'setLoadSheetsOnly')) {
+                $reader->setLoadSheetsOnly([$target]);
+            }
+
+            return $reader->load($absolutePath);
+        }
+
+        $nameAliases = [
+            'الخامات', 'الخامة', 'الخامه', 'اسم الصنف', 'الصنف', 'البيانات', 'الاصناف',
+            'name', 'category_name', 'item_name', 'product_name',
+        ];
+
+        if (method_exists($reader, 'listWorksheetNames')) {
+            foreach ($reader->listWorksheetNames($absolutePath) as $name) {
+                $try = IOFactory::createReaderForFile($absolutePath);
+                $this->applyLightweightReaderOptions($try);
+                if (method_exists($try, 'setLoadSheetsOnly')) {
+                    $try->setLoadSheetsOnly([$name]);
+                }
+                $ss = $try->load($absolutePath);
+                $sheet = $ss->getSheet(0);
+                [, $headers] = $this->locateFlatHeaderRow($sheet);
+                if ($this->matchColumn($headers, $nameAliases) !== null) {
+                    return $ss;
+                }
+                unset($ss, $try);
+            }
+        }
+
+        if (method_exists($reader, 'listWorksheetNames')) {
+            $names = $reader->listWorksheetNames($absolutePath);
+            if ($names !== [] && method_exists($reader, 'setLoadSheetsOnly')) {
+                $reader->setLoadSheetsOnly([$names[0]]);
+            }
+        }
+
+        return $reader->load($absolutePath);
+    }
+
+    private function applyLightweightReaderOptions(object $reader): void
+    {
+        if (method_exists($reader, 'setReadDataOnly')) {
+            $reader->setReadDataOnly(true);
+        }
+        if (method_exists($reader, 'setReadFilter')) {
+            $reader->setReadFilter(new LimitedExcelReadFilter(
+                maxRow: self::FLAT_SHEET_MAX_ROW,
+                maxCol: self::FLAT_SHEET_MAX_COL,
+            ));
+        }
+    }
+
+    /**
+     * @param  array<string, int|null>  $col
+     */
+    private function flatRowIsEmpty($sheet, int $row, array $col): bool
+    {
+        foreach ($col as $key) {
+            if ($key === null) {
+                continue;
+            }
+            $letter = Coordinate::stringFromColumnIndex($key);
+            $v = $sheet->getCell($letter.$row)->getValue();
+            if ($v !== null && trim((string) $v) !== '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Pick the sheet to read: prefer the named sheet, then scan all sheets for one
+     * whose header contains a recognizable «الخامات»/«اسم الصنف» column, else sheet 0.
+     *
+     * @deprecated Use loadFlatMaterialsSpreadsheet() instead.
+     */
+    private function resolveFlatMaterialsSheet($spreadsheet, ?string $sheetName)
+    {
+        if ($sheetName !== null && trim($sheetName) !== '') {
+            $named = $spreadsheet->getSheetByName(trim($sheetName));
+            if ($named !== null) {
+                return $named;
+            }
+            throw new \InvalidArgumentException('لم يُعثر على ورقة «'.$sheetName.'» في ملف Excel.');
+        }
+
+        $nameAliases = [
+            'الخامات', 'الخامة', 'الخامه', 'اسم الصنف', 'الصنف', 'البيانات', 'الاصناف',
+            'name', 'category_name', 'item_name', 'product_name',
+        ];
+        foreach ($spreadsheet->getAllSheets() as $sheet) {
+            [, $headers] = $this->locateFlatHeaderRow($sheet);
+            if ($this->matchColumn($headers, $nameAliases) !== null) {
+                return $sheet;
+            }
+        }
+
+        return $spreadsheet->getSheet(0);
+    }
+
+    /**
+     * Find the header row (1-based) within the first rows of a sheet. Returns the
+     * row number and the header labels keyed by 1-based column index.
+     *
+     * @return array{0:int,1:array<int,string>}
+     */
+    private function locateFlatHeaderRow($sheet): array
+    {
+        $maxColIndex = self::FLAT_SHEET_MAX_COL;
+        $maxScan = min(10, min(self::FLAT_SHEET_MAX_ROW, (int) $sheet->getHighestDataRow()));
+
+        $nameAliases = [
+            'الخامات', 'الخامة', 'الخامه', 'اسم الصنف', 'الصنف', 'البيانات', 'الاصناف',
+            'name', 'category_name', 'item_name', 'product_name',
+        ];
+
+        $fallback = null;
+        for ($r = 1; $r <= max(1, $maxScan); $r++) {
+            $headers = [];
+            $nonEmpty = 0;
+            for ($c = 1; $c <= $maxColIndex; $c++) {
+                $letter = Coordinate::stringFromColumnIndex($c);
+                $val = trim((string) $sheet->getCell($letter.$r)->getValue());
+                $headers[$c] = $val;
+                if ($val !== '') {
+                    $nonEmpty++;
+                }
+            }
+            if ($nonEmpty < 2) {
+                continue;
+            }
+            if ($fallback === null) {
+                $fallback = [$r, $headers];
+            }
+            if ($this->matchColumn($headers, $nameAliases) !== null) {
+                return [$r, $headers];
+            }
+        }
+
+        return $fallback ?? [1, $this->readFlatHeaders($sheet)];
+    }
+
+    /** @return array<int,string> */
+    private function readFlatHeaders($sheet): array
+    {
+        $headers = [];
+        for ($c = 1; $c <= self::FLAT_SHEET_MAX_COL; $c++) {
+            $letter = Coordinate::stringFromColumnIndex($c);
+            $headers[$c] = trim((string) $sheet->getCell($letter.'1')->getValue());
+        }
+
+        return $headers;
+    }
+
+    /**
      * @return 'created'|'updated'|'skipped'
      */
     private function upsertSheetItemInWarehouse(
@@ -799,8 +1199,18 @@ class RecipeSheetImportService
         float $sellPrice,
         ?string $color,
         bool $supportsColor,
+        ?string $itemCode = null,
+        ?int $productionId = null,
+        ?string $itemClassification = null,
     ): string {
-        $existing = $this->findExistingItemInWarehouse($warehouse, $normalizedName, $color, $supportsColor);
+        $existing = null;
+        if ($itemCode !== null && $itemCode !== '') {
+            $existing = Item::query()
+                ->where('warehouse', $warehouse)
+                ->where('item_code', $itemCode)
+                ->first();
+        }
+        $existing ??= $this->findExistingItemInWarehouse($warehouse, $normalizedName, $color, $supportsColor);
 
         if ($existing !== null) {
             $updates = [];
@@ -826,6 +1236,19 @@ class RecipeSheetImportService
             if ((int) $existing->stock_id !== $stockId) {
                 $updates['stock_id'] = $stockId;
             }
+            if ($itemCode !== null && $itemCode !== '' && (string) ($existing->item_code ?? '') !== $itemCode) {
+                $this->itemCodes->assertCodeAvailable($itemCode, (int) $existing->id);
+                $updates['item_code'] = $itemCode;
+            }
+            if ($productionId !== null && (int) $existing->production_id !== $productionId) {
+                $updates['production_id'] = $productionId;
+            }
+            if ($itemClassification !== null && $itemClassification !== '') {
+                $classificationId = $this->resolveClassificationIdFromText($warehouse, $itemClassification);
+                if ((int) ($existing->item_classification_id ?? 0) !== $classificationId) {
+                    $updates['item_classification_id'] = $classificationId;
+                }
+            }
 
             if ($updates !== []) {
                 $existing->update($updates);
@@ -845,6 +1268,9 @@ class RecipeSheetImportService
                 recipeId: null,
                 color: $color,
                 supportsColor: true,
+                itemCode: $itemCode,
+                productionId: $productionId,
+                itemClassification: $itemClassification,
             );
         } elseif ($cost > 0 || $sellPrice > 0) {
             $this->createItemWithSeparatePrices(
@@ -854,6 +1280,10 @@ class RecipeSheetImportService
                 sellPrice: max(0, $sellPrice > 0 ? $sellPrice : $cost),
                 recipeId: null,
                 color: $color,
+                itemCode: $itemCode,
+                unitText: $unitText,
+                productionId: $productionId,
+                itemClassification: $itemClassification,
             );
         } else {
             $this->createItem(
@@ -864,6 +1294,9 @@ class RecipeSheetImportService
                 recipeId: null,
                 color: $color,
                 supportsColor: false,
+                itemCode: $itemCode,
+                productionId: $productionId,
+                itemClassification: $itemClassification,
             );
         }
 
@@ -950,7 +1383,7 @@ class RecipeSheetImportService
      *
      * @param  array<int, array<string,mixed>>  $recipes
      */
-    private function enrichWithExistence(array $recipes): ParsedRecipeSheet
+    private function enrichWithExistence(array $recipes, array $parsedSheetNames = []): ParsedRecipeSheet
     {
         $allNormalizedNames = [];
         foreach ($recipes as $recipe) {
@@ -1032,6 +1465,7 @@ class RecipeSheetImportService
             recipes: $recipes,
             missingItems: array_values(array_unique($missingItems)),
             existingRecipes: $existingRecipeNames,
+            parsedSheetNames: $parsedSheetNames,
         );
     }
 
@@ -1276,78 +1710,24 @@ class RecipeSheetImportService
                 $pick = $this->matchSupportsColorBaseItem($existing[$nameKey]);
                 if ($pick !== null) {
                     $matchedItemId = (int) $pick['id'];
-                    $item = Item::query()->find($matchedItemId);
-                    if ($item) {
-                        $dirty = false;
-                        if (! $item->supports_color) {
-                            $item->supports_color = true;
-                            $dirty = true;
-                        }
-                        if ($meta['price'] !== null && $meta['price'] > 0
-                            && ((float) ($item->category_price ?? 0)) <= 0
-                        ) {
-                            $item->category_price = $meta['price'];
-                            $item->unit_price = $meta['price'];
-                            $dirty = true;
-                        }
-                        if ($dirty) {
-                            $item->save();
-                            $result->itemsUpdated++;
-                        }
-                    }
                 }
             }
 
-            if ($matchedItemId === null && ! $isSc && $normalizedColor !== '' && isset($existing[$nameKey])) {
-                foreach ($existing[$nameKey] as $row) {
-                    if ($row['normalized_color'] === $normalizedColor) {
-                        $matchedItemId = (int) $row['id'];
-                        if ($meta['price'] !== null && $meta['price'] > 0
-                            && ($row['category_price'] === null || $row['category_price'] <= 0)
-                        ) {
-                            $item = Item::query()->find($row['id']);
-                            if ($item) {
-                                $item->category_price = $meta['price'];
-                                $item->unit_price = $meta['price'];
-                                $item->save();
-                            }
+            if ($matchedItemId === null && isset($existing[$nameKey])) {
+                if ($normalizedColor !== '') {
+                    foreach ($existing[$nameKey] as $row) {
+                        if ($row['normalized_color'] === $normalizedColor) {
+                            $matchedItemId = (int) $row['id'];
+                            break;
                         }
-                        break;
                     }
                 }
 
                 if ($matchedItemId === null) {
-                    foreach ($existing[$nameKey] as &$rowRef) {
-                        if ($rowRef['normalized_color'] === '' && ! $rowRef['color_claimed']) {
-                            $item = Item::query()->find($rowRef['id']);
-                            if ($item) {
-                                $item->color = $color;
-                                if ($meta['price'] !== null && $meta['price'] > 0
-                                    && ((float) ($item->category_price ?? 0)) <= 0
-                                ) {
-                                    $item->category_price = $meta['price'];
-                                    $item->unit_price = $meta['price'];
-                                }
-                                $item->save();
-                                $rowRef['normalized_color'] = $normalizedColor;
-                                $rowRef['color_claimed'] = true;
-                                $matchedItemId = (int) $rowRef['id'];
-                                $result->itemsUpdated++;
-                                Log::info('[recipe-import] existing item updated with color', [
-                                    'item_id' => $item->id,
-                                    'name' => $item->category_name,
-                                    'color' => $color,
-                                ]);
-                            }
-                            break;
-                        }
+                    $first = $existing[$nameKey][0] ?? null;
+                    if ($first) {
+                        $matchedItemId = (int) $first['id'];
                     }
-                    unset($rowRef);
-                }
-            } elseif ($matchedItemId === null && ! $isSc && $normalizedColor === '' && isset($existing[$nameKey])) {
-                $first = $existing[$nameKey][0] ?? null;
-                if ($first) {
-                    $matchedItemId = (int) $first['id'];
                 }
             }
 
@@ -1494,6 +1874,56 @@ class RecipeSheetImportService
         return false;
     }
 
+    /**
+     * Keep ingredient color only when the sheet declares that shade for the finished product.
+     * Otherwise match/create raw materials without a color (same name, empty color field).
+     */
+    private function sanitizeIngredientColorsForRecipe(array &$recipe, bool $sheetHasColorColumn): void
+    {
+        $allowed = $this->normalizedColorSet($recipe['finish_colors'] ?? []);
+
+        foreach ($recipe['ingredients'] as &$ing) {
+            if (! empty($ing['supports_color'])) {
+                $ing['color'] = null;
+
+                continue;
+            }
+
+            if (! $sheetHasColorColumn || $allowed === []) {
+                $ing['color'] = null;
+
+                continue;
+            }
+
+            $raw = trim((string) ($ing['color'] ?? ''));
+            if ($raw === '') {
+                continue;
+            }
+
+            if (! isset($allowed[$this->normalizeName($raw)])) {
+                $ing['color'] = null;
+            }
+        }
+        unset($ing);
+    }
+
+    /**
+     * @param  array<int, string>  $labels
+     * @return array<string, true>
+     */
+    private function normalizedColorSet(array $labels): array
+    {
+        $set = [];
+        foreach ($labels as $label) {
+            $n = $this->normalizeName((string) $label);
+            if ($n !== '') {
+                $set[$n] = true;
+            }
+        }
+
+        return $set;
+    }
+
     /** Colors available for the finished good (header column «ألوانه» / variants). */
     private function splitRecipeHeaderColors(string $raw): array
     {
@@ -1534,12 +1964,19 @@ class RecipeSheetImportService
         ?int $recipeId = null,
         ?string $color = null,
         bool $supportsColor = false,
+        ?string $itemCode = null,
+        ?int $productionId = null,
+        ?string $itemClassification = null,
     ): Item {
         $defaults = config('items_import.new_item', []);
 
         $effectivePrice = $price !== null && $price >= 0
             ? (float) $price
             : (float) ($defaults['category_price'] ?? 0);
+
+        if ($itemCode !== null && $itemCode !== '') {
+            $this->itemCodes->assertCodeAvailable($itemCode);
+        }
 
         $attrs = [
             'category_name' => $name,
@@ -1548,11 +1985,14 @@ class RecipeSheetImportService
             'initial_balance' => (float) ($defaults['initial_balance'] ?? 0),
             'minimum_quantity' => (float) ($defaults['minimum_quantity'] ?? 0),
             'warehouse' => $warehouse,
-            'production_id' => $this->resolveProductionIdForWarehouse($warehouse, $defaults),
+            'production_id' => $productionId ?? $this->resolveProductionIdForWarehouse($warehouse, $defaults),
             'measurement_id' => $this->resolveMeasurementIdForWarehouse($warehouse, $unitText, $defaults),
             'stock_id' => $this->resolveStockIdForWarehouse($warehouse),
             'category_image' => (string) ($defaults['category_image'] ?? ''),
-            'item_code' => null,
+            'item_code' => ($itemCode !== null && $itemCode !== '') ? $itemCode : null,
+            'item_classification_id' => ($itemClassification !== null && $itemClassification !== '')
+                ? $this->resolveClassificationIdFromText($warehouse, $itemClassification)
+                : null,
             'color' => $color,
             'recipe_id' => $recipeId,
             'supports_color' => $supportsColor,
@@ -1580,8 +2020,16 @@ class RecipeSheetImportService
         float $sellPrice,
         ?int $recipeId = null,
         ?string $color = null,
+        ?string $itemCode = null,
+        ?string $unitText = null,
+        ?int $productionId = null,
+        ?string $itemClassification = null,
     ): Item {
         $defaults = config('items_import.new_item', []);
+
+        if ($itemCode !== null && $itemCode !== '') {
+            $this->itemCodes->assertCodeAvailable($itemCode);
+        }
 
         $attrs = [
             'category_name' => $name,
@@ -1590,11 +2038,14 @@ class RecipeSheetImportService
             'initial_balance' => (float) ($defaults['initial_balance'] ?? 0),
             'minimum_quantity' => (float) ($defaults['minimum_quantity'] ?? 0),
             'warehouse' => $warehouse,
-            'production_id' => $this->resolveProductionIdForWarehouse($warehouse, $defaults),
-            'measurement_id' => $this->resolveMeasurementIdForWarehouse($warehouse, null, $defaults),
+            'production_id' => $productionId ?? $this->resolveProductionIdForWarehouse($warehouse, $defaults),
+            'measurement_id' => $this->resolveMeasurementIdForWarehouse($warehouse, $unitText, $defaults),
             'stock_id' => $this->resolveStockIdForWarehouse($warehouse),
             'category_image' => (string) ($defaults['category_image'] ?? ''),
-            'item_code' => null,
+            'item_code' => ($itemCode !== null && $itemCode !== '') ? $itemCode : null,
+            'item_classification_id' => ($itemClassification !== null && $itemClassification !== '')
+                ? $this->resolveClassificationIdFromText($warehouse, $itemClassification)
+                : null,
             'color' => $color,
             'recipe_id' => $recipeId,
             'supports_color' => false,
@@ -1635,6 +2086,72 @@ class RecipeSheetImportService
         );
 
         return (int) $row->id;
+    }
+
+    private function resolveProductionIdFromDepartment(string $warehouse, ?string $departmentText, array $defaults): int
+    {
+        $departmentText = trim((string) ($departmentText ?? ''));
+        if ($departmentText === '') {
+            return $this->resolveProductionIdForWarehouse($warehouse, $defaults);
+        }
+
+        $normalized = $this->normalizeName($departmentText);
+        $lines = Production::query()
+            ->where('warehouse', $warehouse)
+            ->get(['id', 'production_line']);
+
+        foreach ($lines as $line) {
+            if ($this->normalizeName((string) $line->production_line) === $normalized) {
+                return (int) $line->id;
+            }
+        }
+
+        foreach ($lines as $line) {
+            $lineNorm = $this->normalizeName((string) $line->production_line);
+            if ($lineNorm !== '' && (str_contains($normalized, $lineNorm) || str_contains($lineNorm, $normalized))) {
+                return (int) $line->id;
+            }
+        }
+
+        $created = Production::query()->create([
+            'warehouse' => $warehouse,
+            'production_line' => $departmentText,
+        ]);
+
+        return (int) $created->id;
+    }
+
+    private function resolveClassificationIdFromText(string $warehouse, ?string $classificationText): int
+    {
+        $classificationText = trim((string) ($classificationText ?? ''));
+        if ($classificationText === '') {
+            throw new \InvalidArgumentException('Classification text is required.');
+        }
+
+        $normalized = $this->normalizeName($classificationText);
+        $rows = ItemClassification::query()
+            ->where('warehouse', $warehouse)
+            ->get(['id', 'classification_name']);
+
+        foreach ($rows as $row) {
+            if ($this->normalizeName((string) $row->classification_name) === $normalized) {
+                return (int) $row->id;
+            }
+        }
+
+        foreach ($rows as $row) {
+            $rowNorm = $this->normalizeName((string) $row->classification_name);
+            if ($rowNorm !== '' && (str_contains($normalized, $rowNorm) || str_contains($rowNorm, $normalized))) {
+                return (int) $row->id;
+            }
+        }
+
+        $created = ItemClassification::query()->create([
+            'warehouse' => $warehouse,
+            'classification_name' => $classificationText,
+        ]);
+
+        return (int) $created->id;
     }
 
     /**

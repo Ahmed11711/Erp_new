@@ -14,7 +14,7 @@
       </div>
       <div class="form-check">
         <input class="form-check-input" type="radio" id="actionChange" value="change_source" formControlName="action">
-        <label class="form-check-label" for="actionChange">تغيير مصدر الدفع (بنك / خزينة / حساب خدمي)</label>
+        <label class="form-check-label" for="actionChange">تغيير مصدر الدفع (بنك / خزينة / حساب خدمي / شركة تحصيل)</label>
       </div>
     </div>
 
@@ -26,16 +26,20 @@
             <option value="safe">خزينة</option>
             <option value="bank">بنك</option>
             <option value="service_account">حساب خدمي</option>
+            <option value="collection_company">مديونية على شركة تحصيل</option>
           </select>
         </div>
         <div class="form-group col-md-8 mb-3">
-          <label class="form-label">{{ paymentType === 'safe' ? 'الخزينة' : paymentType === 'bank' ? 'البنك' : 'الحساب الخدمي' }}</label>
+          <label class="form-label">{{ sourceFieldLabel }}</label>
           <select class="form-control" formControlName="sourceId">
             <option [ngValue]="null" disabled>اختر المصدر</option>
             <option *ngFor="let item of sourceList" [ngValue]="item.id">
-              {{ item.name }} ({{ item.balance | number:'1.2-2' }})
+              {{ item.name }}<ng-container *ngIf="paymentType !== 'collection_company'"> ({{ item.balance | number:'1.2-2' }})</ng-container>
             </option>
           </select>
+          <p class="text-muted small mb-0 mt-1" *ngIf="paymentType === 'collection_company'">
+            المبلغ يُسجَّل مديونية على الشركة حتى تُسوّى لاحقاً — بدون إيداع في بنك أو خزينة.
+          </p>
           <p class="text-danger small mb-0" *ngIf="form.get('sourceId')?.invalid && form.get('sourceId')?.touched">مطلوب</p>
         </div>
       </div>

@@ -88,9 +88,9 @@
    </div>
   </div>
 
-  <!-- المخزن، وحدة القياس، خط الانتاج -->
+  <!-- المخزن، وحدة القياس، خط الانتاج، التصنيف -->
   <div class="form-row mt-3">
-   <div class="form-group col-md-4">
+   <div class="form-group col-md-3">
     <label for="warehouse">المخزن</label>
     <select class="form-control" name="warehouse" ngModel required #warehouse="ngModel"
      (change)="onWarehouseChange($event)">
@@ -107,7 +107,7 @@
     </div>
    </div>
 
-   <div class="form-group col-md-4">
+   <div class="form-group col-md-3">
     <label for="unit">وحدة القياس</label>
     <select class="form-control" name="unit" ngModel required #unit="ngModel">
      <option selected disabled value="">اختر وحدة القياس</option>
@@ -118,7 +118,7 @@
     </div>
    </div>
 
-   <div class="form-group col-md-4">
+   <div class="form-group col-md-3">
     <label for="production">خط الانتاج</label>
     <select class="form-control" name="production" ngModel required #production="ngModel">
      <option selected disabled value="">اختر خط الانتاج</option>
@@ -127,6 +127,14 @@
     <div class="form-text text-danger" *ngIf="production.invalid && (production.dirty || production.touched)">
      <div *ngIf="production.errors?.['required']">من فضلك اختر خط الانتاج</div>
     </div>
+   </div>
+
+   <div class="form-group col-md-3">
+    <label for="item_classification_id">التصنيف</label>
+    <select class="form-control" name="item_classification_id" ngModel #item_classification_id="ngModel" id="item_classification_id">
+     <option selected value="">— بدون —</option>
+     <option *ngFor="let row of classificationsData" [value]="row.id">{{ row.classification_name }}</option>
+    </select>
    </div>
   </div>
 

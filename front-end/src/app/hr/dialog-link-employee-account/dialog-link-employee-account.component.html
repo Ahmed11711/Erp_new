@@ -1,0 +1,27 @@
+<h2 mat-dialog-title class="link-account-dialog__title" dir="rtl">
+  <mat-icon class="link-account-dialog__title-icon">account_tree</mat-icon>
+  ربط حساب شجرة
+</h2>
+<p class="link-account-dialog__subtitle" dir="rtl">{{ data.employeeName }}</p>
+
+<mat-dialog-content class="link-account-dialog__content" dir="rtl">
+  <p class="dialog-hint">
+    <mat-icon class="dialog-hint__icon">info_outline</mat-icon>
+    اختر أي حساب من شجرة الحسابات لترحيل مستحقات راتب هذا الموظف.
+  </p>
+  <app-employee-payable-account-picker
+    [expandInline]="true"
+    [accountId]="accountId"
+    (accountIdChange)="accountId = $event">
+  </app-employee-payable-account-picker>
+</mat-dialog-content>
+
+<mat-dialog-actions class="link-account-dialog__actions" align="end" dir="rtl">
+  <button mat-stroked-button type="button" class="link-account-dialog__btn-cancel" (click)="cancel()" [disabled]="saving">
+    إلغاء
+  </button>
+  <button mat-flat-button type="button" class="link-account-dialog__btn-save" (click)="save()" [disabled]="saving">
+    <mat-icon *ngIf="!saving">save</mat-icon>
+    {{ saving ? 'جاري الحفظ...' : 'حفظ الربط' }}
+  </button>
+</mat-dialog-actions>
