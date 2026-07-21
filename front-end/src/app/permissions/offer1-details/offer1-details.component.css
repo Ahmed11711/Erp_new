@@ -264,11 +264,14 @@
     margin-bottom: 16px;
   }
 
-  #capture {
-    width: 794px;
-    min-height: 0;
-    margin: 0 auto;
-    zoom: 0.42;
+  /* Keep A4 layout readable: scale up + allow horizontal pan (do not capture zoom into PDF). */
+  .offer-capture-wrap > #capture {
+    width: 794px !important;
+    min-width: 794px;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0;
+    zoom: 0.7;
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
     background: #fff;
   }
@@ -302,8 +305,8 @@
 }
 
 @media (max-width: 380px) {
-  #capture {
-    zoom: 0.38;
+  .offer-capture-wrap > #capture {
+    zoom: 0.62;
   }
 }
 
@@ -368,6 +371,47 @@ h3{
   box-sizing: border-box;
   font-family:'Montserrat SemiBold', 'Cairo', sans-serif !important;
   font-weight:normal;
+}
+
+/* Applied only while generating PDF — keep full table inside A4 */
+#capture.is-pdf-export {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+#capture.is-pdf-export .offer-capture-top,
+#capture.is-pdf-export .offer-capture-section,
+#capture.is-pdf-export .offer-capture-totals {
+  padding-left: 1.25rem !important;
+  padding-right: 1.25rem !important;
+}
+
+#capture.is-pdf-export .offer-capture-bank {
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+}
+
+#capture.is-pdf-export .table {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  margin-bottom: 0.5rem !important;
+}
+
+#capture.is-pdf-export .table th,
+#capture.is-pdf-export .table td {
+  font-size: 10px !important;
+  padding: 6px 4px !important;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+  vertical-align: middle;
+}
+
+#capture.is-pdf-export .table th {
+  line-height: 1.25 !important;
 }
 
 /* Arabic line items inside LTR quotation: shaping + RTL order */

@@ -127,9 +127,7 @@
                 <mat-icon>more_vert</mat-icon>
               </span>
               <mat-menu #menu="matMenu">
-                <!-- <button mat-menu-item (click)="downloadOfferPdf(elm)" [disabled]="downloadingOfferId === elm?.id">
-                  <span>{{ downloadingOfferId === elm?.id ? 'جاري التحميل...' : 'تحميل PDF' }}</span>
-                </button> -->
+           
                 <button mat-menu-item [routerLink]="detailsLink(elm)">
                   <span>تفاصيل</span>
                 </button>
@@ -200,9 +198,7 @@
             <mat-icon>more_vert</mat-icon>
           </span>
           <mat-menu #mMenu="matMenu">
-            <button mat-menu-item (click)="downloadOfferPdf(elm)" [disabled]="downloadingOfferId === elm?.id">
-              <span>{{ downloadingOfferId === elm?.id ? 'جاري التحميل...' : 'تحميل PDF' }}</span>
-            </button>
+           
             <button mat-menu-item [routerLink]="detailsLink(elm)">
               <span>تفاصيل</span>
             </button>

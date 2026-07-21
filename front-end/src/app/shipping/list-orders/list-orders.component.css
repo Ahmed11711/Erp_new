@@ -54,6 +54,10 @@ form{
 .partshipped{
   background-color: #92832d
 }
+.partdelivered{
+  background-color: #b45309;
+  color: #fff;
+}
 
 .shipped{
   background-color: #b8e1cd
@@ -526,6 +530,7 @@ a.list-orders-btn-outline.mat-mdc-outlined-button {
 .list-orders-status-pill.new { background: #82225e; color: #fff; }
 .list-orders-status-pill.confirmed { background: #ca8a04; color: #1c1917; }
 .list-orders-status-pill.partshipped { background: #92832d; color: #fff; }
+.list-orders-status-pill.partdelivered { background: #b45309; color: #fff; }
 .list-orders-status-pill.shipped { background: #16a34a; color: #fff; }
 .list-orders-status-pill.received { background: #3f51b5; color: #fff; }
 .list-orders-status-pill.postponed { background: #ea580c; color: #fff; }

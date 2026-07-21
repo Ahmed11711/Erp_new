@@ -101,7 +101,7 @@ export function canShowCollectOrderMenu(
 ): boolean {
   const status = order?.order_status ?? '';
   const maintenanceOk = order?.order_type !== 'طلب صيانة' || !!order?.order_details?.maintenance_date;
-  if (!(['تم شحن', 'تم التسليم'].includes(status) && maintenanceOk)) {
+  if (!(['تم شحن', 'تم التسليم', 'شحن جزئي', 'تسليم جزئي'].includes(status) && maintenanceOk)) {
     return false;
   }
   return allowsManualOrderCollection(order);

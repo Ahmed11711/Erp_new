@@ -377,6 +377,8 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
         return 'shipped';
       case 'شحن جزئي':
         return 'partshipped';
+      case 'تسليم جزئي':
+        return 'partdelivered';
       case 'تم الاستلام':
         return 'received';
       case 'مؤجل':
@@ -396,6 +398,17 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
       default:
         return '';
     }
+  }
+
+  fulfillmentLabel(item: any): string {
+    const p = item?.fulfillment_progress;
+    if (!p) {
+      return '';
+    }
+    if (p.is_fully_shipped) {
+      return 'مكتمل الشحن';
+    }
+    return `مشحون ${p.shipped_qty} / متبقي ${p.remaining_qty}`;
   }
 
   canConfirmMenu(): boolean {
@@ -419,7 +432,7 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
   }
 
   canShip(item: any): boolean {
-    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'مؤجل'].includes(item?.order_status);
+    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي', 'مؤجل'].includes(item?.order_status);
   }
 
   canDeliverMenu(): boolean {
@@ -427,7 +440,7 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
   }
 
   canDeliver(item: any): boolean {
-    return ['تم شحن', 'شحن جزئي'].includes(item?.order_status);
+    return ['تم شحن', 'شحن جزئي', 'تسليم جزئي'].includes(item?.order_status);
   }
 
   canCollectMenu(): boolean {
@@ -441,9 +454,9 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
   }
 
   canCollect(item: any): boolean {
-    // ذمة العميل — يظهر التحصيل بعد الشحن/التسليم حتى بدون شركة شحن
+    // ذمة العميل — يظهر التحصيل بعد أي شحن/تسليم (كامل أو جزئي)
     const status = item?.order_status ?? '';
-    if (!['تم شحن', 'تم التسليم'].includes(status)) {
+    if (!['تم شحن', 'تم التسليم', 'شحن جزئي', 'تسليم جزئي'].includes(status)) {
       return false;
     }
     if (canShowCollectOrderMenu(item)) {
@@ -458,14 +471,14 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
   }
 
   canPartCollect(item: any): boolean {
-    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'].includes(item?.order_status);
+    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'].includes(item?.order_status);
   }
 
   canEdit(item: any): boolean {
     if (!this.rbac.can('orders.edit') && this.user !== 'Admin') {
       return false;
     }
-    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'].includes(item?.order_status)
+    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'].includes(item?.order_status)
       && item?.order_status !== 'تم شحن';
   }
 
@@ -474,16 +487,20 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
   }
 
   confirmDelivery(item: any): void {
-    const noteHint = this.hasShippingCompany(item)
-      ? 'إن وُجدت شركة شحن يمكن نقل الذمة لاحقاً — هنا الذمة الأساسية على العميل.'
-      : 'الذمة على عميل الشركة — بدون نقل لمندوب أو شركة شحن.';
+    const progress = item?.fulfillment_progress;
+    const hasRemaining = progress && !progress.is_fully_shipped && Number(progress.remaining_qty) > 0.009;
+    const noteHint = hasRemaining
+      ? `يوجد متبقي للشحن لاحقاً (${progress.remaining_qty}). سيتم تسجيل «تسليم جزئي» للجزء المشحون دون إغلاق الطلب.`
+      : (this.hasShippingCompany(item)
+        ? 'إن وُجدت شركة شحن يمكن نقل الذمة لاحقاً — هنا الذمة الأساسية على العميل.'
+        : 'الذمة على عميل الشركة — بدون نقل لمندوب أو شركة شحن.');
 
     Swal.fire({
-      title: 'تأكيد التسليم',
+      title: hasRemaining ? 'تأكيد تسليم جزئي' : 'تأكيد التسليم',
       html: `<div style="text-align:right;direction:rtl">${noteHint}</div>`,
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'نعم، تم التسليم',
+      confirmButtonText: hasRemaining ? 'نعم، تسليم الجزء المتاح' : 'نعم، تم التسليم',
       cancelButtonText: 'إلغاء',
       input: 'text',
       inputPlaceholder: 'ملاحظة (اختياري)',
@@ -494,7 +511,13 @@ export class OfferOrdersComponent implements OnInit, OnDestroy {
       this.order.deliverOrder(item.id, { note: result.value || '' }).subscribe({
         next: (res: any) => {
           if (res.message === 'success') {
-            Swal.fire('تم', 'تم تأكيد التسليم — الذمة على العميل', 'success');
+            Swal.fire(
+              'تم',
+              hasRemaining
+                ? 'تم تسجيل التسليم الجزئي — يمكن شحن الباقي عند التوفر'
+                : 'تم تأكيد التسليم — الذمة على العميل',
+              'success',
+            );
             this.load();
           }
         },

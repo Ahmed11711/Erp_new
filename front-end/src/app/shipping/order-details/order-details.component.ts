@@ -495,7 +495,7 @@ export class OrderDetailsComponent implements OnInit{
       return false;
     }
     const status = this.order?.order_status;
-    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'].includes(status);
+    return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'].includes(status);
   }
 
   canCancelProduct(product: any): boolean {

@@ -358,6 +358,14 @@
   border: 1px solid #e2e8f0;
 }
 
+.oo-chip--progress {
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 .oo-status {
   display: inline-flex;
   align-items: center;
@@ -374,6 +382,7 @@
 .oo-status.new { background: #82225e; color: #fff; }
 .oo-status.confirmed { background: #fef08a; color: #713f12; }
 .oo-status.partshipped { background: #92832d; color: #fff; }
+.oo-status.partdelivered { background: #b45309; color: #fff; }
 .oo-status.shipped { background: #bbf7d0; color: #14532d; }
 .oo-status.received { background: #3f51b5; color: #fff; }
 .oo-status.postponed { background: #ff9800; color: #fff; }
@@ -540,6 +549,7 @@
 .list-orders-status-pill.new { background: #82225e; color: #fff; }
 .list-orders-status-pill.confirmed { background: #ca8a04; color: #1c1917; }
 .list-orders-status-pill.partshipped { background: #92832d; color: #fff; }
+.list-orders-status-pill.partdelivered { background: #b45309; color: #fff; }
 .list-orders-status-pill.shipped { background: #16a34a; color: #fff; }
 .list-orders-status-pill.received { background: #3f51b5; color: #fff; }
 .list-orders-status-pill.postponed { background: #ea580c; color: #fff; }

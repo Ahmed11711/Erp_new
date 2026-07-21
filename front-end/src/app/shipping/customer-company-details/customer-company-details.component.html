@@ -102,6 +102,7 @@
       <option value="طلب جديد">جديد</option>
       <option value="طلب مؤكد">طلب مؤكد</option>
       <option value="شحن جزئي">شحن جزئي</option>
+      <option value="تسليم جزئي">تسليم جزئي</option>
       <option value="تم شحن">تم شحن</option>
       <option value="تم الاستلام">تم الاستلام</option>
       <option value="تم التحصيل">تم التحصيل</option>
@@ -227,7 +228,7 @@
           <mat-icon>more_vert</mat-icon>
         </span>
       <mat-menu #menu="matMenu">
-        <button mat-menu-item *ngIf="item.customer_type == 'شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
+        <button mat-menu-item *ngIf="item.customer_type == 'شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي')" [routerLink]="['/dashboard/shipping/shipOrder',item.id]">
           <span>شحن الطلب</span>
         </button>
         <button mat-menu-item *ngIf="item.order_status=='جديد' || item.order_status=='طلب جديد' || item.order_status=='تم الصيانة'" [routerLink]="['/dashboard/shipping/confirmOrder',item.id]">
@@ -242,7 +243,7 @@
          <button mat-menu-item *ngIf="item.order_status=='تم الاستلام'" (click)="maintain(item.id)">
           <span>  تم الصيانة</span>
         </button>
-        <button mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم' || item.order_status=='شحن جزئي') && (item.order_type !='طلب صيانة' || item.order_details?.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
+        <button mat-menu-item *ngIf="(item.order_status=='تم شحن' || item.order_status=='تم التسليم' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي') && (item.order_type !='طلب صيانة' || item.order_details?.maintenance_date)" [routerLink]="['/dashboard/shipping/collectorder',item.id]">
           <span> تحصيل الطلب</span>
         </button>
         <ng-container *ngIf="canRefuseOrderMenu()">
@@ -267,13 +268,13 @@
          <button mat-menu-item *ngIf="canRenewOrder(item)" (click)="changeOrderStatus(item.customer_type,item.id,'ملحوظة التجديد','renew', item)">
           <span>تجديد الطلب</span>
         </button>
-         <button mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">
+         <button mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">
           <span> تحصيل جزئي</span>
         </button>
          <button mat-menu-item *ngIf="item?.customer_type=='شركة' &&
           (item?.order_status=='طلب جديد' ||
           item?.order_status=='طلب مؤكد' ||
-          item?.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/editorder',item.id]">
+          item?.order_status=='شحن جزئي' || item?.order_status=='تسليم جزئي')" [routerLink]="['/dashboard/shipping/editorder',item.id]">
           <span>اضافة صنف</span>
         </button>
         <button mat-menu-item [routerLink]="['/dashboard/shipping/orderdetails',item.id]">

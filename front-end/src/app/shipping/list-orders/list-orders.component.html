@@ -535,7 +535,7 @@
               </ng-container>
 
               <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist' || user == 'Shipping Management'">
-                <button mat-menu-item *ngIf="item.order_status=='تم شحن' || item.order_status=='شحن جزئي'" (click)="confirmDelivery(item.id)">
+                <button mat-menu-item *ngIf="item.order_status=='تم شحن' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي'" (click)="confirmDelivery(item.id)">
                   <span>تأكيد التسليم</span>
                 </button>
               </ng-container>
@@ -586,7 +586,7 @@
               </ng-container>
 
               <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management'">
-                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">
+                <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">
                   <span> تحصيل جزئي</span>
                 </button>
               </ng-container>
@@ -713,7 +713,7 @@
               </button>
             </ng-container>
             <ng-container *ngIf="user == 'Admin' || this.user == 'Operation Management' || this.user == 'Finance and operations management' || this.user == 'Operation Specialist' || user == 'Logistics Specialist' || user == 'Shipping Management'">
-              <button mat-menu-item *ngIf="item.order_status=='تم شحن' || item.order_status=='شحن جزئي'" (click)="confirmDelivery(item.id)">
+              <button mat-menu-item *ngIf="item.order_status=='تم شحن' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي'" (click)="confirmDelivery(item.id)">
                 <span>تأكيد التسليم</span>
               </button>
             </ng-container>
@@ -756,7 +756,7 @@
               </button>
             </ng-container>
             <ng-container *ngIf="user == 'Admin' || user == 'Operation Management' || user == 'Finance and operations management'">
-              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">
+              <button (click)="orderScroll(item.id)" mat-menu-item *ngIf="item?.customer_type=='شركة' && (item.order_status=='طلب جديد' || item.order_status=='طلب مؤكد' || item.order_status=='شحن جزئي' || item.order_status=='تسليم جزئي')" [routerLink]="['/dashboard/shipping/collectpart',item.id]">
                 <span> تحصيل جزئي</span>
               </button>
             </ng-container>

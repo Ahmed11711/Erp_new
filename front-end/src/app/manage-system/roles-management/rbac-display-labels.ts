@@ -39,6 +39,7 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
   'orders.view_status.new': 'عرض الطلبات الجديدة',
   'orders.view_status.confirmed': 'عرض الطلبات المؤكدة',
   'orders.view_status.partial_ship': 'عرض الطلبات — شحن جزئي',
+  'orders.view_status.partial_deliver': 'عرض الطلبات — تسليم جزئي',
   'orders.view_status.shipped': 'عرض الطلبات المشحونة',
   'orders.view_status.delivered': 'عرض الطلبات المُسلَّمة',
   'orders.view_status.received': 'عرض الطلبات المُستلمة',

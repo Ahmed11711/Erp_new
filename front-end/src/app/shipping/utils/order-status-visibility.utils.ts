@@ -22,9 +22,15 @@ export const ORDER_STATUS_VISIBILITY: Record<string, OrderStatusVisibilityDef> =
   },
   partial_ship: {
     permission: 'orders.view_status.partial_ship',
-    labels: ['شحن جزئي'],
+    labels: ['شحن جزئي', 'تسليم جزئي'],
     filterValue: 'شحن جزئي',
     filterLabel: 'شحن جزئي',
+  },
+  partial_deliver: {
+    permission: 'orders.view_status.partial_deliver',
+    labels: ['تسليم جزئي'],
+    filterValue: 'تسليم جزئي',
+    filterLabel: 'تسليم جزئي',
   },
   shipped: {
     permission: 'orders.view_status.shipped',

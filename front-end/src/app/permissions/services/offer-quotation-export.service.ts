@@ -12,6 +12,13 @@ export class OfferQuotationExportService {
 
   /** Opens a print preview window (print + download PDF in toolbar). */
   openPrintPreview(element: HTMLElement, offerId: number | string): void {
+    const printWindow = window.open('', '_blank');
+    // Mobile browsers often block popups — fall back to direct PDF download.
+    if (!printWindow) {
+      void this.downloadPdf(element, offerId);
+      return;
+    }
+
     const printContent = element.innerHTML;
     const baseUrl = window.location.origin + '/';
     const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
@@ -20,12 +27,6 @@ export class OfferQuotationExportService {
     const inlineStyles = Array.from(document.querySelectorAll('style'))
       .map((el: Element) => (el as HTMLStyleElement).outerHTML)
       .join('\n');
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      console.error('Could not open print window.');
-      return;
-    }
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -156,7 +157,7 @@ export class OfferQuotationExportService {
                 margin: 0,
                 filename: 'Quotation-${offerId}.pdf',
                 image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale: 2, useCORS: true, logging: false },
+                html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
               }).from(el).save().then(function () {
@@ -178,7 +179,10 @@ export class OfferQuotationExportService {
 
   /** Saves the quotation DOM node as a PDF file download. */
   downloadPdf(element: HTMLElement, offerId: number | string): Promise<void> {
-    return this.saveHtmlAsPdf(element, `Quotation-${offerId}.pdf`);
+    // Capture the live node at full A4 size (off-screen clones render blank in html2canvas).
+    return this.withFullSizeCapture(element, () =>
+      this.saveHtmlAsPdf(element, `Quotation-${offerId}.pdf`)
+    );
   }
 
   /** Fetch offer by id and download quotation PDF without navigating. */
@@ -195,8 +199,9 @@ export class OfferQuotationExportService {
 
     const host = document.createElement('div');
     host.setAttribute('dir', 'ltr');
+    // Keep in viewport — far off-screen / opacity:0 / z-index:-1 often yield blank PDFs.
     host.style.cssText =
-      'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;z-index:-1;';
+      'position:fixed;left:0;top:0;width:210mm;background:#fff;opacity:0.01;pointer-events:none;z-index:2147483646;';
     host.innerHTML = html;
     document.body.appendChild(host);
 
@@ -300,7 +305,7 @@ export class OfferQuotationExportService {
     const host = document.createElement('div');
     host.setAttribute('dir', dir);
     host.style.cssText =
-      'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;z-index:-1;';
+      'position:fixed;left:0;top:0;width:210mm;background:#fff;opacity:0.01;pointer-events:none;z-index:2147483646;';
     host.innerHTML = html;
     document.body.appendChild(host);
     try {
@@ -310,7 +315,52 @@ export class OfferQuotationExportService {
     }
   }
 
-  private saveHtmlAsPdf(
+  /**
+   * Temporarily force A4 print size on the live preview so mobile CSS zoom
+   * is not baked into the PDF (and avoid off-screen clones that capture blank).
+   */
+  private async withFullSizeCapture<T>(
+    element: HTMLElement,
+    run: () => Promise<T>
+  ): Promise<T> {
+    const wrap = element.closest('.offer-capture-wrap') as HTMLElement | null;
+    const prevEl = {
+      cssText: element.style.cssText,
+    };
+    const prevWrap = wrap
+      ? { overflow: wrap.style.overflow, overflowX: wrap.style.overflowX }
+      : null;
+
+    element.style.setProperty('zoom', '1', 'important');
+    element.style.setProperty('transform', 'none', 'important');
+    element.style.setProperty('width', '210mm', 'important');
+    element.style.setProperty('max-width', '210mm', 'important');
+    element.style.setProperty('min-width', '210mm', 'important');
+    element.style.setProperty('min-height', '296mm', 'important');
+    element.style.setProperty('overflow', 'hidden', 'important');
+    element.style.setProperty('box-sizing', 'border-box', 'important');
+    element.classList.add('is-pdf-export');
+    if (wrap) {
+      wrap.style.overflow = 'visible';
+      wrap.style.overflowX = 'visible';
+    }
+
+    try {
+      await new Promise<void>((r) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => r()))
+      );
+      return await run();
+    } finally {
+      element.classList.remove('is-pdf-export');
+      element.style.cssText = prevEl.cssText;
+      if (wrap && prevWrap) {
+        wrap.style.overflow = prevWrap.overflow;
+        wrap.style.overflowX = prevWrap.overflowX;
+      }
+    }
+  }
+
+  private async saveHtmlAsPdf(
     element: HTMLElement,
     filename: string,
     margin: number | number[] = 0
@@ -319,7 +369,15 @@ export class OfferQuotationExportService {
       margin,
       filename,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] },
     };
@@ -328,7 +386,65 @@ export class OfferQuotationExportService {
       ? (html2pdf as any).default()
       : (html2pdf as any)();
 
-    return worker.set(options).from(element).save();
+    const ua = navigator.userAgent || '';
+    const isIOS =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        worker
+          .set(options)
+          .from(element)
+          .toPdf()
+          .output('blob')
+          .then(
+            (b: Blob) => resolve(b),
+            (err: unknown) => reject(err)
+          );
+      });
+      this.triggerBlobDownload(blob, filename);
+      return;
+    }
+
+    // Desktop: native save() is the most reliable path in this codebase.
+    await worker.set(options).from(element).save();
+  }
+
+  /** Blob download that works more reliably on mobile (esp. iOS/Android WebView). */
+  private triggerBlobDownload(blob: Blob, filename: string): void {
+    if (!blob || !(blob instanceof Blob) || blob.size < 100) {
+      throw new Error('Generated PDF is empty');
+    }
+    const url = URL.createObjectURL(blob);
+    const ua = navigator.userAgent || '';
+    const isIOS =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      const opened = window.open(url, '_blank');
+      if (!opened) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return;
+    }
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   private buildOffer1Html(offer: any): string {

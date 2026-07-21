@@ -10,7 +10,7 @@
       <div class="oo-hero__text">
         <h1 class="oo-hero__title">طلبات عروض الأسعار</h1>
         <p class="oo-hero__subtitle">
-          سايكل مستقل — الذمة على عميل الشركة، وشركة الشحن اختيارية عند الإرسال
+          سايكل مستقل — الذمة على عميل الشركة، وشحن/تسليم جزئي عند توفر الكميات على دفعات
         </p>
       </div>
     </div>
@@ -110,6 +110,7 @@
             <th>الهاتف</th>
             <th>تاريخ الطلب</th>
             <th>الحالة</th>
+            <th>التقدم</th>
             <th>الصافي</th>
             <th>المديونية</th>
             <th>الشحن</th>
@@ -130,6 +131,10 @@
             <td class="oo-cell-date">{{ o.order_date | date: 'yyyy-MM-dd' }}</td>
             <td>
               <span class="oo-status" [ngClass]="getStatusColor(o.order_status)">{{ o.order_status || '—' }}</span>
+            </td>
+            <td>
+              <span class="oo-chip oo-chip--progress" *ngIf="fulfillmentLabel(o) as fl; else noProgress">{{ fl }}</span>
+              <ng-template #noProgress><span class="text-muted">—</span></ng-template>
             </td>
             <td class="oo-cell-amount" dir="ltr">{{ o.net_total | customNumber }}</td>
             <td>
@@ -179,7 +184,7 @@
                   mat-menu-item
                   *ngIf="canDeliverMenu() && canDeliver(o)"
                   (click)="confirmDelivery(o)">
-                  <span>تأكيد التسليم</span>
+                  <span>{{ canDeliver(o) && o.fulfillment_progress && !o.fulfillment_progress.is_fully_shipped ? 'تأكيد تسليم جزئي' : 'تأكيد التسليم' }}</span>
                 </button>
                 <a
                   mat-menu-item
@@ -209,7 +214,7 @@
             </td>
           </tr>
           <tr *ngIf="orders.length === 0">
-            <td colspan="11" class="text-muted py-4">لا توجد طلبات محوّلة من عروض أسعار</td>
+            <td colspan="12" class="text-muted py-4">لا توجد طلبات محوّلة من عروض أسعار</td>
           </tr>
         </tbody>
       </table>
@@ -289,7 +294,7 @@
               mat-menu-item
               *ngIf="canDeliverMenu() && canDeliver(o)"
               (click)="confirmDelivery(o)">
-              <span>تأكيد التسليم</span>
+              <span>{{ o.fulfillment_progress && !o.fulfillment_progress.is_fully_shipped ? 'تأكيد تسليم جزئي' : 'تأكيد التسليم' }}</span>
             </button>
             <a
               mat-menu-item
@@ -333,6 +338,11 @@
         <div class="stat">
           <div class="stat-head"><span>المديونية</span></div>
           <div class="stat-value stat-text">{{ o.offer_debt_posted ? 'على العميل' : '—' }}</div>
+          <div class="stat-unit">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="stat-head"><span>التقدم</span></div>
+          <div class="stat-value stat-text">{{ fulfillmentLabel(o) || '—' }}</div>
           <div class="stat-unit">&nbsp;</div>
         </div>
         <div class="stat">

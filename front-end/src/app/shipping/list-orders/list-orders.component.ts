@@ -107,7 +107,7 @@ export class ListOrdersComponent implements OnDestroy {
       return false;
     }
     const editableTypes = ['جديد', 'طلب استبدال', 'طلب مرتجع', 'طلب صيانة'];
-    const editableStatuses = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'];
+    const editableStatuses = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'];
     return editableTypes.includes(item?.order_type) && editableStatuses.includes(item?.order_status);
   }
 
@@ -207,7 +207,7 @@ export class ListOrdersComponent implements OnDestroy {
     if (!item) return false;
     const status = item.order_status;
     if (this.isCompanyCustomer(item)) {
-      return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'مؤجل'].includes(status);
+      return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي', 'مؤجل'].includes(status);
     }
     if (this.isIndividualCustomer(item)) {
       return ['طلب مؤكد', 'مؤجل', 'طلب جديد'].includes(status);
@@ -746,6 +746,8 @@ export class ListOrdersComponent implements OnDestroy {
         return 'shipped';
       case 'شحن جزئي':
         return 'partshipped';
+      case 'تسليم جزئي':
+        return 'partdelivered';
       case 'تم الاستلام':
         return 'received';
       case 'مؤجل':

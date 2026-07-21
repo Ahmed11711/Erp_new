@@ -229,6 +229,8 @@ export class CustomerCompanyDetailsComponent {
         return 'shipped';
       case 'شحن جزئي':
         return 'partshipped';
+      case 'تسليم جزئي':
+        return 'partdelivered';
       case 'تم الاستلام':
         return 'received';
       case 'مؤجل':

@@ -51,7 +51,7 @@ export class ShipOrderComponent implements OnInit {
     if (this.customer_type === 'شركة' || !this.orderSnap) {
       return false;
     }
-    if (!['طلب مؤكد', 'شحن جزئي', 'طلب جديد'].includes(this.orderStatus)) {
+    if (!['طلب مؤكد', 'شحن جزئي', 'تسليم جزئي', 'طلب جديد'].includes(this.orderStatus)) {
       return false;
     }
     const net = parseFloat(this.orderSnap.net_total) || 0;
