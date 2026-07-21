@@ -24,7 +24,6 @@ class ProcessingDispatchService
         private InventoryMovementLedgerService $ledger,
         private ProcessingAccountingService $accounting,
         private ProcessingOrderService $orderService,
-        private ProcessingCategoryResolverService $categoryResolver,
         private ProcessingActivityLogger $activityLogger,
         private ProcessingInvoiceService $invoiceService,
     ) {
@@ -81,14 +80,14 @@ class ProcessingDispatchService
                     'processing_dispatch_note_id' => $note->id,
                     'processing_order_line_id' => $orderLine->id,
                     'category_id' => $source->id,
-                    'at_vendor_category_id' => $orderLine->at_vendor_category_id,
+                    'at_vendor_category_id' => null,
                     'quantity' => $qty,
                     'unit_cost' => $avg,
                     'total_cost' => round($qty * $avg, 4),
                 ]);
             }
 
-            return $note->fresh(['lines.category', 'lines.atVendorCategory', 'supplier']);
+            return $note->fresh(['lines.category', 'supplier']);
         });
     }
 
@@ -120,11 +119,11 @@ class ProcessingDispatchService
                 $this->orderService->assertSufficientStock($order, $source, (float) $line->quantity);
 
                 $source = Category::query()->lockForUpdate()->findOrFail($source->id);
-                $atVendor = Category::query()->lockForUpdate()->findOrFail($line->at_vendor_category_id);
                 $qty = (float) $line->quantity;
                 $unitCost = (float) $line->unit_cost;
                 $tc = (float) $line->total_cost;
 
+                // خروج من المخزن فقط — الكمية لدى المندوب تُسجَّل على سطر الأمر/الرصيد الوثائقي بدون صنف ظل.
                 $this->ledger->recordOutbound(
                     $source,
                     InventoryMovementType::SubcontractDispatchOut,
@@ -139,36 +138,24 @@ class ProcessingDispatchService
                     auth()->user()?->name
                 );
 
-                $this->ledger->recordInbound(
-                    $atVendor,
-                    InventoryMovementType::SubcontractDispatchIn,
-                    $qty,
-                    $unitCost,
-                    $tc,
-                    true,
-                    $refType,
-                    (int) $note->id,
-                    'استلام لدى مندوب — ' . $note->dispatch_number,
-                    null,
-                    auth()->user()?->name
-                );
-
                 $orderLine->dispatched_qty = (float) $orderLine->dispatched_qty + $qty;
                 $orderLine->unit_material_cost = $unitCost;
+                $orderLine->at_vendor_category_id = null;
                 $orderLine->save();
 
                 $bal = ProcessingMaterialBalance::query()->firstOrCreate(
                     [
                         'processing_order_id' => $note->processing_order_id,
-                        'at_vendor_category_id' => $atVendor->id,
+                        'category_id' => $source->id,
                     ],
                     [
                         'supplier_id' => $note->supplier_id,
-                        'category_id' => $source->id,
+                        'at_vendor_category_id' => null,
                         'qty_at_vendor' => 0,
                     ]
                 );
                 $bal->qty_at_vendor = (float) $bal->qty_at_vendor + $qty;
+                $bal->at_vendor_category_id = null;
                 $bal->save();
 
                 $totalCost += $tc;

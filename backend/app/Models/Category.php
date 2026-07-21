@@ -92,4 +92,9 @@ class Category extends Model
  {
   return $this->belongsToMany(Color::class, 'category_color', 'category_id', 'color_id')->withTimestamps();
  }
+
+ public function costHistories(): HasMany
+ {
+  return $this->hasMany(CategoryCostHistory::class, 'category_id')->orderByDesc('id');
+ }
 }

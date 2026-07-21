@@ -10,14 +10,15 @@ use App\Support\CollectionProviderMorph;
 use App\Services\Accounting\ReceivableTreeAccountGuard;
 
 /**
- * يضمن قبل تأكيد شحن طلب (أفراد) أن جهات التحصيل/الشحن التي ستحمل مديونية
+ * يضمن قبل «تم التسليم» / «نقل الذمة» أن جهات التحصيل/الشحن التي ستحمل مديونية
  * العميل مرتبطة بحساب ذمم في شجرة الحسابات.
  *
+ * عند الشحن لا تُرمى مديونية على هذه الجهات — يُحفظ التعريف فقط.
  * عند تأكيد التسليم تنتقل ذمة العميل إلى شركة الشحن/المندوب (جزء COD)
  * وإلى شركة التحصيل (الجزء المدفوع مقدماً) عبر
  * {@see \App\Services\Accounting\DeliveryConfirmationAccountingService}.
  * إذا لم تكن الجهة مرتبطة بحساب فلن ينتقل القيد وتبقى المديونية على العميل
- * بشكل خاطئ. لذلك نُلزم بربط الحساب أولاً (الجهة نفسها أو شركة الشحن المرتبطة بها).
+ * بشكل خاطئ. لذلك نُلزم بربط الحساب عند التسليم/نقل الذمة (وليس عند الشحن).
  */
 class ShipmentReceivableAccountGuard
 {
@@ -28,7 +29,36 @@ class ShipmentReceivableAccountGuard
     }
 
     /**
-     * يتحقق من ربط الحسابات قبل الشحن. يرمي
+     * يتحقق من ربط الحسابات عند تأكيد التسليم / نقل الذمة (حيث تُرمى المديونية فعلياً).
+     * يقرأ الجهات والمبالغ من تفاصيل الطلب المحفوظة عند الشحن.
+     */
+    public function assertLinkedForDelivery(Order $order): void
+    {
+        $order->loadMissing('order_details');
+        $od = $order->order_details;
+        if (! $od) {
+            return;
+        }
+
+        $shippingCompanyId = (int) ($od->shipping_provider_id ?? $od->shipping_company_id ?? 0);
+        if ($shippingCompanyId <= 0) {
+            return;
+        }
+
+        $this->assertLinkedForShip(
+            $order,
+            $shippingCompanyId,
+            $od->collection_provider_type,
+            $od->collection_provider_id ? (int) $od->collection_provider_id : null,
+            $od->collection_company_id ? (int) $od->collection_company_id : null,
+            $od->shipping_receivable_amount !== null ? (float) $od->shipping_receivable_amount : null,
+            $od->collection_receivable_amount !== null ? (float) $od->collection_receivable_amount : null,
+            null,
+        );
+    }
+
+    /**
+     * يتحقق من ربط الحسابات قبل رمي المديونية (تسليم / نقل ذمة). يرمي
      * {@see UnlinkedReceivableAccountException} برسالة عربية واضحة عند وجود جهة غير مرتبطة.
      */
     public function assertLinkedForShip(
@@ -123,7 +153,7 @@ class ShipmentReceivableAccountGuard
 
         if (! empty($missing)) {
             throw new UnlinkedReceivableAccountException(
-                'لا يمكن إتمام الشحن قبل ربط الحسابات حتى تُسجَّل المديونيات بشكل صحيح. '
+                'لا يمكن إتمام التسليم/نقل الذمة قبل ربط الحسابات حتى تُسجَّل المديونيات بشكل صحيح. '
                 . implode(' ', $missing)
             );
         }

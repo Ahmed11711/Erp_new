@@ -46,11 +46,20 @@ export class TreeAccountService {
    */
   balanceAdjustment(
     id: number,
-    payload: { target_balance: number; counter_account_id: number; date: string; reason?: string }
+    payload: { target_balance: number; counter_account_id: number; date: string; reason?: string; mode?: 'current' | 'opening' }
   ): Observable<{ success: boolean; status: number; message: string; data: any }> {
     return this.http.post<{ success: boolean; status: number; message: string; data: any }>(
       `${environment.Url}/tree_accounts/${id}/balance-adjustment`,
       payload
+    );
+  }
+
+  /** معلومات الرصيد الافتتاحي المسجّل حالياً للحساب (إن وُجد) */
+  getOpeningBalanceInfo(
+    id: number
+  ): Observable<{ success: boolean; status: number; message: string; data: { exists: boolean; date?: string; target_net?: number } }> {
+    return this.http.get<{ success: boolean; status: number; message: string; data: { exists: boolean; date?: string; target_net?: number } }>(
+      `${environment.Url}/tree_accounts/${id}/opening-balance`
     );
   }
 

@@ -17,6 +17,8 @@ export const RBAC_ROUTE = {
   manufacturingDeleteRecipe: ['manufacturing.delete_recipe', 'system.rbac'],
   processingAll: ['processing.view', 'purchases.view', 'suppliers.view'],
   ordersCreate: ['orders.create'],
+  /** تحويل عرض سعر إلى طلب — صفحة منفصلة */
+  ordersConvertFromOffer: ['orders.convert_from_offer'],
   ordersView: ['orders.view'],
   ordersEdit: ['orders.edit'],
   ordersFulfillment: ['orders.change_status', 'orders.assign_driver'],

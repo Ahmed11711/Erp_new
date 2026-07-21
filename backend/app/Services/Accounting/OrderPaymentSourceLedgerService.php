@@ -219,6 +219,9 @@ class OrderPaymentSourceLedgerService
         $journalDesc = trim($details).' — طلب رقم '.$order->id;
         $amount = round(abs($signedAmount), 2);
 
+        // postBalancedJournal يطلب ?DateTimeInterface — نحوّل التاريخ النصي لتفادي فشل القيد
+        $journalDate = $date ? \Illuminate\Support\Carbon::parse($date) : null;
+
         try {
             if ($signedAmount >= 0) {
                 $this->journal->postBalancedJournal(
@@ -240,7 +243,7 @@ class OrderPaymentSourceLedgerService
                     $order->id,
                     $batchCode,
                     null,
-                    $date,
+                    $journalDate,
                     false,
                 );
             } else {
@@ -263,7 +266,7 @@ class OrderPaymentSourceLedgerService
                     $order->id,
                     $batchCode,
                     null,
-                    $date,
+                    $journalDate,
                     false,
                 );
             }

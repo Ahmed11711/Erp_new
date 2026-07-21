@@ -46,7 +46,28 @@
     <mat-sidenav id="nav" #sidenav [mode]="openASide ? 'side' : 'over'" [opened]="openASide"
         [class.mat-elevation-z4]="true" class="app-sidenav hide-scrollbar">
 
-        <mat-nav-list>
+        <!-- Brand header -->
+        <div class="side-brand">
+            <span class="side-brand__name">Magalis</span>
+            <button class="side-brand__home" routerLink="/dashboard" matTooltip="الصفحة الرئيسية" type="button">
+                <mat-icon>home</mat-icon>
+            </button>
+        </div>
+
+        <!-- Menu search -->
+        <div class="side-search">
+            <div class="side-search__box">
+                <mat-icon>search</mat-icon>
+                <input #menuSearchInput type="text" placeholder="بحث في القائمة"
+                    (input)="filterMenu(menuSearchInput.value)" aria-label="بحث في القائمة">
+                <button class="side-search__clear" *ngIf="menuSearchInput.value" type="button"
+                    (click)="menuSearchInput.value=''; filterMenu('')" aria-label="مسح البحث">
+                    <mat-icon>close</mat-icon>
+                </button>
+            </div>
+        </div>
+
+        <mat-nav-list #sidenavNav>
 
             <!-- الرئيسية -->
             <mat-list-item routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">
@@ -530,6 +551,10 @@
                             *ngIf="rbac.can('orders.view')">
                             <span>الطلبات</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/shipping/offer-orders" routerLinkActive="active"
+                            *ngIf="rbac.can('orders.convert_from_offer')">
+                            <span>طلبات عروض الأسعار</span>
+                        </a>
                         <a mat-list-item routerLink="/dashboard/shipping/shippingcompany" routerLinkActive="active"
                             *ngIf="rbac.can('nav.shipping.master')">
                             <span>شركات الشحن والمندوبين</span>
@@ -655,6 +680,10 @@
                         <a mat-list-item routerLink="/dashboard/permissions/priceoffer" routerLinkActive="active">
                             <span>عروض الأسعار</span>
                         </a>
+                        <a mat-list-item routerLink="/dashboard/shipping/offer-orders" routerLinkActive="active"
+                            *ngIf="rbac.can('orders.convert_from_offer')">
+                            <span>طلبات عروض الأسعار</span>
+                        </a>
                         <a mat-list-item routerLink="/dashboard/permissions/offerconditions" routerLinkActive="active"
                             *ngIf="rbac.can('nav.receipts.admin')">
                             <span>شروط عروض الأسعار</span>
@@ -747,6 +776,12 @@
             </mat-accordion>
 
         </mat-nav-list>
+
+        <!-- User footer -->
+        <div class="side-user">
+            <div class="side-user__avatar">{{ (userName || 'U') | slice:0:2 }}</div>
+            <span class="side-user__name">{{ userName }}</span>
+        </div>
     </mat-sidenav>
 
     <mat-sidenav-content>

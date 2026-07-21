@@ -20,8 +20,11 @@ export class ShipOrderComponent implements OnInit {
   paymentTypeActive = false;
   completedShip = false;
   orderSnap: any;
+  /** طلب محوّل من عرض سعر — شركة الشحن اختيارية والذمة على العميل */
+  isOfferOrder = false;
 
   selectedShippingCompanyId: string = '';
+  companySearchKeyword = 'name';
   /** معرّف من جدول collection_companies */
   selectedCollectionCompanyId: string = '';
 
@@ -62,12 +65,19 @@ export class ShipOrderComponent implements OnInit {
       this.orderSnap = res;
       this.customer_type = res?.customer_type;
       this.orderStatus = res?.order_status || '';
+      this.isOfferOrder = !!(res?.offer_id || res?.offer_debt_posted);
       if (res?.customer_type == 'شركة') {
-        this.paymentTypeActive = true;
+        // لطلبات العروض: افتراضي أجل (الذمة على العميل) — شركة الشحن اختيارية
+        if (this.isOfferOrder) {
+          this.payment = 'أجل';
+          this.paymentTypeActive = false;
+        } else {
+          this.paymentTypeActive = true;
+        }
         const status = res?.order_products.every((elm: any) => elm.quantity - elm.shipped_quantity == 0);
         if (status) {
           this.completedShip = true;
-          this.router.navigate(['/dashboard/shipping/listorders']);
+          this.router.navigate([this.afterShipPath()]);
         }
       }
 
@@ -82,6 +92,16 @@ export class ShipOrderComponent implements OnInit {
       this.collectionCompanies = (res || []).filter((c: any) => c.status !== 'inactive');
     });
   }
+  onShippingCompanySelected(item: any): void {
+    this.selectedShippingCompanyId = item?.id != null ? String(item.id) : '';
+    this.onShippingCompanyChange();
+  }
+
+  onShippingCompanyCleared(): void {
+    this.selectedShippingCompanyId = '';
+    this.onShippingCompanyChange();
+  }
+
   onShippingCompanyChange(): void {
     this.updateCollectionSplitVisibility();
     this.recalcSplit();
@@ -199,9 +219,37 @@ export class ShipOrderComponent implements OnInit {
     }
   }
 
+  canSubmitShip(): boolean {
+    if (!this.dateSelected || !this.shippStatus || this.paymentTypeActive || this.cashType || !!this.splitError) {
+      return false;
+    }
+    if (this.isOfferOrder) {
+      if (this.payment === 'نقدي' && !this.selectedShippingCompanyId) {
+        return false;
+      }
+      return true;
+    }
+    return !!this.selectedShippingCompanyId;
+  }
+
+  private afterShipPath(): string {
+    return this.isOfferOrder
+      ? '/dashboard/shipping/offer-orders'
+      : '/dashboard/shipping/listorders';
+  }
+
   shipOrder(form: any) {
+    if (!this.canSubmitShip()) {
+      return;
+    }
+    if (this.isOfferOrder && this.payment === 'نقدي' && !this.selectedShippingCompanyId) {
+      return;
+    }
+
     const formData = new FormData();
-    formData.append('company_id', this.selectedShippingCompanyId);
+    if (this.selectedShippingCompanyId) {
+      formData.append('company_id', this.selectedShippingCompanyId);
+    }
 
     if (this.selectedCollectionCompanyId && this.selectedCollectionCompanyId !== '') {
       formData.append('collection_provider_type', 'collection_company');
@@ -223,7 +271,7 @@ export class ShipOrderComponent implements OnInit {
     const id = this.route.snapshot.params['id'];
 
     if (this.customer_type == 'شركة') {
-      formData.append('payment_way', this.payment);
+      formData.append('payment_way', this.payment || 'أجل');
       if (this.payment == 'نقدي') {
         formData.append('cash', String(this.cash));
       }
@@ -231,7 +279,7 @@ export class ShipOrderComponent implements OnInit {
 
     this.order.shipOrder(formData, id).subscribe((res: any) => {
       if (res.message === 'success') {
-        this.router.navigate(['/dashboard/shipping/listorders']);
+        this.router.navigate([this.afterShipPath()]);
       }
     });
   }

@@ -18,6 +18,10 @@
       <div *ngIf="errorform" class="alert alert-danger">
         {{errorMessage}}
       </div>
+      <div *ngIf="sourceCompanyId && sourceCompanyName" class="alert alert-info py-2" dir="rtl">
+        عرض لعميل الشركة: <strong>{{ sourceCompanyName }}</strong>
+        — بعد الحفظ سيتم الربط وترحيل المديونية تلقائياً.
+      </div>
     </div>
 
       <div id="capture" class="row m-5 border">
@@ -31,9 +35,21 @@
           <hr>
           <div class="d-flex py-4 justify-content-between align-items-start text-white" dir="ltr">
             <div class="client-fields">
-              <h4>Quote for : <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote quote-ltr" type="text" placeholder="..........."></h4>
-              <h4>Contact Person  : <input name="contact_person" autocomplete="off" [(ngModel)]="contact_person" class="quote quote-ltr" type="text" placeholder="Contact person"></h4>
-              <h4>Phone  : <input name="client_phone" autocomplete="off" [(ngModel)]="client_phone" class="quote quote-ltr" type="text" placeholder="Phone number"></h4>
+              <h4>Quote for <span class="req">*</span> :
+                <input name="quote233" autocomplete="off" [(ngModel)]="quote" required
+                  class="quote quote-ltr" [class.is-invalid]="clientFieldsInvalid && !quote?.trim()"
+                  type="text" placeholder="اسم العميل (إجباري)">
+              </h4>
+              <h4>Contact Person <span class="req">*</span> :
+                <input name="contact_person" autocomplete="off" [(ngModel)]="contact_person" required
+                  class="quote quote-ltr" [class.is-invalid]="clientFieldsInvalid && !contact_person?.trim()"
+                  type="text" placeholder="مسؤول التواصل (إجباري)">
+              </h4>
+              <h4>Phone <span class="req">*</span> :
+                <input name="client_phone" autocomplete="off" [(ngModel)]="client_phone" required
+                  class="quote quote-ltr" [class.is-invalid]="clientFieldsInvalid && !client_phone?.trim()"
+                  type="text" placeholder="رقم الهاتف (إجباري)">
+              </h4>
             </div>
             <div>
               <h4>Date : <input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"></h4>
@@ -163,7 +179,9 @@
 
 
       <div class="text-center my-3">
-        <button class="btn btn-add" (click)="submitform()">{{ !id ? 'اضافة' : 'تعديل'}} </button>
+        <button class="btn btn-add" [disabled]="saving" (click)="submitform()">
+          {{ saving ? 'جاري الحفظ...' : (!id ? 'اضافة' : 'تعديل') }}
+        </button>
       </div>
 
 

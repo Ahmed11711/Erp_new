@@ -4,6 +4,7 @@ import { ProcessingService } from '../services/processing.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from 'src/env/env';
 import { ShippingCompanyService } from 'src/app/shipping/services/shipping-company.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -30,6 +31,7 @@ export class ProcessingOrdersComponent implements OnInit {
   filterSupplierId: number | null = null;
   filterStatus = '';
   totalOrders = 0;
+  deletingId: number | null = null;
 
   showForm = false;
   selectedVendor: any = null;
@@ -54,7 +56,43 @@ export class ProcessingOrdersComponent implements OnInit {
     private http: HttpClient,
     private router: Router,
     private shippingCompanyService: ShippingCompanyService,
+    readonly rbac: RbacService,
   ) {}
+
+  canDeleteOrder(): boolean {
+    return this.rbac.can('processing.delete_order') || this.rbac.can('system.rbac');
+  }
+
+  deleteOrder(o: any): void {
+    if (!this.canDeleteOrder() || this.deletingId != null) return;
+
+    const label = this.dispatchNumber(o) || o.order_number || `#${o.id}`;
+    Swal.fire({
+      title: 'حذف أمر التشغيل؟',
+      html: `سيتم حذف «<strong>${label}</strong>» وعكس المخزون والقيود وذمة المورد كأن الأمر لم يُنفَّذ.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'نعم، احذف',
+      cancelButtonText: 'إلغاء',
+      confirmButtonColor: '#b91c1c',
+      input: 'text',
+      inputPlaceholder: 'سبب الحذف (اختياري)',
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+      this.deletingId = o.id;
+      this.api.deleteOrder(o.id, result.value || undefined).subscribe({
+        next: (res) => {
+          this.deletingId = null;
+          Swal.fire('تم', res?.message || 'تم حذف أمر التشغيل وعكس البيانات', 'success');
+          this.loadOrders();
+        },
+        error: (e) => {
+          this.deletingId = null;
+          Swal.fire('خطأ', e?.error?.message || 'تعذر حذف أمر التشغيل', 'error');
+        },
+      });
+    });
+  }
 
   ngOnInit(): void {
     this.api.meta().subscribe((m) => {

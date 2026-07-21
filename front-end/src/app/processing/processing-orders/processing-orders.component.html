@@ -243,6 +243,15 @@
           <td>{{ o.expected_service_total | number:'1.2-2' }}</td>
           <td class="actions">
             <button type="button" class="btn-text" (click)="openDetail(o)">تفاصيل / استلام</button>
+            <button
+              type="button"
+              class="btn-text btn-text--danger"
+              *ngIf="canDeleteOrder()"
+              [disabled]="deletingId === o.id"
+              (click)="deleteOrder(o)"
+            >
+              {{ deletingId === o.id ? 'جاري الحذف…' : 'حذف' }}
+            </button>
           </td>
         </tr>
       </tbody>

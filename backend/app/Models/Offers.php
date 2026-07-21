@@ -16,6 +16,11 @@ class Offers extends Model
         'quote',
         'contact_person',
         'client_phone',
+        'customer_company_id',
+        'debt_posted_at',
+        'debt_amount',
+        'converted_order_id',
+        'converted_at',
         'dateFrom',
         'dateTo',
         'subtotal',
@@ -28,6 +33,18 @@ class Offers extends Model
         'transportation',
     ];
 
+    protected $casts = [
+        'debt_posted_at' => 'datetime',
+        'converted_at' => 'datetime',
+        'debt_amount' => 'float',
+        'total' => 'float',
+    ];
+
+    public function convertedOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'converted_order_id');
+    }
+
     public function category()
     {
         return $this->hasMany(OffersCategory::class, 'offer_id');
@@ -36,6 +53,11 @@ class Offers extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function customerCompany(): BelongsTo
+    {
+        return $this->belongsTo(customerCompany::class, 'customer_company_id');
     }
 
 }

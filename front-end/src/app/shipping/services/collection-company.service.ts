@@ -54,6 +54,16 @@ export class CollectionCompanyService {
     );
   }
 
+  settleWithShipping(
+    id: number,
+    body: { order_ids: number[]; cash_account_id: number; date: string; mode?: string; notes?: string }
+  ) {
+    return this.http.post<any>(
+      `${environment.Url}/reports/collection-accounts/${id}/settle-with-shipping`,
+      body
+    );
+  }
+
   pendingOrdersReport(params: Record<string, string> = {}) {
     return this.http.get(
       `${environment.Url}/reports/collection-accounts/pending-orders`,

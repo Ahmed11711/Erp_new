@@ -39,7 +39,10 @@ import {
   isRefuseEligibleOrderStatus,
 } from '../utils/order-refuse.utils';
 import { canShowCollectOrderMenu as isCollectOrderMenuVisible } from '../utils/order-collect-eligibility.utils';
-import { orderStatusFilterOptions } from '../utils/order-status-visibility.utils';
+import {
+  OrderStatusFilterOption,
+  orderStatusFilterOptions,
+} from '../utils/order-status-visibility.utils';
 
 @Component({
   selector: 'app-list-orders',
@@ -71,9 +74,13 @@ export class ListOrdersComponent implements OnDestroy {
     return this.rbac.canAny([...RBAC_ROUTE.shopifyOrderReview]);
   }
 
-  /** خيارات فلتر حالة الطلب حسب صلاحيات RBAC والقسم. */
-  get statusFilterOptions() {
-    return orderStatusFilterOptions(this.user, (slug) => this.rbac.can(slug));
+  /** خيارات فلتر حالة الطلب حسب صلاحيات RBAC (ثابتة بعد التحميل حتى لا يُعاد رسم الـ select). */
+  statusFilterOptions: OrderStatusFilterOption[] = [];
+  /** القيمة المعروضة في فلتر الحالة — مربوطة حتى لا ترجع لأول خيار بعد البحث. */
+  orderStatusFilter = '';
+
+  trackByStatusFilter(_index: number, opt: OrderStatusFilterOption): string {
+    return opt.value;
   }
 
   canPostponeOrder(): boolean {
@@ -270,6 +277,8 @@ export class ListOrdersComponent implements OnDestroy {
 
   ngOnInit(): void {
     this.user = this.authService.getUser();
+    this.statusFilterOptions = orderStatusFilterOptions(this.user, (slug) => this.rbac.can(slug));
+    this.orderStatusFilter = this.filterService.order_status || '';
     const perms = this.authService.getPermission();
     this.canAssignWhatsAppNumbers =
       Array.isArray(perms) && perms.includes('assign to whatsapp number');
@@ -760,63 +769,151 @@ export class ListOrdersComponent implements OnDestroy {
 
   confirmDelivery(orderId: number) {
     this.order.checkDeliveryTransfer(orderId).subscribe(
-      (check) => {
-        const msg = check.needs_transfer
-          ? 'هل تم تسليم الطلب للعميل؟ ستنتقل المديونية من العميل إلى شركة الشحن/المندوب.'
-          : 'هل تم تسليم الطلب للعميل؟';
+      (check) => this.showDeliveryDialog(orderId, check),
+      () => this.showDeliveryDialog(orderId, { needs_transfer: false, holders: [] })
+    );
+  }
 
-        Swal.fire({
-          title: 'تأكيد التسليم',
-          text: msg,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: 'نعم، تم التسليم',
-          cancelButtonText: 'إلغاء',
-          input: 'text',
-          inputPlaceholder: 'ملاحظة (اختياري)',
-          inputValidator: () => undefined
-        }).then((result) => {
-          if (result.isConfirmed) {
-            this.order.deliverOrder(orderId, { note: result.value || '' }).subscribe(
-              (res: any) => {
-                if (res.message === 'success') {
-                  Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
-                  location.reload();
-                }
-              },
-              (err) => {
-                Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
-              }
-            );
-          }
-        });
+  private async showDeliveryDialog(orderId: number, check: any) {
+    const amount = check?.amount;
+    const hasAmount = amount != null && Number(amount) > 0.009;
+    const holders: any[] = Array.isArray(check?.holders) ? check.holders : [];
+
+    // بلا مديونية للنقل — تأكيد تسليم بسيط.
+    if (!hasAmount && holders.length === 0 && !check?.needs_transfer) {
+      Swal.fire({
+        title: 'تأكيد التسليم',
+        text: 'هل تم تسليم الطلب للعميل؟',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'نعم، تم التسليم',
+        cancelButtonText: 'إلغاء',
+        input: 'text',
+        inputPlaceholder: 'ملاحظة (اختياري)',
+        inputValidator: () => undefined
+      }).then((result) => {
+        if (result.isConfirmed) {
+          this.submitDelivery(orderId, { note: result.value || '' });
+        }
+      });
+      return;
+    }
+
+    // تحميل القوائم الكاملة (شركات الشحن/المناديب + شركات التحصيل) حتى يمكن اختيار أي شركة.
+    let shippingList: any[] = [];
+    let collectionList: any[] = [];
+    try {
+      const s: any = await firstValueFrom(this.company.shippingCompanySelect());
+      shippingList = Array.isArray(s) ? s : (s?.data ?? []);
+    } catch {}
+    try {
+      const c: any = await firstValueFrom(this.collectionCompanyService.select());
+      collectionList = Array.isArray(c) ? c : (c?.data ?? []);
+    } catch {}
+
+    const shipOpts = shippingList
+      .filter((c) => c?.id)
+      .map((c) => {
+        const type = c.type === 'مندوب' ? 'courier' : 'shipping_company';
+        return `<option value="${type}:${c.id}">${this.escapeHtml(c.name)}</option>`;
+      })
+      .join('');
+
+    const collOpts = collectionList
+      .filter((c) => c?.id && c.status !== 'inactive')
+      .map((c) => `<option value="collection_company:${c.id}">${this.escapeHtml(c.name)}</option>`)
+      .join('');
+
+    // بدون قوائم شركات — نعود لقائمة الجهات المقترحة من الطلب أو تأكيد بسيط.
+    if (!shipOpts && !collOpts) {
+      const fallbackOpts = holders
+        .map((h) => `<option value="${h.type}:${h.id}">${this.escapeHtml(`${h.label ? h.label + ' — ' : ''}${h.name}`)}</option>`)
+        .join('');
+      if (!fallbackOpts) {
+        this.submitDelivery(orderId, { note: '' });
+        return;
+      }
+      this.openDeliveryHolderDialog(orderId, check, `<select id="swal-holder" class="swal2-select" style="width:100%;margin:0 0 10px">${fallbackOpts}</select>`);
+      return;
+    }
+
+    const selectHtml = `
+      <select id="swal-holder" class="swal2-select" style="width:100%;margin:0 0 10px">
+        ${shipOpts ? `<optgroup label="شركات الشحن / المناديب">${shipOpts}</optgroup>` : ''}
+        ${collOpts ? `<optgroup label="شركات التحصيل">${collOpts}</optgroup>` : ''}
+      </select>`;
+
+    this.openDeliveryHolderDialog(orderId, check, selectHtml);
+  }
+
+  private openDeliveryHolderDialog(orderId: number, check: any, selectHtml: string) {
+    const amount = check?.amount;
+    const defaultKey = check?.default_holder
+      ? `${check.default_holder.type}:${check.default_holder.id}`
+      : (Array.isArray(check?.holders) && check.holders[0]
+          ? `${check.holders[0].type}:${check.holders[0].id}`
+          : '');
+
+    const amountLine =
+      amount != null
+        ? `<p style="margin:0 0 8px">المبلغ الذي ستُنقل ذمته: <b>${this.escapeHtml(amount)}</b></p>`
+        : '';
+
+    Swal.fire({
+      title: 'تأكيد التسليم — نقل الذمة',
+      html: `
+        <div style="text-align:right;direction:rtl">
+          <p style="margin:0 0 8px">عند التسليم ستُرمى المديونية على الجهة التالية. الافتراضي هو الشركة المرتبطة بالطلب، ويمكنك اختيار شركة أخرى:</p>
+          ${amountLine}
+          <label style="display:block;margin:0 0 4px;font-weight:600">نقل الذمة على</label>
+          ${selectHtml}
+          <input id="swal-note" class="swal2-input" placeholder="ملاحظة (اختياري)" style="margin:0;width:100%">
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'تأكيد ونقل الذمة',
+      cancelButtonText: 'إلغاء',
+      focusConfirm: false,
+      didOpen: () => {
+        const el = document.getElementById('swal-holder') as HTMLSelectElement | null;
+        if (el && defaultKey) {
+          el.value = defaultKey;
+        }
       },
-      () => {
-        Swal.fire({
-          title: 'تأكيد التسليم',
-          text: 'هل تم تسليم الطلب للعميل؟',
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: 'نعم، تم التسليم',
-          cancelButtonText: 'إلغاء',
-          input: 'text',
-          inputPlaceholder: 'ملاحظة (اختياري)',
-          inputValidator: () => undefined
-        }).then((result) => {
-          if (result.isConfirmed) {
-            this.order.deliverOrder(orderId, { note: result.value || '' }).subscribe(
-              (res: any) => {
-                if (res.message === 'success') {
-                  Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
-                  location.reload();
-                }
-              },
-              (err) => {
-                Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
-              }
-            );
-          }
-        });
+      preConfirm: () => {
+        const holderEl = document.getElementById('swal-holder') as HTMLSelectElement | null;
+        const noteEl = document.getElementById('swal-note') as HTMLInputElement | null;
+        const [type, id] = (holderEl?.value || '').split(':');
+        return {
+          liability_holder_type: type || undefined,
+          liability_holder_id: id ? Number(id) : undefined,
+          note: noteEl?.value || ''
+        };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.submitDelivery(orderId, result.value || {});
+      }
+    });
+  }
+
+  private escapeHtml(value: any): string {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) =>
+      (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[ch])
+    );
+  }
+
+  private submitDelivery(orderId: number, body: any) {
+    this.order.deliverOrder(orderId, body).subscribe(
+      (res: any) => {
+        if (res.message === 'success') {
+          Swal.fire('تم', 'تم تأكيد تسليم الطلب بنجاح', 'success');
+          location.reload();
+        }
+      },
+      (err) => {
+        Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
       }
     );
   }
@@ -1394,6 +1491,7 @@ export class ListOrdersComponent implements OnDestroy {
     }
 
     if (event?.target?.id ==="order_status") {
+      this.orderStatusFilter = event.target.value;
       this.filterService.order_status = event.target.value;
     }
 

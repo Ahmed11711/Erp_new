@@ -1,74 +1,149 @@
-<div class="container-fluid home-page">
-  <div class="row py-3 align-items-center home-topbar">
-    <div class="col-6 col-md-4 d-flex align-items-center order-2 order-md-1">
-      <app-time></app-time>
-    </div>
-    <div class="col-12 col-md-4 order-1 order-md-2">
-      <p class="title header m-auto">الصفحة الرئيسية</p>
-    </div>
-    <div class="col-6 col-md-4 d-none d-md-flex align-items-center justify-content-end order-3">
-    </div>
-  </div>
+<div class="home-page">
 
-  <div *ngFor="let notification of notifications">
-    {{ notification.message }}
-  </div>
+  <!-- ═══════ Greeting banner ═══════ -->
+  <section class="hero">
+    <div class="hero-text">
+      <h2 class="hero-title">{{ greeting }}<span *ngIf="userName">، {{ userName }}</span></h2>
+      <p class="hero-sub">
+        {{ todayLabel }}
+        <ng-container *ngIf="canApprovals && pendingApprovals">
+          <span class="hero-dot">—</span>
+          لديك {{ pendingApprovals }} موافقات بانتظار مراجعتك
+        </ng-container>
+      </p>
+    </div>
+    <button class="hero-btn" *ngIf="canApprovals" routerLink="/dashboard/approvals">
+      <mat-icon>fact_check</mat-icon>
+      مراجعة الموافقات
+    </button>
+  </section>
 
-  <div class="home-cards">
-    <div class="head" routerLink="/dashboard/shipping/listorders">
-      <mat-icon>local_shipping</mat-icon>
-      <h4>الطلبات</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/financial/expenses" *ngIf="rbac.canAny(RBAC.financeTeam)">
-      <mat-icon>commute</mat-icon>
-      <h4>المصروفات</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/purchases/list_invoice" *ngIf="user == 'Admin'">
-      <mat-icon>shopping_cart</mat-icon>
-      <h4>المشتريات</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/notification">
-      <mat-icon>notifications</mat-icon>
-      <h4>الاشعارات</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/shipping/listorders" *ngIf="user == 'Admin'">
-      <mat-icon>inventory_2</mat-icon>
-      <h4>تقرير المخزون</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/shipping/shippingcompany" *ngIf="user == 'Admin'">
-      <mat-icon>local_shipping</mat-icon>
-      <h4>حساب المندوبين وشركات الشحن</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/shipping/collection-companies"
-      *ngIf="rbac.canAny(['nav.shipping.master', 'shipping.companies.manage', 'collection_companies.manage', 'system.rbac'])">
-      <mat-icon>payments</mat-icon>
-      <h4>شركات التحصيل والدفع</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/shipping/shipping-accounts-report"
-      *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
-      <mat-icon>account_balance_wallet</mat-icon>
-      <h4>تقارير ذمم الشحن والتحصيل</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/approvals" *ngIf="user == 'Admin'">
-      <mat-icon>checklist</mat-icon>
-      <h4>الموافقات</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/admin/tracking" *ngIf="user == 'Admin'">
-      <mat-icon>my_location</mat-icon>
-      <h4>تتبع</h4>
-    </div>
-    <div class="head" routerLink="/dashboard/shopify" *ngIf="user == 'Admin'">
-      <mat-icon>storefront</mat-icon>
-      <h4>Shopify</h4>
-    </div>
-  </div>
 
-  <div class="row p-2 mt-3">
-    <div class="col-12">
-      <div class="report-panel">
-        <app-categories-report></app-categories-report>
+    <!-- ═══════ KPI cards ═══════ -->
+    <section class="kpi-grid">
+      <div class="kpi-card" *ngIf="canCollections" routerLink="/dashboard/shipping/shipping-accounts-report">
+        <div class="kpi-icon kpi-icon--green"><mat-icon>payments</mat-icon></div>
+        <div class="kpi-value">{{ todayCollected !== null ? (todayCollected | number:'1.0-0') : '—' }}</div>
+        <div class="kpi-label">تحصيلات اليوم <span class="kpi-unit">(ج.م)</span></div>
+      </div>
+  
+      <div class="kpi-card" *ngIf="canApprovals" routerLink="/dashboard/approvals">
+        <div class="kpi-icon kpi-icon--blue"><mat-icon>fact_check</mat-icon></div>
+        <div class="kpi-value">{{ pendingApprovals !== null ? pendingApprovals : '—' }}</div>
+        <div class="kpi-label">بانتظار الموافقة</div>
+      </div>
+  
+      <div class="kpi-card" *ngIf="canOrders" routerLink="/dashboard/notification">
+        <div class="kpi-icon kpi-icon--amber"><mat-icon>warning_amber</mat-icon></div>
+        <div class="kpi-value">{{ lateConfirmedOrders !== null ? lateConfirmedOrders : '—' }}</div>
+        <div class="kpi-label">طلبات مؤكدة متأخرة</div>
+      </div>
+  
+      <div class="kpi-card" *ngIf="canOrders" routerLink="/dashboard/shipping/listorders">
+        <div class="kpi-icon kpi-icon--brand"><mat-icon>local_shipping</mat-icon></div>
+        <div class="kpi-value">{{ todayOrders !== null ? (todayOrders | number) : '—' }}</div>
+        <div class="kpi-label">طلبات اليوم</div>
+      </div>
+    </section>
+  
+
+    <!-- ═══════ Operations ═══════ -->
+    <section class="section-group">
+      <h3 class="section-title">العمليات</h3>
+      <div class="tiles">
+        <div class="tile" routerLink="/dashboard/shipping/listorders">
+          <mat-icon>local_shipping</mat-icon>
+          <span>الطلبات</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/purchases/list_invoice" *ngIf="user == 'Admin'">
+          <mat-icon>shopping_cart</mat-icon>
+          <span>المشتريات</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/notification">
+          <mat-icon>notifications</mat-icon>
+          <span>الاشعارات</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/approvals" *ngIf="user == 'Admin'">
+          <mat-icon>checklist</mat-icon>
+          <span>الموافقات</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/admin/tracking" *ngIf="user == 'Admin'">
+          <mat-icon>my_location</mat-icon>
+          <span>تتبع</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/shopify" *ngIf="user == 'Admin'">
+          <mat-icon>storefront</mat-icon>
+          <span>Shopify</span>
+        </div>
+      </div>
+    </section>
+  
+    <!-- ═══════ Finance & collection ═══════ -->
+    <section class="section-group">
+      <h3 class="section-title">المالية والتحصيل</h3>
+      <div class="tiles">
+        <div class="tile" routerLink="/dashboard/financial/expenses" *ngIf="rbac.canAny(RBAC.financeTeam)">
+          <mat-icon>request_quote</mat-icon>
+          <span>المصروفات</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/reports/storage" *ngIf="user == 'Admin'">
+          <mat-icon>inventory_2</mat-icon>
+          <span>تقرير المخزون</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/shipping/shippingcompany" *ngIf="user == 'Admin'">
+          <mat-icon>local_shipping</mat-icon>
+          <span>حساب المندوبين وشركات الشحن</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/shipping/collection-companies"
+          *ngIf="rbac.canAny(['nav.shipping.master', 'shipping.companies.manage', 'collection_companies.manage', 'system.rbac'])">
+          <mat-icon>payments</mat-icon>
+          <span>شركات التحصيل والدفع</span>
+        </div>
+        <div class="tile" routerLink="/dashboard/shipping/shipping-accounts-report"
+          *ngIf="rbac.canAny(['nav.shipping.accounts_report', 'system.rbac'])">
+          <mat-icon>account_balance_wallet</mat-icon>
+          <span>تقارير ذمم الشحن والتحصيل</span>
+        </div>
+      </div>
+    </section>
+
+  <!-- ═══════ Operational pipeline ═══════ -->
+  <section class="panel pipeline-panel"
+    *ngIf="canCollections || canOrders || canManufacture || canPurchases">
+    <div class="panel-head">
+      <span class="panel-title">مسار العملية التشغيلية</span>
+    </div>
+    <div class="pipeline">
+      <div class="pipe-step" *ngIf="canCollections" routerLink="/dashboard/shipping/collection-accounts-report">
+        <div class="pipe-ic"><mat-icon>receipt_long</mat-icon></div>
+        <div class="pipe-label">تحصيل <b>{{ collectPipeline !== null ? collectPipeline : '—' }}</b></div>
+      </div>
+      <span class="pipe-line" *ngIf="canCollections && canOrders"></span>
+
+      <div class="pipe-step" *ngIf="canOrders" routerLink="/dashboard/shipping/listorders">
+        <div class="pipe-ic"><mat-icon>local_shipping</mat-icon></div>
+        <div class="pipe-label">شحن <b>{{ shipPipeline !== null ? shipPipeline : '—' }}</b></div>
+      </div>
+      <span class="pipe-line" *ngIf="canOrders && canManufacture"></span>
+
+      <div class="pipe-step" *ngIf="canManufacture" routerLink="/dashboard/manufacturing/orders">
+        <div class="pipe-ic"><mat-icon>precision_manufacturing</mat-icon></div>
+        <div class="pipe-label">تصنيع <b>{{ manufacturePipeline !== null ? manufacturePipeline : '—' }}</b></div>
+      </div>
+      <span class="pipe-line" *ngIf="canManufacture && canPurchases"></span>
+
+      <div class="pipe-step" *ngIf="canPurchases" routerLink="/dashboard/purchases/list_invoice">
+        <div class="pipe-ic"><mat-icon>shopping_cart</mat-icon></div>
+        <div class="pipe-label">مشتريات <b>{{ purchasePipeline !== null ? purchasePipeline : '—' }}</b></div>
       </div>
     </div>
-  </div>
+  </section>
+
+
+
+  <!-- ═══════ Product sales report chart (kept as is) ═══════ -->
+  <section class="report-panel">
+    <app-categories-report></app-categories-report>
+  </section>
 
 </div>

@@ -23,6 +23,7 @@ class Voucher extends Model
         'shipping_company_id',
         'collection_company_id',
         'amount',
+        'shipping_expense_amount',
         'notes',
         'reference_number',
         'user_id',
@@ -31,6 +32,7 @@ class Voucher extends Model
     protected $casts = [
         'date' => 'date',
         'amount' => 'decimal:2',
+        'shipping_expense_amount' => 'decimal:2',
     ];
 
     public function account()

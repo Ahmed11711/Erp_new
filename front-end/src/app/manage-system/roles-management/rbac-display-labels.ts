@@ -25,6 +25,7 @@ export const RBAC_MODULE_AR: Record<string, string> = {
 export const RBAC_PERMISSION_AR: Record<string, string> = {
   'orders.view': 'عرض الطلبات',
   'orders.create': 'إنشاء طلبات',
+  'orders.convert_from_offer': 'تحويل عرض السعر إلى طلب',
   'orders.edit': 'تعديل الطلبات',
   'orders.cancel_line': 'إلغاء أصناف من الطلب',
   'orders.delete': 'حذف الطلبات',
@@ -94,6 +95,7 @@ export const RBAC_PERMISSION_AR: Record<string, string> = {
   'processing.view': 'عرض التشغيل الخارجي',
   'processing.create': 'إنشاء مستندات التشغيل الخارجي',
   'processing.post': 'ترحيل مستندات التشغيل الخارجي',
+  'processing.delete_order': 'حذف أوامر التشغيل الخارجي',
   'nav.processing': 'قائمة: التشغيل الخارجي',
 
   'notifications.review_filter': 'تصفية ومراجعة الإشعارات',

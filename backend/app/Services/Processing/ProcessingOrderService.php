@@ -123,9 +123,6 @@ class ProcessingOrderService
     public function repairLineCategories(ProcessingOrder $order): void
     {
         $order->loadMissing('lines.category', 'sourceStock');
-        $atVendorStock = ProcessingWarehouseResolver::ensureMaterialsAtVendorStock();
-
-        $destStock = $order->destinationStock ?? $order->sourceStock;
 
         foreach ($order->lines as $line) {
             $picked = $line->category;
@@ -134,28 +131,16 @@ class ProcessingOrderService
             }
 
             $source = $this->resolveSourceCategory($order, $picked);
-            $atVendor = $this->categoryResolver->resolveInStock($source, $atVendorStock);
-            $destCat = $destStock
-                ? $this->categoryResolver->resolveInStock($source, $destStock)
-                : null;
 
-            $dirty = false;
+            // لا نُنشئ صنفاً ظلّاً في «مواد لدى مندوب» — الكمية لدى المندوب تُتابع على سطر الأمر.
             if ((int) $line->category_id !== (int) $source->id) {
                 $line->category_id = $source->id;
-                $dirty = true;
-            }
-            if ((int) $line->at_vendor_category_id !== (int) $atVendor->id) {
-                $line->at_vendor_category_id = $atVendor->id;
-                $dirty = true;
-            }
-            if ($destCat && (int) $line->destination_category_id !== (int) $destCat->id) {
-                $line->destination_category_id = $destCat->id;
-                $dirty = true;
-            }
-
-            if ($dirty) {
+                $line->at_vendor_category_id = null;
                 $line->save();
                 $line->setRelation('category', $source);
+            } elseif ($line->at_vendor_category_id) {
+                $line->at_vendor_category_id = null;
+                $line->save();
             }
         }
     }
@@ -225,10 +210,6 @@ class ProcessingOrderService
 
     private function syncLines(ProcessingOrder $order, array $lines): void
     {
-        $atVendorStock = ProcessingWarehouseResolver::ensureMaterialsAtVendorStock();
-
-        $destStock = $order->destinationStock ?? $order->sourceStock;
-
         $sourceStock = $order->sourceStock ?? Stock::query()->find($order->source_stock_id);
         if (! $sourceStock) {
             $sourceStock = ProductionWarehouseResolver::rawMaterialsStock();
@@ -242,16 +223,11 @@ class ProcessingOrderService
 
             $orderedQty = (float) $row['ordered_qty'];
 
-            $atVendorCat = $this->categoryResolver->resolveInStock($sourceCategory, $atVendorStock);
-            $destCat = $destStock
-                ? $this->categoryResolver->resolveInStock($sourceCategory, $destStock)
-                : null;
-
             ProcessingOrderLine::query()->create([
                 'processing_order_id' => $order->id,
                 'category_id' => $sourceCategory->id,
-                'at_vendor_category_id' => $atVendorCat->id,
-                'destination_category_id' => $destCat?->id,
+                'at_vendor_category_id' => null,
+                'destination_category_id' => null,
                 'ordered_qty' => $orderedQty,
                 'expected_service_amount' => (float) ($row['expected_service_amount'] ?? 0),
                 'notes' => $row['notes'] ?? null,

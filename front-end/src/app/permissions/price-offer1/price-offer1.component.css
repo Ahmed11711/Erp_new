@@ -68,6 +68,16 @@ hr{
   white-space: nowrap;
 }
 
+.req {
+  color: #ffb3b3;
+  font-weight: 700;
+}
+
+.quote.is-invalid {
+  border-bottom: 2px solid #ff6b6b !important;
+  background-color: rgba(255, 107, 107, 0.15);
+}
+
 /* PDF-specific Arabic text handling */
 .pdf-arabic-fix {
   direction: rtl !important;

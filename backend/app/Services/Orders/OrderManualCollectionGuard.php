@@ -28,12 +28,37 @@ final class OrderManualCollectionGuard
     }
 
     /**
-     * هل يُسمح بـ «تحصيل الطلب» (COD على الشحن و/أو ذمة شركة تحصيل مثل Paymob)؟
+     * تحصيل مباشر من عميل الشركة (عروض أسعار / بدون شركة شحن) — الذمة على العميل وليس على المندوب.
+     */
+    public function allowsCustomerCompanyDirectCollect(Order $order): bool
+    {
+        if ($order->customer_type !== 'شركة') {
+            return false;
+        }
+
+        $order->loadMissing('order_details');
+        $hasShippingCompany = (int) ($order->order_details?->shipping_company_id
+            ?? $order->order_details?->shipping_provider_id
+            ?? 0) > 0;
+
+        if ($hasShippingCompany) {
+            return false;
+        }
+
+        return ! empty($order->offer_id)
+            || ! empty($order->offer_debt_posted)
+            || round((float) ($order->net_total ?? 0), 2) > 0.009;
+    }
+
+    /**
+     * هل يُسمح بـ «تحصيل الطلب» (COD على الشحن و/أو ذمة شركة تحصيل مثل Paymob
+     * و/أو تحصيل مباشر من عميل الشركة)؟
      */
     public function allowsManualOrderCollection(Order $order): bool
     {
         return $this->allowsManualShippingCollection($order)
-            || $this->openCollectionReceivableAmount($order) > 0.009;
+            || $this->openCollectionReceivableAmount($order) > 0.009
+            || $this->allowsCustomerCompanyDirectCollect($order);
     }
 
     /** المبلغ الإجمالي المتوقع عند تحصيل الطلب من الواجهة */
@@ -52,6 +77,16 @@ final class OrderManualCollectionGuard
     {
         $order->loadMissing('order_details');
         $od = $order->order_details;
+
+        // بدون شركة شحن لا يوجد COD على المندوب — التحصيل من العميل مباشرة
+        $hasShippingCompany = (int) ($od?->shipping_company_id ?? $od?->shipping_provider_id ?? 0) > 0;
+        if ($order->customer_type === 'شركة' && ! $hasShippingCompany) {
+            if ($od?->shipping_receivable_amount !== null) {
+                return round(max(0, (float) $od->shipping_receivable_amount), 2);
+            }
+
+            return 0.0;
+        }
 
         if ($od?->shipping_receivable_amount !== null) {
             return round(max(0, (float) $od->shipping_receivable_amount), 2);
@@ -194,6 +229,11 @@ final class OrderManualCollectionGuard
     {
         if (! $this->allowsManualOrderCollection($order)) {
             return $this->manualCollectionBlockedMessage($order);
+        }
+
+        // تحصيل من عميل الشركة مباشرة — لا يتطلب مستحقات شحن/مندوب
+        if ($this->allowsCustomerCompanyDirectCollect($order)) {
+            return null;
         }
 
         $openCollection = $this->openCollectionReceivableAmount($order);

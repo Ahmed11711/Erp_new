@@ -30,8 +30,10 @@ class TreeAccountController extends BaseController
     }
 
     /**
-     * تسوية رصيد حساب شجري عبر قيد يومي مع حساب مقابل (قيد مزدوج + وصف تدقيق).
-     * body: target_balance, counter_account_id, reason?, date?
+     * تعديل/تسوية رصيد حساب شجري عبر قيد يومي مع حساب مقابل (قيد مزدوج + وصف تدقيق).
+     * body: target_balance, counter_account_id, reason?, date?, mode?
+     *   mode=current  (افتراضي): يجعل الرصيد الحالي الكلي = المستهدف (الفرق من كل القيود).
+     *   mode=opening : رصيد افتتاحي بتاريخ — يجعل الرصيد عند التاريخ = المستهدف والعمليات اللاحقة تمشي فوقه.
      */
     public function balanceAdjustment(Request $request, int $id): JsonResponse
     {
@@ -40,10 +42,17 @@ class TreeAccountController extends BaseController
             'counter_account_id' => 'required|integer|exists:tree_accounts,id',
             'reason' => 'nullable|string|max:2000',
             'date' => 'nullable|date',
+            'mode' => 'nullable|in:current,opening',
         ]);
 
         if ($validator->fails()) {
             return $this->errorResponse($validator->errors()->first(), 422);
+        }
+
+        $mode = $request->input('mode', 'current');
+
+        if ($mode === 'opening' && ! $request->filled('date')) {
+            return $this->errorResponse('تاريخ الرصيد الافتتاحي مطلوب.', 422);
         }
 
         $account = $this->repository->find($id);
@@ -60,6 +69,30 @@ class TreeAccountController extends BaseController
         $date = $request->input('date') ? \Carbon\Carbon::parse($request->input('date'))->format('Y-m-d') : now()->format('Y-m-d');
 
         try {
+            if ($mode === 'opening') {
+                $result = $service->setOpeningBalance(
+                    $account,
+                    (float) $request->target_balance,
+                    $counter,
+                    $request->input('reason'),
+                    $date,
+                    (int) auth()->id()
+                );
+
+                return $this->successResponse(
+                    [
+                        'daily_entry' => $result['daily_entry'],
+                        'prior_net_before_date' => $result['prior_net'],
+                        'delta_posted' => $result['delta'],
+                        'target_balance' => $result['target_balance'],
+                        'replaced_previous' => $result['replaced_previous'],
+                    ],
+                    $result['replaced_previous']
+                        ? 'تم تحديث الرصيد الافتتاحي (استبدال القيد السابق) بتاريخ ' . $date
+                        : 'تم تسجيل الرصيد الافتتاحي كقيد يومي بتاريخ ' . $date
+                );
+            }
+
             $result = $service->adjustToTarget(
                 $account,
                 (float) $request->target_balance,
@@ -87,6 +120,21 @@ class TreeAccountController extends BaseController
             ],
             'تم تسجيل تسوية الرصيد كقيد يومي بنجاح'
         );
+    }
+
+    /**
+     * معلومات الرصيد الافتتاحي المسجّل حالياً للحساب (للعرض قبل التعديل).
+     */
+    public function openingBalanceInfo(int $id): JsonResponse
+    {
+        $account = $this->repository->find($id);
+        if (!$account) {
+            return $this->errorResponse('Record not found', 404);
+        }
+
+        $info = app(ManualBalanceAdjustmentService::class)->getOpeningBalanceInfo($account);
+
+        return $this->successResponse($info, 'ok');
     }
 
     /**

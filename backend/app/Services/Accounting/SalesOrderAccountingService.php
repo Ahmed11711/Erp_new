@@ -184,6 +184,18 @@ class SalesOrderAccountingService
 
     private function writeEntries(Order $order, bool $skipPrepaid = false): void
     {
+        // طلبات محوّلة من عروض أسعار: المديونية وإيراد المبيعات رُحّلا مسبقاً على العرض
+        // (OfferDebtAccountingService بدفعة OFFER-*). لا نكرّر قيد ORD-* هنا وإلا تُضاعف
+        // ذمة العميل والإيراد في الشجرة.
+        if (! empty($order->offer_debt_posted)) {
+            Log::info('SalesOrderAccountingService: skipped ORD invoice recognition for offer-converted order', [
+                'order_id' => $order->id,
+                'offer_id' => $order->offer_id,
+            ]);
+
+            return;
+        }
+
         $customerAccount = $this->resolveCustomerAccount($order);
         if (!$customerAccount) {
             Log::warning('SalesOrderAccountingService: cannot resolve customer account', [

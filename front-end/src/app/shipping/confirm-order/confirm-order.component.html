@@ -23,10 +23,11 @@
     <div class="form-group col-md-3">
       <div class="form-group">
         <div class="form-group ">
-          <select class="form-control" name="line" ngModel required #line="ngModel">
-            <option selected disabled value=""> خط التوزيع</option>
+          <select class="form-control" name="line" ngModel [required]="!isOfferOrder" #line="ngModel">
+            <option selected disabled value="">{{ isOfferOrder ? 'خط التوزيع (اختياري)' : 'خط التوزيع' }}</option>
             <option *ngFor="let item of lines" value="{{item.id}}">{{item.name}}</option>
           </select>
+          <small class="text-muted" *ngIf="isOfferOrder">اختياري — الذمة على العميل وليس على خط الشحن</small>
         </div>
       </div>
     </div>
@@ -58,7 +59,7 @@
 
   <div class="form-group text-center">
     <button  type="submit" class="btn btn-success px-4 py-3"
-      [disabled]="confirm.invalid || !dateSelected">تاكيد</button>
+      [disabled]="(!isOfferOrder && confirm.invalid) || !dateSelected">تاكيد</button>
 
   </div>
 </form>

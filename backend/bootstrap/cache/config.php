@@ -907,6 +907,23 @@
         1 => 'orders.view',
       ),
     ),
+    'offer_convert_to_order' => 
+    array (
+      'departments' => 
+      array (
+        0 => 'Admin',
+        1 => 'Data Entry',
+        2 => 'Customer Service',
+        3 => 'Corparates',
+        4 => 'Shipping Management',
+      ),
+      'permissions' => 
+      array (
+        0 => 'orders.convert_from_offer',
+        1 => 'nav.receipts.quotes',
+        2 => 'orders.create',
+      ),
+    ),
     'review_temp' => 
     array (
       'departments' => 

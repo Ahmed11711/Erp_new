@@ -211,11 +211,13 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['permission:nav.shipping.accounts_report|system.rbac'])->group(function () {
         Route::get('reports/shipping-accounts', [App\Http\Controllers\ShippingAccountingReportController::class, 'accountsSummary']);
         Route::get('reports/shipping-accounts/{id}/statement', [App\Http\Controllers\ShippingAccountingReportController::class, 'companyStatement']);
+        Route::post('reports/shipping-accounts/{id}/settle-with-shipping', [App\Http\Controllers\ShippingAccountingReportController::class, 'settleWithShipping']);
         Route::get('reports/shipping-accounts/pending-orders', [App\Http\Controllers\ShippingAccountingReportController::class, 'pendingOrders']);
         Route::get('reports/shipping-accounts/settlement-summary', [App\Http\Controllers\ShippingAccountingReportController::class, 'settlementSummary']);
         Route::get('reports/collection-accounts', [App\Http\Controllers\CollectionAccountingReportController::class, 'accountsSummary']);
         Route::get('reports/collection-accounts/pending-orders', [App\Http\Controllers\CollectionAccountingReportController::class, 'pendingOrders']);
         Route::get('reports/collection-accounts/{id}/statement', [App\Http\Controllers\CollectionAccountingReportController::class, 'companyStatement']);
+        Route::post('reports/collection-accounts/{id}/settle-with-shipping', [App\Http\Controllers\CollectionAccountingReportController::class, 'settleWithShipping']);
     });
 
     Route::middleware([InventoryGlSyncApiAccess::class])->group(function () {
@@ -419,6 +421,7 @@ Route::middleware('auth')->group(function () {
         Route::get('orders/{id}', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'show'])->whereNumber('id');
         Route::put('orders/{id}', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'update'])->whereNumber('id');
         Route::post('orders/{id}/approve', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'approve'])->whereNumber('id');
+        Route::delete('orders/{id}', [\App\Http\Controllers\Processing\ProcessingOrderController::class, 'destroy'])->whereNumber('id');
 
         Route::get('dispatches', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'index']);
         Route::post('dispatches', [\App\Http\Controllers\Processing\ProcessingDispatchController::class, 'store']);
@@ -696,7 +699,18 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware(['order.profile:offer_crud'])->group(function () {
+        Route::post('offer/{id}/link-client', [App\Http\Controllers\OffersController::class, 'linkCustomerCompany']);
+        Route::post('offer/{id}/create-and-link-client', [App\Http\Controllers\OffersController::class, 'createAndLinkCustomerCompany']);
+        Route::post('offer/{id}/sync-debt-gl', [App\Http\Controllers\OffersController::class, 'syncDebtGl']);
+        Route::get('offer/{id}/product-gaps', [App\Http\Controllers\OffersController::class, 'productGaps']);
+        Route::post('offer/{id}/create-missing-categories', [App\Http\Controllers\OffersController::class, 'createMissingCategories']);
+        Route::post('offer/{id}/link-matched-category', [App\Http\Controllers\OffersController::class, 'linkMatchedCategory']);
+        Route::post('offer/{id}/clear-matched-category', [App\Http\Controllers\OffersController::class, 'clearMatchedCategory']);
         Route::apiResource('offer', App\Http\Controllers\OffersController::class);
+    });
+
+    Route::middleware(['order.profile:offer_convert_to_order'])->group(function () {
+        Route::post('offer/{id}/convert-to-order', [App\Http\Controllers\OffersController::class, 'convertToOrder']);
     });
 
     Route::middleware(['order.profile:review_temp'])->group(function () {
@@ -719,6 +733,7 @@ Route::middleware('auth')->group(function () {
     Route::get('transactions/by-customer-order/search', [OrdersController::class, 'allUserUnique']);
     Route::get('transactions/by-customer-order/detailed', [TransactionController::class, 'index']);
     Route::middleware(['permission:finance.tree_account.balance_adjustment|system.rbac'])->group(function () {
+        Route::get('tree_accounts/{id}/opening-balance', [TreeAccountController::class, 'openingBalanceInfo']);
         Route::post('tree_accounts/{id}/balance-adjustment', [TreeAccountController::class, 'balanceAdjustment']);
         Route::post('tree_accounts/bulk-balance-adjustment', [TreeAccountController::class, 'bulkBalanceAdjustment']);
     });

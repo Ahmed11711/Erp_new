@@ -175,29 +175,36 @@ class OrderFulfillmentController extends Controller
 
         $order = Order::with('order_details')->findOrFail($id);
         $preferred = LiabilityHolderType::from($data['to_holder_type']);
-        $resolved = $this->liabilityTransfer->resolveManualTransferHolder(
-            $order,
-            $preferred,
-            (int) $data['to_holder_id'],
-        );
-        if (! $resolved) {
-            $message = $preferred === LiabilityHolderType::CollectionCompany
-                ? 'تعذر تحديد شركة التحصيل. اختر شركة تحصيل من القائمة أو راجع ربط Paymob/Shopify بشركات التحصيل.'
-                : 'حدد جهة الشحن أو المندوب أولاً من شاشة الشحن.';
-
-            return response()->json(['message' => $message], 422);
-        }
-
-        [$holder, $holderId] = $resolved;
 
         try {
-            $result = $this->liabilityTransfer->transfer(
-                $order,
-                $holder,
-                $holderId,
-                isset($data['amount']) ? (float) $data['amount'] : null,
-                $data['reason'] ?? null,
-            );
+            // اسمح باختيار شركة مختلفة عن المرتبطة بالطلب: نطبّقها على الطلب ثم ننقل الذمة
+            // في معاملة واحدة (يُلغى تغيير الشركة إن فشل النقل).
+            $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $preferred, $data) {
+                $this->liabilityTransfer->applyChosenHolder($order, $preferred, (int) $data['to_holder_id']);
+
+                $resolved = $this->liabilityTransfer->resolveManualTransferHolder(
+                    $order,
+                    $preferred,
+                    (int) $data['to_holder_id'],
+                );
+                if (! $resolved) {
+                    throw new \RuntimeException(
+                        $preferred === LiabilityHolderType::CollectionCompany
+                            ? 'تعذر تحديد شركة التحصيل. اختر شركة تحصيل من القائمة أو راجع ربط Paymob/Shopify بشركات التحصيل.'
+                            : 'حدد جهة الشحن أو المندوب أولاً من شاشة الشحن.'
+                    );
+                }
+
+                [$holder, $holderId] = $resolved;
+
+                return $this->liabilityTransfer->transfer(
+                    $order,
+                    $holder,
+                    $holderId,
+                    isset($data['amount']) ? (float) $data['amount'] : null,
+                    $data['reason'] ?? null,
+                );
+            });
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

@@ -6,6 +6,7 @@ use App\Enums\InventoryMovementType;
 use App\Enums\ProcessingDocumentStatus;
 use App\Enums\ProcessingOrderStatus;
 use App\Models\Category;
+use App\Models\CategoryCostHistory;
 use App\Models\ProcessingMaterialBalance;
 use App\Models\ProcessingOrder;
 use App\Models\ProcessingOrderLine;
@@ -70,11 +71,21 @@ class ProcessingReceiptService
                     throw new \InvalidArgumentException('يجب إدخال كمية مستلمة للسطر #' . $orderLine->id);
                 }
 
-                if ($total > $orderLine->qtyAtVendor() + 0.000001) {
-                    throw new \InvalidArgumentException('الكمية المستلمة أكبر من المتاح لدى المعالج للسطر #' . $orderLine->id);
+                if ($good <= 0) {
+                    throw new \InvalidArgumentException('أدخل الكمية المستلمة (الجيدة) للسطر #' . $orderLine->id);
                 }
 
-                $sourceCat = Category::query()->findOrFail($orderLine->category_id);
+                if ($total > $orderLine->qtyAtVendor() + 0.000001) {
+                    throw new \InvalidArgumentException('الكمية المستلمة + الهالك أكبر من المتاح لدى المعالج للسطر #' . $orderLine->id);
+                }
+
+                $sourceCat = Category::query()->find($orderLine->category_id);
+                if (! $sourceCat) {
+                    throw new \InvalidArgumentException(
+                        'صنف الصرف الأصلي غير موجود في قاعدة البيانات (#' . (int) $orderLine->category_id . ').'
+                    );
+                }
+
                 $destCat = $this->resolveReceiptDestination($row, $orderLine, $sourceCat, $destStock);
 
                 if ((int) $orderLine->destination_category_id !== (int) $destCat->id) {
@@ -85,19 +96,30 @@ class ProcessingReceiptService
 
                 $materialUnitCost = (float) ($orderLine->unit_material_cost ?? 0);
                 $allocatedService = $this->resolveAllocatedService($row, $orderLine, $good);
+                $remainingQty = max(0.0, $orderLine->qtyAtVendor() - $total);
+                $suggestedUnitCost = $this->computeSuggestedUnitCost(
+                    $materialUnitCost,
+                    $good,
+                    $damaged,
+                    $allocatedService,
+                    $remainingQty
+                );
+                $costMode = $this->resolveCostApplyMode($row);
                 [$destUnitCost, $destSellPrice] = $this->resolveDestPricing(
                     $row,
                     $destCat,
-                    $materialUnitCost,
-                    $allocatedService,
-                    $good
+                    $suggestedUnitCost,
+                    $costMode
                 );
+
+                $priorQty = (float) ($destCat->quantity ?? 0);
+                $priorUnit = CategoryInventoryCostService::averageCostForCategoryIssue((int) $destCat->id);
 
                 ProcessingReceiptLine::query()->create([
                     'processing_receipt_id' => $receipt->id,
                     'processing_order_line_id' => $orderLine->id,
                     'category_id' => $orderLine->category_id,
-                    'at_vendor_category_id' => $orderLine->at_vendor_category_id,
+                    'at_vendor_category_id' => null,
                     'destination_category_id' => $destCat->id,
                     'good_qty' => $good,
                     'damaged_qty' => $damaged,
@@ -106,12 +128,54 @@ class ProcessingReceiptService
                     'allocated_service_cost' => $allocatedService,
                     'dest_unit_cost' => $destUnitCost,
                     'dest_sell_price' => $destSellPrice,
+                    'cost_apply_mode' => $costMode,
+                    'suggested_unit_cost' => $suggestedUnitCost,
+                    'prior_unit_cost' => $priorUnit,
+                    'prior_qty' => $priorQty,
                     'rejection_return_category_id' => $returnCat->id,
                 ]);
             }
 
             return $receipt->fresh(['lines']);
         });
+    }
+
+    /**
+     * تكلفة وحدة الصنف المجهز = (تكلفة مادة المستلم + مادة الهالك + الخدمة المخصّصة) ÷ الكمية الجيّدة.
+     *
+     * الهالك يُرسمَل داخل تكلفة الصنف المستلم (خسارة طبيعية)، والخدمة موزّعة نسبياً على
+     * الكمية الجيّدة أصلاً، لذا المقام هو الكمية الجيّدة فقط. هذا يضمن اتزان القيود:
+     *   فرق التقييم = قيمة مادة الهالك، وصافي حساب الهالك = صفر، وتفريغ «مواد لدى المندوب» كاملاً.
+     * المعامل $remainingQty محفوظ للتوافق فقط ولا يدخل في الحساب.
+     */
+    public function computeSuggestedUnitCost(
+        float $materialUnitCost,
+        float $goodQty,
+        float $wasteQty,
+        float $allocatedService,
+        float $remainingQty = 0.0
+    ): float {
+        if ($goodQty <= 0.0000001) {
+            return 0.0;
+        }
+
+        $consumedQty = max(0.0, $goodQty) + max(0.0, $wasteQty);
+        $total = ($consumedQty * max(0.0, $materialUnitCost)) + max(0.0, $allocatedService);
+
+        return round($total / $goodQty, 4);
+    }
+
+    private function resolveCostApplyMode(array $row): string
+    {
+        $mode = (string) ($row['cost_apply_mode'] ?? ProcessingReceiptLine::COST_MODE_WEIGHTED_AVERAGE);
+        if (! in_array($mode, [
+            ProcessingReceiptLine::COST_MODE_WEIGHTED_AVERAGE,
+            ProcessingReceiptLine::COST_MODE_OVERWRITE,
+        ], true)) {
+            return ProcessingReceiptLine::COST_MODE_WEIGHTED_AVERAGE;
+        }
+
+        return $mode;
     }
 
     /**
@@ -133,11 +197,21 @@ class ProcessingReceiptService
         }
 
         if (! empty($row['destination_category_id'])) {
-            return Category::query()->findOrFail((int) $row['destination_category_id']);
+            $picked = Category::query()->find((int) $row['destination_category_id']);
+            if (! $picked) {
+                throw new \InvalidArgumentException(
+                    'صنف الاستلام المختار غير موجود (#' . (int) $row['destination_category_id'] . '). اختر صنفاً آخر من القائمة.'
+                );
+            }
+
+            return $picked;
         }
 
         if ($orderLine->destination_category_id) {
-            return Category::query()->findOrFail($orderLine->destination_category_id);
+            $stored = Category::query()->find($orderLine->destination_category_id);
+            if ($stored) {
+                return $stored;
+            }
         }
 
         return $this->categoryResolver->resolveInStock($sourceCat, $destStock);
@@ -172,18 +246,13 @@ class ProcessingReceiptService
     }
 
     /**
-     * The destination item's unit cost & selling price are set manually by the user
-     * (no weighted average). If not supplied we keep the item's current values, and
-     * for a brand-new product fall back to (material + processing) per unit as a hint.
-     *
      * @return array{0: float, 1: ?float}  [unitCost, sellPrice|null]
      */
     private function resolveDestPricing(
         array $row,
         Category $destCat,
-        float $materialUnitCost,
-        float $allocatedService,
-        float $goodQty
+        float $suggestedUnitCost,
+        string $costMode
     ): array {
         $hasUnit = isset($row['dest_unit_cost']) && $row['dest_unit_cost'] !== null && $row['dest_unit_cost'] !== '';
         $hasSell = isset($row['dest_sell_price']) && $row['dest_sell_price'] !== null && $row['dest_sell_price'] !== '';
@@ -191,12 +260,19 @@ class ProcessingReceiptService
         if ($hasUnit) {
             $unitCost = round(max(0.0, (float) $row['dest_unit_cost']), 4);
         } else {
-            $current = (float) ($destCat->unit_price ?? 0);
-            if ($current > 0.00001) {
-                $unitCost = round($current, 4);
-            } else {
-                $servicePerUnit = $goodQty > 0 ? $allocatedService / $goodQty : 0.0;
-                $unitCost = round($materialUnitCost + $servicePerUnit, 4);
+            $unitCost = $suggestedUnitCost;
+            if ($costMode === ProcessingReceiptLine::COST_MODE_WEIGHTED_AVERAGE) {
+                $priorQty = (float) ($destCat->quantity ?? 0);
+                $priorUnit = CategoryInventoryCostService::averageCostForCategoryIssue((int) $destCat->id);
+                // عند عدم إدخال تكلفة يدوياً تُحفظ تكلفة طبقة الاستلام المقترحة؛
+                // المتوسط المرجّح يُحسب عند الترحيل على رصيد الصنف.
+                if ($priorQty > 0.0000001 && $priorUnit > 0 && $suggestedUnitCost <= 0) {
+                    $unitCost = round($priorUnit, 4);
+                }
+            }
+            if ($unitCost <= 0.00001) {
+                $current = CategoryInventoryCostService::averageCostForCategoryIssue((int) $destCat->id);
+                $unitCost = $current > 0 ? round($current, 4) : 0.0;
             }
         }
 
@@ -231,45 +307,90 @@ class ProcessingReceiptService
                 $destStockId = (int) (($line->destinationCategory->stock_id ?? null) ?: $receipt->destination_stock_id);
                 $destAccId = $resolveDestAcc($destStockId);
 
-                $atVendor = Category::query()->lockForUpdate()->findOrFail($line->at_vendor_category_id);
                 $unitCost = (float) $line->material_unit_cost;
+                $costMode = (string) ($line->cost_apply_mode ?: ProcessingReceiptLine::COST_MODE_WEIGHTED_AVERAGE);
 
                 if ((float) $line->good_qty > 0) {
                     $goodQty = (float) $line->good_qty;
-                    $materialValue = round($goodQty * $unitCost, 4);
+                    $wasteQty = (float) $line->damaged_qty;
+                    $materialGoodValue = round($goodQty * $unitCost, 4);
+                    $materialWasteValue = round($wasteQty * $unitCost, 4);
                     $serviceValue = round((float) $line->allocated_service_cost, 4);
 
                     $destCat = $line->destination_category_id
                         ? Category::query()->lockForUpdate()->findOrFail($line->destination_category_id)
                         : null;
 
-                    $manualUnitCost = (float) ($line->dest_unit_cost ?? 0);
-                    if ($manualUnitCost <= 0.00001) {
-                        $manualUnitCost = $goodQty > 0 ? round(($materialValue + $serviceValue) / $goodQty, 4) : 0.0;
+                    $priorQty = $destCat ? (float) ($destCat->quantity ?? 0) : 0.0;
+                    $priorUnit = $destCat
+                        ? CategoryInventoryCostService::averageCostForCategoryIssue((int) $destCat->id)
+                        : 0.0;
+
+                    $orderLineForQty = $line->orderLine;
+                    $availableBefore = $orderLineForQty ? (float) $orderLineForQty->qtyAtVendor() : ($goodQty + $wasteQty);
+                    $remainingQty = max(0.0, $availableBefore - $goodQty - $wasteQty - (float) $line->rejected_qty);
+
+                    $receiptUnitCost = (float) ($line->dest_unit_cost ?? 0);
+                    if ($receiptUnitCost <= 0.00001) {
+                        $receiptUnitCost = $this->computeSuggestedUnitCost(
+                            $unitCost,
+                            $goodQty,
+                            $wasteQty,
+                            $serviceValue,
+                            $remainingQty
+                        );
                     }
 
+                    $receiptLayerTotal = round($goodQty * $receiptUnitCost, 4);
+
+                    // المواد خرجت مسبقاً عند الصرف؛ هنا دخول للصنف المجهز فقط + قيد محاسبي من حساب لدى المندوب.
                     $invDelta = $this->receiveGoodQty(
-                        $atVendor,
                         $destCat,
                         $goodQty,
-                        $unitCost,
-                        $materialValue,
-                        $manualUnitCost,
+                        $receiptUnitCost,
+                        $receiptLayerTotal,
+                        $costMode,
                         $line->dest_sell_price !== null ? (float) $line->dest_sell_price : null,
                         $refType,
                         (int) $receipt->id,
                         $receipt->receipt_number
                     );
 
-                    // Fund the destination inventory increase from materials-at-vendor,
-                    // capitalize the processing fee, and route any difference (because the
-                    // user set the item cost manually) to the processing variance account
-                    // so the journal stays balanced and matches the inventory subledger.
-                    if ($materialValue > 0.00001) {
+                    if ($destCat) {
+                        $freshDest = Category::query()->lockForUpdate()->findOrFail($destCat->id);
+                        $line->prior_qty = $priorQty;
+                        $line->prior_unit_cost = $priorUnit;
+                        $line->suggested_unit_cost = $this->computeSuggestedUnitCost(
+                            $unitCost,
+                            $goodQty,
+                            $wasteQty,
+                            $serviceValue,
+                            $remainingQty
+                        );
+                        $line->resulting_unit_cost = CategoryInventoryCostService::averageCostForCategoryIssue((int) $freshDest->id);
+                        $line->dest_unit_cost = $receiptUnitCost;
+                        $line->cost_apply_mode = $costMode;
+                        $line->save();
+
+                        $this->writeCostHistory(
+                            $freshDest,
+                            $receipt,
+                            $line,
+                            $costMode,
+                            $goodQty,
+                            $receiptUnitCost,
+                            $receiptLayerTotal,
+                            $wasteQty,
+                            $materialWasteValue
+                        );
+                    }
+
+                    // تفريغ قيمة المواد الجيدة + رسملة المعالجة + فروق التقييم (تشمل تحميل الهالك على تكلفة الصنف).
+                    if ($materialGoodValue > 0.00001) {
                         $journalLegs[] = [
                             'debit_account_id' => $destAccId,
                             'credit_account_id' => $atVendorAccId,
-                            'amount' => $materialValue,
+                            'amount' => $materialGoodValue,
                             'description' => 'استلام — تفريغ قيمة المواد لدى المندوب',
                         ];
                     }
@@ -281,7 +402,7 @@ class ProcessingReceiptService
                             'description' => 'رسملة تكلفة المعالجة على الصنف المستلم',
                         ];
                     }
-                    $variance = round($invDelta - $materialValue - $serviceValue, 4);
+                    $variance = round($invDelta - $materialGoodValue - $serviceValue, 4);
                     if ($variance > 0.00001) {
                         $journalLegs[] = [
                             'debit_account_id' => $destAccId,
@@ -301,19 +422,22 @@ class ProcessingReceiptService
 
                 if ((float) $line->rejected_qty > 0) {
                     $returnCat = Category::query()->lockForUpdate()->findOrFail($line->rejection_return_category_id);
-                    $this->processQtyLeg(
-                        $atVendor,
+                    $rejQty = (float) $line->rejected_qty;
+                    $amt = round($rejQty * $unitCost, 4);
+                    // إرجاع للمخزن المصدر (كانت المواد خارجة عند الصرف).
+                    $this->ledger->recordInbound(
                         $returnCat,
-                        (float) $line->rejected_qty,
-                        $unitCost,
-                        0,
-                        InventoryMovementType::SubcontractReceiptRejectedOut,
                         InventoryMovementType::SubcontractReceiptRejectedIn,
+                        $rejQty,
+                        $unitCost,
+                        $amt,
+                        true,
                         $refType,
                         (int) $receipt->id,
-                        $receipt->receipt_number . ' (مرفوض)'
+                        $receipt->receipt_number . ' (مرفوض)',
+                        null,
+                        auth()->user()?->name
                     );
-                    $amt = round((float) $line->rejected_qty * $unitCost, 4);
                     $journalLegs[] = [
                         'debit_account_id' => $sourceAccId,
                         'credit_account_id' => $atVendorAccId,
@@ -325,24 +449,12 @@ class ProcessingReceiptService
                 if ((float) $line->damaged_qty > 0) {
                     $damagedQty = (float) $line->damaged_qty;
                     $tc = round($damagedQty * $unitCost, 4);
-                    $this->ledger->recordOutbound(
-                        $atVendor,
-                        InventoryMovementType::SubcontractReceiptDamagedOut,
-                        $damagedQty,
-                        $unitCost,
-                        $tc,
-                        true,
-                        $refType,
-                        (int) $receipt->id,
-                        'تالف — ' . $receipt->receipt_number,
-                        null,
-                        auth()->user()?->name
-                    );
+                    // لا حركة مخزون للهالك — المادة خرجت عند الصرف؛ قيد مصروف فقط.
                     $journalLegs[] = [
                         'debit_account_id' => $scrapAccId,
                         'credit_account_id' => $atVendorAccId,
                         'amount' => $tc,
-                        'description' => 'كمية تالفة من التشغيل الخارجي',
+                        'description' => 'كمية هالكة من التشغيل الخارجي',
                     ];
                 }
 
@@ -354,7 +466,7 @@ class ProcessingReceiptService
 
                 $bal = ProcessingMaterialBalance::query()->where([
                     'processing_order_id' => $receipt->processing_order_id,
-                    'at_vendor_category_id' => $line->at_vendor_category_id,
+                    'category_id' => $line->category_id,
                 ])->first();
                 if ($bal) {
                     $bal->qty_at_vendor = max(0, (float) $bal->qty_at_vendor - ((float) $line->good_qty + (float) $line->damaged_qty + (float) $line->rejected_qty));
@@ -385,21 +497,16 @@ class ProcessingReceiptService
     }
 
     /**
-     * Receive the good (processed) quantity onto the destination product:
-     *  - material leaves "materials at vendor" (quantity + valuation down at material cost),
-     *  - the destination item quantity is increased,
-     *  - the destination item is revalued to the user's manual unit cost & selling price
-     *    (overwrite — NO weighted average).
+     * Receive the good quantity onto the destination product using weighted average or overwrite.
      *
      * @return float  Change in the destination item's inventory value (total_price delta).
      */
     private function receiveGoodQty(
-        Category $atVendor,
         ?Category $dest,
         float $qty,
-        float $materialUnitCost,
-        float $materialValue,
-        float $manualUnitCost,
+        float $receiptUnitCost,
+        float $receiptLayerTotal,
+        string $costMode,
         ?float $manualSellPrice,
         string $refType,
         int $refId,
@@ -409,30 +516,51 @@ class ProcessingReceiptService
             return 0.0;
         }
 
-        $this->ledger->recordOutbound(
-            $atVendor,
-            InventoryMovementType::SubcontractReceiptGoodOut,
-            $qty,
-            $materialUnitCost,
-            $materialValue,
-            true,
-            $refType,
-            $refId,
-            $label,
-            null,
-            auth()->user()?->name
-        );
-
         $priorTotal = (float) ($dest->total_price ?? 0);
-        $receivedValue = round($qty * $manualUnitCost, 4);
 
-        // Add quantity only; valuation is set explicitly below (no weighted average).
+        if ($costMode === ProcessingReceiptLine::COST_MODE_WEIGHTED_AVERAGE) {
+            // كمية فقط + إضافة قيمة طبقة الاستلام → متوسط مرجّح تلقائي.
+            $this->ledger->recordInbound(
+                $dest,
+                InventoryMovementType::SubcontractReceiptGoodIn,
+                $qty,
+                $receiptUnitCost,
+                $receiptLayerTotal,
+                true,
+                $refType,
+                $refId,
+                $label,
+                null,
+                auth()->user()?->name
+            );
+
+            $fresh = Category::query()->lockForUpdate()->findOrFail($dest->id);
+            $newQty = (float) $fresh->quantity;
+            $newTotal = (float) ($fresh->total_price ?? 0);
+            // ضمان اتساق unit_price بعد الحفظ (sync داخل ledger قد يقرأ قبل الحفظ).
+            if ($newQty > 0.0000001) {
+                $fresh->unit_price = round($newTotal / $newQty, 4);
+                $fresh->total_price = round($newTotal, 4);
+            } else {
+                $fresh->unit_price = round($receiptUnitCost, 4);
+                $fresh->total_price = 0;
+            }
+            if ($manualSellPrice !== null && $manualSellPrice > 0.00001) {
+                $fresh->category_price = round($manualSellPrice, 4);
+                $fresh->sell_total_price = round($manualSellPrice * $newQty, 4);
+            }
+            $fresh->save();
+
+            return round((float) $fresh->total_price - $priorTotal, 4);
+        }
+
+        // overwrite: كل الرصيد بسعر طبقة الاستلام الجديدة.
         $this->ledger->recordInbound(
             $dest,
             InventoryMovementType::SubcontractReceiptGoodIn,
             $qty,
-            $manualUnitCost,
-            $receivedValue,
+            $receiptUnitCost,
+            $receiptLayerTotal,
             false,
             $refType,
             $refId,
@@ -443,8 +571,8 @@ class ProcessingReceiptService
 
         $fresh = Category::query()->lockForUpdate()->findOrFail($dest->id);
         $newQty = (float) $fresh->quantity;
-        $fresh->unit_price = round($manualUnitCost, 4);
-        $fresh->total_price = round($manualUnitCost * $newQty, 4);
+        $fresh->unit_price = round($receiptUnitCost, 4);
+        $fresh->total_price = round($receiptUnitCost * $newQty, 4);
         if ($manualSellPrice !== null && $manualSellPrice > 0.00001) {
             $fresh->category_price = round($manualSellPrice, 4);
             $fresh->sell_total_price = round($manualSellPrice * $newQty, 4);
@@ -454,53 +582,53 @@ class ProcessingReceiptService
         return round((float) $fresh->total_price - $priorTotal, 4);
     }
 
-    private function processQtyLeg(
-        Category $from,
-        ?Category $to,
-        float $qty,
-        float $unitCost,
-        float $servicePerUnit,
-        InventoryMovementType $outType,
-        InventoryMovementType $inType,
-        string $refType,
-        int $refId,
-        string $label
+    private function writeCostHistory(
+        Category $dest,
+        ProcessingReceipt $receipt,
+        ProcessingReceiptLine $line,
+        string $costMode,
+        float $goodQty,
+        float $receiptUnitCost,
+        float $receiptLayerTotal,
+        float $wasteQty,
+        float $wasteCost
     ): void {
-        if ($qty <= 0 || ! $to) {
-            return;
-        }
+        $oldQty = (float) ($line->prior_qty ?? 0);
+        $oldUnit = (float) ($line->prior_unit_cost ?? 0);
+        $oldTotal = round($oldQty * $oldUnit, 4);
+        $newQty = (float) ($dest->quantity ?? 0);
+        $newUnit = (float) ($line->resulting_unit_cost ?? CategoryInventoryCostService::averageCostForCategoryIssue((int) $dest->id));
+        $newTotal = round((float) ($dest->total_price ?? ($newQty * $newUnit)), 4);
 
-        $materialTc = round($qty * $unitCost, 4);
-        $serviceTc = round($qty * $servicePerUnit, 4);
-        $inboundTc = $materialTc + $serviceTc;
-        $inboundUnit = $qty > 0 ? $inboundTc / $qty : 0;
+        $modeLabel = $costMode === ProcessingReceiptLine::COST_MODE_OVERWRITE
+            ? 'استبدال تكلفة الرصيد'
+            : 'متوسط مرجّح';
 
-        $this->ledger->recordOutbound(
-            $from,
-            $outType,
-            $qty,
-            $unitCost,
-            $materialTc,
-            true,
-            $refType,
-            $refId,
-            $label,
-            null,
-            auth()->user()?->name
-        );
-
-        $this->ledger->recordInbound(
-            $to,
-            $inType,
-            $qty,
-            $inboundUnit,
-            $inboundTc,
-            true,
-            $refType,
-            $refId,
-            $label,
-            null,
-            auth()->user()?->name
-        );
+        CategoryCostHistory::query()->create([
+            'category_id' => $dest->id,
+            'source_type' => 'processing_receipt',
+            'source_id' => $receipt->id,
+            'source_line_id' => $line->id,
+            'apply_mode' => $costMode,
+            'old_qty' => $oldQty,
+            'old_unit_cost' => $oldUnit,
+            'old_total_cost' => $oldTotal,
+            'receipt_qty' => $goodQty,
+            'receipt_unit_cost' => $receiptUnitCost,
+            'receipt_total_cost' => $receiptLayerTotal,
+            'new_qty' => $newQty,
+            'new_unit_cost' => $newUnit,
+            'new_total_cost' => $newTotal,
+            'waste_qty' => $wasteQty,
+            'waste_cost' => $wasteCost,
+            'notes' => sprintf(
+                'إذن استلام %s — %s | كانت التكلفة %s وأصبحت %s',
+                $receipt->receipt_number,
+                $modeLabel,
+                number_format($oldUnit, 4, '.', ''),
+                number_format($newUnit, 4, '.', '')
+            ),
+            'created_by' => auth()->id(),
+        ]);
     }
 }

@@ -1,9 +1,12 @@
 import { Injectable } from '@angular/core';
+import * as html2pdf from 'html2pdf.js';
 import { formatDdMmYyyy, isoStringToDate } from 'src/app/shared/date/date-utils';
 
 export interface OrderInvoicePrintOptions {
   showInvoiceDate?: boolean;
   size?: 'A4' | 'A3' | string;
+  /** Skip auto browser-print dialog (useful when only downloading). */
+  autoPrint?: boolean;
 }
 
 @Injectable({
@@ -18,6 +21,7 @@ export class OrderInvoicePrintService {
 
     const showInvoiceDate = options.showInvoiceDate !== false;
     const size = options.size || 'A4';
+    const autoPrint = options.autoPrint !== false;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       return false;
@@ -28,9 +32,65 @@ export class OrderInvoicePrintService {
     printWindow.document.write(html);
     printWindow.document.close();
 
-    void this.triggerPrintWhenReady(printWindow);
+    if (autoPrint) {
+      void this.triggerPrintWhenReady(printWindow);
+    }
 
     return true;
+  }
+
+  /** Save invoice(s) as a PDF file download. */
+  async downloadPdf(orders: any[], options: OrderInvoicePrintOptions = {}): Promise<void> {
+    if (!orders?.length) {
+      throw new Error('No orders to export');
+    }
+
+    const showInvoiceDate = options.showInvoiceDate !== false;
+    const size = options.size || 'A4';
+    const pages = this.buildInvoicePages(orders, showInvoiceDate, size);
+    const host = document.createElement('div');
+    host.style.cssText =
+      'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;z-index:-1;';
+    host.innerHTML = `<div id="capture" dir="ltr">${pages}</div>`;
+    document.body.appendChild(host);
+
+    const firstId = orders[0]?.id || 'invoice';
+    const filename =
+      orders.length === 1 ? `Invoice-${firstId}.pdf` : `Invoices-${orders.length}.pdf`;
+
+    const worker = (html2pdf as any).default
+      ? (html2pdf as any).default()
+      : (html2pdf as any)();
+
+    try {
+      const images = Array.from(host.querySelectorAll('img'));
+      await Promise.all(
+        images.map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete) {
+                resolve();
+                return;
+              }
+              img.addEventListener('load', () => resolve(), { once: true });
+              img.addEventListener('error', () => resolve(), { once: true });
+            })
+        )
+      );
+      await worker
+        .set({
+          margin: 8,
+          filename,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: size === 'A3' ? 'a3' : 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] },
+        })
+        .from(host.querySelector('#capture') || host)
+        .save();
+    } finally {
+      host.remove();
+    }
   }
 
   private async triggerPrintWhenReady(printWindow: Window): Promise<void> {

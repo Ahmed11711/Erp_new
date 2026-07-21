@@ -246,6 +246,9 @@ class CustomerCompanyController extends Controller
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
         $search = customerCompany::query()->with('treeAccount:id,code,name');
+        if ($request->filled('id')) {
+            $search->where('id', (int) $request->id);
+        }
         if($request->has('name')){
             $search->where('name', 'like' ,  '%'.$request->name.'%');
         }

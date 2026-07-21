@@ -41,4 +41,33 @@ final class ArabicTextNormalizer
 
         return mb_strtolower($s, 'UTF-8');
     }
+
+    /**
+     * مقارنة أسماء قد تختلف فقط بمسافات ناقصة/زائدة
+     * مثال: "betro waterfloat" ≈ "betro water float"
+     */
+    public static function compact(string $raw): string
+    {
+        $normalized = self::normalize($raw);
+
+        return preg_replace('/\s+/u', '', $normalized) ?? $normalized;
+    }
+
+    public static function namesMatch(string $a, string $b): bool
+    {
+        if ($a === '' || $b === '') {
+            return false;
+        }
+
+        $na = self::normalize($a);
+        $nb = self::normalize($b);
+        if ($na !== '' && $na === $nb) {
+            return true;
+        }
+
+        $ca = self::compact($a);
+        $cb = self::compact($b);
+
+        return $ca !== '' && $ca === $cb;
+    }
 }

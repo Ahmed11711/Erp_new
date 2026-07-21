@@ -75,6 +75,16 @@ hr{
   border-bottom: 1px solid #ccc;
 }
 
+.req {
+  color: #c0392b;
+  font-weight: 700;
+}
+
+.quote.is-invalid {
+  border-bottom: 2px solid #c0392b !important;
+  background-color: rgba(192, 57, 43, 0.08);
+}
+
 /* PDF-specific Arabic text handling */
 .pdf-arabic-fix {
   direction: rtl !important;

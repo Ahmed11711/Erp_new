@@ -84,6 +84,10 @@ return [
         'departments' => ['Admin', 'Data Entry', 'Shipping Management', 'Customer Service', 'Corparates'],
         'permissions' => ['nav.receipts.quotes', 'orders.view'],
     ],
+    'offer_convert_to_order' => [
+        'departments' => ['Admin', 'Data Entry', 'Customer Service', 'Corparates', 'Shipping Management'],
+        'permissions' => ['orders.convert_from_offer', 'nav.receipts.quotes', 'orders.create'],
+    ],
     'review_temp' => [
         'departments' => ['Admin', 'Data Entry', 'Review Management'],
         'permissions' => ['notifications.review_filter', 'orders.view', 'system.rbac'],

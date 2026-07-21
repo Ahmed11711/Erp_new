@@ -49,6 +49,8 @@ export class ReceivePaymentComponent implements OnInit {
   /** يُمرَّر من تقرير الذمم لإغلاق سطور الطلب عند قبض المبلغ */
   settledOrderIds: number[] = [];
 
+  shippingExpenseAmount = 0;
+
   constructor(
     private paymentSourcesService: PaymentSourcesService,
     private voucherService: VoucherService,
@@ -151,6 +153,11 @@ export class ReceivePaymentComponent implements OnInit {
         this.voucher.amount = Math.round(a * 100) / 100;
       }
     }
+    const shipAmt = params.get('shipping_amount');
+    if (shipAmt) {
+      const s = parseFloat(shipAmt);
+      this.shippingExpenseAmount = !isNaN(s) && s > 0 ? Math.round(s * 100) / 100 : 0;
+    }
     const note = params.get('note');
     if (note && note.trim() !== '') {
       this.voucher.notes = note;
@@ -192,6 +199,17 @@ export class ReceivePaymentComponent implements OnInit {
     if (list.some((x) => x.id === id)) {
       this.selectedSourceId = id;
     }
+  }
+
+  /** حقلا «مبلغ الطلب + مبلغ الشحن» يظهران عند القبض من شركة شحن/تحصيل. */
+  showShippingSplit(): boolean {
+    return this.fundDirection === 'receipt'
+      && (this.party === 'shipping_company' || this.party === 'collection_company');
+  }
+
+  toNumber(v: any): number {
+    const n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
   }
 
   onClientSearchChange(): void {
@@ -327,7 +345,14 @@ export class ReceivePaymentComponent implements OnInit {
       this.toast.warning('اختر شركة التحصيل');
       return;
     }
-    if (!this.voucher.amount || this.voucher.amount <= 0) {
+    const shippingExpense = this.showShippingSplit() ? this.toNumber(this.shippingExpenseAmount) : 0;
+    const productAmount = this.toNumber(this.voucher.amount);
+    if (this.showShippingSplit()) {
+      if (productAmount < 0 || shippingExpense < 0 || (productAmount + shippingExpense) <= 0) {
+        this.toast.warning('أدخل مبلغ الطلب و/أو مبلغ الشحن بشكل صحيح');
+        return;
+      }
+    } else if (!this.voucher.amount || this.voucher.amount <= 0) {
       this.toast.warning('أدخل مبلغاً صحيحاً');
       return;
     }
@@ -348,6 +373,9 @@ export class ReceivePaymentComponent implements OnInit {
       supplier_id: this.party === 'supplier' ? this.voucher.supplier_id : null,
       shipping_company_id: this.party === 'shipping_company' ? this.voucher.shipping_company_id : null,
       collection_company_id: this.party === 'collection_company' ? this.voucher.collection_company_id : null,
+      ...(this.showShippingSplit() && shippingExpense > 0
+        ? { shipping_expense_amount: shippingExpense }
+        : {}),
       ...((this.party === 'shipping_company' || this.party === 'collection_company') && this.settledOrderIds.length
         ? { settled_order_ids: this.settledOrderIds }
         : {})
@@ -369,6 +397,7 @@ export class ReceivePaymentComponent implements OnInit {
           notes: ''
         };
         this.settledOrderIds = [];
+        this.shippingExpenseAmount = 0;
         this.selectedSourceId = null;
         this.selectedClientKey = null;
         this.onPartyChange();

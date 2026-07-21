@@ -44,7 +44,11 @@ export class AccountingTreeComponent implements OnInit {
   counterSearch = '';
   /** حالة فتح قائمة الحساب المقابل المنسدلة */
   counterDropdownOpen = false;
+  /** معلومات الرصيد الافتتاحي المسجّل حالياً للحساب المفتوح */
+  openingInfo: { exists: boolean; date?: string; target_net?: number } | null = null;
+  loadingOpeningInfo = false;
   baForm = {
+    mode: 'current' as 'current' | 'opening',
     targetDisplay: 0,
     date: '',
     counterAccountId: null as number | null,
@@ -409,13 +413,54 @@ export class AccountingTreeComponent implements OnInit {
     this.counterSearch = '';
     this.counterDropdownOpen = false;
     this.balanceAccount = account;
+    this.openingInfo = null;
     this.baForm = {
+      mode: 'current',
       targetDisplay: Number(this.getDisplayBalance(account).toFixed(2)),
       date: this.todayYmd(),
       counterAccountId: null,
       reason: ''
     };
     this.showBalanceDialog = true;
+
+    this.loadingOpeningInfo = true;
+    this.treeAccountService.getOpeningBalanceInfo(account.id).subscribe({
+      next: (res) => {
+        this.openingInfo = res?.data ?? { exists: false };
+        this.loadingOpeningInfo = false;
+      },
+      error: () => {
+        this.openingInfo = { exists: false };
+        this.loadingOpeningInfo = false;
+      }
+    });
+  }
+
+  /** تبديل نوع العملية مع تعبئة القيم المناسبة */
+  setBalanceMode(mode: 'current' | 'opening'): void {
+    this.baForm.mode = mode;
+    const account = this.balanceAccount;
+    if (!account) {
+      return;
+    }
+    if (mode === 'opening' && this.openingInfo?.exists) {
+      this.baForm.date = this.openingInfo.date || this.todayYmd();
+      this.baForm.targetDisplay = Number((this.displaySign(account.type) * (this.openingInfo.target_net ?? 0)).toFixed(2));
+    } else if (mode === 'opening') {
+      this.baForm.date = this.todayYmd();
+      this.baForm.targetDisplay = 0;
+    } else {
+      this.baForm.date = this.todayYmd();
+      this.baForm.targetDisplay = Number(this.getDisplayBalance(account).toFixed(2));
+    }
+  }
+
+  /** تحويل صافي (مدين−دائن) إلى رصيد العرض حسب نوع الحساب المفتوح */
+  displayFromNet(net?: number): number {
+    if (!this.balanceAccount) {
+      return net ?? 0;
+    }
+    return this.displaySign(this.balanceAccount.type) * (net ?? 0);
   }
 
   private todayYmd(): string {
@@ -451,15 +496,19 @@ export class AccountingTreeComponent implements OnInit {
       target_balance: targetNet,
       counter_account_id: this.baForm.counterAccountId,
       date: this.baForm.date,
-      reason: this.baForm.reason?.trim() || undefined
+      reason: this.baForm.reason?.trim() || undefined,
+      mode: this.baForm.mode
     }).subscribe({
       next: (res) => {
         this.savingBalance = false;
         const entryNo = res?.data?.daily_entry?.entry_number;
+        const title = this.baForm.mode === 'opening'
+          ? 'تم تسجيل الرصيد الافتتاحي'
+          : 'تم تسجيل التسوية كقيد يومي متوازن';
         Swal.fire({
           icon: 'success',
-          title: 'تم تسجيل الرصيد كقيد يومي متوازن',
-          text: entryNo ? `رقم القيد: ${entryNo}` : (res?.message || ''),
+          title,
+          text: res?.message || (entryNo ? `رقم القيد: ${entryNo}` : ''),
         });
         this.closeDialogs();
         this.loadAccounts();

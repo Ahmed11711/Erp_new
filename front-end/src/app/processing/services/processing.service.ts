@@ -40,6 +40,12 @@ export class ProcessingService {
     return this.http.post<any>(`${this.base}/orders/${id}/approve`, {});
   }
 
+  deleteOrder(id: number, reason?: string) {
+    return this.http.delete<any>(`${this.base}/orders/${id}`, {
+      body: reason ? { reason } : {},
+    });
+  }
+
   listDispatches(params: any = {}) {
     return this.http.get<any>(`${this.base}/dispatches`, { params });
   }

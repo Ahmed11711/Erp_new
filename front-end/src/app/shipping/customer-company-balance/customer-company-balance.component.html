@@ -6,8 +6,23 @@
     <div class="col-5">
       <h1 class="header text-center mx-auto my-4">كشف حساب عميل شركة  ( {{ name || '' }} )</h1>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+    <div class="col-3 d-flex align-items-center justify-content-end gap-2 flex-wrap" dir="rtl">
+      <a
+        *ngIf="canCreateOffer() && id"
+        class="btn btn-sm btn-outline-secondary"
+        style="border-radius:999px;"
+        [routerLink]="['/dashboard/permissions/priceoffer']"
+        [queryParams]="{ company_id: id, company_name: name }">
+        عروضه
+      </a>
+      <a
+        *ngIf="canCreateOffer() && id"
+        class="btn btn-sm text-white"
+        style="background:#82225e;border-radius:999px;"
+        [routerLink]="['/dashboard/permissions/priceoffer1']"
+        [queryParams]="{ company_id: id }">
+        إنشاء عرض سعر
+      </a>
     </div>
   </div>
 </div>
@@ -40,9 +55,9 @@
       <tr *ngFor="let item of data">
         <td>
           <a
-            *ngIf="getRouterLink(item.ref).length; else plainRef"
+            *ngIf="getRouterLink(item.ref, item.type).length; else plainRef"
             class="cursor-pointer"
-            [routerLink]="getRouterLink(item.ref)">
+            [routerLink]="getRouterLink(item.ref, item.type)">
             {{ item.ref }}
           </a>
           <ng-template #plainRef>{{ item.ref }}</ng-template>

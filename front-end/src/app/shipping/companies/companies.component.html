@@ -142,6 +142,30 @@
         >
           <span>كشف حساب</span>
         </a>
+        <a
+          *ngIf="canCreateOffer()"
+          mat-menu-item
+          [routerLink]="['/dashboard/permissions/priceoffer']"
+          [queryParams]="{ company_id: company.id, company_name: company.name }"
+        >
+          <span>عروض الأسعار</span>
+        </a>
+        <a
+          *ngIf="canCreateOffer()"
+          mat-menu-item
+          [routerLink]="['/dashboard/permissions/priceoffer1']"
+          [queryParams]="{ company_id: company.id }"
+        >
+          <span>إنشاء عرض سعر 1</span>
+        </a>
+        <a
+          *ngIf="canCreateOffer()"
+          mat-menu-item
+          [routerLink]="['/dashboard/permissions/priceoffer2']"
+          [queryParams]="{ company_id: company.id }"
+        >
+          <span>إنشاء عرض سعر 2</span>
+        </a>
         <button
           type="button"
           *ngIf="canCollect()"

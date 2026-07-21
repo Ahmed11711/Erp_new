@@ -931,7 +931,13 @@ class AccountingReportController extends Controller
                 if ($detail === 'sales' || $hasKeyword($name, ['مبيعات', 'sales'])) {
                     $sales += $net;
                 } elseif ($detail === 'shipping_revenue'
-                    || $hasKeyword($name, ['إيراد شحن', 'ايراد شحن', 'شحن محصل', 'شحن للعميل', 'shipping revenue', 'delivery revenue', 'handling revenue'])) {
+                    || $hasKeyword($name, [
+                        'إيراد شحن', 'ايراد شحن',
+                        'إيرادات الشحن', 'ايرادات الشحن',
+                        'إيرادات شحن', 'ايرادات شحن',
+                        'شحن محصل', 'شحن للعميل',
+                        'shipping revenue', 'delivery revenue', 'handling revenue',
+                    ])) {
                     /** إيراد شحن يُحصّل من العميل — منفصل عن مبيعات البضاعة (IFRS/GAAP: freight billed to customers). */
                     $shippingRevenue += $net;
                 } elseif ($detail === 'sales_returns' || $hasKeyword($name, ['مرتجع', 'مردود', 'returns'])) {

@@ -4,7 +4,7 @@
       <app-time></app-time>
     </div>
     <div class="col-4 text-center">
-      <p class="title header mb-0">تقارير حسابات الشحن والتحصيل</p>
+      <p class="title header mb-0">تقارير حسابات الشحن و المناديب</p>
     </div>
     <div class="col-4"></div>
   </div>
@@ -153,9 +153,71 @@
     <div class="px-3 mb-3">
       <h5 class="mb-2">كشف حساب: {{ selectedCompany.name }} ({{ selectedCompany.type }})</h5>
 
-      <div class="alert alert-info py-2 mb-2" *ngIf="selectedOrderIds.length">
+      <div class="order-multi-select mb-3">
+        <label class="form-label mb-1">بحث وتحديد الطلبات (رقم الطلب / رقم البوليصة)</label>
+        <div class="order-multi-select-input-wrap">
+          <input
+            type="text"
+            class="form-control"
+            [(ngModel)]="orderSearchTerm"
+            (focus)="orderPickerOpen = true"
+            (click)="orderPickerOpen = true"
+            placeholder="اكتب رقم الطلب أو رقم البوليصة للبحث والتحديد..."
+            autocomplete="off"
+          />
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary order-multi-select-clear"
+            *ngIf="orderSearchTerm"
+            (click)="clearOrderSearch(); $event.stopPropagation()"
+            title="مسح البحث"
+          >×</button>
+        </div>
+        <div class="order-multi-select-panel" *ngIf="orderPickerOpen">
+          <div class="order-multi-select-toolbar">
+            <span class="text-muted small">
+              {{ filteredCollectibleOptions.length }} نتيجة
+              <span *ngIf="selectedOrderIds.length"> — محدد: {{ selectedOrderIds.length }}</span>
+            </span>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-outline-primary" (click)="selectFilteredCollectible(); $event.stopPropagation()">تحديد نتائج البحث</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="orderPickerOpen = false; $event.stopPropagation()">إغلاق</button>
+            </div>
+          </div>
+          <div class="order-multi-select-list" *ngIf="filteredCollectibleOptions.length; else noCollectibleMatch">
+            <label
+              class="order-multi-select-item"
+              *ngFor="let o of filteredCollectibleOptions"
+              [class.selected]="isSearchOptionSelected(o)"
+            >
+              <input
+                type="checkbox"
+                [checked]="isSearchOptionSelected(o)"
+                (change)="toggleOrderFromSearch(o)"
+              />
+              <span class="order-multi-select-item-text">
+                <strong>#{{ o.order_id }}</strong>
+                <span class="text-muted" *ngIf="optionShipmentText(o)"> — بوليصة: {{ optionShipmentText(o) }}</span>
+                <span *ngIf="o.customer_name"> — {{ o.customer_name }}</span>
+                <span class="fw-bold" dir="ltr"> — {{ o.amount | number:'1.2-2' }}</span>
+                <span class="text-success small" dir="ltr"> (بضاعة {{ o.product_value | number:'1.2-2' }}</span>
+                <span class="text-primary small" dir="ltr"> · شحن {{ o.shipping_value | number:'1.2-2' }})</span>
+              </span>
+            </label>
+          </div>
+          <ng-template #noCollectibleMatch>
+            <div class="order-multi-select-empty text-muted">لا توجد طلبات مطابقة للبحث</div>
+          </ng-template>
+        </div>
+      </div>
+
+      <div class="alert alert-success py-2 mb-2" *ngIf="selectedOrderIds.length">
         <strong>{{ selectedOrderIds.length }}</strong> طلب محدّد — المجموع:
         <strong dir="ltr">{{ selectedTotal | number:'1.2-2' }}</strong>
+        <div class="d-flex flex-wrap gap-3 mt-1">
+          <span>قيمة البضاعة (نقد): <strong dir="ltr" class="text-success">{{ selectedProductTotal | number:'1.2-2' }}</strong></span>
+          <span>قيمة الشحن (للمندوب): <strong dir="ltr" class="text-primary">{{ selectedShippingTotal | number:'1.2-2' }}</strong></span>
+        </div>
         <span class="text-muted small d-block mt-1">يُغلق كل طلب محدّد ويُحدَّث كشف التشغيل والقيد على حساب الذمم.</span>
         <div class="mt-2 d-flex flex-wrap gap-2">
           <a
@@ -166,6 +228,27 @@
           >قبض الطلبات المحددة ({{ selectedTotal | number:'1.2-2' }})</a>
           <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearSelection()">إلغاء التحديد</button>
         </div>
+
+        <!-- <hr class="my-2" />
+        <div class="fw-bold mb-1">تسوية مزدوجة (مقاصّة): قبض قيمة البضاعة + إطفاء مستحق الشحن للمندوب</div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <select class="form-select form-select-sm" style="max-width:320px" [(ngModel)]="nettingCashAccountId">
+            <option [ngValue]="null">— اختر خزنة/بنك لقبض قيمة البضاعة —</option>
+            <option *ngFor="let s of cashSources" [ngValue]="s.account_id">{{ s.label || s.name }}</option>
+          </select>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            [disabled]="nettingBusy || !nettingCashAccountId"
+            (click)="settleWithShippingNetting()"
+          >
+            {{ nettingBusy ? 'جارٍ التنفيذ...' : 'تنفيذ التسوية (بضاعة نقد + شحن مقاصّة)' }}
+          </button>
+        </div>
+        <span class="text-muted small d-block mt-1">
+          نقد يدخل الخزنة = {{ selectedProductTotal | number:'1.2-2' }} —
+          يُطفأ من مستحقات الشحن = {{ selectedShippingTotal | number:'1.2-2' }} — بلا حركة نقدية للشحن.
+        </span> -->
       </div>
 
       <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -181,6 +264,18 @@
         <div class="card text-center p-2 border-danger">
           <div class="text-muted small">المعلق</div>
           <div class="h5 mb-0 text-danger">{{ statementAggregates.outstanding | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-2" *ngIf="statementAggregates.product_outstanding != null">
+        <div class="card text-center p-2 border-success">
+          <div class="text-muted small">قيمة البضاعة (معلّق)</div>
+          <div class="h5 mb-0 text-success">{{ statementAggregates.product_outstanding | number:'1.2-2' }}</div>
+        </div>
+      </div>
+      <div class="col-md-2" *ngIf="statementAggregates.shipping_outstanding != null">
+        <div class="card text-center p-2 border-primary">
+          <div class="text-muted small">قيمة الشحن (للمندوب)</div>
+          <div class="h5 mb-0 text-primary">{{ statementAggregates.shipping_outstanding | number:'1.2-2' }}</div>
         </div>
       </div>
       <div class="col-md-2">
@@ -251,10 +346,13 @@
           <tr>
             <th style="width:40px"></th>
             <th>رقم الطلب</th>
+            <th>رقم البوليصة</th>
             <th>اسم العميل</th>
             <th>هاتف العميل</th>
             <th>صافي الطلب</th>
             <th>المبلغ</th>
+            <th>قيمة البضاعة</th>
+            <th>قيمة الشحن</th>
             <th>الحالة</th>
             <th>تاريخ الشحن</th>
             <th>تسوية</th>
@@ -274,10 +372,13 @@
             <td>
               <a [routerLink]="['/dashboard/shipping/orderdetails', d.order_id]" target="_blank">{{ d.order_id }}</a>
             </td>
+            <td dir="ltr" class="small">{{ shipmentNumbersText(d) }}</td>
             <td>{{ d.order?.customer_name }}</td>
             <td dir="ltr">{{ d.order?.customer_phone_1 }}</td>
             <td dir="ltr">{{ d.order?.net_total | number:'1.2-2' }}</td>
             <td dir="ltr" class="fw-bold">{{ rowCollectibleAmount(d) | number:'1.2-2' }}</td>
+            <td dir="ltr" class="text-success">{{ d.product_value | number:'1.2-2' }}</td>
+            <td dir="ltr" class="text-primary">{{ d.shipping_value | number:'1.2-2' }}</td>
             <td>
               <span class="badge" 
                 [class.bg-warning]="d.status === 'تم شحن'" 
@@ -297,7 +398,7 @@
                 *ngIf="isCollectibleRow(d)"
                 class="btn btn-sm btn-success text-white"
                 [routerLink]="['/dashboard/financial/cash/receive']"
-                [queryParams]="cashQueryReceipt(selectedCompany, rowCollectibleAmount(d), [d.order_id])"
+                [queryParams]="cashQueryReceipt(selectedCompany, d.product_value, [d.order_id], d.shipping_value)"
               >قبض</a>
             </td>
           </tr>

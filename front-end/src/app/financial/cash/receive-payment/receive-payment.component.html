@@ -183,7 +183,25 @@
           </select>
         </div>
 
-        <div class="col-md-6 form-group">
+        <ng-container *ngIf="showShippingSplit()">
+          <div class="col-md-6 form-group">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="small mb-1">مبلغ الطلب (البضاعة)</label>
+                <input type="number" class="form-control form-control-sm" [(ngModel)]="voucher.amount" min="0" step="0.01" dir="ltr">
+              </div>
+              <div class="col-6">
+                <label class="small mb-1">مبلغ الشحن (مصروف)</label>
+                <input type="number" class="form-control form-control-sm" [(ngModel)]="shippingExpenseAmount" min="0" step="0.01" dir="ltr">
+              </div>
+            </div>
+            <small class="text-muted d-block mt-1">
+              البضاعة تدخل الخزنة/البنك، والشحن يُثبَّت كمصروف ويُخصم من مديونية الجهة —
+              الإجمالي: <strong dir="ltr">{{ (toNumber(voucher.amount) + toNumber(shippingExpenseAmount)) | number:'1.2-2' }}</strong>
+            </small>
+          </div>
+        </ng-container>
+        <div class="col-md-6 form-group" *ngIf="!showShippingSplit()">
           <label>المبلغ</label>
           <input type="number" class="form-control" [(ngModel)]="voucher.amount" min="0.01" step="0.01" dir="ltr">
         </div>

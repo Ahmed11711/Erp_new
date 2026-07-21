@@ -26,6 +26,7 @@ export class CollectOrderComponent {
   total_balance: number = 0;
   collectBreakdownLabel: string | null = null;
   order_type = '';
+  isOfferOrder = false;
   collectType: string = 'تحصيل في الخزينة';
   paymentType: string = 'bank'; // Default to bank
   imgtext: string = "صورة الايصال";
@@ -44,10 +45,11 @@ export class CollectOrderComponent {
       next: (res: any) => {
         const details = res?.order_details;
         this.line = details?.shipping_line?.name ?? '—';
-        this.company = details?.shipping_company?.name ?? '—';
+        this.company = details?.shipping_company?.name ?? 'بدون شركة شحن — التحصيل من العميل';
+        this.isOfferOrder = !!(res?.offer_id || res?.offer_debt_posted);
         if (res?.order_status === 'تم التحصيل') {
           Swal.fire({ icon: 'info', title: 'تم تحصيل هذا الطلب مسبقاً' }).then(() =>
-            this.router.navigate(['/dashboard/shipping/listorders'])
+            this.router.navigate([this.afterCollectPath()])
           );
           return;
         }
@@ -57,7 +59,7 @@ export class CollectOrderComponent {
             icon: 'info',
             title: 'لا يمكن تحصيل هذا الطلب من هنا',
             text: manualCollectionBlockedMessage(res),
-          }).then(() => this.router.navigate(['/dashboard/shipping/listorders']));
+          }).then(() => this.router.navigate([this.afterCollectPath()]));
           return;
         }
 
@@ -103,7 +105,7 @@ export class CollectOrderComponent {
           this.order.collectOrder(id, body).subscribe({
             next: (res: any) => {
               if (res.message == 'success') {
-                this.router.navigate(['/dashboard/shipping/listorders']);
+                this.router.navigate([this.afterCollectPath()]);
               }
             },
             error: (err) => {
@@ -111,7 +113,6 @@ export class CollectOrderComponent {
               Swal.fire({ icon: 'warning', title: msg });
             },
           });
-          console.log(true);
         } else if (result.isDismissed) {
           body['receivedOrder'] = false;
           Swal.fire({
@@ -128,7 +129,7 @@ export class CollectOrderComponent {
                 this.order.collectOrder(id, body).subscribe({
                   next: (res: any) => {
                     if (res.message == 'success') {
-                      this.router.navigate(['/dashboard/shipping/listorders']);
+                      this.router.navigate([this.afterCollectPath()]);
                     }
                   },
                   error: (err) => {
@@ -141,10 +142,8 @@ export class CollectOrderComponent {
               return undefined
             }
           })
-          console.log(false);
         }
 
-        console.log(body)
         return undefined
       })
     } else {
@@ -171,7 +170,7 @@ export class CollectOrderComponent {
       this.order.collectOrder(id, formData).subscribe({
         next: (res: any) => {
           if (res.message == 'success') {
-            this.router.navigate(['/dashboard/shipping/listorders']);
+            this.router.navigate([this.afterCollectPath()]);
           }
         },
         error: (err) => {
@@ -181,6 +180,12 @@ export class CollectOrderComponent {
       });
     }
 
+  }
+
+  private afterCollectPath(): string {
+    return this.isOfferOrder
+      ? '/dashboard/shipping/offer-orders'
+      : '/dashboard/shipping/listorders';
   }
 
   openFileInput() {

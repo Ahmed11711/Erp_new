@@ -51,6 +51,10 @@ export class CompaniesComponent {
     return this.rbac.canAny(['customer_companies.collect', 'system.rbac']);
   }
 
+  canCreateOffer(): boolean {
+    return this.rbac.canAny(['nav.receipts.quotes', 'orders.view', 'orders.convert_from_offer', 'system.rbac']);
+  }
+
   ngOnInit(){
     this.user = this.authService.getUser();
     this.loadUnlinkedSummary();

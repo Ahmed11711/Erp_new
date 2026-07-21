@@ -331,12 +331,52 @@
         الحساب: <strong>{{ balanceAccount.code }} — {{ balanceAccount.name }}</strong>
         ({{ getAccountTypeLabel(balanceAccount.type) }})
       </p>
-      <p class="small text-info mb-3">
-        لا يُعدَّل الرصيد مباشرةً؛ يُسجَّل <strong>قيد يومي متوازن</strong> بالفرق فقط بينك وبين الحساب المقابل،
-        بالتاريخ الذي تختاره — فيبقى أثر واضح في الدفاتر وقابل للمراجعة.
-      </p>
 
       <form>
+        <div class="form-group">
+          <label class="d-block mb-1">نوع العملية *</label>
+          <div class="btn-group w-100" role="group">
+            <button type="button" class="btn"
+              [class.btn-primary]="baForm.mode === 'current'"
+              [class.btn-outline-primary]="baForm.mode !== 'current'"
+              (click)="setBalanceMode('current')">
+              تعديل الرصيد الحالي
+            </button>
+            <button type="button" class="btn"
+              [class.btn-primary]="baForm.mode === 'opening'"
+              [class.btn-outline-primary]="baForm.mode !== 'opening'"
+              (click)="setBalanceMode('opening')">
+              رصيد افتتاحي بتاريخ
+            </button>
+          </div>
+        </div>
+
+        <div class="alert alert-info py-2 small mb-2" *ngIf="baForm.mode === 'opening' && loadingOpeningInfo">
+          <i class="fas fa-spinner fa-spin"></i> جاري التحقق من وجود رصيد افتتاحي مسجّل...
+        </div>
+        <div class="alert alert-warning py-2 small mb-2"
+          *ngIf="baForm.mode === 'opening' && !loadingOpeningInfo && openingInfo?.exists">
+          <i class="fas fa-info-circle"></i>
+          يوجد رصيد افتتاحي مسجّل بالفعل بتاريخ <strong>{{ openingInfo?.date }}</strong>
+          بقيمة <strong>{{ displayFromNet(openingInfo?.target_net) | number:'1.2-2' }}</strong>.
+          الحفظ الآن <strong>سيستبدل</strong> القيد الافتتاحي السابق.
+        </div>
+        <div class="alert alert-secondary py-2 small mb-2"
+          *ngIf="baForm.mode === 'opening' && !loadingOpeningInfo && openingInfo && !openingInfo.exists">
+          <i class="fas fa-info-circle"></i>
+          لا يوجد رصيد افتتاحي مسجّل لهذا الحساب — سيتم إنشاء رصيد افتتاحي جديد.
+        </div>
+
+        <p class="small text-info mb-3" *ngIf="baForm.mode === 'current'">
+          يُسجَّل <strong>قيد يومي متوازن</strong> بالفرق حتى يصبح <strong>الرصيد الحالي الكلي</strong> = القيمة المدخلة،
+          بالتاريخ الذي تختاره.
+        </p>
+        <p class="small text-info mb-3" *ngIf="baForm.mode === 'opening'">
+          يُسجَّل قيد افتتاحي بتاريخ محدد بحيث يكون <strong>الرصيد عند هذا التاريخ</strong> = القيمة المدخلة،
+          <strong>والعمليات التي تمت بعده تُحسب فوقه</strong> فتبقى الأرصدة صحيحة.
+          تعديل الرصيد الافتتاحي لاحقاً <strong>يستبدل</strong> القيد الافتتاحي السابق لنفس الحساب.
+        </p>
+
         <div class="form-group">
           <label>الرصيد الحالي (من القيود)</label>
           <p class="form-control-plaintext border rounded px-2 py-1 mb-0 bg-light">
@@ -345,7 +385,8 @@
         </div>
 
         <div class="form-group">
-          <label>الرصيد المطلوب (الافتتاحي / بعد التسوية) *</label>
+          <label *ngIf="baForm.mode === 'current'">الرصيد الحالي المطلوب *</label>
+          <label *ngIf="baForm.mode === 'opening'">الرصيد الافتتاحي عند التاريخ *</label>
           <input
             type="number"
             step="0.01"
@@ -360,7 +401,8 @@
         </div>
 
         <div class="form-group">
-          <label>تاريخ الرصيد / التسوية *</label>
+          <label *ngIf="baForm.mode === 'current'">تاريخ التسوية *</label>
+          <label *ngIf="baForm.mode === 'opening'">تاريخ الرصيد الافتتاحي *</label>
           <app-date-input id="ba-date" [(ngModel)]="baForm.date" name="baDate"></app-date-input>
         </div>
 

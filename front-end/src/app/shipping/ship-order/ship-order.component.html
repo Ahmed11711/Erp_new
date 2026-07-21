@@ -19,20 +19,30 @@
       <!-- الصف الأول: بيانات الشحن الأساسية -->
       <div class="form-row align-items-end">
         <div class="form-group col-md-3">
-          <label class="small text-muted mb-1">شركة الشحن <span class="text-danger">*</span></label>
-          <select
-            class="form-control"
-            name="company"
-            [(ngModel)]="selectedShippingCompanyId"
-            #company="ngModel"
-            required
-            (ngModelChange)="onShippingCompanyChange()"
+          <label class="small text-muted mb-1">
+            شركة الشحن
+            <span class="text-danger" *ngIf="!isOfferOrder">*</span>
+            <span class="text-muted" *ngIf="isOfferOrder">(اختياري)</span>
+          </label>
+          <ng-autocomplete
+            [data]="companies"
+            [searchKeyword]="companySearchKeyword"
+            placeholder="ابحث عن شركة الشحن"
+            (selected)="onShippingCompanySelected($event)"
+            (inputCleared)="onShippingCompanyCleared()"
+            [itemTemplate]="shippingCompanyItemTpl"
+            [notFoundTemplate]="shippingCompanyNotFoundTpl"
           >
-            <option selected disabled value="">اختر شركة الشحن</option>
-            <option *ngFor="let item of companies" [value]="item.id">
-              {{ item.name }}
-            </option>
-          </select>
+          </ng-autocomplete>
+          <ng-template #shippingCompanyItemTpl let-item>
+            <a [innerHTML]="item.name"></a>
+          </ng-template>
+          <ng-template #shippingCompanyNotFoundTpl let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+          <small class="text-muted d-block mt-1" *ngIf="isOfferOrder">
+            الذمة على عميل الشركة. اترك الحقل فارغاً إن لم تُرسل عبر شركة شحن/مندوب.
+          </small>
         </div>
 
         <div class="form-group col-md-3">
@@ -147,10 +157,16 @@
       <!-- ملخص التقسيم -->
       <div class="form-row" *ngIf="customer_type !== 'شركة' && orderSnap && selectedShippingCompanyId">
         <div class="col-12 mb-3">
-          <div class="alert alert-info py-2 px-3 mb-0 d-flex flex-wrap gap-3 align-items-center small">
-            <span><strong>سيُسجَّل على شركة الشحن:</strong> {{ computedShippingAmount | number:'1.2-2' }}</span>
-            <span *ngIf="showCollectionSplit"><strong>على شركة التحصيل:</strong> {{ computedCollectionAmount | number:'1.2-2' }}</span>
-            <span *ngIf="splitError" class="text-danger"><i class="fa fa-exclamation-triangle"></i> {{ splitError }}</span>
+          <div class="alert alert-info py-2 px-3 mb-0 small">
+            <div class="d-flex flex-wrap gap-3 align-items-center">
+              <span><strong>مخصَّص لشركة الشحن:</strong> {{ computedShippingAmount | number:'1.2-2' }}</span>
+              <span *ngIf="showCollectionSplit"><strong>مخصَّص لشركة التحصيل:</strong> {{ computedCollectionAmount | number:'1.2-2' }}</span>
+              <span *ngIf="splitError" class="text-danger"><i class="fa fa-exclamation-triangle"></i> {{ splitError }}</span>
+            </div>
+            <div class="text-muted mt-1">
+              <i class="fa fa-info-circle"></i>
+              لا تُسجَّل المديونية على الشركة الآن — يتم حفظ البيانات فقط. تُرمى المديونية عند «تم التسليم» أو «نقل الذمة»، ويمكن حينها اختيار شركة أخرى أو تعديلها.
+            </div>
           </div>
         </div>
       </div>
@@ -158,11 +174,11 @@
       <!-- الصف الثالث: بيانات شركة (أجل/نقدي) -->
       <div class="form-row align-items-end" *ngIf="customer_type == 'شركة'">
         <div class="col-md-2 form-group">
-          <label class="small text-muted mb-1">طريقة الدفع <span class="text-danger">*</span></label>
+          <label class="small text-muted mb-1">طريقة الدفع <span class="text-danger" *ngIf="!isOfferOrder">*</span></label>
           <select id="paymentType" class="form-control" (change)="paymentType($event)">
-            <option selected disabled>اختر طريقة الدفع</option>
-            <option value="أجل">أجل</option>
-            <option value="نقدي">نقدي</option>
+            <option *ngIf="!isOfferOrder" selected disabled>اختر طريقة الدفع</option>
+            <option value="أجل" [selected]="payment === 'أجل'">أجل (ذمة العميل)</option>
+            <option value="نقدي" [selected]="payment === 'نقدي'">نقدي (يتطلب شركة شحن)</option>
           </select>
         </div>
         <div class="form-group col-md-2" *ngIf="cashType || cashval">
@@ -175,7 +191,7 @@
         <button
           type="submit"
           class="btn px-5 py-2 btn-primary"
-          [disabled]="ship.invalid || !dateSelected || !shippStatus || paymentTypeActive || cashType || !!splitError"
+          [disabled]="ship.invalid || !canSubmitShip()"
         >
           <i class="fa fa-truck ml-1"></i> شحن
         </button>

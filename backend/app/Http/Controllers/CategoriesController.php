@@ -47,8 +47,27 @@ class CategoriesController extends Controller
 
  public function allCategories()
  {
-  $cateogry = Category::all();
-  return response()->json($cateogry, 200);
+  $category = Category::query()
+   ->with(['measurement:id,unit', 'stock:id,name'])
+   // إخفاء أصناف ظل التشغيل الخارجي في مخزن «مواد لدى مندوب»
+   ->where(function ($q) {
+    $q->whereNull('warehouse')
+     ->orWhereNotIn('warehouse', ['مواد لدى مندوب', 'مخزون لدى معالج خارجي']);
+   })
+   ->where(function ($q) {
+    $q->whereNull('stock_id')
+     ->orWhereHas('stock', function ($s) {
+      $s->where(function ($s2) {
+       $s2->whereNull('warehouse_type')
+        ->orWhere('warehouse_type', '!=', 'materials_at_vendor');
+      });
+     });
+   })
+   ->orderBy('warehouse')
+   ->orderBy('category_name')
+   ->get();
+
+  return response()->json($category, 200);
  }
 
  public function getCategoryById($id)
@@ -339,12 +358,30 @@ class CategoriesController extends Controller
    $img->move(public_path('images'), $img_name);
   }
 
+  $incomingName = trim((string) $request->category_name);
   $exist = Category::where('warehouse', $request->warehouse)
-   ->whereRaw('TRIM(category_name) = ?', trim($request->category_name))
+   ->whereRaw('TRIM(category_name) = ?', [$incomingName])
    ->first();
 
+  // منع التكرار حتى مع اختلاف المسافات: "betro waterfloat" ≈ "betro water float"
+  if (!$exist) {
+   $exist = app(\App\Services\Offers\OfferProductMatchService::class)
+    ->findCategoryByCompactOrNormalized($incomingName);
+   if ($exist && trim((string) $exist->warehouse) !== trim((string) $request->warehouse)) {
+    // نفس الاسم في مخزن آخر لا يمنع الإنشاء في مخزن مختلف
+    $exist = null;
+   }
+  }
+
   if ($exist) {
-   return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
+   return response()->json([
+    'message' => 'هذا الصنف موجود بالفعل'
+     . ($exist->category_name !== $incomingName
+      ? ' باسم مشابه: «' . $exist->category_name . '»'
+      : ''),
+    'existing_id' => (int) $exist->id,
+    'existing_name' => $exist->category_name,
+   ], 422);
   }
 
   $stockId = $this->resolveStockIdForCategory($request);
@@ -492,8 +529,29 @@ class CategoriesController extends Controller
     $dupQuery->where('warehouse', $incomingWarehouse);
    }
 
-   if ($dupQuery->first()) {
-    return response()->json(['message' => 'هذا الصنف موجود بالفعل'], 422);
+   $dup = $dupQuery->first();
+   if (!$dup) {
+    $similar = app(\App\Services\Offers\OfferProductMatchService::class)
+     ->findCategoryByCompactOrNormalized($incomingName);
+    if ($similar && (int) $similar->id !== (int) $id) {
+     $sameStock = $stockId
+      ? (int) $similar->stock_id === (int) $stockId
+      : trim((string) $similar->warehouse) === $incomingWarehouse;
+     if ($sameStock) {
+      $dup = $similar;
+     }
+    }
+   }
+
+   if ($dup) {
+    return response()->json([
+     'message' => 'هذا الصنف موجود بالفعل'
+      . ($dup->category_name !== $incomingName
+       ? ' باسم مشابه: «' . $dup->category_name . '»'
+       : ''),
+     'existing_id' => (int) $dup->id,
+     'existing_name' => $dup->category_name,
+    ], 422);
    }
   }
 

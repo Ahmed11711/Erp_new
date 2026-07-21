@@ -481,7 +481,7 @@ class TreeAccount extends Model
 
         $level = (int) $expensesRoot->level + 1;
         $nextCode = (string) static::nextNumericAccountCodeUnderParent($expensesRoot);
-        while (static::where('code', $nextCode)->exists()) {
+        while (static::withTrashed()->where('code', $nextCode)->exists()) {
             $nextCode = (string) ((int) preg_replace('/\D/', '', $nextCode) + 1);
         }
 
@@ -564,7 +564,7 @@ class TreeAccount extends Model
 
         $level = (int) $parent->level + 1;
         $nextCode = (string) static::nextNumericAccountCodeUnderParent($parent);
-        while (static::where('code', $nextCode)->exists()) {
+        while (static::withTrashed()->where('code', $nextCode)->exists()) {
             $nextCode = (string) ((int) preg_replace('/\D/', '', $nextCode) + 1);
         }
 
@@ -654,19 +654,53 @@ class TreeAccount extends Model
             ->first();
         $max = $row && $row->mx !== null ? (int) $row->mx : 0;
         if ($max > 0) {
-            return $max + 1;
+            $next = $max + 1;
+        } else {
+            $p = (int) preg_replace('/\D/', '', (string) $parent->code);
+            if ($p <= 0) {
+                $p = 50001;
+            }
+            $next = $p * 10 + 1;
         }
 
-        $p = (int) preg_replace('/\D/', '', (string) $parent->code);
-        if ($p <= 0) {
-            $p = 50001;
+        // الأكواد فريدة عالمياً (بما فيها المحذوفة soft-delete لأن فهرس DB يشملها)
+        while (static::withTrashed()->where('code', (string) $next)->exists()) {
+            $next++;
         }
 
-        return $p * 10 + 1;
+        return $next;
     }
 
     /**
-     * ذمم شركات الشحن / مندوبين (دائن).
+     * الحساب التجميعي «ذمم شركات شحن» (قد يكون له فروع لشركات الشحن).
+     */
+    public static function findShippingCourierPayableGroupAccount(): ?self
+    {
+        $withDetail = static::where('detail_type', 'shipping_courier_payable')->orderBy('id')->first();
+        if ($withDetail) {
+            return $withDetail;
+        }
+
+        $byName = static::where('type', 'liability')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%ذمم شركات شحن%')
+                    ->orWhere('name', 'like', '%مستحق شحن%')
+                    ->orWhere('name_en', 'like', '%Shipping companies payable%')
+                    ->orWhere('name_en', 'like', '%shipping%payable%');
+            })
+            ->orderBy('id')
+            ->first();
+
+        if ($byName && $byName->detail_type !== 'shipping_courier_payable') {
+            $byName->detail_type = 'shipping_courier_payable';
+            $byName->saveQuietly();
+        }
+
+        return $byName;
+    }
+
+    /**
+     * ذمم شركات الشحن / مندوبين (دائن) — ورقة قابلة للترحيل إن أمكن.
      * detail_type المقترح: shipping_courier_payable
      */
     public static function resolveShippingCourierPayableAccount(): ?self
@@ -676,9 +710,9 @@ class TreeAccount extends Model
             return $acc;
         }
 
-        $withDetail = static::where('detail_type', 'shipping_courier_payable')->orderBy('id')->first();
-        if ($withDetail) {
-            return static::firstLeafUnderAccount($withDetail);
+        $group = static::findShippingCourierPayableGroupAccount();
+        if ($group) {
+            return static::firstLeafUnderAccount($group);
         }
 
         return static::where('type', 'liability')
@@ -694,14 +728,15 @@ class TreeAccount extends Model
 
     /**
      * ذمم شركات الشحن — إنشاء تلقائي عند غياب الحساب (مثل AccountingInventoryShippingAccountsSeeder).
+     * يُرجع الحساب التجميعي (حتى لو له فروع) لاستخدامه كأب لذمم شركات الشحن.
      *
      * @throws \RuntimeException إن تعذر العثور على مجموعة خصوم متداولة مناسبة
      */
     public static function ensureShippingCourierPayableAccount(): self
     {
-        $acc = static::resolveShippingCourierPayableAccount();
-        if ($acc) {
-            return $acc;
+        $group = static::findShippingCourierPayableGroupAccount();
+        if ($group) {
+            return $group;
         }
 
         $parent = static::where('code', '20001')->first()
@@ -733,6 +768,8 @@ class TreeAccount extends Model
     /**
      * إيراد شحن/توصيل يُحصّل من العميل (ليس مصروف الناقل).
      * detail_type المقترح: shipping_revenue
+     *
+     * يطابق الأسماء الشائعة: «إيراد شحن»، «إيرادات الشحن»، «إيراد شحن وتوصيل»، …
      */
     public static function resolveShippingRevenueAccount(): ?self
     {
@@ -741,13 +778,29 @@ class TreeAccount extends Model
             return $acc;
         }
 
+        $withDetail = static::where('detail_type', 'shipping_revenue')->orderBy('id')->first();
+        if ($withDetail) {
+            return static::firstLeafUnderAccount($withDetail);
+        }
+
+        // %إيراد%شحن% يغطي: إيراد شحن / إيرادات الشحن / إيرادات شحن وتوصيل
         return static::where('type', 'revenue')
             ->where(function ($q) {
-                $q->where('name', 'like', '%إيراد شحن%')
+                $q->where('name', 'like', '%إيراد%شحن%')
+                    ->orWhere('name', 'like', '%ايراد%شحن%')
                     ->orWhere('name', 'like', '%شحن محصل%')
-                    ->orWhere('name_en', 'like', '%shipping%revenue%');
+                    ->orWhere('name', 'like', '%شحن للعميل%')
+                    ->orWhere('name_en', 'like', '%shipping%revenue%')
+                    ->orWhere('name_en', 'like', '%shipping%handling%')
+                    ->orWhere('name_en', 'like', '%delivery%revenue%');
             })
             ->whereDoesntHave('children')
+            ->orderByRaw("CASE
+                WHEN name LIKE '%إيرادات الشحن%' OR name LIKE '%ايرادات الشحن%' THEN 0
+                WHEN name LIKE '%إيراد شحن%' OR name LIKE '%ايراد شحن%' THEN 1
+                WHEN name LIKE '%إيراد%شحن%' OR name LIKE '%ايراد%شحن%' THEN 2
+                ELSE 3
+            END")
             ->orderBy('id')
             ->first();
     }

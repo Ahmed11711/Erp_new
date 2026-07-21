@@ -6,7 +6,9 @@ use App\Enums\CollectionProviderType;
 use App\Enums\OrderSettlementStatus;
 use App\Models\CollectionCompany;
 use App\Models\Order;
+use App\Models\OrderShippingNumber;
 use App\Models\shippingCompanyDetails;
+use App\Services\Shipping\CollectionShippingNettingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -46,6 +48,48 @@ class CollectionAccountingReportController extends Controller
                 'total_collected' => round($collection->sum('total_collected'), 3),
                 'total_orders_pending' => (int) $collection->sum('pending_orders_count'),
             ],
+        ]);
+    }
+
+    /**
+     * تسوية مزدوجة (مقاصّة): قبض قيمة البضاعة نقداً + إطفاء مستحق الشحن للمندوب.
+     * POST /api/reports/collection-accounts/{id}/settle-with-shipping
+     */
+    public function settleWithShipping(Request $request, int $id, CollectionShippingNettingService $service)
+    {
+        $data = $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'integer|exists:orders,id',
+            'cash_account_id' => 'required|integer|exists:tree_accounts,id',
+            'date' => 'required|date',
+            'mode' => 'nullable|in:netting,cash_out',
+            'notes' => 'nullable|string',
+        ]);
+
+        try {
+            $result = $service->settle(
+                $id,
+                $data['order_ids'],
+                (int) $data['cash_account_id'],
+                $data['date'],
+                $data['mode'] ?? 'netting',
+                $data['notes'] ?? null,
+                auth()->id()
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'تعذر إتمام التسوية: '.$e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'message' => sprintf(
+                'تمت تسوية %d طلب — قيمة البضاعة %.2f، الشحن %.2f.',
+                $result['order_count'],
+                $result['product_total'],
+                $result['shipping_total']
+            ),
+            'data' => $result,
         ]);
     }
 
@@ -274,7 +318,10 @@ class CollectionAccountingReportController extends Controller
         $pendingOnly = $request->boolean('pending_only');
 
         $query = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
-            ->with(['order:id,customer_name,customer_phone_1,net_total,order_status,prepaid_amount'])
+            ->with([
+                'order:id,customer_name,customer_phone_1,net_total,shipping_cost,courier_shipping_cost,order_status,prepaid_amount',
+                'order.order_shipment_number:id,order_id,shipment_number',
+            ])
             ->orderByDesc('id');
 
         if ($pendingOnly) {
@@ -299,6 +346,11 @@ class CollectionAccountingReportController extends Controller
             $row->collectible = ! $row->is_done && in_array($row->status, ['تم شحن', 'تم التسليم'], true);
             $row->collectible_amount = $row->collectible ? round(abs((float) $row->amount), 2) : 0;
 
+            $outstanding = round(abs((float) $row->amount), 2);
+            [$product, $shipping] = $this->splitProductShipping($row->order, $outstanding);
+            $row->product_value = $product;
+            $row->shipping_value = $shipping;
+
             return $row;
         });
 
@@ -314,11 +366,47 @@ class CollectionAccountingReportController extends Controller
             ])
             ->first();
 
+        $collectibleOptions = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
+            ->where('is_done', 0)
+            ->whereIn('status', ['تم شحن', 'تم التسليم'])
+            ->when($dateFrom, fn ($q) => $q->whereDate('shipping_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->whereDate('shipping_date', '<=', $dateTo))
+            ->with([
+                'order:id,customer_name,net_total,shipping_cost,courier_shipping_cost',
+                'order.order_shipment_number:id,order_id,shipment_number',
+            ])
+            ->orderByDesc('id')
+            ->get()
+            ->unique('order_id')
+            ->values()
+            ->map(function ($row) {
+                $shipmentNumbers = $row->order?->order_shipment_number
+                    ? $row->order->order_shipment_number->pluck('shipment_number')->filter()->values()->all()
+                    : [];
+
+                $outstanding = round(abs((float) $row->amount), 2);
+                [$product, $shipping] = $this->splitProductShipping($row->order, $outstanding);
+
+                return [
+                    'order_id' => (int) $row->order_id,
+                    'amount' => $outstanding,
+                    'product_value' => $product,
+                    'shipping_value' => $shipping,
+                    'customer_name' => $row->order?->customer_name,
+                    'shipment_numbers' => $shipmentNumbers,
+                    'status' => $row->status,
+                ];
+            });
+
+        $aggregates->product_outstanding = round((float) $collectibleOptions->sum('product_value'), 2);
+        $aggregates->shipping_outstanding = round((float) $collectibleOptions->sum('shipping_value'), 2);
+
         return response()->json([
             'company' => $company,
             'source' => 'ledger',
             'aggregates' => $aggregates,
             'details' => $details,
+            'collectible_options' => $collectibleOptions,
         ]);
     }
 
@@ -333,6 +421,8 @@ class CollectionAccountingReportController extends Controller
                 'orders.customer_name',
                 'orders.customer_phone_1',
                 'orders.net_total',
+                'orders.shipping_cost',
+                'orders.courier_shipping_cost',
                 'orders.prepaid_amount',
                 'orders.order_status',
                 'orders.order_date',
@@ -368,16 +458,62 @@ class CollectionAccountingReportController extends Controller
         $details = $query->orderByDesc('orders.id')
             ->paginate($request->integer('per_page', 50));
 
-        $details->getCollection()->transform(function ($row) use ($settledStatus) {
+        $pageOrderIds = $details->getCollection()->pluck('id')->filter()->map(fn ($id) => (int) $id)->values()->all();
+        $pageShipments = $this->shipmentNumbersByOrderIds($pageOrderIds);
+
+        $details->getCollection()->transform(function ($row) use ($settledStatus, $pageShipments) {
             $amt = round((float) ($row->collection_receivable_amount ?? 0), 2);
             $isPending = $amt > 0.009
                 && ! in_array($row->order_status, ['ملغي', 'تم التحصيل'], true)
                 && ($row->settlement_status === null || $row->settlement_status !== $settledStatus);
             $row->collectible = $isPending;
             $row->collectible_amount = $isPending ? $amt : 0;
+            $row->shipment_numbers = $pageShipments[(int) $row->id] ?? [];
+
+            [$product, $shipping] = $this->splitProductShipping($row, $amt);
+            $row->product_value = $product;
+            $row->shipping_value = $shipping;
 
             return $row;
         });
+
+        $optionRows = $this->applyPendingCollectionScope(
+            $this->ordersBaseQuery($company->id, $company->linked_shipping_company_id),
+            $dateFrom,
+            $dateTo
+        )
+            ->select([
+                'orders.id',
+                'orders.customer_name',
+                'orders.net_total',
+                'orders.shipping_cost',
+                'orders.courier_shipping_cost',
+                'orders.order_status',
+                'order_details.collection_receivable_amount',
+            ])
+            ->orderByDesc('orders.id')
+            ->get();
+
+        $optionOrderIds = $optionRows->pluck('id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $optionShipments = $this->shipmentNumbersByOrderIds($optionOrderIds);
+
+        $collectibleOptions = $optionRows
+            ->unique('id')
+            ->values()
+            ->map(function ($row) use ($optionShipments) {
+                $outstanding = round((float) ($row->collection_receivable_amount ?? 0), 2);
+                [$product, $shipping] = $this->splitProductShipping($row, $outstanding);
+
+                return [
+                    'order_id' => (int) $row->id,
+                    'amount' => $outstanding,
+                    'product_value' => $product,
+                    'shipping_value' => $shipping,
+                    'customer_name' => $row->customer_name,
+                    'shipment_numbers' => $optionShipments[(int) $row->id] ?? [],
+                    'status' => $row->order_status,
+                ];
+            });
 
         return response()->json([
             'company' => $company,
@@ -385,8 +521,63 @@ class CollectionAccountingReportController extends Controller
             'aggregates' => [
                 'outstanding' => round($pendingSum, 3),
                 'total_orders' => $details->total(),
+                'product_outstanding' => round((float) $collectibleOptions->sum('product_value'), 2),
+                'shipping_outstanding' => round((float) $collectibleOptions->sum('shipping_value'), 2),
             ],
             'details' => $details,
+            'collectible_options' => $collectibleOptions,
         ]);
+    }
+
+    /**
+     * تقسيم المتبقّي على الطلب إلى: قيمة البضاعة (net_total - shipping_cost) وقيمة الشحن (الباقي).
+     *
+     * @param  object|null  $order  كائن يحمل net_total و shipping_cost
+     * @return array{0: float, 1: float}  [product_value, shipping_value]
+     */
+    private function splitProductShipping($order, float $outstanding): array
+    {
+        $outstanding = round(max(0, $outstanding), 2);
+        if ($outstanding <= 0.009 || ! $order) {
+            return [0.0, 0.0];
+        }
+
+        $net = round((float) ($order->net_total ?? 0), 2);
+        $customerShipping = round(max(0, (float) ($order->shipping_cost ?? 0)), 2);
+        $product = round(max(0, $net - $customerShipping), 2);
+        $product = round(min($product, $outstanding), 2);
+        $shipping = round(max(0, $outstanding - $product), 2);
+
+        return [$product, $shipping];
+    }
+
+    /**
+     * @param  array<int>  $orderIds
+     * @return array<int, array<int, string>>
+     */
+    private function shipmentNumbersByOrderIds(array $orderIds): array
+    {
+        if ($orderIds === []) {
+            return [];
+        }
+
+        $grouped = [];
+        OrderShippingNumber::query()
+            ->whereIn('order_id', $orderIds)
+            ->orderByDesc('id')
+            ->get(['order_id', 'shipment_number'])
+            ->each(function ($row) use (&$grouped) {
+                $oid = (int) $row->order_id;
+                $num = trim((string) $row->shipment_number);
+                if ($num === '') {
+                    return;
+                }
+                $grouped[$oid] ??= [];
+                if (! in_array($num, $grouped[$oid], true)) {
+                    $grouped[$oid][] = $num;
+                }
+            });
+
+        return $grouped;
     }
 }

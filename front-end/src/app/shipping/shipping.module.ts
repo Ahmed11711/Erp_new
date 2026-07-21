@@ -3,6 +3,8 @@ import { CommonModule, DatePipe } from '@angular/common';
 
 import { ShippingRoutingModule } from './shipping-routing.module';
 import { AddOrderComponent } from './add-order/add-order.component';
+import { ConvertOfferToOrderComponent } from './convert-offer-to-order/convert-offer-to-order.component';
+import { OfferOrdersComponent } from './offer-orders/offer-orders.component';
 import { SharedModule } from '../shared/shared.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDatepickerModule } from '@angular/material/datepicker';
@@ -60,6 +62,8 @@ import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review
 @NgModule({
   declarations: [
     AddOrderComponent,
+    ConvertOfferToOrderComponent,
+    OfferOrdersComponent,
     ListOrdersComponent,
     OrderSourceComponent,
     ShippingWayComponent,

@@ -37,7 +37,6 @@ use App\Models\shippingCompanyDetails;
 use App\Services\Accounting\InventoryGlPostingService;
 use App\Services\Accounting\AccountLinkingService;
 use App\Services\Accounting\LedgerJournalService;
-use App\Services\Accounting\ShippingCourierAccountingService;
 use App\Services\CategoryInventoryCostService;
 use App\Enums\InventoryMovementType;
 use App\Services\Inventory\InventoryMovementLedgerService;
@@ -128,6 +127,7 @@ class OrdersController extends Controller
 
         $orders = Order::with('order_details.shipping_line', 'order_details.shipping_company', 'shipping_method', 'order_products.category:id,category_name')
             ->visibleToUser(auth()->user())
+            ->whereNull('offer_id')
             ->orderBy('id', 'desc')
             ->paginate($itemsPerPage);
 
@@ -1560,7 +1560,7 @@ class OrdersController extends Controller
 
         $request->validate([
             'date' => 'required',
-            'line_id' => 'required|numeric|exists:shippinglines,id',
+            'line_id' => ['nullable', 'numeric', 'exists:shippinglines,id'],
         ]);
         DB::beginTransaction();
         try {
@@ -1573,6 +1573,12 @@ class OrdersController extends Controller
                 return response()->json(['message' => ' حالة الطلب الحاليه ' . $order->order_status], 422);
             }
 
+            // طلبات عروض الأسعار: خط التوزيع اختياري (الذمة على العميل وليس على خط/شركة شحن)
+            $isOfferOrder = ! empty($order->offer_id);
+            if (! $isOfferOrder && ! $request->filled('line_id')) {
+                return response()->json(['message' => 'خط التوزيع مطلوب'], 422);
+            }
+
             if ($order->shopify_needs_product_review) {
                 DB::rollback();
 
@@ -1583,15 +1589,18 @@ class OrdersController extends Controller
 
             $user_id = auth()->user()->id;
             $order->order_status = 'طلب مؤكد';
+            $odConfirm = [
+                'need_by_date' => $request->date,
+                'confirm_date' => date('Y-m-d'),
+                'status_date' => date('Y-m-d'),
+                'reviewed' => 0,
+            ];
+            if ($request->filled('line_id')) {
+                $odConfirm['shipping_line_id'] = (int) $request->line_id;
+            }
             OrderDetails::updateOrCreate(
                 ['order_id' => $id],
-                [
-                    'need_by_date' => $request->date,
-                    'shipping_line_id' => $request->line_id,
-                    'confirm_date' => date('Y-m-d'),
-                    'status_date' => date('Y-m-d'),
-                    'reviewed' => 0,
-                ]
+                $odConfirm
             );
             $order->save();
 
@@ -1677,9 +1686,13 @@ class OrdersController extends Controller
             ], 422);
         }
 
+        $isOfferCompanyOrder = $order->customer_type === 'شركة'
+            && (! empty($order->offer_id) || ! empty($order->offer_debt_posted));
+
         $request->validate([
             'date' => 'required',
-            'company_id' => 'required|numeric|exists:shipping_companies,id',
+            // طلبات عروض الأسعار / ذمة العميل: شركة الشحن اختيارية
+            'company_id' => [$isOfferCompanyOrder ? 'nullable' : 'required', 'numeric', 'exists:shipping_companies,id'],
             'collection_company_id' => 'nullable|numeric|exists:shipping_companies,id',
             'collection_provider_type' => 'nullable|in:none,shipping_company,courier,collection_company,employee',
             'collection_provider_id' => 'nullable|integer|min:1',
@@ -1687,6 +1700,18 @@ class OrdersController extends Controller
             'shipping_receivable_amount' => 'nullable|numeric|min:0',
             'collection_receivable_amount' => 'nullable|numeric|min:0',
         ]);
+
+        $shippingCompanyId = $request->filled('company_id') ? (int) $request->company_id : 0;
+        if (! $isOfferCompanyOrder && $shippingCompanyId <= 0) {
+            return response()->json(['message' => 'شركة الشحن مطلوبة'], 422);
+        }
+        if ($order->customer_type === 'شركة'
+            && ($request->payment_way ?? '') === 'نقدي'
+            && $shippingCompanyId <= 0) {
+            return response()->json([
+                'message' => 'الشحن النقدي يتطلب شركة شحن. للشحن بدون شركة استخدم «أجل» — الذمة على العميل.',
+            ], 422);
+        }
 
         DB::beginTransaction();
         try {
@@ -1786,25 +1811,30 @@ class OrdersController extends Controller
                 }
 
 
-                $shipping_company = ShippingCompany::find($request->company_id);
+                $shipping_company = $shippingCompanyId > 0
+                    ? ShippingCompany::find($shippingCompanyId)
+                    : null;
 
                 if ($finshied) {
-                    if ($order->customer_type == 'افراد') {
-                        $this->assertReceivableAccountsLinked($order, $request, null);
+                    if ($order->customer_type == 'افراد' && $shippingCompanyId > 0) {
+                        // عند الشحن: تعريف شركة الشحن/التحصيل ولقطة المبالغ فقط، بدون رمي
+                        // أي مديونية. تُرمى المديونية لاحقاً عند «تم التسليم» / نقل الذمة.
                         $receivableSnapshot = $this->postShippedReceivableSegments(
                             $order,
-                            (int) $request->company_id,
+                            $shippingCompanyId,
                             $this->resolveCollectionCompanyIdForShip($request),
                             $request->filled('shipping_receivable_amount') ? (float) $request->shipping_receivable_amount : null,
                             $request->filled('collection_receivable_amount') ? (float) $request->collection_receivable_amount : null,
                             (string) $request->date,
                             (int) $id,
-                            null
+                            null,
+                            false
                         );
                     }
 
                     if ($order->customer_type == 'شركة') {
-                        if ($request->payment_way == 'أجل') { ////
+                        // طلب محوّل من عرض سعر رُحّلت مديونيته مسبقاً — لا تكرار عند الشحن الآجل
+                        if ($request->payment_way == 'أجل' && empty($order->offer_debt_posted)) { ////
                             $company_id = $order->company_id;
                             $amount = (float)($total + $order->vat - $order->discount);
                             $ref = $id;
@@ -1820,10 +1850,18 @@ class OrdersController extends Controller
                                 $user_id,
                                 now()
                             ]);
+                        } elseif ($request->payment_way == 'أجل' && ! empty($order->offer_debt_posted)) {
+                            $this->insertTracking(
+                                $id,
+                                'تم تخطي ترحيل مديونية الشحن الآجل — مُرحّلة مسبقاً من عرض السعر #' . ($order->offer_id ?? '—')
+                                    . ($shippingCompanyId <= 0 ? ' | تسليم بدون شركة شحن (الذمة على العميل)' : ''),
+                                $user_id,
+                                now()
+                            );
                         }
 
-                        if ($request->payment_way == 'نقدي') {
-                            $shipping_company_id = (float)$request->company_id;
+                        if ($request->payment_way == 'نقدي' && $shippingCompanyId > 0 && $shipping_company) {
+                            $shipping_company_id = (float) $shippingCompanyId;
                             $order_id = $id;
                             $shipping_date = $request->date;
                             $status = 'تم شحن';
@@ -1856,7 +1894,9 @@ class OrdersController extends Controller
                         }
                     }
 
-                    $action = 'تم شحن';
+                    $action = $shippingCompanyId > 0
+                        ? 'تم شحن'
+                        : 'تم شحن / تسليم تشغيلي بدون شركة شحن — الذمة على عميل الشركة';
                     $this->insertTracking($order->id, $action, $user_id, now());
 
                     $order->order_status = 'تم شحن';
@@ -1864,7 +1904,7 @@ class OrdersController extends Controller
                 } else {
 
                     if ($order->customer_type == 'شركة') {
-                        if ($request->payment_way == 'أجل') {
+                        if ($request->payment_way == 'أجل' && empty($order->offer_debt_posted)) {
                             $company_id = $order->company_id;
                             $amount = (float)$total;
                             $ref = $id;
@@ -1880,10 +1920,17 @@ class OrdersController extends Controller
                                 $user_id,
                                 now()
                             ]);
+                        } elseif ($request->payment_way == 'أجل' && ! empty($order->offer_debt_posted)) {
+                            $this->insertTracking(
+                                $id,
+                                'تم تخطي ترحيل مديونية الشحن الجزئي الآجل — مُرحّلة مسبقاً من عرض السعر #' . ($order->offer_id ?? '—'),
+                                $user_id,
+                                now()
+                            );
                         }
 
-                        if ($request->payment_way == 'نقدي') {
-                            $shipping_company_id = (float)$request->company_id;
+                        if ($request->payment_way == 'نقدي' && $shippingCompanyId > 0 && $shipping_company) {
+                            $shipping_company_id = (float) $shippingCompanyId;
                             $order_id = $id;
                             $shipping_date = $request->date;
                             $status = 'تم شحن';
@@ -1951,7 +1998,9 @@ class OrdersController extends Controller
                 $img->move(public_path('images'), $img_name);
             }
 
-            if ($order->customer_type != 'شركة' && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
+            if ($order->customer_type != 'شركة'
+                && $shippingCompanyId > 0
+                && ! in_array($order->order_type, self::ORDER_TYPES_INVENTORY_SHIP, true)) {
 
                 $action = 'تم شحن الطلب';
                 $this->insertTracking($order->id, $action, $user_id, now());
@@ -1972,22 +2021,23 @@ class OrdersController extends Controller
                     $basisOverride = $basisAmount;
                 }
 
-                $this->assertReceivableAccountsLinked($order, $request, $basisOverride);
+                // عند الشحن: تعريف شركة الشحن/التحصيل ولقطة المبالغ فقط، بدون رمي مديونية.
                 $receivableSnapshot = $this->postShippedReceivableSegments(
                     $order,
-                    (int) $request->company_id,
+                    $shippingCompanyId,
                     $this->resolveCollectionCompanyIdForShip($request),
                     $request->filled('shipping_receivable_amount') ? (float) $request->shipping_receivable_amount : null,
                     $request->filled('collection_receivable_amount') ? (float) $request->collection_receivable_amount : null,
                     (string) $request->date,
                     (int) $id,
-                    $basisOverride
+                    $basisOverride,
+                    false
                 );
             }
 
             $odPayload = [
                     'status_date' => date('Y-m-d'),
-                    'shipping_company_id' => $request->company_id,
+                    'shipping_company_id' => $shippingCompanyId > 0 ? $shippingCompanyId : null,
                     'shippment_image' => $img_name,
                     'shipping_date' => $request->date,
                     'reviewed' => 0,
@@ -2004,6 +2054,10 @@ class OrdersController extends Controller
             if ($receivableSnapshot !== null) {
                 $odPayload['shipping_receivable_amount'] = $receivableSnapshot['shipping_amount'];
                 $odPayload['collection_receivable_amount'] = $receivableSnapshot['collection_amount'];
+                if (! $request->filled('collection_company_id')
+                    && ! empty($receivableSnapshot['collection_company_id'])) {
+                    $odPayload['collection_company_id'] = (int) $receivableSnapshot['collection_company_id'];
+                }
             }
             OrderDetails::updateOrCreate(
                 ['order_id' => $id],
@@ -2011,13 +2065,22 @@ class OrdersController extends Controller
             );
 
             $order->refresh()->load('order_details');
-            app(OrderFinancialStateService::class)->inferCollectionProviderOnShip(
-                $order,
-                (int) $request->company_id,
-                $request->filled('collection_company_id') ? (int) $request->collection_company_id : null,
-                $request->input('collection_provider_type'),
-                $request->filled('collection_provider_id') ? (int) $request->collection_provider_id : null,
-            );
+            if ($shippingCompanyId > 0) {
+                app(OrderFinancialStateService::class)->inferCollectionProviderOnShip(
+                    $order,
+                    $shippingCompanyId,
+                    $request->filled('collection_company_id') ? (int) $request->collection_company_id : null,
+                    $request->input('collection_provider_type'),
+                    $request->filled('collection_provider_id') ? (int) $request->collection_provider_id : null,
+                );
+            } elseif ($order->customer_type === 'شركة' && $order->order_details) {
+                // ذمة العميل فقط — بدون نقل لمندوب/شركة شحن
+                $odNoShip = $order->order_details;
+                $odNoShip->shipping_provider_id = null;
+                $odNoShip->collection_provider_type = 'none';
+                $odNoShip->collection_provider_id = null;
+                $odNoShip->save();
+            }
 
             if ($request->shippment_number) {
                 OrderShippingNumber::create([
@@ -2074,29 +2137,12 @@ class OrdersController extends Controller
                 }
             }
 
-            // Record courier shipping cost (Dr Shipping Expense, Cr Courier Payable/Cash).
-            // This is SEPARATE from the customer — the customer already paid shipping
-            // as part of their invoice. This records what WE pay the courier.
-            $courierCost = $request->filled('courier_shipping_cost')
-                ? (float) $request->courier_shipping_cost
-                : (float) ($order->shipping_cost ?? 0);
-
-            if ($courierCost > 0.0001 && $request->company_id) {
-                $courierCo = ShippingCompany::find($request->company_id);
-                if ($courierCo) {
-                    $courierPaid = $request->boolean('courier_cost_paid', false);
-                    app(ShippingCourierAccountingService::class)->recordShipmentCourierCost(
-                        Order::findOrFail($id),
-                        $courierCo,
-                        $courierCost,
-                        $courierPaid,
-                        $request->input('courier_payment_type', 'bank'),
-                        $request->input('courier_bank_id') ?: $request->input('bank_id'),
-                        $request->input('courier_safe_id'),
-                        $request->input('courier_service_account_id'),
-                        $user_id
-                    );
-                }
+            // لا تُرحَّل مستحقات/ذمم شركة الشحن أو المندوب أو شركة التحصيل عند الشحن.
+            // تُحفظ جهة الشحن ولقطة المبالغ فقط؛ الترحيل عند «تم التسليم» أو «نقل الذمة».
+            // مصروف توصيل المندوب (ShippingCourierAccountingService) أيضاً لا يُسجَّل هنا.
+            if ($request->filled('courier_shipping_cost')) {
+                $order->courier_shipping_cost = round((float) $request->courier_shipping_cost, 2);
+                $order->save();
             }
 
             DB::commit();
@@ -2216,7 +2262,8 @@ class OrdersController extends Controller
         try {
             $request->merge(['id' => (int) $id]);
             $order->load('order_details');
-            if ($order->order_details) {
+            // طلبات عروض الأسعار / بدون شركة شحن: التحصيل من العميل — لا تُنشأ مستحقات شحن
+            if ($order->order_details && ! $collectionGuard->allowsCustomerCompanyDirectCollect($order)) {
                 $this->ensureOpenShippingCollectionLinesForCollect($order, $order->order_details);
             }
 
@@ -2346,14 +2393,22 @@ class OrdersController extends Controller
         DB::beginTransaction();
         try {
             $user_id = auth()->user()->id;
+
+            [$preferredHolder, $preferredHolderId] = $this->resolveDeliveryHolderFromRequest($request);
+
             $this->finalizeOrderDelivery(
                 $order,
                 $user_id,
                 $request->has('note') && $request->note != '' ? (string) $request->note : null,
+                $preferredHolder,
+                $preferredHolderId,
             );
 
             DB::commit();
             return response()->json(['message' => 'success'], 200);
+        } catch (UnlinkedReceivableAccountException $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
@@ -2361,18 +2416,83 @@ class OrdersController extends Controller
     }
 
     /**
+     * يقرأ جهة نقل الذمة المختارة من طلب التسليم (اختياري).
+     *
+     * @return array{0: ?\App\Enums\LiabilityHolderType, 1: ?int}
+     */
+    private function resolveDeliveryHolderFromRequest(Request $request): array
+    {
+        $type = $request->input('liability_holder_type');
+        if (! $type) {
+            return [null, null];
+        }
+
+        $holder = \App\Enums\LiabilityHolderType::tryFrom((string) $type);
+        if ($holder === null) {
+            return [null, null];
+        }
+
+        $holderId = $request->filled('liability_holder_id')
+            ? (int) $request->input('liability_holder_id')
+            : null;
+
+        return [$holder, $holderId];
+    }
+
+    /**
+     * يطبّق الجهة المختارة (قد تكون شركة مختلفة عن المرتبطة بالطلب) على تفاصيل الطلب،
+     * بحيث تُرمى المديونية على الشركة المختارة في القيود والرصيد التشغيلي.
+     */
+    private function applyChosenHolderToOrderDetails(
+        Order $order,
+        \App\Enums\LiabilityHolderType $holder,
+        int $holderId,
+    ): void {
+        app(OrderLiabilityTransferService::class)->applyChosenHolder($order, $holder, $holderId);
+    }
+
+    /**
      * تأكيد التسليم: قيود GL + نقل الذمة التشغيلي + تحديث بيانات الطلب.
      */
-    private function finalizeOrderDelivery(Order $order, int $userId, ?string $note = null): void
-    {
+    private function finalizeOrderDelivery(
+        Order $order,
+        int $userId,
+        ?string $note = null,
+        ?\App\Enums\LiabilityHolderType $preferredHolder = null,
+        ?int $preferredHolderId = null,
+    ): void {
+        // المديونية تُرمى الآن (عند التسليم) على شركة الشحن/المندوب/شركة التحصيل.
+        // طلبات الشركات تُدار مديونيتها عبر رصيد العميل-الشركة فلا تخضع لهذا المسار.
+        if ($order->customer_type !== 'شركة') {
+            // إن اختار المستخدم شركة أخرى (غير المرتبطة بالطلب) نُحدّث بيانات الطلب أولاً
+            // حتى تُرمى المديونية على الشركة المختارة في القيود والرصيد التشغيلي.
+            if ($preferredHolder !== null && $preferredHolderId) {
+                $this->applyChosenHolderToOrderDetails($order, $preferredHolder, $preferredHolderId);
+            }
+
+            // نُلزم بربط حسابات الذمم أولاً حتى تنتقل المديونية بشكل صحيح.
+            app(ShipmentReceivableAccountGuard::class)->assertLinkedForDelivery($order);
+
+            // إنشاء سطور المستحقات التشغيلية (لم تُنشأ عند الشحن — تعريف فقط).
+            $this->createDeliveryReceivableLines($order);
+        }
+
         $deliverySvc = app(DeliveryConfirmationAccountingService::class);
         $result = $deliverySvc->recordDeliveryReceivableTransfer($order);
 
-        app(OrderLiabilityTransferService::class)->recordOperationalTransferOnDelivery(
-            $order,
-            $result['batch_code'] ?? '',
-            'delivery_confirm',
-        );
+        // طلبات الشركات بدون شركة شحن: الذمة تبقى على العميل — لا نقل لمندوب/شركة شحن
+        $hasShippingHolder = (int) ($order->order_details?->shipping_company_id
+            ?? $order->order_details?->shipping_provider_id
+            ?? 0) > 0;
+        if ($order->customer_type !== 'شركة' || $hasShippingHolder || $preferredHolder !== null) {
+            app(OrderLiabilityTransferService::class)->recordOperationalTransferOnDelivery(
+                $order,
+                $result['batch_code'] ?? '',
+                'delivery_confirm',
+                $preferredHolder,
+                $preferredHolderId,
+            );
+        }
 
         $od = $order->order_details;
         if ($od) {
@@ -2454,7 +2574,83 @@ class OrdersController extends Controller
 
         $needsTransfer = $totalAlreadyTransferred < ($grandTotal - 0.01);
 
-        return response()->json(['needs_transfer' => $needsTransfer]);
+        /** @var OrderLiabilityTransferService $liabilitySvc */
+        $liabilitySvc = app(OrderLiabilityTransferService::class);
+
+        return response()->json([
+            'needs_transfer' => $needsTransfer,
+            'amount' => $liabilitySvc->resolveTransferAmount($order),
+            'default_holder' => $this->describeLiabilityHolder(
+                $liabilitySvc->resolveHolderForDelivery($order)
+            ),
+            'holders' => $this->buildLiabilityHolderOptions($order, $liabilitySvc),
+        ]);
+    }
+
+    /**
+     * جهات نقل الذمة القابلة للاختيار عند التسليم: شركة الشحن/المندوب + شركة التحصيل (إن وُجدت).
+     *
+     * @return array<int, array{type: string, id: int, name: string, label: string}>
+     */
+    private function buildLiabilityHolderOptions(Order $order, OrderLiabilityTransferService $liabilitySvc): array
+    {
+        $options = [];
+        $seen = [];
+
+        $shipping = $liabilitySvc->resolveManualTransferHolder(
+            $order,
+            \App\Enums\LiabilityHolderType::Courier,
+        );
+        if ($shipping !== null) {
+            $desc = $this->describeLiabilityHolder($shipping);
+            if ($desc) {
+                $desc['label'] = $desc['type'] === \App\Enums\LiabilityHolderType::Courier->value
+                    ? 'المندوب'
+                    : 'شركة الشحن';
+                $options[] = $desc;
+                $seen[$desc['type'] . ':' . $desc['id']] = true;
+            }
+        }
+
+        $collection = $liabilitySvc->resolveManualTransferHolder(
+            $order,
+            \App\Enums\LiabilityHolderType::CollectionCompany,
+        );
+        if ($collection !== null) {
+            $desc = $this->describeLiabilityHolder($collection);
+            if ($desc && ! isset($seen[$desc['type'] . ':' . $desc['id']])) {
+                $desc['label'] = 'شركة التحصيل';
+                $options[] = $desc;
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * @param  array{0: \App\Enums\LiabilityHolderType, 1: int}|null  $holder
+     * @return array{type: string, id: int, name: string}|null
+     */
+    private function describeLiabilityHolder(?array $holder): ?array
+    {
+        if ($holder === null) {
+            return null;
+        }
+
+        [$type, $id] = $holder;
+
+        $name = match ($type) {
+            \App\Enums\LiabilityHolderType::Courier,
+            \App\Enums\LiabilityHolderType::ShippingCompany => ShippingCompany::find($id)?->name,
+            \App\Enums\LiabilityHolderType::CollectionCompany => \App\Models\CollectionCompany::find($id)?->name,
+            default => null,
+        };
+
+        return [
+            'type' => $type->value,
+            'id' => (int) $id,
+            'name' => $name ?? ('#' . $id),
+        ];
     }
 
     /**
@@ -2525,9 +2721,15 @@ class OrdersController extends Controller
         );
         $paymentType = $request->payment_type ?? 'bank';
         if ($order->customer_type == 'شركة') {
+            // طلبات عروض الأسعار / بدون شركة شحن: التحصيل من رصيد عميل الشركة مباشرة
+            $allowCustomerOnlyCollect = ! empty($order->offer_id)
+                || ! empty($order->offer_debt_posted)
+                || (int) ($order_details->shipping_company_id ?? 0) <= 0;
+
             if ($shippingDetails->isEmpty()
                 && $collectionGuard->openCollectionReceivableAmount($order) <= 0.009
-                && (float) $order->net_total > 0.0001) {
+                && (float) $order->net_total > 0.0001
+                && ! $allowCustomerOnlyCollect) {
                 throw new \RuntimeException('لا توجد بيانات شحن للتحصيل');
             }
             $collectFromCompanies = 0;
@@ -3215,6 +3417,17 @@ class OrdersController extends Controller
 
         $order = Order::query();
 
+        // طلبات عروض الأسعار تظهر في صفحة منفصلة فقط
+        if ($request->boolean('from_offer')) {
+            $order->whereNotNull('offer_id');
+        } else {
+            $order->whereNull('offer_id');
+        }
+
+        if ($request->filled('offer_id')) {
+            $order->where('offer_id', $request->offer_id);
+        }
+
         if ($request->has('company_id')) {
             $order->where('company_id',$request->company_id);
         }
@@ -3888,8 +4101,14 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
             return;
         }
 
-        $courierId = (int) ($orderDetails->shipping_company_id ?? 0);
+        $courierId = (int) ($orderDetails->shipping_company_id ?? $orderDetails->shipping_provider_id ?? 0);
         if ($courierId <= 0) {
+            // شركة بدون شحن / عرض سعر: التحصيل من العميل مباشرة — لا مستحقات مندوب
+            if ($order->customer_type === 'شركة'
+                || ! empty($order->offer_id)
+                || ! empty($order->offer_debt_posted)) {
+                return;
+            }
             throw new \RuntimeException('لا توجد شركة شحن مرتبطة بالطلب — لا يمكن إنشاء مستحقات التحصيل');
         }
 
@@ -3923,6 +4142,25 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
         $orderDetails->save();
     }
 
+    /**
+     * إنشاء سطور المستحقات التشغيلية عند التسليم (رمي المديونية على شركة الشحن/المندوب/
+     * شركة التحصيل). لا تُنشأ عند الشحن — يقتصر الشحن على التعريف واللقطة فقط.
+     */
+    private function createDeliveryReceivableLines(Order $order): void
+    {
+        app(OrderLiabilityTransferService::class)->ensureDeliveryLines($order);
+    }
+
+    /**
+     * يحسب تقسيم المستحقات (COD/مقدَّم) ويُرجِع لقطة المبالغ.
+     *
+     * عند الشحن نمرّر $postProcedure=false: نُعرِّف شركة الشحن/التحصيل فقط دون
+     * رمي أي مديونية (لا رصيد ولا سطور shipping_company_details).
+     * عند التسليم/نقل الذمة نمرّر $postProcedure=true بالحالة 'تم التسليم' لإنشاء
+     * سطور المستحقات الفعلية.
+     *
+     * @return array{shipping_amount: float, collection_amount: float, collection_company_id: ?int}
+     */
     private function postShippedReceivableSegments(
         Order $order,
         int $courierCompanyId,
@@ -3932,6 +4170,8 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
         string $shippingDate,
         int $orderId,
         ?float $basisNetTotal,
+        bool $postProcedure = true,
+        string $procedureStatus = 'تم شحن',
     ): array {
         /** @var ShippingReceivableSplitService $splitSvc */
         $splitSvc = app(ShippingReceivableSplitService::class);
@@ -3953,28 +4193,31 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
             $basisNetTotal,
         );
 
-        $segments = $splitSvc->segmentsForProcedureCalls(
-            $courierCompanyId,
-            $split['collection_company_id'],
-            $split['shipping_amount'],
-            $split['collection_amount'],
-        );
+        if ($postProcedure) {
+            $segments = $splitSvc->segmentsForProcedureCalls(
+                $courierCompanyId,
+                $split['collection_company_id'],
+                $split['shipping_amount'],
+                $split['collection_amount'],
+            );
 
-        foreach ($segments as $seg) {
-            DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
-                $seg['company_id'],
-                $orderId,
-                $shippingDate,
-                'تم شحن',
-                $seg['amount'],
-                auth()->user()->name,
-                now(),
-            ]);
+            foreach ($segments as $seg) {
+                DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                    $seg['company_id'],
+                    $orderId,
+                    $shippingDate,
+                    $procedureStatus,
+                    $seg['amount'],
+                    auth()->user()->name,
+                    now(),
+                ]);
+            }
         }
 
         return [
             'shipping_amount' => $split['shipping_amount'],
             'collection_amount' => $split['collection_amount'],
+            'collection_company_id' => $split['collection_company_id'],
         ];
     }
 
@@ -4113,19 +4356,118 @@ private function updateSafeBalance($safe_id, $amount, $order_id, $user_id, $deta
 
             $shippingCompany = ShippingCompany::find($shippingCompanyId);
             $details = ' تحصيل من شركة شحن ' . ($shippingCompany->name ?? '');
+            $receivableAccountId = $this->resolveShippingReceivableAccountId($shippingCompany);
 
-            $this->applyOrderCollectionToPaymentSource(
-                $order,
-                $request,
-                $collectAmount,
-                $userId,
-                $details,
-                $order->id,
-                'الطلبات',
-                $paymentType,
-                $this->resolveShippingReceivableAccountId($shippingCompany),
-            );
+            // تقسيم: قيمة البضاعة نقداً + قيمة الشحن مقاصّة على مستحقات الطرف الحامل للمديونية.
+            [$productAmount, $shippingAmount] = $this->splitOrderProductShipping($order, $collectAmount);
+
+            $canNetShipping = $shippingAmount > 0.009
+                && $receivableAccountId !== null
+                && $shippingCompany !== null;
+
+            if ($canNetShipping) {
+                if ($productAmount > 0.0001) {
+                    $this->applyOrderCollectionToPaymentSource(
+                        $order,
+                        $request,
+                        $productAmount,
+                        $userId,
+                        $details . ' — قيمة البضاعة',
+                        $order->id,
+                        'الطلبات',
+                        $paymentType,
+                        $receivableAccountId,
+                    );
+                }
+
+                $this->postOrderShippingNettingLeg(
+                    $order,
+                    $shippingCompany,
+                    (int) $receivableAccountId,
+                    $shippingAmount,
+                    $userId,
+                );
+            } else {
+                $this->applyOrderCollectionToPaymentSource(
+                    $order,
+                    $request,
+                    $collectAmount,
+                    $userId,
+                    $details,
+                    $order->id,
+                    'الطلبات',
+                    $paymentType,
+                    $receivableAccountId,
+                );
+            }
         }
+    }
+
+    /**
+     * تقسيم مبلغ التحصيل إلى قيمة البضاعة (net_total - shipping_cost) وقيمة الشحن (الباقي، محدوداً بالمبلغ).
+     *
+     * @return array{0: float, 1: float}  [product_amount, shipping_amount]
+     */
+    private function splitOrderProductShipping(Order $order, float $collectAmount): array
+    {
+        $collectAmount = round(max(0, $collectAmount), 2);
+        if ($collectAmount <= 0.009) {
+            return [0.0, 0.0];
+        }
+
+        $net = round((float) ($order->net_total ?? 0), 2);
+        $customerShipping = round(max(0, (float) ($order->shipping_cost ?? 0)), 2);
+        $product = round(max(0, $net - $customerShipping), 2);
+        $product = round(min($product, $collectAmount), 2);
+        $shipping = round(max(0, $collectAmount - $product), 2);
+
+        return [$product, $shipping];
+    }
+
+    /**
+     * قيمة الشحن كمصروف: مدين «مصروف شحن صادر» ودائن ذمم الجهة — يُثبِّت أجرة الشحن
+     * كمصروف ويُخفّض مديونية المندوب/الشركة بمقدارها (بلا حركة خزنة).
+     */
+    private function postOrderShippingNettingLeg(
+        Order $order,
+        ?ShippingCompany $shippingCompany,
+        int $receivableAccountId,
+        float $shippingAmount,
+        int $userId,
+    ): void {
+        $shippingAmount = round($shippingAmount, 2);
+        if ($shippingAmount <= 0.009) {
+            return;
+        }
+
+        $expenseAccountId = (int) \App\Models\TreeAccount::ensureFreightOutExpenseAccount()->id;
+
+        $partyName = $shippingCompany?->name ?? ($shippingCompany ? ('#' . $shippingCompany->id) : 'شركة الشحن');
+        $desc = 'تسوية شحن الطلب رقم ' . $order->id . ' — ' . $partyName
+            . ' — إثبات مصروف شحن مقابل ذمة التحصيل';
+
+        app(\App\Services\Accounting\LedgerJournalService::class)->postBalancedJournal(
+            [
+                [
+                    'account_id' => $expenseAccountId,
+                    'debit' => $shippingAmount,
+                    'credit' => 0,
+                    'description' => $desc . ' — مصروف شحن صادر',
+                ],
+                [
+                    'account_id' => $receivableAccountId,
+                    'debit' => 0,
+                    'credit' => $shippingAmount,
+                    'description' => $desc . ' — تخفيض ذمة التحصيل',
+                ],
+            ],
+            $desc,
+            $order->id,
+            'ORDER-SHIP-EXP-' . $order->id . '-' . now()->format('YmdHis'),
+            $userId,
+            null,
+            true
+        );
     }
 
     private function applyOrderCollectionToPaymentSource(

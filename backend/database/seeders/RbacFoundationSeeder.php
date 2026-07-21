@@ -62,6 +62,7 @@ class RbacFoundationSeeder extends Seeder
             ['module' => 'processing', 'slug' => 'processing.view', 'name' => 'View External Processing'],
             ['module' => 'processing', 'slug' => 'processing.create', 'name' => 'Create External Processing Documents'],
             ['module' => 'processing', 'slug' => 'processing.post', 'name' => 'Post External Processing Documents'],
+            ['module' => 'processing', 'slug' => 'processing.delete_order', 'name' => 'Delete External Processing Orders'],
             ['module' => 'processing', 'slug' => 'nav.processing', 'name' => 'Nav: External Processing section'],
             ['module' => 'notifications', 'slug' => 'notifications.review_filter', 'name' => 'Notifications review filter'],
             ['module' => 'nav', 'slug' => 'nav.receipts', 'name' => 'Nav: Receipts section'],
@@ -143,7 +144,8 @@ class RbacFoundationSeeder extends Seeder
             'inventory.view', 'inventory.transfer',
             'settings.view', 'system.rbac', 'system.activity_log', 'system.activity_log.edit',
             'categories.view', 'categories.manage',
-            'suppliers.view', 'purchases.view', 'manufacturing.view', 'manufacturing.edit_recipe', 'processing.view',
+            'suppliers.view', 'purchases.view', 'manufacturing.view', 'manufacturing.edit_recipe',
+            'processing.view', 'processing.delete_order',
             'nav.receipts', 'nav.receipts.quotes', 'nav.receipts.admin',
             'nav.corporate', 'nav.shopify', 'nav.shopify.dashboard', 'nav.shopify.settings',
             'nav.shipping.master', 'nav.shipping.accounts_report',
@@ -170,6 +172,7 @@ class RbacFoundationSeeder extends Seeder
             'orders.view', 'orders.change_status', 'orders.edit', 'orders.cancel_line',
             'orders.view_status.new',
             'nav.receipts.quotes',
+            'orders.convert_from_offer',
         ];
         $csIds = Permission::query()->where('guard_name', $guard)->whereIn('slug', $csSlugs)->pluck('id');
         $customerServicePreset->syncPermissions($csIds);

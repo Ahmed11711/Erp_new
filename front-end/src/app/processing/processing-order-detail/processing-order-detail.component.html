@@ -8,7 +8,18 @@
         <span *ngIf="representativeLabel() !== '—'"> — مندوب: {{ representativeLabel() }}</span>
       </p>
     </div>
-    <button type="button" class="btn-secondary" (click)="paySupplier()">سداد المورد</button>
+    <div class="toolbar-actions">
+      <button type="button" class="btn-secondary" (click)="paySupplier()">سداد المورد</button>
+      <button
+        type="button"
+        class="btn-danger"
+        *ngIf="canDeleteOrder()"
+        [disabled]="deleting"
+        (click)="deleteOrder()"
+      >
+        {{ deleting ? 'جاري الحذف…' : 'حذف الأمر' }}
+      </button>
+    </div>
   </header>
 
   <section class="panel summary-panel">
@@ -27,6 +38,7 @@
           <th>اسم الصنف</th>
           <th>الكمية المصروفة</th>
           <th>المستلم</th>
+          <th>هالك</th>
           <th>لدى المورد</th>
           <th>المبلغ</th>
         </tr>
@@ -36,6 +48,7 @@
           <td>{{ l.category?.category_name }}</td>
           <td>{{ l.dispatched_qty | number:'1.0-4' }}</td>
           <td>{{ l.received_good_qty | number:'1.0-4' }}</td>
+          <td>{{ l.received_damaged_qty | number:'1.0-4' }}</td>
           <td>{{ (l.dispatched_qty - l.received_good_qty - l.received_damaged_qty - l.received_rejected_qty) | number:'1.0-4' }}</td>
           <td>{{ l.expected_service_amount | number:'1.2-2' }}</td>
         </tr>
@@ -56,8 +69,11 @@
           <tr>
             <th>صنف الاستلام (المنتج المستلَم عليه)</th>
             <th class="col-num">الكمية المستلمة</th>
-            <th class="col-num">تكلفة الوحدة</th>
-            <th class="col-num">سعر البيع</th>
+            <th class="col-num">الهالك</th>
+            <th class="col-num">تكلفة الاستلام</th>
+            <th class="col-num">كانت</th>
+            <th class="col-num">أصبحت</th>
+            <th>طريقة التكلفة</th>
           </tr>
         </thead>
         <tbody>
@@ -67,16 +83,19 @@
               <span class="receipt-unit" *ngIf="receiptDestUnit(l)">/ {{ receiptDestUnit(l) }}</span>
             </td>
             <td class="col-num">{{ l.good_qty | number:'1.0-4' }}</td>
+            <td class="col-num">{{ l.damaged_qty | number:'1.0-4' }}</td>
             <td class="col-num">{{ l.dest_unit_cost | number:'1.2-4' }}</td>
-            <td class="col-num">{{ l.dest_sell_price | number:'1.2-4' }}</td>
+            <td class="col-num">{{ l.prior_unit_cost != null ? (l.prior_unit_cost | number:'1.2-4') : '—' }}</td>
+            <td class="col-num">{{ l.resulting_unit_cost != null ? (l.resulting_unit_cost | number:'1.2-4') : '—' }}</td>
+            <td>{{ costModeLabel(l.cost_apply_mode) }}</td>
           </tr>
         </tbody>
         <tfoot>
           <tr class="totals-row">
             <td><strong>الإجمالي</strong></td>
             <td class="col-num"><strong>{{ receiptTotalQty(rcpt) | number:'1.0-4' }}</strong></td>
-            <td></td>
-            <td></td>
+            <td class="col-num"><strong>{{ receiptTotalWaste(rcpt) | number:'1.0-4' }}</strong></td>
+            <td colspan="4"></td>
           </tr>
         </tfoot>
       </table>
@@ -99,6 +118,8 @@
             <th>صنف الاستلام (المنتج المجهز)</th>
             <th class="col-num">لدى المورد</th>
             <th class="col-num">الكمية المستلمة</th>
+            <th class="col-num">الهالك</th>
+            <th class="col-num">المتبقي</th>
           </tr>
         </thead>
         <tbody>
@@ -106,60 +127,126 @@
             <td>{{ r.category_name }}</td>
             <td>
               <ng-container *ngIf="!r.add_new">
-                <div *ngIf="r.destination_category_id" class="selected-chip selected-chip--sm">
-                  <span>{{ r.destination_label }}</span>
-                  <button type="button" class="chip-clear" (click)="clearReceiptDest(r)">×</button>
+                <div *ngIf="r.destination_category_id" class="dest-compact">
+                  <div class="selected-chip selected-chip--sm">
+                    <span>{{ r.destination_label }}</span>
+                    <button type="button" class="chip-clear" (click)="clearReceiptDest(r)">×</button>
+                  </div>
+                  <button
+                    type="button"
+                    class="info-icon-btn"
+                    [class.info-icon-btn--open]="r.show_cost_details"
+                    title="تفاصيل التكلفة والصنف"
+                    (click)="toggleCostDetails(r)"
+                  >i</button>
+                  <span class="dest-compact__cost" *ngIf="r.dest_unit_cost != null">
+                    تكلفة: {{ r.dest_unit_cost | number:'1.2-2' }}
+                  </span>
                 </div>
-                <div class="dest-info" *ngIf="r.destination_meta">
+
+                <ng-autocomplete
+                  *ngIf="!r.destination_category_id"
+                  class="proc-ac proc-ac--table dest-select"
+                  [data]="products"
+                  [searchKeyword]="productKeyword"
+                  [customFilter]="filterCategorySearch"
+                  [selectedValueRender]="selectedCategoryLabel"
+                  [minQueryLength]="0"
+                  [debounceTime]="150"
+                  notFoundText="لا يوجد صنف مطابق"
+                  [placeholder]="productsLoading ? 'جاري تحميل الأصناف…' : 'ابحث واختر الصنف المجهز (كل المخازن)…'"
+                  (selected)="onReceiptDestSelected(r, $event)"
+                  [itemTemplate]="destItemTpl"
+                  [notFoundTemplate]="notFoundTpl"
+                ></ng-autocomplete>
+
+                <div class="dest-info-popover" *ngIf="r.destination_meta && r.show_cost_details">
+                  <div class="dest-info-popover__head">
+                    <strong>تفاصيل التكلفة</strong>
+                    <button type="button" class="chip-clear" (click)="r.show_cost_details = false">×</button>
+                  </div>
                   <div class="dest-info__grid">
                     <span><strong>كود:</strong> {{ r.destination_meta.item_code }}</span>
                     <span><strong>المخزن:</strong> {{ r.destination_meta.warehouse }}</span>
                     <span><strong>الوحدة:</strong> {{ r.destination_meta.measurement }}</span>
                     <span><strong>الرصيد الحالي:</strong> {{ r.destination_meta.quantity | number:'1.0-4' }}</span>
+                    <span><strong>التكلفة الحالية:</strong> {{ r.destination_meta.avg_cost | number:'1.2-4' }}</span>
                   </div>
-                  <div class="dest-edit">
-                    <label>تكلفة الوحدة
-                      <input class="field-control field-control--xs" type="number" min="0" step="0.0001" [(ngModel)]="r.dest_unit_cost" />
+
+                  <div class="cost-suggest">
+                    <div class="cost-suggest__row">
+                      <span>تكلفة الاستلام المقترحة (مادة المستلم + مادة الهالك + معالجة) ÷ الكمية الجيّدة</span>
+                      <strong>{{ r.suggested_unit_cost | number:'1.2-4' }}</strong>
+                    </div>
+                    <div class="cost-suggest__muted" *ngIf="r.cost_waste > 0">
+                      قيمة الهالك مُرسمَلة داخل تكلفة الصنف المستلم: {{ r.cost_waste | number:'1.2-2' }} ج
+                    </div>
+                  </div>
+
+                  <div class="cost-mode">
+                    <label class="cost-mode__opt">
+                      <input type="radio" name="costMode{{r.processing_order_line_id}}"
+                        [(ngModel)]="r.cost_apply_mode" value="weighted_average"
+                        (ngModelChange)="onCostModeChange(r)" />
+                      <span>
+                        متوسط مرجّح
+                        <small>النتيجة المتوقعة: {{ previewWeightedAvg(r) | number:'1.2-4' }}</small>
+                      </span>
                     </label>
-                    <label>سعر البيع
-                      <input class="field-control field-control--xs" type="number" min="0" step="0.0001" [(ngModel)]="r.dest_sell_price" />
+                    <label class="cost-mode__opt">
+                      <input type="radio" name="costMode{{r.processing_order_line_id}}"
+                        [(ngModel)]="r.cost_apply_mode" value="overwrite"
+                        (ngModelChange)="onCostModeChange(r)" />
+                      <span>
+                        استبدال تكلفة كل الرصيد
+                        <small>النتيجة المتوقعة: {{ previewOverwrite(r) | number:'1.2-4' }}</small>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div class="dest-edit">
+                    <label>تكلفة وحدة الاستلام
+                      <input class="field-control field-control--xs" type="number" min="0" step="0.0001"
+                        [(ngModel)]="r.dest_unit_cost" (ngModelChange)="onDestUnitCostChange(r)" />
                     </label>
                   </div>
                 </div>
-                <ng-autocomplete
-                  *ngIf="!r.destination_category_id"
-                  class="proc-ac proc-ac--table"
-                  [data]="products"
-                  [searchKeyword]="productKeyword"
-                  [customFilter]="filterCategorySearch"
-                  [selectedValueRender]="selectedCategoryLabel"
-                  [minQueryLength]="1"
-                  [debounceTime]="200"
-                  notFoundText="لا يوجد صنف — اكتب اسم الصنف للبحث"
-                  placeholder="ابحث عن المنتج المجهز…"
-                  (inputChanged)="onProductInputChanged($event)"
-                  (selected)="onReceiptDestSelected(r, $event)"
-                  [itemTemplate]="destItemTpl"
-                  [notFoundTemplate]="notFoundTpl"
-                ></ng-autocomplete>
+
                 <button type="button" class="btn-link-sm" (click)="toggleNewProduct(r)">+ منتج جديد</button>
               </ng-container>
               <ng-container *ngIf="r.add_new">
-                <input
-                  class="field-control field-control--sm"
-                  type="text"
-                  [(ngModel)]="r.new_product_name"
-                  placeholder="اسم المنتج الجديد (مادة خام)"
-                />
+                <div class="dest-compact">
+                  <input
+                    class="field-control field-control--sm dest-compact__name"
+                    type="text"
+                    [(ngModel)]="r.new_product_name"
+                    placeholder="اسم المنتج الجديد (مادة خام)"
+                  />
+                  <button
+                    type="button"
+                    class="info-icon-btn"
+                    *ngIf="r.new_product_name?.trim()"
+                    [class.info-icon-btn--open]="r.show_cost_details"
+                    title="تفاصيل التكلفة"
+                    (click)="toggleCostDetails(r)"
+                  >i</button>
+                </div>
                 <button type="button" class="btn-link-sm" (click)="toggleNewProduct(r)">اختيار من الموجود</button>
-                <div class="dest-info dest-info--new" *ngIf="r.new_product_name?.trim()">
-                  <span>منتج جديد — سيُنشأ كمادة خام عند الترحيل</span>
+                <div class="dest-info-popover dest-info-popover--new" *ngIf="r.new_product_name?.trim() && r.show_cost_details">
+                  <div class="dest-info-popover__head">
+                    <strong>تفاصيل التكلفة — منتج جديد</strong>
+                    <button type="button" class="chip-clear" (click)="r.show_cost_details = false">×</button>
+                  </div>
+                  <div class="cost-suggest">
+                    <div class="cost-suggest__row">
+                      <span>تكلفة الاستلام المقترحة</span>
+                      <strong>{{ r.suggested_unit_cost | number:'1.2-4' }}</strong>
+                    </div>
+                  </div>
                   <div class="dest-edit">
                     <label>تكلفة الوحدة
-                      <input class="field-control field-control--xs" type="number" min="0" step="0.0001" [(ngModel)]="r.dest_unit_cost" />
-                    </label>
-                    <label>سعر البيع
-                      <input class="field-control field-control--xs" type="number" min="0" step="0.0001" [(ngModel)]="r.dest_sell_price" />
+                      <input class="field-control field-control--xs" type="number" min="0" step="0.0001"
+                        [(ngModel)]="r.dest_unit_cost" (ngModelChange)="onDestUnitCostChange(r)" />
                     </label>
                   </div>
                 </div>
@@ -170,6 +257,14 @@
               <input class="field-control field-control--sm" type="number" min="0" [max]="r.at_vendor" step="0.0001"
                 [(ngModel)]="r.received_qty" (ngModelChange)="onReceiptQtyChange(r)" />
             </td>
+            <td class="col-num">
+              <input class="field-control field-control--sm" type="number" min="0" [max]="r.at_vendor" step="0.0001"
+                [(ngModel)]="r.waste_qty" (ngModelChange)="onWasteQtyChange(r)" />
+            </td>
+            <td class="col-num">
+              <input class="field-control field-control--sm" type="number" min="0" [max]="r.at_vendor" step="0.0001"
+                [(ngModel)]="r.remaining_qty" (ngModelChange)="onRemainingQtyChange(r)" />
+            </td>
           </tr>
         </tbody>
         <tfoot>
@@ -178,23 +273,28 @@
             <td></td>
             <td></td>
             <td class="col-num"><strong>{{ totalReceiptQty() | number:'1.0-4' }}</strong></td>
+            <td class="col-num"><strong>{{ totalWasteQty() | number:'1.0-4' }}</strong></td>
+            <td class="col-num"><strong>{{ totalRemainingQty() | number:'1.0-4' }}</strong></td>
           </tr>
         </tfoot>
       </table>
     </div>
-
     <p class="hint">
-      تكلفة المعالجة مُسجَّلة على ذمة المورد من إذن الصرف. هنا تختار المنتج المستلَم والكمية، ويمكنك ضبط تكلفة الوحدة وسعر البيع للصنف المستلَم.
+      المستلم + الهالك + المتبقي = الكمية لدى المورد. يمكنك استلام جزء بهالك وترك متبقٍ للتجهيز واستلامه لاحقاً.
+      متوسط تكلفة الوحدة = (مادة المستلم + مادة الهالك + المعالجة) ÷ الكمية الجيّدة، والهالك مُرسمَل داخل تكلفة الصنف المستلم.
+      اختر متوسطاً مرجّحاً أو استبدال تكلفة الرصيد — ويُحفظ تاريخ التكلفة (كانت / أصبحت).
     </p>
 
     <ng-template #destItemTpl let-item>
       <div class="ac-option">
         <span class="ac-option__title" [innerHTML]="item.category_name"></span>
-        <span class="ac-option__meta">{{ item.item_code || '—' }} · {{ item.warehouse || item.warehouse_name || '—' }} · رصيد {{ item.quantity | number:'1.0-2' }}</span>
+        <span class="ac-option__meta">
+          {{ item.item_code || '—' }} · {{ item.warehouse || '—' }} · رصيد {{ item.quantity | number:'1.0-2' }}
+        </span>
       </div>
     </ng-template>
     <ng-template #notFoundTpl let-notFound>
-      <div class="ac-not-found" [innerHTML]="notFound"></div>
+      <div class="ac-not-found">{{ notFound }}</div>
     </ng-template>
 
     <div class="voucher-footer">
@@ -219,6 +319,10 @@
         </tr>
       </tbody>
     </table>
-    <p class="hint">المبلغ مُسجّل على ذمة المورد — المحاسب يسدده من «سداد المورد».</p>
+    <p class="hint">
+      المستلم + الهالك + المتبقي = الكمية لدى المورد. يمكنك استلام جزء بهالك وترك متبقٍ للتجهيز واستلامه لاحقاً.
+      متوسط تكلفة الوحدة = (مادة المستلم + مادة الهالك + المعالجة) ÷ الكمية الجيّدة، والهالك مُرسمَل داخل تكلفة الصنف المستلم.
+      اختر متوسطاً مرجّحاً أو استبدال تكلفة الرصيد — ويُحفظ تاريخ التكلفة (كانت / أصبحت).
+    </p>
   </section>
 </div>

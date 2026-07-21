@@ -789,7 +789,7 @@ class AccountLinkingService
             $resolved = TreeAccount::resolveNextChildCodeAndLevel($parent, $lastChild);
             $code = $resolved['code'];
 
-            while (TreeAccount::where('code', $code)->exists()) {
+            while (TreeAccount::withTrashed()->where('code', $code)->exists()) {
                 $code = (string) ((int) preg_replace('/\D/', '', $code) + 1);
             }
 

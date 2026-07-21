@@ -1,4 +1,5 @@
-import { ChangeDetectorRef, Component, OnDestroy, Renderer2 } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, OnDestroy, QueryList, Renderer2, ViewChild, ViewChildren } from '@angular/core';
+import { MatExpansionPanel } from '@angular/material/expansion';
 import { NavigationEnd, Route, Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { filter, forkJoin, interval, startWith, Subscription, switchMap } from 'rxjs';
@@ -64,7 +65,9 @@ export class DashboardComponent implements OnDestroy {
   }
 
   showShippingMenuSection(): boolean {
-    return this.rbac.can('orders.view') || this.showShopifySubmenu();
+    return this.rbac.can('orders.view')
+      || this.rbac.can('orders.convert_from_offer')
+      || this.showShopifySubmenu();
   }
 
   /** True if the current user is assigned to at least one WhatsApp number */
@@ -74,6 +77,10 @@ export class DashboardComponent implements OnDestroy {
 
   openASide:boolean = true;
   asideMode:string = 'side';
+
+  @ViewChild('sidenavNav', { read: ElementRef }) sidenavNav?: ElementRef<HTMLElement>;
+  @ViewChildren(MatExpansionPanel) menuPanels?: QueryList<MatExpansionPanel>;
+  menuSearchTerm = '';
 
   /** مسار المحتوى تحت /dashboard لتمييز التبويب النشط */
   dashboardNavUrl = '';
@@ -247,6 +254,66 @@ export class DashboardComponent implements OnDestroy {
 
   backPage(){
     window.history.back();
+  }
+
+  /** فلترة عناصر القائمة الجانبية بالبحث النصّي دون حذف أي عنصر من الـ DOM */
+  filterMenu(term: string): void {
+    const q = (term ?? '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+    this.menuSearchTerm = q;
+    const root = this.sidenavNav?.nativeElement;
+    if (!root) { return; }
+
+    const norm = (s: string | null | undefined) =>
+      (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+    const itemSelector = 'a[mat-list-item], mat-list-item';
+
+    // إعادة الضبط عند مسح البحث
+    if (!q) {
+      root.querySelectorAll('.menu-hide').forEach(el => el.classList.remove('menu-hide'));
+      this.menuPanels?.forEach(p => p.close());
+      return;
+    }
+
+    // 1) إظهار/إخفاء الروابط والعناصر حسب المطابقة
+    const items = Array.from(root.querySelectorAll<HTMLElement>(itemSelector));
+    items.forEach(el => {
+      const match = norm(el.textContent).includes(q);
+      el.classList.toggle('menu-hide', !match);
+    });
+
+    const panels = Array.from(root.querySelectorAll<HTMLElement>('mat-expansion-panel'));
+
+    // 2) الأقسام التي يطابق عنوانها البحث: أظهر كل عناصرها
+    panels.forEach(panel => {
+      const header = panel.querySelector('mat-expansion-panel-header');
+      if (norm(header?.textContent).includes(q)) {
+        panel.querySelectorAll<HTMLElement>(itemSelector)
+          .forEach(el => el.classList.remove('menu-hide'));
+      }
+    });
+
+    // 3) إظهار القسم إذا طابق عنوانه أو كان يحتوي أي عنصر ظاهر
+    panels.forEach(panel => {
+      const header = panel.querySelector('mat-expansion-panel-header');
+      const headerMatch = norm(header?.textContent).includes(q);
+      const hasVisibleItem = !!panel.querySelector(
+        'a[mat-list-item]:not(.menu-hide), mat-list-item:not(.menu-hide)'
+      );
+      panel.classList.toggle('menu-hide', !(headerMatch || hasVisibleItem));
+    });
+
+    // 4) فتح الأقسام الظاهرة لإبراز النتائج
+    const instances = this.menuPanels?.toArray() ?? [];
+    panels.forEach((panel, i) => {
+      const inst = instances[i];
+      if (!inst) { return; }
+      if (panel.classList.contains('menu-hide')) {
+        inst.close();
+      } else {
+        inst.open();
+      }
+    });
   }
 
   clickNotification(elm:any){

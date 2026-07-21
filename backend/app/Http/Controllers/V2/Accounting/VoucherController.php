@@ -315,6 +315,7 @@ class VoucherController extends Controller
             'shipping_company_id' => 'nullable|required_if:voucher_type,shipping_company|exists:shipping_companies,id',
             'collection_company_id' => 'nullable|required_if:voucher_type,collection_company|exists:collection_companies,id',
             'amount' => 'required|numeric|min:0',
+            'shipping_expense_amount' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
             'reference_number' => 'nullable|string',
             'settled_order_ids' => 'nullable|array',
@@ -370,6 +371,7 @@ class VoucherController extends Controller
                 'collection_company_id' => $request->voucher_type === 'collection_company' ? $request->collection_company_id : null,
                 'client_or_supplier_name' => $partyLabel,
                 'amount' => $request->amount,
+                'shipping_expense_amount' => $this->shippingExpenseAmount($request),
                 'notes' => $request->notes,
                 'reference_number' => $request->reference_number,
                 'user_id' => auth()->id(),
@@ -444,6 +446,9 @@ class VoucherController extends Controller
             $accountingService->updateAccountHierarchyBalances($debitAccountId);
             $accountingService->updateAccountHierarchyBalances($creditAccountId);
 
+            // قيد مصروف الشحن: مدين «مصروف شحن صادر»، دائن ذمم الجهة (يُثبِّت المصروف ويخفّض المديونية).
+            $this->postShippingExpenseLeg($voucher, (int) $partnerTreeAccountId, $request, $accountingService);
+
             // ------------------------------------------------------------------
             // UPDATE OPERATIONAL BALANCES (Legacy System)
             // ------------------------------------------------------------------
@@ -498,6 +503,7 @@ class VoucherController extends Controller
             'type' => 'sometimes|in:receipt,payment',
             'account_id' => 'sometimes|exists:tree_accounts,id',
             'amount' => 'sometimes|numeric|min:0.01',
+            'shipping_expense_amount' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
             'reference_number' => 'nullable|string|max:255',
         ]);
@@ -532,7 +538,7 @@ class VoucherController extends Controller
 
             // Update voucher
             $voucher->update($request->only([
-                'date', 'type', 'account_id', 'amount', 'notes', 'reference_number'
+                'date', 'type', 'account_id', 'amount', 'shipping_expense_amount', 'notes', 'reference_number'
             ]));
 
             // New Accounting Logic (Copy from Store)
@@ -587,6 +593,17 @@ class VoucherController extends Controller
                 $accountingService->updateAccountHierarchyBalances((int) $tid);
             }
 
+            // إعادة قيد مصروف الشحن (إن وُجد) بعد إعادة بناء القيد الأساسي.
+            if (in_array($voucher->voucher_type, ['shipping_company', 'collection_company'], true)
+                && $voucher->type === 'receipt') {
+                $this->postShippingExpenseAmount(
+                    $voucher,
+                    (int) $partnerTreeAccountId,
+                    (float) $voucher->shipping_expense_amount,
+                    $accountingService
+                );
+            }
+
             // ------------------------------------------------------------------
             // APPLY NEW OPERATIONAL BALANCE
             // ------------------------------------------------------------------
@@ -602,6 +619,74 @@ class VoucherController extends Controller
             DB::rollBack();
             return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
         }
+    }
+
+    /** مبلغ الشحن الذي يُثبَّت كمصروف (اختياري) — للقبض من شركة شحن/تحصيل فقط. */
+    private function shippingExpenseAmount(Request $request): float
+    {
+        if (! in_array($request->voucher_type, ['shipping_company', 'collection_company'], true)) {
+            return 0.0;
+        }
+        if ($request->type !== 'receipt') {
+            return 0.0;
+        }
+        $v = (float) $request->input('shipping_expense_amount', 0);
+
+        return $v > 0 ? round($v, 2) : 0.0;
+    }
+
+    /** إجمالي ما يُسوّى مقابل ذمة الجهة = النقد (البضاعة) + مصروف الشحن. */
+    private function receiptSettlementAmount(Voucher $voucher, Request $request): float
+    {
+        return round((float) $voucher->amount + $this->shippingExpenseAmount($request), 2);
+    }
+
+    /**
+     * قيد مصروف الشحن الصادر: مدين «مصروف شحن صادر»، دائن ذمم الجهة (نفس حساب السند).
+     * يُثبِّت أجرة المندوب/شركة الشحن كمصروف ويخفّض مديونيتها بمقدار الشحن.
+     */
+    private function postShippingExpenseLeg(
+        Voucher $voucher,
+        int $partnerTreeAccountId,
+        Request $request,
+        \App\Services\Accounting\AccountingService $accountingService
+    ): void {
+        $this->postShippingExpenseAmount(
+            $voucher,
+            $partnerTreeAccountId,
+            $this->shippingExpenseAmount($request),
+            $accountingService
+        );
+    }
+
+    private function postShippingExpenseAmount(
+        Voucher $voucher,
+        int $partnerTreeAccountId,
+        float $shippingExpense,
+        \App\Services\Accounting\AccountingService $accountingService
+    ): void {
+        $shippingExpense = round((float) $shippingExpense, 2);
+        if ($shippingExpense <= 0.009) {
+            return;
+        }
+
+        $expenseAccountId = (int) TreeAccount::ensureFreightOutExpenseAccount()->id;
+
+        $date = $voucher->date instanceof \DateTimeInterface
+            ? $voucher->date->format('Y-m-d')
+            : (is_string($voucher->date) ? substr($voucher->date, 0, 10) : date('Y-m-d'));
+
+        // مدين المصروف / دائن ذمم الجهة (نفس آلية قيد السند لتكون قابلة للعكس عند الحذف/التعديل).
+        $this->createVoucherJournalEntries(
+            $voucher,
+            $expenseAccountId,
+            $partnerTreeAccountId,
+            $shippingExpense,
+            $date
+        );
+
+        $accountingService->updateAccountHierarchyBalances($expenseAccountId);
+        $accountingService->updateAccountHierarchyBalances($partnerTreeAccountId);
     }
 
     private function shippingCompanyOpenDetailsQuery(int $companyId, array $orderIds): \Illuminate\Database\Eloquent\Builder
@@ -640,7 +725,7 @@ class VoucherController extends Controller
 
         $rows = $this->shippingCompanyOpenDetailsQuery($companyId, $filteredIds)->get();
         $sum = round((float) $rows->sum(static fn ($r) => (float) $r->amount), 2);
-        $vAmt = round((float) $voucher->amount, 2);
+        $vAmt = $this->receiptSettlementAmount($voucher, $request);
 
         if ($rows->isNotEmpty() && abs($sum - $vAmt) <= 0.05) {
             $this->closeShippingCompanyDetailLines($voucher, $rows);
@@ -686,7 +771,7 @@ class VoucherController extends Controller
             ? array_values(array_unique(array_filter(array_map('intval', $orderIds))))
             : [];
 
-        $vAmt = round((float) $voucher->amount, 2);
+        $vAmt = $this->receiptSettlementAmount($voucher, $request);
 
         $orderRows = $this->collectionCompanyPendingOrdersQuery($collectionCompanyId, $filteredIds)
             ->get([
@@ -1182,7 +1267,8 @@ class VoucherController extends Controller
             throw new \InvalidArgumentException('تعذر حساب مبلغ الطلبات المحددة — تأكد أنها معلّقة وقابلة للتحصيل.');
         }
 
-        $amount = round((float) $request->amount, 2);
+        // إجمالي ما يُسوّى = النقد (مبلغ البضاعة) + مصروف الشحن.
+        $amount = round((float) $request->amount + $this->shippingExpenseAmount($request), 2);
 
         if ($request->voucher_type === 'collection_company') {
             if ($amount <= 0) {

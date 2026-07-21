@@ -1,0 +1,406 @@
+<div class="convert-page" dir="rtl">
+  <header class="convert-hero">
+    <div class="convert-hero__time">
+      <app-time></app-time>
+    </div>
+    <div class="convert-hero__main">
+      <div class="convert-hero__badge" aria-hidden="true">
+        <i class="fa-solid fa-right-left"></i>
+      </div>
+      <div class="convert-hero__text">
+        <h1 class="convert-hero__title">تحويل عرض سعر إلى طلب</h1>
+        <p class="convert-hero__sub" *ngIf="offer?.id">من العرض #{{ offer.id }}</p>
+      </div>
+    </div>
+  </header>
+
+  <div *ngIf="loading" class="convert-state">
+    <i class="fa-solid fa-spinner fa-spin"></i>
+    <p>جاري التحميل...</p>
+  </div>
+  <div *ngIf="!loading && loadError" class="alert alert-danger convert-alert">{{ loadError }}</div>
+
+  <div *ngIf="!loading && !loadError && offer" class="convert-wrap">
+    <section class="convert-card convert-offer-summary">
+      <div class="convert-offer-summary__head">
+        <h2 class="convert-offer-summary__title">عرض سعر #{{ offer.id }}</h2>
+        <span class="convert-offer-summary__total" dir="ltr">{{ offer.total | customNumber }}</span>
+      </div>
+      <div class="convert-meta-grid">
+        <div class="convert-meta">
+          <span class="convert-meta__label">العميل في العرض</span>
+          <span class="convert-meta__value">{{ offer.quote || '—' }}</span>
+        </div>
+        <div class="convert-meta">
+          <span class="convert-meta__label">التواصل</span>
+          <span class="convert-meta__value">{{ offer.contact_person || '—' }}</span>
+        </div>
+        <div class="convert-meta">
+          <span class="convert-meta__label">الهاتف</span>
+          <span class="convert-meta__value" dir="ltr">{{ offer.client_phone || '—' }}</span>
+        </div>
+        <div class="convert-meta convert-meta--total-desktop">
+          <span class="convert-meta__label">الإجمالي</span>
+          <span class="convert-meta__value" dir="ltr">{{ offer.total | customNumber }}</span>
+        </div>
+      </div>
+      <div class="convert-banner convert-banner--ok" *ngIf="alreadyDebtPosted">
+        المديونية مرحّلة مسبقاً على العميل — لن تُكرَّر عند التحويل/الشحن
+      </div>
+      <div class="convert-banner convert-banner--warn" *ngIf="!alreadyDebtPosted">
+        عند التحويل سيتم ترحيل المديونية على عميل الشركة
+      </div>
+    </section>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="convert-form">
+      <section class="convert-card convert-customer-card">
+        <div class="convert-card__head">
+          <h3 class="convert-section-title">عميل الشركة</h3>
+          <div class="convert-mode-switch" *ngIf="canCreateCompany || showCreateForm">
+            <button
+              type="button"
+              class="convert-mode-btn"
+              [class.active]="!showCreateForm"
+              (click)="cancelCreateForm()">
+              اختيار موجود
+            </button>
+            <button
+              type="button"
+              class="convert-mode-btn"
+              [class.active]="showCreateForm"
+              [disabled]="!canCreateCompany && !showCreateForm"
+              (click)="openCreateForm()">
+              عميل جديد
+            </button>
+          </div>
+        </div>
+
+        <div class="convert-selected-banner" *ngIf="selectedCompany && !showCreateForm">
+          <div class="convert-selected-banner__info">
+            <strong>{{ selectedCompany.name }}</strong>
+            <span class="text-muted" *ngIf="selectedCompany.phone1" dir="ltr">{{ selectedCompany.phone1 }}</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-link text-danger p-0" (click)="clearSelectedCompany()" *ngIf="canCreateCompany || !offer?.customer_company_id">
+            تغيير
+          </button>
+        </div>
+
+        <div *ngIf="!showCreateForm">
+          <div class="convert-stack" *ngIf="!selectedCompany">
+            <div>
+              <label class="convert-label">ابحث عن عميل شركة</label>
+              <ng-autocomplete
+                [data]="companies"
+                [searchKeyword]="catword"
+                [initialValue]="selectedCompany?.name"
+                placeholder="اكتب اسم الشركة…"
+                (selected)="onCompanySelected($event)"
+                (inputCleared)="resetCompany()"
+                [itemTemplate]="companyItemTpl"
+                [notFoundTemplate]="companyNotFoundTpl">
+              </ng-autocomplete>
+              <ng-template #companyItemTpl let-item>
+                <a [innerHTML]="item.name"></a>
+              </ng-template>
+              <ng-template #companyNotFoundTpl let-notFound>
+                <div class="convert-not-found">
+                  <span>لا يوجد بهذا الاسم</span>
+                  <button type="button" class="btn btn-sm convert-link-btn" *ngIf="canCreateCompany" (click)="openCreateForm()">
+                    إنشاء من بيانات العرض
+                  </button>
+                </div>
+              </ng-template>
+            </div>
+            <button type="button" class="convert-create-cta" *ngIf="canCreateCompany" (click)="openCreateForm()">
+              <span class="convert-create-cta-icon">+</span>
+              <span>
+                <strong>العميل غير موجود؟</strong>
+                أنشئه من بيانات العرض وعدّل ما يلزم
+              </span>
+            </button>
+          </div>
+
+          <div class="convert-fields-grid" *ngIf="selectedCompany">
+            <div>
+              <label class="convert-label">الهاتف</label>
+              <input class="form-control convert-input" formControlName="customer_phone_1" dir="ltr">
+            </div>
+            <div>
+              <label class="convert-label">المحافظة</label>
+              <input class="form-control convert-input" formControlName="governorate">
+            </div>
+            <div>
+              <label class="convert-label">المدينة</label>
+              <input class="form-control convert-input" formControlName="city">
+            </div>
+            <div class="convert-fields-grid__wide">
+              <label class="convert-label">العنوان</label>
+              <input class="form-control convert-input" formControlName="address">
+            </div>
+          </div>
+        </div>
+
+        <div class="convert-create-panel" *ngIf="showCreateForm && canCreateCompany">
+          <div class="convert-offer-chips">
+            <span class="convert-chip" *ngIf="offer?.quote">من العرض: {{ offer.quote }}</span>
+            <span class="convert-chip" *ngIf="offer?.client_phone">هاتف العرض: {{ offer.client_phone }}</span>
+            <span class="convert-chip" *ngIf="offer?.contact_person">تواصل: {{ offer.contact_person }}</span>
+            <span class="convert-chip convert-chip-warn" *ngIf="!alreadyDebtPosted">
+              سيُرحَّل {{ offer?.total | customNumber }} كمديونية
+            </span>
+          </div>
+
+          <div class="convert-fields-grid">
+            <div class="convert-fields-grid__wide">
+              <label class="convert-label">اسم العميل / الشركة <span class="req">*</span></label>
+              <input
+                class="form-control convert-input"
+                [(ngModel)]="newCompany.name"
+                [ngModelOptions]="{standalone: true}"
+                placeholder="مثال: شركة النور">
+            </div>
+            <div>
+              <label class="convert-label">موبايل أساسي <span class="req">*</span></label>
+              <input
+                class="form-control convert-input"
+                type="tel"
+                maxlength="11"
+                [(ngModel)]="newCompany.phone1"
+                [ngModelOptions]="{standalone: true}"
+                placeholder="01xxxxxxxxx"
+                dir="ltr">
+              <small class="convert-hint">11 رقم يبدأ بـ 01</small>
+            </div>
+            <div>
+              <label class="convert-label">موبايل إضافي</label>
+              <input
+                class="form-control convert-input"
+                type="tel"
+                maxlength="11"
+                [(ngModel)]="newCompany.phone2"
+                [ngModelOptions]="{standalone: true}"
+                placeholder="اختياري"
+                dir="ltr">
+            </div>
+            <div>
+              <label class="convert-label">المحافظة <span class="req">*</span></label>
+              <select
+                class="form-control convert-input"
+                [(ngModel)]="newCompany.governorate"
+                [ngModelOptions]="{standalone: true}"
+                (change)="onGovernChange()">
+                <option value="" disabled>اختر المحافظة</option>
+                <option *ngFor="let elm of location" [value]="elm.governorate_name_ar">{{ elm.governorate_name_ar }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="convert-label">المدينة</label>
+              <select
+                class="form-control convert-input"
+                [(ngModel)]="newCompany.city"
+                [ngModelOptions]="{standalone: true}"
+                [disabled]="!governName">
+                <option value="">{{ governName ? 'اختر المدينة' : '—' }}</option>
+                <option *ngFor="let elm of cities" [value]="elm.city_name_ar">{{ elm.city_name_ar }}</option>
+              </select>
+            </div>
+            <div class="convert-fields-grid__wide">
+              <label class="convert-label">العنوان <span class="req">*</span></label>
+              <textarea
+                class="form-control convert-input"
+                rows="2"
+                [(ngModel)]="newCompany.address"
+                [ngModelOptions]="{standalone: true}"
+                placeholder="العنوان التفصيلي أو ملاحظات التسليم"></textarea>
+            </div>
+          </div>
+
+          <div class="convert-create-actions">
+            <button
+              type="button"
+              class="btn convert-primary-btn"
+              [disabled]="creating"
+              (click)="createAndLinkCompany()">
+              {{ creating ? 'جاري الإنشاء...' : 'إنشاء وربط بالعرض' }}
+            </button>
+            <button type="button" class="btn convert-ghost-btn" [disabled]="creating" (click)="cancelCreateForm()">
+              رجوع للبحث
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="convert-card">
+        <h3 class="convert-section-title mb-3">بيانات الطلب</h3>
+        <div class="convert-fields-grid">
+          <div>
+            <label class="convert-label">تاريخ الطلب</label>
+            <input type="date" class="form-control convert-input" formControlName="order_date">
+          </div>
+          <div>
+            <label class="convert-label">تاريخ التسليم</label>
+            <input type="date" class="form-control convert-input" formControlName="delivery_date">
+          </div>
+          <div>
+            <label class="convert-label">مصدر الطلب (اختياري)</label>
+            <select class="form-control convert-input" formControlName="order_source_id">
+              <option [ngValue]="null">افتراضي</option>
+              <option *ngFor="let s of orderSources" [ngValue]="s.id">{{ s.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="convert-label">طريقة الشحن (اختياري)</label>
+            <select class="form-control convert-input" formControlName="shipping_method_id">
+              <option [ngValue]="null">افتراضي</option>
+              <option *ngFor="let w of shippingWays" [ngValue]="w.id">{{ w.name }}</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="convert-card">
+        <h3 class="convert-section-title mb-2">التسليم / الشحن</h3>
+        <p class="convert-hint-block">
+          الشحن الفعلي اختياري: قد يكون بمندوب تابع للعميل أو عبر السيستم أو استلام ذاتي — حدّد الحالة وأضف ملاحظة.
+        </p>
+        <div class="convert-fields-grid">
+          <div>
+            <label class="convert-label">حالة التسليم</label>
+            <select class="form-control convert-input" formControlName="delivery_mode">
+              <option *ngFor="let m of deliveryModes" [ngValue]="m.value">{{ m.label }}</option>
+            </select>
+          </div>
+          <div class="convert-fields-grid__wide">
+            <label class="convert-label">ملاحظة الشحن / التسليم</label>
+            <input class="form-control convert-input" formControlName="shipping_note"
+              placeholder="مثال: استلام من المخزن / مندوب الشركة X / يُشحن لاحقاً">
+          </div>
+          <div>
+            <label class="convert-label">تكلفة الشحن</label>
+            <input type="number" min="0" class="form-control convert-input" formControlName="shipping_cost" dir="ltr">
+          </div>
+          <div>
+            <label class="convert-label">مقدم</label>
+            <input type="number" min="0" class="form-control convert-input" formControlName="prepaid_amount" dir="ltr">
+          </div>
+          <div>
+            <label class="convert-label">خصم</label>
+            <input type="number" min="0" class="form-control convert-input" formControlName="discount" dir="ltr">
+          </div>
+          <div>
+            <label class="convert-label">VAT</label>
+            <input type="number" min="0" class="form-control convert-input" formControlName="vat" dir="ltr">
+          </div>
+          <div class="convert-fields-grid__wide">
+            <label class="convert-label">ملاحظات الطلب</label>
+            <textarea class="form-control convert-input" rows="2" formControlName="order_notes"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="convert-card">
+        <div class="convert-card__head convert-card__head--stack">
+          <h3 class="convert-section-title mb-0">أصناف العرض → الطلب</h3>
+          <a class="convert-match-link"
+            [routerLink]="offer.offer === 'offer1' ? ['/dashboard/permissions/offer1', offer.id] : ['/dashboard/permissions/offer2', offer.id]">
+            مطابقة / إنشاء أصناف ناقصة
+          </a>
+        </div>
+        <div *ngIf="unmatchedCount" class="convert-banner convert-banner--warn mt-2">
+          {{ unmatchedCount }} منتج غير مربوط بصنف — أنشئ الأصناف من صفحة التفاصيل ثم أعد فتح التحويل.
+        </div>
+
+        <!-- جدول ويب -->
+        <div class="table-responsive convert-lines-table d-none d-md-block mt-3">
+          <table class="table table-bordered table-sm text-center mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>اسم العرض</th>
+                <th>الصنف المطابق</th>
+                <th>الكمية</th>
+                <th>السعر</th>
+                <th>الإجمالي</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let line of lines" [class.table-warning]="!line.category_id">
+                <td>{{ line.offer_name }}</td>
+                <td>
+                  <span *ngIf="line.category_id">{{ line.category_name }} <small class="text-muted">#{{ line.category_id }}</small></span>
+                  <span *ngIf="!line.category_id" class="text-danger">غير مطابق</span>
+                </td>
+                <td><input type="number" class="form-control form-control-sm" [(ngModel)]="line.quantity" [ngModelOptions]="{standalone:true}" (input)="recalcLine(line)"></td>
+                <td><input type="number" class="form-control form-control-sm" [(ngModel)]="line.price" [ngModelOptions]="{standalone:true}" (input)="recalcLine(line)"></td>
+                <td>{{ line.total | customNumber }}</td>
+                <td>
+                  <span *ngIf="line.match_type === 'space_insensitive'" class="badge bg-secondary">فرق مسافات</span>
+                  <span *ngIf="line.category_id && line.match_type !== 'space_insensitive'" class="badge bg-success">مطابق</span>
+                  <span *ngIf="!line.category_id" class="badge bg-danger">ناقص</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- بطاقات موبايل -->
+        <div class="convert-line-cards d-md-none mt-3">
+          <article
+            class="convert-line-card"
+            *ngFor="let line of lines; let i = index"
+            [class.convert-line-card--warn]="!line.category_id">
+            <div class="convert-line-card__top">
+              <span class="convert-line-card__idx">#{{ i + 1 }}</span>
+              <span
+                class="convert-line-card__badge"
+                [class.is-ok]="!!line.category_id && line.match_type !== 'space_insensitive'"
+                [class.is-space]="line.match_type === 'space_insensitive'"
+                [class.is-bad]="!line.category_id">
+                <ng-container *ngIf="line.match_type === 'space_insensitive'">فرق مسافات</ng-container>
+                <ng-container *ngIf="line.category_id && line.match_type !== 'space_insensitive'">مطابق</ng-container>
+                <ng-container *ngIf="!line.category_id">ناقص</ng-container>
+              </span>
+            </div>
+            <h4 class="convert-line-card__name">{{ line.offer_name }}</h4>
+            <p class="convert-line-card__match">
+              <ng-container *ngIf="line.category_id">{{ line.category_name }} <small>#{{ line.category_id }}</small></ng-container>
+              <ng-container *ngIf="!line.category_id"><span class="text-danger">غير مطابق</span></ng-container>
+            </p>
+            <div class="convert-line-card__fields">
+              <div>
+                <label class="convert-label">الكمية</label>
+                <input type="number" class="form-control convert-input" [(ngModel)]="line.quantity" [ngModelOptions]="{standalone:true}" (input)="recalcLine(line)" dir="ltr">
+              </div>
+              <div>
+                <label class="convert-label">السعر</label>
+                <input type="number" class="form-control convert-input" [(ngModel)]="line.price" [ngModelOptions]="{standalone:true}" (input)="recalcLine(line)" dir="ltr">
+              </div>
+              <div class="convert-line-card__total">
+                <span class="convert-meta__label">الإجمالي</span>
+                <strong dir="ltr">{{ line.total | customNumber }}</strong>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="convert-totals">
+          <div>
+            <span>إجمالي الأصناف</span>
+            <strong dir="ltr">{{ productsTotal | customNumber }}</strong>
+          </div>
+          <div>
+            <span>صافي الطلب</span>
+            <strong dir="ltr">{{ netTotal | customNumber }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <div class="convert-actions">
+        <button type="submit" class="btn convert-primary-btn convert-actions__submit" [disabled]="saving || unmatchedCount > 0">
+          {{ saving ? 'جاري التحويل...' : 'تحويل إلى طلب وترحيل المديونية' }}
+        </button>
+        <button type="button" class="btn convert-ghost-btn" routerLink="/dashboard/permissions/priceoffer">رجوع</button>
+      </div>
+    </form>
+  </div>
+</div>

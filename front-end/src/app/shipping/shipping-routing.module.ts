@@ -1,6 +1,8 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { AddOrderComponent } from './add-order/add-order.component';
+import { ConvertOfferToOrderComponent } from './convert-offer-to-order/convert-offer-to-order.component';
+import { OfferOrdersComponent } from './offer-orders/offer-orders.component';
 import { ListOrdersComponent } from './list-orders/list-orders.component';
 import { OrderSourceComponent } from './order-source/order-source.component';
 import { ShippingWayComponent } from './shipping-way/shipping-way.component';
@@ -27,6 +29,7 @@ import { CollectionCompaniesComponent } from './collection-companies/collection-
 import { CollectionAccountsReportComponent } from './collection-accounts-report/collection-accounts-report.component';
 
 const cr = [...RBAC_ROUTE.ordersCreate];
+const convertOffer = [...RBAC_ROUTE.ordersConvertFromOffer];
 const vw = [...RBAC_ROUTE.ordersView];
 const ed = [...RBAC_ROUTE.ordersEdit];
 const ff = [...RBAC_ROUTE.ordersFulfillment];
@@ -40,6 +43,18 @@ const sar = [...RBAC_ROUTE.shippingAccountsReport];
 
 const routes: Routes = [
   { path: 'addorder', component: AddOrderComponent, canActivate: [departmentGuard], data: { rbacPermissions: cr } },
+  {
+    path: 'convert-offer/:offerId',
+    component: ConvertOfferToOrderComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: convertOffer },
+  },
+  {
+    path: 'offer-orders',
+    component: OfferOrdersComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: convertOffer },
+  },
   { path: 'listorders', component: ListOrdersComponent, canActivate: [departmentGuard], data: { rbacPermissions: vw } },
   { path: 'ordersource', component: OrderSourceComponent, canActivate: [departmentGuard], data: { rbacPermissions: ms } },
   { path: 'shippingway', component: ShippingWayComponent, canActivate: [departmentGuard], data: { rbacPermissions: ms } },

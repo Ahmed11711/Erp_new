@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { from } from 'rxjs';
 import { OrderService } from '../services/order.service';
 import { ShippingLinesService } from '../services/shipping-lines.service';
 import Swal from 'sweetalert2';
@@ -17,6 +16,7 @@ lines:any[]=[];
 dateSelected = false;
 date:any;
 orderType!:string;
+isOfferOrder = false;
   constructor(
     private line:ShippingLinesService,
     private datePipe :DatePipe,
@@ -27,9 +27,20 @@ orderType!:string;
 
   ngOnInit(): void {
     this.getData();
+    const id = this.route.snapshot.params['id'];
+    this.order.getOrderById(id).subscribe((res: any) => {
+      this.isOfferOrder = !!(res?.offer_id || res?.offer_debt_posted);
+      this.orderType = res?.order_type || this.orderType;
+    });
   }
   getOrderType(data:any){
     this.orderType = data.orderType;
+  }
+
+  private afterConfirmPath(): string {
+    return this.isOfferOrder
+      ? '/dashboard/shipping/offer-orders'
+      : '/dashboard/shipping/listorders';
   }
 
   getData(){
@@ -53,9 +64,14 @@ orderType!:string;
   async confirmOrder(form:any){
     const  id  = this.route.snapshot.params['id'];
 
-    if (form.valid) {
+    if (!this.dateSelected) {
+      return;
+    }
+    if (!this.isOfferOrder && !form.value.line) {
+      return;
+    }
 
-    // let maintenReason:string='';
+    const lineId = form.value.line || null;
 
       if (this.orderType == 'طلب صيانة') {
         await Swal.fire({
@@ -67,11 +83,9 @@ orderType!:string;
               return 'يجب ادخال قيمة'
             }
             if (value !== '') {
-                // maintenReason = value;
-                this.order.confirmOrder(id, this.date,form.value.line,form.value.note, value).subscribe((result:any)=>{
-                  console.log(result);
+                this.order.confirmOrder(id, this.date, lineId, form.value.note, value).subscribe((result:any)=>{
                   if(result.message == "success"){
-                    this.router.navigate(['/dashboard/shipping/listorders']);
+                    this.router.navigate([this.afterConfirmPath()]);
                   }
                 });
             }
@@ -79,14 +93,11 @@ orderType!:string;
           }
         })
       } else {
-        this.order.confirmOrder(id, this.date,form.value.line,form.value.note, '').subscribe((result:any)=>{
-          console.log(result);
+        this.order.confirmOrder(id, this.date, lineId, form.value.note, '').subscribe((result:any)=>{
           if(result.message == "success"){
-            this.router.navigate(['/dashboard/shipping/listorders']);
+            this.router.navigate([this.afterConfirmPath()]);
           }
         });
       }
-
-    }
   }
 }

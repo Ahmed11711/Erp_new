@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderDetails;
 use App\Models\OrderLiabilityTransfer;
 use App\Models\ShippingCompany;
+use App\Models\shippingCompanyDetails;
 use App\Services\Accounting\DeliveryConfirmationAccountingService;
 use Illuminate\Support\Facades\DB;
 
@@ -18,7 +19,124 @@ class OrderLiabilityTransferService
     public function __construct(
         private DeliveryConfirmationAccountingService $deliveryAccounting,
         private OrderFinancialStateService $financialState,
+        private ShippingReceivableSplitService $splitService,
     ) {
+    }
+
+    /**
+     * يطبّق الجهة المختارة (قد تكون شركة مختلفة عن المرتبطة بالطلب) على تفاصيل الطلب،
+     * حتى تُرمى المديونية على الشركة المختارة في القيود والرصيد التشغيلي.
+     */
+    public function applyChosenHolder(Order $order, LiabilityHolderType $holder, ?int $holderId): void
+    {
+        if (! $holderId || $holderId <= 0) {
+            return;
+        }
+
+        $order->loadMissing('order_details');
+        $od = $order->order_details;
+        if (! $od) {
+            return;
+        }
+
+        if (
+            $holder === LiabilityHolderType::Courier
+            || $holder === LiabilityHolderType::ShippingCompany
+        ) {
+            $company = ShippingCompany::find($holderId);
+            if (! $company) {
+                throw new \RuntimeException('شركة الشحن/المندوب المختارة غير موجودة.');
+            }
+            $od->shipping_provider_id = (int) $company->id;
+            $od->shipping_company_id = (int) $company->id;
+            $od->unsetRelation('shipping_company');
+            $od->save();
+
+            return;
+        }
+
+        if ($holder === LiabilityHolderType::CollectionCompany) {
+            $company = CollectionCompany::find($holderId);
+            if (! $company) {
+                throw new \RuntimeException('شركة التحصيل المختارة غير موجودة.');
+            }
+            $od->collection_provider_type = CollectionProviderType::CollectionCompany->value;
+            $od->collection_provider_id = (int) $company->id;
+            if ($company->linked_shipping_company_id) {
+                $od->collection_company_id = (int) $company->linked_shipping_company_id;
+            }
+            $od->unsetRelation('collection_company');
+            $od->save();
+        }
+    }
+
+    /**
+     * إنشاء سطور المستحقات التشغيلية عند التسليم/نقل الذمة (رمي المديونية على
+     * شركة الشحن/المندوب/شركة التحصيل بحالة «تم التسليم»). لا تُنشأ عند الشحن.
+     */
+    public function ensureDeliveryLines(Order $order): void
+    {
+        $order->loadMissing('order_details');
+        $od = $order->order_details;
+        if (! $od) {
+            return;
+        }
+
+        // طلبات الشركات تُدار مديونيتها عبر رصيد العميل-الشركة، لا عبر مستحقات شركات الشحن.
+        if ($order->customer_type === 'شركة') {
+            return;
+        }
+
+        if (shippingCompanyDetails::where('order_id', $order->id)->exists()) {
+            return;
+        }
+
+        $courierId = (int) ($od->shipping_provider_id ?? $od->shipping_company_id ?? 0);
+        if ($courierId <= 0) {
+            return;
+        }
+
+        $net = round((float) ($order->net_total ?? 0), 3);
+        if ($net <= 0.0001) {
+            return;
+        }
+
+        $collectionCompanyId = $od->collection_company_id ? (int) $od->collection_company_id : null;
+        $shippingDate = $od->shipping_date ? (string) $od->shipping_date : now()->format('Y-m-d');
+        $manualShip = $od->shipping_receivable_amount !== null ? (float) $od->shipping_receivable_amount : null;
+        $manualColl = $od->collection_receivable_amount !== null ? (float) $od->collection_receivable_amount : null;
+
+        $split = $this->splitService->resolveForShip(
+            $order,
+            $courierId,
+            $collectionCompanyId,
+            $manualShip,
+            $manualColl,
+            null,
+        );
+
+        $segments = $this->splitService->segmentsForProcedureCalls(
+            $courierId,
+            $split['collection_company_id'],
+            $split['shipping_amount'],
+            $split['collection_amount'],
+        );
+
+        foreach ($segments as $seg) {
+            DB::statement('CALL shipping_company_procedure(?, ?, ?, ?, ?, ?, ?)', [
+                $seg['company_id'],
+                (int) $order->id,
+                $shippingDate,
+                'تم التسليم',
+                $seg['amount'],
+                auth()->user()->name ?? 'system',
+                now(),
+            ]);
+        }
+
+        $od->shipping_receivable_amount = $split['shipping_amount'];
+        $od->collection_receivable_amount = $split['collection_amount'];
+        $od->save();
     }
 
     /**
@@ -54,6 +172,12 @@ class OrderLiabilityTransferService
         }
 
         return DB::transaction(function () use ($order, $od, $toHolder, $toHolderId, $transferAmount, $reason) {
+            // المديونية تُرمى الآن على الشركة المختارة — ربط حساب الذمم ثم إنشاء المستحقات التشغيلية.
+            if ($order->customer_type !== 'شركة') {
+                app(ShipmentReceivableAccountGuard::class)->assertLinkedForDelivery($order);
+                $this->ensureDeliveryLines($order);
+            }
+
             $gl = $this->deliveryAccounting->recordDeliveryReceivableTransfer($order);
 
             $transfer = OrderLiabilityTransfer::create([
@@ -102,10 +226,19 @@ class OrderLiabilityTransferService
         Order $order,
         string $glBatchCode,
         string $reason = 'delivery_confirm',
+        ?LiabilityHolderType $preferredHolder = null,
+        ?int $preferredHolderId = null,
     ): ?OrderLiabilityTransfer {
         $order->loadMissing('order_details');
         $od = $order->order_details;
         if (! $od || $od->liability_transferred_at) {
+            return null;
+        }
+
+        // طلبات الشركات بدون جهة شحن: الذمة تبقى على عميل الشركة
+        if ($order->customer_type === 'شركة'
+            && $preferredHolder === null
+            && (int) ($od->shipping_company_id ?? $od->shipping_provider_id ?? 0) <= 0) {
             return null;
         }
 
@@ -114,8 +247,13 @@ class OrderLiabilityTransferService
             return null;
         }
 
-        $resolved = $this->resolveHolderForDelivery($order);
+        $resolved = $preferredHolder !== null
+            ? $this->resolveManualTransferHolder($order, $preferredHolder, $preferredHolderId)
+            : $this->resolveHolderForDelivery($order);
         if ($resolved === null) {
+            if ($order->customer_type === 'شركة') {
+                return null;
+            }
             throw new \RuntimeException('تعذر تحديد شركة الشحن أو المندوب لنقل الذمة عند التسليم.');
         }
 

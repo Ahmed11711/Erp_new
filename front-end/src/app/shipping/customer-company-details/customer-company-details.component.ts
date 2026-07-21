@@ -67,6 +67,10 @@ export class CustomerCompanyDetailsComponent {
 
     }
 
+    canCreateOffer(): boolean {
+      return this.rbac.canAny(['nav.receipts.quotes', 'orders.view', 'orders.convert_from_offer', 'system.rbac']);
+    }
+
     ngOnInit(): void {
       this.user = this.authService.getUser();
       this.company_id = this.route.snapshot.params['id'];

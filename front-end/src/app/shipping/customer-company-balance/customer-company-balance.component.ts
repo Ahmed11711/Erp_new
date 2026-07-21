@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 import { CompaniesService } from '../services/companies.service';
 
 @Component({
@@ -21,8 +22,16 @@ export class CustomerCompanyBalanceComponent implements OnInit {
 
   pageSizeOptions = [15, 50];
 
-  constructor(private company: CompaniesService, private router: ActivatedRoute) {
+  constructor(
+    private company: CompaniesService,
+    private router: ActivatedRoute,
+    private rbac: RbacService,
+  ) {
     this.id = this.router.snapshot.paramMap.get('id');
+  }
+
+  canCreateOffer(): boolean {
+    return this.rbac.canAny(['nav.receipts.quotes', 'orders.view', 'orders.convert_from_offer', 'system.rbac']);
   }
 
   ngOnInit() {
@@ -35,7 +44,10 @@ export class CustomerCompanyBalanceComponent implements OnInit {
     this.getData();
   }
 
-  getRouterLink(ref: string): any[] {
+  getRouterLink(ref: string, type?: string): any[] {
+    if (type === 'عروض أسعار') {
+      return [];
+    }
     if (ref && /^\d/.test(ref)) {
       return ['/dashboard/shipping/orderdetails', ref];
     }

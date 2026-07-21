@@ -17,6 +17,7 @@ class Order extends Model
  protected $casts = [
   'shopify_reviewed_at' => 'datetime',
   'shopify_needs_product_review' => 'boolean',
+  'offer_debt_posted' => 'boolean',
  ];
 
  public function shopifyReviewer()

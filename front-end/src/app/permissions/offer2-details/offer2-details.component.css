@@ -6,6 +6,278 @@
   border-radius: 7px;
 }
 
+.offer-page-title.title.header {
+  width: min(100%, 420px);
+  font-size: clamp(1.1rem, 3.5vw, 1.75rem);
+  padding: 0.4rem 0.75rem;
+}
+
+.offer-actions-bar {
+  max-width: 900px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.offer-actions-bar__doc,
+.offer-actions-bar__tools,
+.offer-actions-bar__ops {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.offer-actions-bar__doc .btn,
+.offer-actions-bar__ops .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.offer-actions-bar__doc .btn i,
+.offer-actions-bar__ops .btn i {
+  font-size: 0.9rem !important;
+}
+
+.offer-actions-bar__pdf {
+  background: #82225e;
+}
+
+.offer-tool-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid #d8c4ce;
+  background: #fff;
+  color: #5a3d4c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.offer-tool-chip i {
+  font-size: 0.95rem !important;
+  color: #82225e;
+  cursor: inherit;
+}
+
+.offer-tool-chip:hover,
+.offer-tool-chip.active {
+  border-color: #82225e;
+  background: #fdf2f8;
+  color: #82225e;
+}
+
+.offer-tool-chip__badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.offer-tool-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.offer-tool-chip__dot--ok {
+  background: #16a34a;
+}
+
+.offer-capture-wrap {
+  max-width: 900px;
+  overflow: visible;
+}
+
+/* ——— موبايل ——— */
+@media (max-width: 767.98px) {
+  .offer-details-page {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .offer-page-head {
+    margin-bottom: 4px;
+  }
+
+  .offer-page-head__time {
+    transform: scale(0.85);
+    transform-origin: right center;
+  }
+
+  .offer-page-title.title.header {
+    width: 100%;
+    font-size: 1rem;
+    padding: 0.35rem 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .offer-actions-bar {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    max-width: 100%;
+    padding: 8px;
+    margin-bottom: 10px !important;
+    background: #fff;
+    border: 1px solid #eddfe6;
+    border-radius: 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .offer-actions-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .offer-actions-bar__doc,
+  .offer-actions-bar__tools,
+  .offer-actions-bar__ops {
+    width: auto;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .offer-btn-label,
+  .offer-tool-chip__text {
+    display: none;
+  }
+
+  .offer-actions-bar__doc .btn,
+  .offer-tool-chip {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 !important;
+    justify-content: center;
+    border-radius: 50% !important;
+  }
+
+  .offer-actions-bar__doc .btn i,
+  .offer-tool-chip i {
+    font-size: 0.95rem !important;
+    margin: 0 !important;
+  }
+
+  .offer-tool-chip__badge {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+  }
+
+  .offer-tool-chip__dot {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+  }
+
+  .offer-converted-link,
+  .offer-actions-bar__ops .btn {
+    width: auto !important;
+    min-width: auto;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 10px !important;
+    border-radius: 999px !important;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .offer-converted-link .offer-btn-label,
+  .offer-actions-bar__ops .offer-btn-label {
+    display: inline;
+  }
+
+  .offer-converted-link i {
+    font-size: 0.85rem !important;
+  }
+
+  .offer-link-client,
+  .offer-product-gaps {
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .offer-link-client .card-body,
+  .offer-product-gaps .card-body {
+    padding: 12px;
+  }
+
+  .offer-capture-wrap {
+    max-width: 100%;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #f1f5f9;
+    padding: 10px 8px 14px;
+    margin-bottom: 16px;
+  }
+
+  #capture {
+    width: 794px;
+    min-height: 0;
+    margin: 0 auto;
+    zoom: 0.42;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+    background: #fff;
+  }
+
+  .offer-capture2-pad {
+    padding: 1.25rem !important;
+  }
+
+  .offer-capture2-logo {
+    width: 160px !important;
+  }
+
+  .offer-capture2-meta {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .gap-match-cell {
+    min-width: 180px;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  #capture {
+    zoom: 0.38;
+  }
+}
+
 i{
   cursor: pointer;
 }
@@ -123,6 +395,90 @@ input {
   outline: none;
   font-size: 12px !important;
   font-weight: 100 !important;
+}
+
+.offer-product-gaps,
+.offer-product-gaps .card-body {
+  overflow: visible;
+}
+
+.gaps-table-wrap {
+  overflow: visible;
+}
+
+.gaps-table-wrap table {
+  overflow: visible;
+}
+
+.gaps-table-wrap tbody tr:has(.autocomplete-container.active) {
+  position: relative;
+  z-index: 30;
+}
+
+.gap-match-cell {
+  min-width: 260px;
+  max-width: 360px;
+  overflow: visible;
+  position: relative;
+}
+
+:host ::ng-deep .gap-ac.ng-autocomplete {
+  width: 100%;
+  display: block;
+  position: relative;
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container {
+  width: 100%;
+  height: auto;
+  box-shadow: none;
+  position: relative;
+  z-index: 1;
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container.active {
+  z-index: 11001;
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container .input-container input {
+  width: 100% !important;
+  min-height: 38px;
+  padding: 0.4rem 0.65rem !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  outline: none;
+  font-size: 0.9rem !important;
+  font-weight: 400 !important;
+  background: #fff !important;
+  color: #212529 !important;
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container .input-container input:focus {
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.12);
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container .suggestions-container {
+  z-index: 11003 !important;
+  position: absolute !important;
+  width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  background: #fff;
+  margin-top: 4px;
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container .suggestions-container ul li {
+  padding: 0.5rem 0.75rem;
+  text-align: right;
+}
+
+:host ::ng-deep .gap-ac .autocomplete-container .input-container .x {
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 

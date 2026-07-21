@@ -11,6 +11,27 @@
         <mat-icon>more_vert</mat-icon>
       </span>
       <mat-menu #menu="matMenu">
+        <a
+          *ngIf="canCreateOffer()"
+          mat-menu-item
+          [routerLink]="['/dashboard/permissions/priceoffer']"
+          [queryParams]="{ company_id: company_id, company_name: comapnyName }">
+          <span>عروض الأسعار</span>
+        </a>
+        <a
+          *ngIf="canCreateOffer()"
+          mat-menu-item
+          [routerLink]="['/dashboard/permissions/priceoffer1']"
+          [queryParams]="{ company_id: company_id }">
+          <span>إنشاء عرض سعر 1</span>
+        </a>
+        <a
+          *ngIf="canCreateOffer()"
+          mat-menu-item
+          [routerLink]="['/dashboard/permissions/priceoffer2']"
+          [queryParams]="{ company_id: company_id }">
+          <span>إنشاء عرض سعر 2</span>
+        </a>
         <button mat-menu-item (click)="postDataToGoogleSheet('Mylerz')">
           <span>تسجيل في شيت Mylerz</span>
         </button>

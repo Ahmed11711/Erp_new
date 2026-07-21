@@ -114,8 +114,8 @@ class ProcessingAccountingService
 
     public function resolveScrapExpenseAccount(): TreeAccount
     {
-        $acc = TreeAccount::query()->where('code', '500016')->first()
-            ?? TreeAccount::query()->where('detail_type', 'subcontract_scrap')->first();
+        // نُميّز حساب التشغيل الخارجي عبر detail_type فقط حتى لا يتصادم مع أكواد حسابات أخرى مستخدمة.
+        $acc = TreeAccount::query()->where('detail_type', 'subcontract_scrap')->first();
 
         if (! $acc) {
             $acc = $this->ensureScrapExpenseAccount();
@@ -126,8 +126,7 @@ class ProcessingAccountingService
 
     public function resolveServiceExpenseAccount(): TreeAccount
     {
-        $acc = TreeAccount::query()->where('code', '500017')->first()
-            ?? TreeAccount::query()->where('detail_type', 'subcontract_service')->first();
+        $acc = TreeAccount::query()->where('detail_type', 'subcontract_service')->first();
 
         if (! $acc) {
             $acc = $this->ensureServiceExpenseAccount();
@@ -138,22 +137,17 @@ class ProcessingAccountingService
 
     private function ensureScrapExpenseAccount(): TreeAccount
     {
-        $existing = TreeAccount::query()->where('code', '500016')->first();
+        $existing = TreeAccount::query()->where('detail_type', 'subcontract_scrap')->first();
         if ($existing) {
             return $existing;
         }
 
-        $parent = TreeAccount::query()->where('code', '50001')->first()
-            ?? TreeAccount::query()->where('type', 'expense')->orderBy('id')->first();
-
-        if (! $parent) {
-            throw new \RuntimeException('حساب خسائر التشغيل (500016) غير مهيأ — لا يوجد حساب مصروفات أب.');
-        }
+        $parent = $this->resolveProcessingExpenseParent();
 
         return TreeAccount::query()->create([
-            'name' => 'خسائر تشغيل (تالف)',
+            'name' => 'خسائر تشغيل خارجي (تالف)',
             'name_en' => 'Subcontract scrap / damage',
-            'code' => '500016',
+            'code' => $this->freeChildCode($parent),
             'type' => 'expense',
             'detail_type' => 'subcontract_scrap',
             'parent_id' => (int) $parent->id,
@@ -164,28 +158,55 @@ class ProcessingAccountingService
 
     private function ensureServiceExpenseAccount(): TreeAccount
     {
-        $existing = TreeAccount::query()->where('code', '500017')->first();
+        $existing = TreeAccount::query()->where('detail_type', 'subcontract_service')->first();
         if ($existing) {
             return $existing;
         }
 
-        $parent = TreeAccount::query()->where('code', '50001')->first()
-            ?? TreeAccount::query()->where('type', 'expense')->orderBy('id')->first();
-
-        if (! $parent) {
-            return $this->ensureScrapExpenseAccount();
-        }
+        $parent = $this->resolveProcessingExpenseParent();
 
         return TreeAccount::query()->create([
             'name' => 'مصاريف تشغيل خارجي',
             'name_en' => 'Subcontract service expense',
-            'code' => '500017',
+            'code' => $this->freeChildCode($parent),
             'type' => 'expense',
             'detail_type' => 'subcontract_service',
             'parent_id' => (int) $parent->id,
             'level' => (int) ($parent->level ?? 2) + 1,
             'balance' => 0,
         ]);
+    }
+
+    /**
+     * الحساب الأب لمصروفات التشغيل الخارجي — نُفضّل «مصروفات التشغيل (50003)» ثم «المصروفات (5000)».
+     */
+    private function resolveProcessingExpenseParent(): TreeAccount
+    {
+        $parent = TreeAccount::query()->where('code', '50003')->where('type', 'expense')->first()
+            ?? TreeAccount::query()->where('code', '5000')->where('type', 'expense')->first()
+            ?? TreeAccount::query()->where('type', 'expense')->orderBy('id')->first();
+
+        if (! $parent) {
+            throw new \RuntimeException('لا يوجد حساب مصروفات أب لتهيئة حسابات التشغيل الخارجي.');
+        }
+
+        return $parent;
+    }
+
+    /**
+     * توليد كود فرعي غير مستخدم أسفل الحساب الأب.
+     */
+    private function freeChildCode(TreeAccount $parent): string
+    {
+        $base = (string) $parent->code;
+        for ($i = 1; $i <= 999; $i++) {
+            $code = $base . $i;
+            if (! TreeAccount::query()->where('code', $code)->exists()) {
+                return $code;
+            }
+        }
+
+        return $base . substr((string) time(), -4);
     }
 
     public function resolveStockAccount(int $stockId): TreeAccount

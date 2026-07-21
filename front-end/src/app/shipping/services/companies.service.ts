@@ -24,6 +24,13 @@ export class CompaniesService {
     return this.http.get(`${environment.Url}/companies/search?itemsPerPage=${items}&page=${page}`,{params:search});
   }
 
+  /** بيانات شركة واحدة (لتهيئة عرض سعر من عملاء الشركات). */
+  getCompany(id: number | string) {
+    return this.http.get<any>(`${environment.Url}/companies/search`, {
+      params: { itemsPerPage: 1, page: 1, id: String(id) },
+    });
+  }
+
   companyBalanceDetails(id:any , items:number,page:number){
     return this.http.get(`${environment.Url}/companies/${id}?itemsPerPage=${items}&page=${page}`);
   }

@@ -74,3 +74,41 @@ php artisan db:seed --class=TreeAccountBalanceAdjustmentPermissionSeeder
 
 
 php artisan db:seed --class=OffersViewAllPermissionSeeder
+php artisan db:seed --class=ProcessingDeleteOrderPermissionSeeder
+
+php artisan db:seed --class=OrdersConvertFromOfferPermissionSeeder
+
+
+
+SELECT COUNT(*) AS account_entries FROM account_entries;
+SELECT COUNT(*) AS daily_entries FROM daily_entries;
+SELECT COUNT(*) AS daily_entry_items FROM daily_entry_items;
+SELECT SUM(balance) AS total_balance FROM tree_accounts;
+
+
+START TRANSACTION;
+
+DELETE FROM account_entries;
+DELETE FROM daily_entry_items;
+DELETE FROM daily_entries;
+
+UPDATE tree_accounts
+SET balance = 0,
+    debit_balance = 0,
+    credit_balance = 0,
+    updated_at = NOW();
+
+COMMIT;
+
+
+
+
+
+# تجربة بدون تعديل
+php artisan accounting:backfill-shipping-revenue --dry-run --from=2026-01-01
+
+# تنفيذ فعلي لنفس الفترة
+php artisan accounting:backfill-shipping-revenue --from=2026-01-01
+
+# طلب واحد
+php artisan accounting:backfill-shipping-revenue --order=45008

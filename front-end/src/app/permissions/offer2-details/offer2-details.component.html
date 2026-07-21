@@ -1,24 +1,333 @@
-<div class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+<div class="offer-details-page container-fluid">
+  <div class="offer-page-head row py-2 py-md-3 align-items-center">
+    <div class="col-3 col-md-4 d-flex align-items-center offer-page-head__time">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">  عرض(2) {{offer?.id}}</p></div>
+    <div class="col-6 col-md-5 text-center">
+      <p class="title header offer-page-title mb-0 mx-auto">عرض(2) {{offer?.id}}</p>
     </div>
-    <div class="col-3 d-flex align-items-end justify-content-start">
-      <p  (click)="downloadPDF()"> <i class="fa-solid color-main fa-print "></i></p>
+    <div class="col-3 col-md-3"></div>
+  </div>
 
+  <div class="offer-actions-bar mx-auto mb-2 mb-md-3" dir="rtl" *ngIf="offer?.id">
+    <div class="offer-actions-bar__doc">
+      <button
+        type="button"
+        class="btn btn-sm text-white offer-actions-bar__pdf"
+        [disabled]="exportingPdf"
+        (click)="saveQuotationPdf()"
+        title="تحميل PDF">
+        <i class="fa-solid fa-file-pdf"></i>
+        <span class="offer-btn-label">{{ exportingPdf ? 'جاري التحميل...' : 'تحميل PDF' }}</span>
+      </button>
+      <button
+        type="button"
+        class="btn btn-sm btn-outline-secondary"
+        (click)="downloadPDF()"
+        title="طباعة">
+        <i class="fa-solid fa-print"></i>
+        <span class="offer-btn-label">طباعة</span>
+      </button>
+    </div>
+
+    <div class="offer-actions-bar__tools">
+      <button
+        type="button"
+        class="offer-tool-chip"
+        [class.active]="showLinkClientPanel"
+        (click)="toggleLinkClientPanel()"
+        title="ربط العميل">
+        <i class="fa-solid fa-building-user"></i>
+        <span class="offer-tool-chip__text">ربط العميل</span>
+        <span class="offer-tool-chip__dot offer-tool-chip__dot--ok" *ngIf="isLinked" title="مربوط"></span>
+      </button>
+      <button
+        type="button"
+        class="offer-tool-chip"
+        [class.active]="showProductGapsPanel"
+        (click)="toggleProductGapsPanel()"
+        title="مطابقة المنتجات">
+        <i class="fa-solid fa-boxes-stacked"></i>
+        <span class="offer-tool-chip__text">المنتجات</span>
+        <span
+          class="offer-tool-chip__badge"
+          *ngIf="actionableGaps?.length"
+          [attr.title]="actionableGaps.length + ' يحتاج إجراء'">
+          {{ actionableGaps.length }}
+        </span>
+      </button>
+    </div>
+
+    <div class="offer-actions-bar__ops">
+      <a
+        *ngIf="!offer?.converted_order_id && rbac.can('orders.convert_from_offer')"
+        class="btn btn-sm text-white offer-actions-bar__pdf"
+        [routerLink]="['/dashboard/shipping/convert-offer', offer.id]"
+        title="تحويل العرض إلى طلب">
+        <i class="fa-solid fa-right-left d-md-none"></i>
+        <span class="offer-btn-label">تحويل العرض إلى طلب</span>
+      </a>
+      <a
+        *ngIf="offer?.converted_order_id"
+        class="btn btn-sm btn-outline-success offer-converted-link"
+        [routerLink]="['/dashboard/shipping/orderdetails', offer.converted_order_id]"
+        title="الطلب المحوّل">
+        <i class="fa-solid fa-receipt"></i>
+        <span class="offer-btn-label">الطلب #{{ offer.converted_order_id }}</span>
+      </a>
     </div>
   </div>
+
+  <div class="offer-link-client card border-0 shadow-sm mb-3 mx-auto" dir="rtl" style="max-width: 900px;" *ngIf="showLinkClientPanel">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <h5 class="mb-0" style="color:#82225e;">ربط عرض السعر بعميل شركة</h5>
+        <button type="button" class="btn btn-sm btn-light border" (click)="showLinkClientPanel = false">إخفاء</button>
+      </div>
+
+      <div *ngIf="isLinked" class="alert alert-success mb-0">
+        مربوط بـ: <strong>{{ offer?.customer_company?.name || offer?.quote }}</strong>
+        — تم ترحيل مديونية
+        <strong>{{ offer?.debt_amount | customNumber }}</strong>
+        على رصيد العميل وقيد حساب الشجرة.
+        <a
+          *ngIf="offer?.customer_company_id"
+          class="d-block mt-2"
+          [routerLink]="['/dashboard/shipping/companybalance', offer.customer_company_id]">
+          فتح كشف حساب عميل الشركة
+        </a>
+      </div>
+
+      <div *ngIf="!isLinked && !showCreateForm" class="d-flex flex-wrap align-items-end gap-3">
+        <div style="min-width: 260px; flex: 1;">
+          <label class="form-label mb-1">اختر عميل من عملاء الشركات</label>
+          <ng-autocomplete
+            [data]="companies"
+            [searchKeyword]="catword"
+            placeholder="ابحث باسم الشركة"
+            (selected)="onCompanySelected($event)"
+            (inputCleared)="resetCompany()"
+            [itemTemplate]="companyItemTpl"
+            [notFoundTemplate]="companyNotFoundTpl">
+          </ng-autocomplete>
+          <ng-template #companyItemTpl let-item>
+            <a [innerHTML]="item.name"></a>
+          </ng-template>
+          <ng-template #companyNotFoundTpl let-notFound>
+            <div [innerHTML]="notFound"></div>
+          </ng-template>
+        </div>
+        <button
+          type="button"
+          class="btn text-white"
+          style="background:#82225e;"
+          [disabled]="linking || !selectedCompany"
+          (click)="linkToCompany()">
+          {{ linking ? 'جاري الربط...' : 'ربط وترحيل المديونية' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          (click)="openCreateForm()">
+          إنشاء عميل جديد من بيانات العرض
+        </button>
+      </div>
+
+      <div *ngIf="!isLinked && showCreateForm" class="border rounded p-3 bg-light">
+        <h6 class="mb-3" style="color:#82225e;">إنشاء عميل شركة من بيانات العرض</h6>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label mb-1">اسم العميل / الشركة</label>
+            <input class="form-control" [(ngModel)]="newCompany.name" placeholder="اسم العميل">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">رقم الموبايل</label>
+            <input class="form-control" [(ngModel)]="newCompany.phone1" placeholder="01xxxxxxxxx">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">موبايل إضافي (اختياري)</label>
+            <input class="form-control" [(ngModel)]="newCompany.phone2" placeholder="01xxxxxxxxx">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label mb-1">المحافظة</label>
+            <select class="form-control" [(ngModel)]="newCompany.governorate" (change)="onGovernChange()">
+              <option value="">اختر المحافظة</option>
+              <option *ngFor="let elm of location" [value]="elm.governorate_name_ar">{{ elm.governorate_name_ar }}</option>
+            </select>
+          </div>
+          <div class="col-md-6" *ngIf="governName">
+            <label class="form-label mb-1">المدينة</label>
+            <select class="form-control" [(ngModel)]="newCompany.city">
+              <option value="">اختر المدينة</option>
+              <option *ngFor="let elm of cities" [value]="elm.city_name_ar">{{ elm.city_name_ar }}</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label mb-1">العنوان</label>
+            <textarea class="form-control" rows="2" [(ngModel)]="newCompany.address" placeholder="العنوان"></textarea>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button
+            type="button"
+            class="btn text-white"
+            style="background:#82225e;"
+            [disabled]="creating"
+            (click)="createAndLinkCompany()">
+            {{ creating ? 'جاري الإنشاء...' : 'إنشاء العميل وترحيل المديونية' }}
+          </button>
+          <button type="button" class="btn btn-light border" [disabled]="creating" (click)="cancelCreateForm()">
+            رجوع
+          </button>
+        </div>
+      </div>
+
+      <small *ngIf="!isLinked" class="text-muted d-block mt-2">
+        عند التأكيد يُضاف إجمالي العرض ({{ offer?.total | customNumber }}) كمديونية على رصيد العميل.
+      </small>
+    </div>
+  </div>
+
+  <div class="offer-product-gaps card border-0 shadow-sm mb-3 mx-auto" dir="rtl" style="max-width: 1100px;" *ngIf="showProductGapsPanel">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h5 class="mb-0" style="color:#82225e;">مطابقة منتجات العرض مع الأصناف ووصفات التصنيع</h5>
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadProductGaps()" [disabled]="loadingGaps">
+            {{ loadingGaps ? 'جاري الفحص...' : 'إعادة الفحص' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm text-white"
+            style="background:#82225e;"
+            [disabled]="creatingCategories || !productGapsSummary?.missing_category"
+            (click)="createMissingCategories()">
+            {{ creatingCategories ? 'جاري الإنشاء...' : 'إنشاء كل الأصناف الناقصة' }}
+          </button>
+          <button type="button" class="btn btn-sm btn-light border" (click)="showProductGapsPanel = false">إخفاء</button>
+        </div>
+      </div>
+
+      <div *ngIf="productGapsSummary" class="small text-muted mb-2">
+        البنود: {{ productGapsSummary.total }}
+        — مطابق: {{ productGapsSummary.matched }}
+        — مربوط يدوياً: {{ productGapsSummary.matched_manual || 0 }}
+        — مطابق مع اختلاف مسافات: {{ productGapsSummary.matched_space_diff }}
+        — ناقص صنف: {{ productGapsSummary.missing_category }}
+        — بدون وصفة: {{ productGapsSummary.missing_recipe }}
+      </div>
+
+      <div *ngIf="!loadingGaps && actionableGaps.length === 0" class="alert alert-success mb-0">
+        كل منتجات العرض موجودة في الأصناف ولها وصفات (أو لا توجد بنود تحتاج إجراء).
+      </div>
+
+      <div class="gaps-table-wrap" *ngIf="actionableGaps.length">
+        <table class="table table-sm table-bordered text-center mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>اسم العرض</th>
+              <th>الحالة</th>
+              <th>الصنف المطابق</th>
+              <th>الاقتراح</th>
+              <th>إجراء</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let line of actionableGaps"
+              [class.table-warning]="line.status === 'missing_category'"
+              [class.table-info]="line.status === 'missing_recipe'"
+              [class.table-secondary]="line.match_type === 'space_insensitive' && line.status === 'ok'"
+              [class.table-success]="line.match_type === 'manual'">
+              <td>{{ line.offer_name }}</td>
+              <td>
+                <span *ngIf="line.status === 'missing_category'">صنف غير موجود</span>
+                <span *ngIf="line.status === 'missing_recipe'">بدون وصفة</span>
+                <span *ngIf="line.status === 'ok' && line.match_type === 'space_insensitive'">موجود (فرق مسافات)</span>
+                <span *ngIf="line.match_type === 'manual'">مربوط يدوياً</span>
+              </td>
+              <td class="gap-match-cell text-start">
+                <div *ngIf="line.status === 'missing_category' || line.editingMatch; else linkedCat2">
+                  <ng-autocomplete
+                    class="gap-ac"
+                    [data]="finishedCategories"
+                    [searchKeyword]="categorySearchKeyword"
+                    [customFilter]="filterGapCategorySearch"
+                    [selectedValueRender]="selectedGapCategoryLabel"
+                    [minQueryLength]="0"
+                    [debounceTime]="150"
+                    notFoundText="لا يوجد صنف تام مطابق"
+                    placeholder="ابحث في أصناف المنتج التام..."
+                    (selected)="onGapCategorySelected(line, $event)"
+                    [itemTemplate]="gapCatItemTpl2"
+                    [notFoundTemplate]="gapCatNotFoundTpl2">
+                  </ng-autocomplete>
+                  <button
+                    *ngIf="line.editingMatch"
+                    type="button"
+                    class="btn btn-link btn-sm p-0 mt-1"
+                    (click)="line.editingMatch = false">
+                    إلغاء
+                  </button>
+                </div>
+                <ng-template #linkedCat2>
+                  <ng-container *ngIf="line.category; else noCat2">
+                    {{ line.category.category_name }}
+                    <small class="d-block text-muted">#{{ line.category.id }}</small>
+                    <button type="button" class="btn btn-link btn-sm p-0" (click)="startEditGapMatch(line)">تغيير</button>
+                    <button
+                      *ngIf="line.match_type === 'manual'"
+                      type="button"
+                      class="btn btn-link btn-sm text-danger p-0 ms-2"
+                      [disabled]="linkingCategory"
+                      (click)="clearGapCategoryLink(line)">
+                      إلغاء الربط
+                    </button>
+                  </ng-container>
+                  <ng-template #noCat2>—</ng-template>
+                </ng-template>
+              </td>
+              <td class="text-start">{{ line.suggestion }}</td>
+              <td>
+                <button
+                  *ngIf="line.status === 'missing_category'"
+                  type="button"
+                  class="btn btn-sm btn-outline-primary"
+                  [disabled]="creatingCategories || linkingCategory"
+                  (click)="createOneMissingCategory(line)">
+                  إنشاء صنف
+                </button>
+                <a
+                  *ngIf="line.status === 'missing_recipe' && line.category?.id"
+                  class="btn btn-sm btn-outline-success"
+                  [routerLink]="recipeLink(line)"
+                  [queryParams]="recipeQuery(line)">
+                  إنشاء وصفة
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ng-template #gapCatItemTpl2 let-item>
+        <a [innerHTML]="item.category_name"></a>
+        <span *ngIf="item.item_code" class="text-muted ms-1">({{ item.item_code }})</span>
+      </ng-template>
+      <ng-template #gapCatNotFoundTpl2 let-notFound>
+        <div [innerHTML]="notFound"></div>
+      </ng-template>
+    </div>
+  </div>
+
+  <div class="offer-capture-wrap mx-auto">
   <div id="capture" dir="ltr" class="row border m-0 p-0 mx-auto">
 
     <div class=" col-md-12 ">
-      <div class="p-5">
+      <div class="p-5 offer-capture2-pad">
         <h4 style="text-align: start; margin-top: 30px;">
-          <img width="250px" src="assets/images/logoo.png" alt="">
+          <img class="offer-capture2-logo" width="250px" src="assets/images/logoo.png" alt="">
         </h4>
-        <div class="mx-4 mt-5">
+        <div class="mx-4 mt-5 offer-capture2-meta">
           <h4 style="text-align: start;"> Date :  {{offer?.dateFrom}} </h4>
           <h4 style="text-align: start;">Valid till :    {{offer?.dateTo}} </h4>
           <div class="quote-client-info" *ngIf="offer?.quote || offer?.contact_person || offer?.client_phone">
@@ -140,6 +449,7 @@
     </div>
 
 
+  </div>
   </div>
 
 </div>

@@ -88,8 +88,13 @@ export class OrderService {
     return this.http.get(`${environment.Url}/refuseorder/${id}?note=${note}&amount=${amount}&bank=${bank}&getorder=${receviedorder}&reasoncat=${reasoncat}`);
   }
 
-  confirmOrder(id:number,date:string,line_id:number,note:string , maintenReason:string){
-    return this.http.post(`${environment.Url}/confirm/${id}`,{date,line_id,note,maintenReason});
+  confirmOrder(id:number,date:string,line_id:number | null,note:string , maintenReason:string){
+    return this.http.post(`${environment.Url}/confirm/${id}`,{
+      date,
+      line_id: line_id || null,
+      note,
+      maintenReason,
+    });
   }
 
   shipOrder(formData:any,id:number){
@@ -136,7 +141,12 @@ export class OrderService {
   }
 
   checkDeliveryTransfer(id: number) {
-    return this.http.get<{ needs_transfer: boolean }>(`${environment.Url}/order/${id}/delivery-transfer-check`);
+    return this.http.get<{
+      needs_transfer: boolean;
+      amount?: number;
+      default_holder?: { type: string; id: number; name: string } | null;
+      holders?: { type: string; id: number; name: string; label: string }[];
+    }>(`${environment.Url}/order/${id}/delivery-transfer-check`);
   }
 
   deliverOrder(id: number, body: any = {}) {
@@ -173,6 +183,16 @@ export class OrderService {
     return this.http.get(
       `${environment.Url}/reports/shipping-accounts/${id}/statement`,
       httpOptionsFromParams(params)
+    );
+  }
+
+  settleShippingWithShipping(
+    id: number,
+    body: { order_ids: number[]; cash_account_id: number; date: string; mode?: string; notes?: string }
+  ) {
+    return this.http.post<any>(
+      `${environment.Url}/reports/shipping-accounts/${id}/settle-with-shipping`,
+      body
     );
   }
 

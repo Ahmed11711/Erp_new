@@ -3,25 +3,20 @@
 namespace App\Http\Controllers\Processing;
 
 use App\Http\Controllers\Controller;
-use App\Models\ProcessingDispatchNote;
-use App\Models\ProcessingInvoice;
 use App\Models\ProcessingOrder;
-use App\Models\ProcessingReceipt;
 use App\Models\Supplier;
 use App\Models\TransactionType;
 use App\Services\Documents\DocumentNumberService;
-use App\Services\Processing\ProcessingDispatchService;
-use App\Services\Processing\ProcessingInvoiceService;
+use App\Services\Processing\ProcessingOrderReversalService;
 use App\Services\Processing\ProcessingOrderService;
-use App\Services\Processing\ProcessingReceiptService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class ProcessingOrderController extends Controller
 {
     public function __construct(
         private ProcessingOrderService $orders,
         private DocumentNumberService $numbers,
+        private ProcessingOrderReversalService $reversal,
     ) {
     }
 
@@ -137,6 +132,28 @@ class ProcessingOrderController extends Controller
         $order = ProcessingOrder::query()->findOrFail($id);
         try {
             return response()->json($this->orders->approve($order));
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * حذف أمر التشغيل وعكس المخزون والقيود — للأدمن (processing.delete_order / system.rbac).
+     */
+    public function destroy(Request $request, int $id)
+    {
+        if (! has_permission('processing.delete_order') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'غير مصرح بحذف أوامر التشغيل الخارجي.'], 403);
+        }
+
+        $data = $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            return response()->json(
+                $this->reversal->deleteAndReverse($id, (int) auth()->id(), $data['reason'] ?? null)
+            );
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
