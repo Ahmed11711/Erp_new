@@ -19,7 +19,7 @@ use RuntimeException;
 final class OrderLineCancellationService
 {
     /** @var list<string> */
-    private const ALLOWED_STATUSES = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'];
+    private const ALLOWED_STATUSES = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'];
 
     /** @var list<string> */
     private const OPEN_SHIPPING_STATUSES = ['تم شحن', 'تم التسليم'];

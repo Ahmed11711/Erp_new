@@ -6,6 +6,7 @@ enum OrderDeliveryStatus: string
 {
     case Pending = 'pending';
     case Partial = 'partial';
+    case PartiallyDelivered = 'partially_delivered';
     case Shipped = 'shipped';
     case Delivered = 'delivered';
     case Refused = 'refused';
@@ -16,6 +17,7 @@ enum OrderDeliveryStatus: string
         return match ($this) {
             self::Pending => 'في الانتظار',
             self::Partial => 'شحن جزئي',
+            self::PartiallyDelivered => 'تسليم جزئي',
             self::Shipped => 'تم الشحن',
             self::Delivered => 'تم التسليم',
             self::Refused => 'رفض استلام',

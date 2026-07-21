@@ -136,6 +136,7 @@ class RbacFoundationSeeder extends Seeder
             'orders.view', 'orders.create', 'orders.edit', 'orders.cancel_line', 'orders.change_status', 'orders.export', 'orders.shopify.review',
             // «طلب جديد» (orders.view_status.new) مقصورة على خدمة العملاء — غير مشمولة هنا.
             'orders.view_status.confirmed', 'orders.view_status.partial_ship',
+            'orders.view_status.partial_deliver',
             'orders.view_status.shipped', 'orders.view_status.delivered', 'orders.view_status.received',
             'orders.view_status.collected', 'orders.view_status.postponed', 'orders.view_status.archived',
             'orders.view_status.maintained', 'orders.view_status.refused', 'orders.view_status.cancelled',

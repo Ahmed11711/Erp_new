@@ -29,6 +29,12 @@ class Order extends Model
  {
   return $this->hasMany(OrderProduct::class);
  }
+
+ /** دفعات الشحن الجزئي (order_shipments) — غير علاقة Shipment القديمة */
+ public function orderShipments()
+ {
+  return $this->hasMany(OrderShipment::class)->orderBy('shipment_seq');
+ }
  public function order_products_archive()
  {
   return $this->hasMany(OrderProductArchive::class);
@@ -102,7 +108,7 @@ class Order extends Model
   if ($order->order_status === 'تم التحصيل') {
    return false;
   }
-  if (! in_array($order->order_status, ['تم شحن', 'تم التسليم', 'شحن جزئي'], true)) {
+  if (! in_array($order->order_status, ['تم شحن', 'تم التسليم', 'شحن جزئي', 'تسليم جزئي'], true)) {
    return false;
   }
   if (! $order->order_details) {
@@ -130,7 +136,7 @@ class Order extends Model
    if (shippingCompanyDetails::where('order_id', $orderId)->where('is_done', 0)->exists()) {
     return;
    }
-   if (! in_array($o->order_status, ['تم شحن', 'تم التسليم', 'شحن جزئي'], true)) {
+   if (! in_array($o->order_status, ['تم شحن', 'تم التسليم', 'شحن جزئي', 'تسليم جزئي'], true)) {
     return;
    }
    $od = $o->order_details;

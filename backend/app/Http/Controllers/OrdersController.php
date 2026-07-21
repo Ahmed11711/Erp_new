@@ -54,6 +54,7 @@ use App\Services\Orders\OrderCancellationAccountingService;
 use App\Services\Orders\OrderEditAccountingService;
 use App\Services\Orders\OrderEditApplyService;
 use App\Services\Orders\OrderLineCancellationService;
+use App\Services\Orders\OrderPartialFulfillmentService;
 use App\Services\Orders\OrderPrepaidAdjustmentService;
 use App\Services\Orders\OrderPrintService;
 use App\Services\Shopify\ShopifyOrderReviewApplyService;
@@ -312,6 +313,10 @@ class OrdersController extends Controller
             ? $prepaidAdjustment->ineligibilityReason($order)
             : null;
 
+        $fulfillment = app(OrderPartialFulfillmentService::class);
+        $order->setAttribute('fulfillment_progress', $fulfillment->progress($order));
+        $order->load(['orderShipments.lines']);
+
         return response()->json($order, 200);
     }
 
@@ -567,7 +572,7 @@ class OrdersController extends Controller
             $canEditShipped = RbacLegacyAccess::passes(auth()->user(), [], ['orders.edit']);
             if (
                 ! (in_array($order->order_type, ['جديد', 'طلب استبدال', 'طلب مرتجع', 'طلب صيانة'], true)
-                    && in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'], true))
+                    && in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'], true))
                 && ! ($this->isVariableCollectionOrderStatus((string) $order->order_status) && $canEditShipped)
             ) {
                 return response()->json([
@@ -1673,10 +1678,10 @@ class OrdersController extends Controller
             return response()->json(['message' => 'not found'], 404);
         }
 
-        if (
-            ($order->customer_type == 'شركة' && !in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'مؤجل'])) ||
-            ($order->customer_type == 'افراد' && !in_array($order->order_status, ['طلب مؤكد', 'مؤجل']))
-        ) {
+        $shippable = $order->customer_type == 'شركة'
+            ? OrderPartialFulfillmentService::SHIPPABLE_COMPANY
+            : OrderPartialFulfillmentService::SHIPPABLE_INDIVIDUAL;
+        if (! in_array($order->order_status, $shippable, true)) {
             return response()->json(['message' => ' حالة الطلب الحاليه ' . $order->order_status], 422);
         }
 
@@ -1730,6 +1735,8 @@ class OrdersController extends Controller
                 }
                 $totalCogs = 0;
                 $cogsByInvAcc = [];
+                $shipmentLines = [];
+                $fulfillment = app(OrderPartialFulfillmentService::class);
                 foreach ($productsToShip as $product) {
                     $order_product = OrderProduct::find($product['id'] ?? null);
                     if (! $order_product) {
@@ -1770,19 +1777,27 @@ class OrdersController extends Controller
                     }
 
                     $avgCost = CategoryInventoryCostService::averageCostForCategoryIssue($category_id);
-                    $lineCogs = $avgCost * (float) $product['quantity'];
+                    $lineCogs = $avgCost * $shipQty;
                     $totalCogs += $lineCogs;
                     $invAcc = \App\Models\TreeAccount::resolveInventoryAccountForCategoryId($category_id);
                     if ($invAcc && $lineCogs > 0.000001) {
                         $cogsByInvAcc[$invAcc->id] = ($cogsByInvAcc[$invAcc->id] ?? 0) + $lineCogs;
                     }
-                    $order_product->shipped_quantity += (float)$product['quantity'];
+                    $order_product->shipped_quantity += $shipQty;
                     $order_product->save();
 
+                    $shipmentLines[] = [
+                        'order_product_id' => (int) $order_product->id,
+                        'category_id' => $category_id,
+                        'quantity' => $shipQty,
+                        'unit_price' => (float) $order_product->price,
+                        'unit_cost' => (float) $avgCost,
+                        'line_cogs' => (float) $lineCogs,
+                    ];
 
                     $invoice_number = $id;
                     $type = 'شحن طلب';
-                    $quantity = -(float)$product['quantity'];
+                    $quantity = -$shipQty;
                     $price = $order_product->price;
                     DB::statement('CALL category_procedure(?, ?, ?, ?, ?, ?, ?)', [
                         $category_id,
@@ -1794,22 +1809,19 @@ class OrdersController extends Controller
                         now()
                     ]);
 
-                    Category::find($category_id)->increment('sell_total_price', ($order_product->price * (float)$product['quantity']));
+                    Category::find($category_id)->increment('sell_total_price', ($order_product->price * $shipQty));
 
-                    $total += (int)$product['quantity'] * $order_product->price;
+                    $total += $shipQty * (float) $order_product->price;
                 }
 
                 $allOrderProducts = OrderProduct::query()->where('order_id', $id)->get();
                 foreach ($allOrderProducts as $lineProduct) {
-                    $remaining = (float) $lineProduct->quantity
-                        - (float) ($lineProduct->shipped_quantity ?? 0)
-                        - (float) ($lineProduct->cancelled_quantity ?? 0);
-                    if ($remaining > 0.009) {
+                    if ($fulfillment->remainingQuantity($lineProduct) > 0.009) {
                         $finshied = false;
                         break;
                     }
                 }
-
+                $statusAfterShip = $fulfillment->statusAfterShip($finshied);
 
                 $shipping_company = $shippingCompanyId > 0
                     ? ShippingCompany::find($shippingCompanyId)
@@ -1899,7 +1911,7 @@ class OrdersController extends Controller
                         : 'تم شحن / تسليم تشغيلي بدون شركة شحن — الذمة على عميل الشركة';
                     $this->insertTracking($order->id, $action, $user_id, now());
 
-                    $order->order_status = 'تم شحن';
+                    $order->order_status = $statusAfterShip;
                     $order->save();
                 } else {
 
@@ -1963,11 +1975,29 @@ class OrdersController extends Controller
                         }
                     }
 
-                    $action = 'تم شحن جزء من الطلب';
+                    $progress = $fulfillment->progress($order->fresh(['order_products']));
+                    $action = 'تم شحن جزء من الطلب — مشحون '
+                        . $progress['shipped_qty'] . ' / متبقي ' . $progress['remaining_qty'];
                     $this->insertTracking($order->id, $action, $user_id, now());
 
-                    $order->order_status = 'شحن جزئي';
+                    $order->order_status = $statusAfterShip;
                     $order->save();
+                }
+
+                if ($shipmentLines !== []) {
+                    $fulfillment->recordShipment(
+                        $order,
+                        $shipmentLines,
+                        $finshied,
+                        $statusAfterShip,
+                        $shippingCompanyId > 0 ? $shippingCompanyId : null,
+                        $request->payment_way ? (string) $request->payment_way : null,
+                        $request->date ? (string) $request->date : null,
+                        (int) $user_id,
+                        $finshied
+                            ? 'شحن كامل / آخر دفعة'
+                            : 'شحن جزئي — باقي الكميات عند التوفر',
+                    );
                 }
                 
                 if ($totalCogs > 0.000001) {
@@ -2383,7 +2413,7 @@ class OrdersController extends Controller
             return response()->json(['message' => 'not found'], 404);
         }
 
-        $allowedStatuses = ['تم شحن', 'شحن جزئي'];
+        $allowedStatuses = OrderPartialFulfillmentService::DELIVERABLE;
         if (!in_array($order->order_status, $allowedStatuses)) {
             return response()->json([
                 'message' => ' حالة الطلب الحاليه ' . $order->order_status,
@@ -2453,6 +2483,7 @@ class OrdersController extends Controller
 
     /**
      * تأكيد التسليم: قيود GL + نقل الذمة التشغيلي + تحديث بيانات الطلب.
+     * إن بقيت كميات غير مشحونة → «تسليم جزئي» دون إغلاق الطلب، ويُؤجَّل نقل الذمة للتسليم النهائي.
      */
     private function finalizeOrderDelivery(
         Order $order,
@@ -2461,6 +2492,46 @@ class OrdersController extends Controller
         ?\App\Enums\LiabilityHolderType $preferredHolder = null,
         ?int $preferredHolderId = null,
     ): void {
+        $fulfillment = app(OrderPartialFulfillmentService::class);
+        $order->loadMissing(['order_products', 'order_details']);
+        $hasRemaining = $fulfillment->hasOpenRemaining($order);
+        $newStatus = $fulfillment->statusAfterDeliver($order);
+
+        // تسليم جزئي: لا نقل ذمة/قيود وسيط كاملة طالما بقي متبقي — يُكمَل عند التسليم النهائي
+        if ($hasRemaining) {
+            $od = $order->order_details;
+            if ($od) {
+                $od->delivery_date = now()->format('Y-m-d');
+                $od->delivered_by_user_id = $userId;
+                $od->status_date = now()->format('Y-m-d');
+                $od->reviewed = 0;
+                $od->save();
+            }
+
+            $order->order_status = $newStatus;
+            $order->save();
+
+            app(OrderFinancialStateService::class)->syncFromOrder($order->fresh(['order_details', 'order_products']));
+
+            $progress = $fulfillment->progress($order);
+            $this->insertTracking(
+                $order->id,
+                'تسليم جزئي — تم تسليم المشحون، متبقي '
+                    . $progress['remaining_qty']
+                    . ' للطلب عند التوفر (قيمة متبقية ≈ '
+                    . $progress['remaining_value']
+                    . ')',
+                $userId,
+                now()
+            );
+
+            if ($note !== null && $note !== '') {
+                $this->insertNote($order->id, $userId, $note, 'تأكيد تسليم جزئي', now());
+            }
+
+            return;
+        }
+
         // المديونية تُرمى الآن (عند التسليم) على شركة الشحن/المندوب/شركة التحصيل.
         // طلبات الشركات تُدار مديونيتها عبر رصيد العميل-الشركة فلا تخضع لهذا المسار.
         if ($order->customer_type !== 'شركة') {
@@ -2509,7 +2580,7 @@ class OrdersController extends Controller
             ->where('is_done', 0)
             ->update(['status' => 'تم التسليم']);
 
-        $order->order_status = 'تم التسليم';
+        $order->order_status = OrderPartialFulfillmentService::STATUS_DELIVERED;
         $order->save();
 
         app(OrderFinancialStateService::class)->syncFromOrder($order->fresh(['order_details']));
@@ -2668,7 +2739,7 @@ class OrdersController extends Controller
         DB::beginTransaction();
         try {
             $done = 0;
-            $allowedStatuses = ['تم شحن', 'شحن جزئي'];
+            $allowedStatuses = OrderPartialFulfillmentService::DELIVERABLE;
             foreach ($orderIds as $oid) {
                 $order = Order::with('order_details')->find($oid);
                 if (!$order || !in_array($order->order_status, $allowedStatuses)) {
@@ -2953,7 +3024,7 @@ class OrdersController extends Controller
             return response()->json(['message' => 'not found'], 404);
         }
 
-        if (!($order->customer_type == 'شركة' && in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي']))) {
+        if (!($order->customer_type == 'شركة' && in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي']))) {
             return response()->json(['message' => ' حالة الطلب الحاليه ' . $order->order_status], 422);
         }
 
@@ -2961,7 +3032,7 @@ class OrdersController extends Controller
         try {
             $user_id = auth()->user()->id;
 
-            if ($order->customer_type == 'شركة' && ($order->order_status == 'طلب جديد' || $order->order_status == 'طلب مؤكد' || $order->order_status == 'شحن جزئي')) {
+            if ($order->customer_type == 'شركة' && ($order->order_status == 'طلب جديد' || $order->order_status == 'طلب مؤكد' || $order->order_status == 'شحن جزئي' || $order->order_status == 'تسليم جزئي')) {
                 $order->prepaid_amount = $order->prepaid_amount + $request->amount;
                 $order->net_total = $order->net_total - $request->amount;
                 $order->save();
@@ -3126,7 +3197,7 @@ class OrdersController extends Controller
             return response()->json(['message' => 'غير مصرح'], 401);
         }
 
-        if (! in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي'], true)) {
+        if (! in_array($order->order_status, ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'], true)) {
             return response()->json([
                 'message' => 'لا يمكن مراجعة/تعديل طلب Shopify في حالة «'.$order->order_status.'».',
             ], 422);
@@ -3618,6 +3689,11 @@ class OrdersController extends Controller
             },])
         ->orderBy('id', 'desc')
         ->paginate($itemsPerPage);
+
+        if ($request->boolean('from_offer')) {
+            app(OrderPartialFulfillmentService::class)->attachProgressToOrders($orders->getCollection());
+        }
+
         return response()->json($orders, 200);
     }
 

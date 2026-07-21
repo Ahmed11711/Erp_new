@@ -89,6 +89,7 @@ class OrderFinancialStateService
         $delivery = match ($orderStatus) {
             'طلب جديد', 'جديد', 'طلب مؤكد', 'مؤجل' => OrderDeliveryStatus::Pending,
             'شحن جزئي' => OrderDeliveryStatus::Partial,
+            'تسليم جزئي' => OrderDeliveryStatus::PartiallyDelivered,
             'تم شحن' => OrderDeliveryStatus::Shipped,
             'تم التسليم' => OrderDeliveryStatus::Delivered,
             'رفض استلام' => OrderDeliveryStatus::Refused,

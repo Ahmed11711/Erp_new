@@ -162,7 +162,7 @@ class OrderLiabilityTransferService
             throw new \RuntimeException('تم نقل الذمة مسبقاً لهذا الطلب.');
         }
 
-        if (! in_array($order->order_status, ['تم شحن', 'شحن جزئي', 'تم التسليم'], true)) {
+        if (! in_array($order->order_status, ['تم شحن', 'شحن جزئي', 'تسليم جزئي', 'تم التسليم'], true)) {
             throw new \RuntimeException('لا يمكن نقل الذمة في الحالة: ' . $order->order_status);
         }
 
@@ -326,7 +326,7 @@ class OrderLiabilityTransferService
             return false;
         }
 
-        if (! in_array($order->order_status, ['تم شحن', 'شحن جزئي', 'تم التسليم'], true)) {
+        if (! in_array($order->order_status, ['تم شحن', 'شحن جزئي', 'تسليم جزئي', 'تم التسليم'], true)) {
             return false;
         }
 

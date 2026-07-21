@@ -112,3 +112,6 @@ php artisan accounting:backfill-shipping-revenue --from=2026-01-01
 
 # طلب واحد
 php artisan accounting:backfill-shipping-revenue --order=45008
+
+php artisan migrate
+php artisan db:seed --class=PartialDeliverStatusPermissionSeeder

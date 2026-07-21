@@ -31,9 +31,17 @@ return [
         'partial_ship' => [
             'permission' => 'orders.view_status.partial_ship',
             'name' => 'View Partially Shipped Orders',
-            'labels' => ['شحن جزئي'],
+            // يشمل «تسليم جزئي» حتى تظهر الطلبات المفتوحة لاستكمال الشحن بدون صلاحية منفصلة
+            'labels' => ['شحن جزئي', 'تسليم جزئي'],
             'filter_value' => 'شحن جزئي',
             'filter_label' => 'شحن جزئي',
+        ],
+        'partial_deliver' => [
+            'permission' => 'orders.view_status.partial_deliver',
+            'name' => 'View Partially Delivered Orders',
+            'labels' => ['تسليم جزئي'],
+            'filter_value' => 'تسليم جزئي',
+            'filter_label' => 'تسليم جزئي',
         ],
         'shipped' => [
             'permission' => 'orders.view_status.shipped',
@@ -108,18 +116,18 @@ return [
      */
     'department_default_status_keys' => [
         // «طلب جديد» (new) مقصورة على خدمة العملاء فقط — لا تُمنح لأي قسم آخر افتراضياً.
-        'Admin' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
+        'Admin' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
         'Customer Service' => '*',
-        'Data Entry' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
-        'Account Management' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
-        'Finance and operations management' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
-        'Corparates' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
-        'Employee' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
-        'Operation Management' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'postponed', 'maintained', 'refused'],
-        'Operation Specialist' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'postponed', 'maintained', 'refused'],
-        'Logistics Specialist' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'postponed', 'maintained', 'refused'],
-        'Shipping Management' => ['confirmed', 'partial_ship', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'maintained', 'refused', 'cancelled'],
+        'Data Entry' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
+        'Account Management' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
+        'Finance and operations management' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
+        'Corparates' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
+        'Employee' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'archived', 'maintained', 'refused', 'cancelled'],
+        'Operation Management' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'postponed', 'maintained', 'refused'],
+        'Operation Specialist' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'postponed', 'maintained', 'refused'],
+        'Logistics Specialist' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'postponed', 'maintained', 'refused'],
+        'Shipping Management' => ['confirmed', 'partial_ship', 'partial_deliver', 'shipped', 'delivered', 'received', 'collected', 'postponed', 'maintained', 'refused', 'cancelled'],
         'Review Management' => ['shipped', 'delivered', 'collected', 'postponed', 'cancelled', 'refused'],
-        'Financial Accounts' => ['shipped', 'partial_ship', 'collected', 'received', 'delivered'],
+        'Financial Accounts' => ['shipped', 'partial_ship', 'partial_deliver', 'collected', 'received', 'delivered'],
     ],
 ];

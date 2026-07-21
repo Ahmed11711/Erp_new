@@ -23,7 +23,7 @@ class OrdersAccountingReconcileService
     private const EXCLUDED_STATUSES = ['ملغي', 'أرشيف'];
 
     private const ACTIVE_STATUSES = [
-        'طلب جديد', 'طلب مؤكد', 'شحن جزئي',
+        'طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي',
         'تم شحن', 'تم التسليم', 'تم الاستلام', 'تم التحصيل',
         'مؤجل', 'رفض استلام', 'تم الصيانة',
     ];
