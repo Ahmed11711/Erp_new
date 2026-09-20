@@ -19,3 +19,4 @@ yarn-error.log
 .env.*
 backend/.env
 backend/bootstrap/cache/*.php
+/.env
