@@ -13,7 +13,7 @@ export class BankDetailsComponent {
   suppliersData: any = [];
   name!:string;
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
 

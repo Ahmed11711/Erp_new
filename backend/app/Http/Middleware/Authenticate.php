@@ -14,8 +14,13 @@ class Authenticate extends Middleware
      */
     protected function redirectTo($request)
     {
-        if (! $request->expectsJson()) {
-            return route('login');
+        // طلبات الـ API لا يوجد لها مسار تسجيل دخول للتحويل إليه؛ إرجاع null يجعل Laravel
+        // يستجيب بـ 401 JSON بدلاً من رمي RouteNotFoundException (500) الذي يمنع
+        // الواجهة من تجديد التوكن.
+        if ($request->is('api', 'api/*') || $request->expectsJson()) {
+            return null;
         }
+
+        return \Illuminate\Support\Facades\Route::has('login') ? route('login') : null;
     }
 }

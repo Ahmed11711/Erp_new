@@ -179,3 +179,57 @@ i{
   color: #6c757d;
   font-size: 0.95rem;
 }
+
+.lead-actions {
+  white-space: nowrap;
+}
+
+.lead-quote-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-inline-end: 0.35rem;
+  border-radius: 8px;
+  background: #f8e8f0;
+  text-decoration: none;
+}
+
+.lead-quote-icon i {
+  color: #82225e !important;
+  font-size: 1rem !important;
+}
+
+.lead-quote-icon:hover {
+  background: #82225e;
+}
+
+.lead-quote-icon:hover i {
+  color: #fff !important;
+}
+
+.lead-quote-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-inline-end: 0.35rem;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #82225e;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.lead-quote-count:hover {
+  color: #fff;
+  background: #6b1c4a;
+}
+
+.lead-quote-icon.has-quotation {
+  box-shadow: 0 0 0 2px #82225e inset;
+}

@@ -112,12 +112,12 @@ return [
             'button_ids' => ['write_review', 'write_review_en'],
         ],
 
-        // feedback — نفس الـ header (صورة متغيرة في القالب المعتمد).
+        // feedback — عربي وإنجليزي بدون header (الصورة حُذفت من Meta؛ إرسال image يسبب 132018).
         [
             'name' => 'feedback',
             'language' => 'ar',
             'ui_label' => 'فيد باك بالعربية',
-            'header_format' => 'image',
+            'header_format' => 'omit',
             'header_param_keys' => [],
             'header_default_image_url' => null,
             'body_params' => [],
@@ -130,7 +130,7 @@ return [
             'language' => 'en_US',
             'api_language_code' => 'en',
             'ui_label' => 'فيد باك بالانجليزية',
-            'header_format' => 'image',
+            'header_format' => 'omit',
             'header_param_keys' => [],
             'header_default_image_url' => null,
             'body_params' => [],

@@ -13,7 +13,7 @@ export class IndividualsClientsComponent implements OnInit {
   dateFrom!: string;
   dateTo!: string;
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15, 50, 100];

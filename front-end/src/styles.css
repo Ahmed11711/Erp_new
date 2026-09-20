@@ -174,6 +174,36 @@ tbody tr:hover {
   border-color: var(--clr-primary-dark) !important;
 }
 
+/* ===== PAGE TITLES (black .header bars) =====
+   body.mat-typography inherits line-height: 20px as an absolute length.
+   Titles use font-size: 2rem (~32px) without their own line-height, so Arabic
+   glyphs get clipped and wrapped lines stack on top of each other. */
+.title.header,
+h1.header,
+h4.header,
+p.header {
+  line-height: 1.5;
+  letter-spacing: normal;
+  padding: 0.45rem 1.25rem;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.title.header.w-50,
+.title.header.w-75 {
+  width: fit-content !important;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  .title.header.w-50,
+  .title.header.w-75 {
+    white-space: normal;
+    font-size: 1.25rem;
+  }
+}
+
 /* ===== CARD / PAGE LAYOUT ===== */
 .erp-page {
   padding: 20px 24px;
@@ -646,6 +676,28 @@ tbody tr:hover {
   box-shadow: 0 12px 40px rgba(14, 64, 87, 0.22) !important;
 }
 
+/* شركات الشحن — لوحة بحث حساب الذمم فوق الجدول وأزرار الـ toolbar في لوحة التحكم */
+.cdk-overlay-pane.shipping-company-receivable-panel {
+  z-index: 100200 !important;
+}
+
+/* القيود اليومية — لوحة بحث الحساب فوق نافذة القيد والقائمة الجانبية */
+.cdk-overlay-container:has(.cdk-overlay-pane.daily-entry-account-panel) {
+  z-index: 100300 !important;
+}
+
+.cdk-overlay-pane.daily-entry-account-panel {
+  z-index: 100300 !important;
+}
+
+.mat-mdc-autocomplete-panel.daily-entry-account-panel {
+  max-width: min(420px, calc(100vw - 22rem - 48px));
+}
+
+/* حسابات الخدمات — لوحة بحث الحساب فوق نافذة الحوار */
+.cdk-overlay-pane.service-account-autocomplete-panel {
+  z-index: 100200 !important;
+}
 /* ╔══════════════════════════════════════════════════════════╗
    ║              MOBILE RESPONSIVE STYLES                   ║
    ╚══════════════════════════════════════════════════════════╝ */
@@ -921,6 +973,10 @@ tbody tr:hover {
     font-size: 0.95rem !important;
     padding: 16px !important;
   }
+
+  .swal2-popup.hr-deduct-popup {
+    padding: 0 0 1rem !important;
+  }
 }
 
 @keyframes erp-slide-up-mobile {
@@ -953,3 +1009,268 @@ app-daily-entries .modal-overlay,
 app-accounting-tree .modal-overlay {
   z-index: 100100 !important;
 }
+
+/* ===== HR — سجل تعديلات كشف الحضور (SweetAlert) ===== */
+.fp-log-popup {
+  border-radius: 14px !important;
+  padding: 0 0 1rem !important;
+  direction: rtl;
+}
+
+.fp-log-title {
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  color: var(--clr-primary) !important;
+  padding: 1.25rem 1.25rem 0.25rem !important;
+}
+
+.fp-log-container {
+  margin: 0 !important;
+  padding: 0 1.25rem !important;
+  text-align: right;
+}
+
+.fp-log-popup-date {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--clr-text-secondary);
+  background: var(--clr-primary-bg);
+  border-radius: 20px;
+  padding: 0.25rem 0.75rem;
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  direction: ltr;
+}
+
+.fp-log-list {
+  max-height: 380px;
+  overflow-y: auto;
+  text-align: right;
+}
+
+.fp-log-item {
+  background: var(--clr-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.fp-log-item:last-child {
+  margin-bottom: 0;
+}
+
+.fp-log-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.fp-log-action {
+  font-weight: 700;
+  color: var(--clr-navy);
+  font-size: 0.92rem;
+}
+
+.fp-log-user {
+  font-size: 0.82rem;
+  color: var(--clr-primary);
+  background: var(--clr-primary-bg);
+  padding: 0.15rem 0.55rem;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.fp-log-when {
+  font-size: 0.78rem;
+  color: var(--clr-text-muted);
+  margin-bottom: 0.5rem;
+  direction: ltr;
+  text-align: right;
+}
+
+.fp-log-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fp-log-change-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.fp-log-field {
+  color: var(--clr-text-secondary);
+  font-weight: 600;
+}
+
+.fp-log-old {
+  color: var(--clr-danger);
+  text-decoration: line-through;
+  direction: ltr;
+  text-align: center;
+}
+
+.fp-log-arrow {
+  color: var(--clr-text-muted);
+  font-size: 0.75rem;
+}
+
+.fp-log-new {
+  color: var(--clr-success);
+  font-weight: 700;
+  direction: ltr;
+  text-align: center;
+}
+
+.fp-log-note {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.5rem;
+}
+
+.fp-log-confirm-btn {
+  background: var(--clr-primary) !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 2rem !important;
+  font-size: 0.9rem !important;
+}
+
+.fp-log-close-btn {
+  color: var(--clr-text-muted) !important;
+}
+
+/* ===== HR — كارت خصم يوم الحضور ===== */
+.hr-deduct-popup {
+  width: min(420px, 94vw) !important;
+  border-radius: 16px !important;
+  padding: 0 0 1.1rem !important;
+  direction: rtl;
+  overflow: hidden;
+  box-shadow: 0 18px 50px rgba(17, 24, 39, 0.22) !important;
+}
+
+.hr-deduct-title {
+  margin: 0 !important;
+  padding: 1rem 1.25rem !important;
+  background: var(--clr-primary);
+  color: #fff !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+}
+
+.hr-deduct-body {
+  margin: 0 !important;
+  padding: 1.1rem 1.25rem 0.25rem !important;
+  text-align: right;
+}
+
+.hr-deduct-date {
+  display: inline-block;
+  margin-bottom: 0.9rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--clr-primary-bg);
+  color: var(--clr-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.hr-deduct-field {
+  margin-bottom: 0.9rem;
+  text-align: right;
+}
+
+.hr-deduct-field label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.hr-deduct-field select,
+.hr-deduct-field input {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+  height: 44px;
+  padding: 0 0.85rem !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  font-size: 0.95rem !important;
+}
+
+.hr-deduct-field select:focus,
+.hr-deduct-field input:focus {
+  outline: none;
+  border-color: var(--clr-primary) !important;
+  box-shadow: 0 0 0 3px var(--clr-primary-bg) !important;
+}
+
+.hr-deduct-result {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: #f8f1f5;
+  border: 1px solid #edd5e3;
+  text-align: right;
+}
+
+.hr-deduct-result__label {
+  display: block;
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-bottom: 0.2rem;
+}
+
+.hr-deduct-result__value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--clr-primary);
+  direction: ltr;
+  text-align: right;
+}
+
+.hr-deduct-result__hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.hr-deduct-actions {
+  margin: 0.4rem 1.25rem 0 !important;
+  gap: 0.5rem !important;
+}
+
+.hr-deduct-confirm {
+  background: var(--clr-primary) !important;
+  border-radius: 10px !important;
+  padding: 0.55rem 1.5rem !important;
+  font-weight: 700 !important;
+}
+
+.hr-deduct-cancel {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+  border-radius: 10px !important;
+  padding: 0.55rem 1.25rem !important;
+}
+

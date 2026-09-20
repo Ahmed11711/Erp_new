@@ -173,3 +173,27 @@ ul {
 .recommender-pending {
   color: #dc3545 !important;
 }
+
+.lead-quote-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #f8e8f0;
+  text-decoration: none;
+}
+
+.lead-quote-icon i {
+  color: #82225e !important;
+  font-size: 1.15rem !important;
+}
+
+.lead-quote-icon:hover {
+  background: #82225e;
+}
+
+.lead-quote-icon:hover i {
+  color: #fff !important;
+}

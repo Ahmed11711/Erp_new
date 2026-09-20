@@ -13,6 +13,7 @@ class PurchasesTracking extends Model
         'invoice_id',
         'invoice_number',
         'action',
+        'details',
         'user_id',
     ];
 

@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, of, shareReplay } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { environment } from 'src/env/env';
+import { WHATSAPP_SKIP_GLOBAL_LOADING } from './whatsapp-http.util';
 
 export type MessageDirection = 'sent' | 'received';
 export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | string;
@@ -13,6 +14,7 @@ export interface ChatMessage {
   type: MessageType;
   direction: MessageDirection;
   status?: string;
+  order_id?: number | null;
   media_url: string | null;
   media_mime_type?: string | null;
   media_filename?: string | null;
@@ -21,9 +23,45 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface ConversationOrderProduct {
+  id: number;
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+  special_details?: string | null;
+}
+
+export interface ConversationOrder {
+  id: number;
+  customer_name?: string;
+  order_status?: string;
+  order_type?: string;
+  order_date?: string;
+  net_total: number;
+  prepaid_amount: number;
+  products: ConversationOrderProduct[];
+}
+
+export interface ConversationMeta {
+  id: number;
+  name: string;
+  phone: string;
+  is_archived?: boolean;
+  whatsapp_archived_at?: string | null;
+  awaiting_reply?: boolean;
+}
+
+export interface ConversationOrdersPage {
+  success: boolean;
+  conversation?: ConversationMeta;
+  data: ConversationOrder[];
+  error?: string;
+}
+
 export interface MessagesPage {
   success: boolean;
-  conversation?: { id: number; name: string; phone: string };
+  conversation?: ConversationMeta;
   data: ChatMessage[];
   next_cursor: string | null;
   has_more: boolean;
@@ -71,7 +109,21 @@ export class MessageService {
 
     return this.http.get<MessagesPage>(
       `${this.baseUrl}/conversations/${conversationId}/messages`,
-      { params }
+      { params, headers: WHATSAPP_SKIP_GLOBAL_LOADING }
+    );
+  }
+
+  getConversationOrders(
+    conversationId: number,
+    includeId?: number | null
+  ): Observable<ConversationOrdersPage> {
+    let params = new HttpParams();
+    if (includeId) {
+      params = params.set('include_id', String(includeId));
+    }
+    return this.http.get<ConversationOrdersPage>(
+      `${this.baseUrl}/conversations/${conversationId}/orders`,
+      { params, headers: WHATSAPP_SKIP_GLOBAL_LOADING }
     );
   }
 
@@ -83,7 +135,10 @@ export class MessageService {
     }
 
     const stream$ = this.http
-      .get(`${this.baseUrl}/media/${messageId}`, { responseType: 'blob' })
+      .get(`${this.baseUrl}/media/${messageId}`, {
+        responseType: 'blob',
+        headers: WHATSAPP_SKIP_GLOBAL_LOADING,
+      })
       .pipe(
         map((blob) => URL.createObjectURL(blob)),
         tap((url) => {
@@ -107,6 +162,7 @@ export class MessageService {
       .get(`${this.baseUrl}/media/${messageId}`, {
         responseType: 'blob',
         params: { download: '1' },
+        headers: WHATSAPP_SKIP_GLOBAL_LOADING,
       })
       .pipe(
         map((blob) => {

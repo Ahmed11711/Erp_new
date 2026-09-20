@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CategoriesRoutingModule } from './categories-routing.module';
 import { UnitsComponent } from './units/units.component';
+import { ClassificationsComponent } from './classifications/classifications.component';
 import {MatDialogModule} from '@angular/material/dialog';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { FormsModule } from '@angular/forms';
@@ -23,6 +24,7 @@ import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 @NgModule({
   declarations: [
     UnitsComponent,
+    ClassificationsComponent,
     ProductionComponent,
     AddCategoryComponent,
     ListCategoriesComponent,

@@ -30,6 +30,13 @@ table th{
   font-size: 25px;
 }
 
+.supplier-row-menu {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
 
 ::ng-deep .mat-mdc-paginator-container{
   justify-content: center !important;

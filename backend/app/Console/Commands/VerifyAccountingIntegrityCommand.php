@@ -149,6 +149,7 @@ class VerifyAccountingIntegrityCommand extends Command
 
         $salesAcc = TreeAccount::resolveSalesRevenueAccount();
         $shippingRevAcc = TreeAccount::resolveShippingRevenueAccount();
+        $maintenanceRevAcc = TreeAccount::resolveMaintenanceRevenueAccount();
         $freightOutAcc = TreeAccount::resolveFreightOutExpenseAccount();
         $courierPayableAcc = TreeAccount::resolveShippingCourierPayableAccount();
 
@@ -166,6 +167,11 @@ class VerifyAccountingIntegrityCommand extends Command
 
         $this->info("   Sales Revenue: [{$salesAcc->code}] {$salesAcc->name}");
         $this->info("   Shipping Revenue: [{$shippingRevAcc->code}] {$shippingRevAcc->name}");
+        if ($maintenanceRevAcc) {
+            $this->info("   Maintenance Revenue: [{$maintenanceRevAcc->code}] {$maintenanceRevAcc->name}");
+        } else {
+            $this->warn('   Maintenance Revenue: missing (detail_type=maintenance_revenue or name إيرادات الصيانة)');
+        }
         $this->info("   Freight Out: [{$freightOutAcc->code}] {$freightOutAcc->name}");
         $this->info("   Courier Payable: [{$courierPayableAcc->code}] {$courierPayableAcc->name}");
         $this->info('   All 4 required accounts exist. Accounting structure is correct.');

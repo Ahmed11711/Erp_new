@@ -2,10 +2,9 @@
   <div class="row wa-chat-row g-0">
     <!-- Customers (conversation) list -->
     <div
-      #listScrollArea
-      class="col-md-3 border-end wa-customer-list wa-chat-main-col"
+      class="col-12 col-md-3 border-end wa-customer-list wa-chat-main-col"
       [class.wa-customer-list--loading]="listLoading"
-      (scroll)="onListScroll()"
+      [class.wa-customer-list--thread-open]="!!customerId"
     >
       <div class="wa-conv-list-sticky">
       <div class="p-3 border-bottom wa-panel-header">
@@ -29,6 +28,42 @@
           matTooltip="مسح البحث"
         >
           <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="wa-list-archive-tabs" role="tablist" aria-label="فلتر الأرشيف">
+        <button
+          type="button"
+          role="tab"
+          class="wa-list-archive-tab"
+          [class.wa-list-archive-tab--active]="listArchiveFilter === 'inbox'"
+          [attr.aria-selected]="listArchiveFilter === 'inbox'"
+          (click)="setListArchiveFilter('inbox')"
+        >
+          الصندوق
+          <span class="wa-list-archive-count" *ngIf="listInboxCount">{{ listInboxCount }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="wa-list-archive-tab"
+          [class.wa-list-archive-tab--active]="listArchiveFilter === 'archived'"
+          [attr.aria-selected]="listArchiveFilter === 'archived'"
+          (click)="setListArchiveFilter('archived')"
+        >
+          الأرشيف
+          <span class="wa-list-archive-count" *ngIf="listArchivedCount">{{ listArchivedCount }}</span>
+        </button>
+      </div>
+      <div class="wa-archive-all-wrap" *ngIf="listArchiveFilter === 'inbox'">
+        <button
+          type="button"
+          class="wa-archive-all-btn"
+          [disabled]="!canArchiveAllInbox || archiveAllBusy || listLoading"
+          (click)="archiveAllInbox()"
+        >
+          <mat-icon>archive</mat-icon>
+          <span *ngIf="!archiveAllBusy">أرشفة الجميع</span>
+          <span *ngIf="archiveAllBusy">جاري الأرشفة…</span>
         </button>
       </div>
       <div
@@ -63,97 +98,226 @@
       </div>
       </div>
       <div
-        *ngIf="listLoading"
+        #listScrollArea
+        class="wa-list-body"
+        (scroll)="onListScroll()"
+      >
+      <div
+        *ngIf="listLoading && customers.length > 0"
         class="text-center p-2 text-muted small wa-list-loading"
       >
         <p class="mb-0">جاري تحديث القائمة…</p>
       </div>
-      <div *ngIf="loading && !customerId" class="text-center p-3 text-muted">
+      <div
+        *ngIf="(listInitialLoading || listLoading) && !customers.length"
+        class="text-center p-3 text-muted wa-list-initial-loading"
+      >
         <p class="mb-0">جاري التحميل...</p>
       </div>
       <div
-        *ngIf="!loading && customers.length > 0 && !filteredCustomers.length"
+        *ngIf="listLoadError && !customers.length && !listLoading"
+        class="text-center p-3 text-danger small"
+      >
+        <p class="mb-2">{{ listLoadError }}</p>
+        <button type="button" class="btn btn-sm btn-outline-primary" (click)="loadCustomers(true)">
+          إعادة المحاولة
+        </button>
+      </div>
+      <div
+        *ngIf="!listInitialLoading && customers.length > 0 && !filteredCustomers.length"
         class="text-center p-3 text-muted small"
       >
         <p class="mb-0">لا توجد نتائج مطابقة</p>
       </div>
       <div
+        *ngIf="!listInitialLoading && !customers.length && !listLoadError && !listLoading"
+        class="text-center p-3 text-muted small"
+      >
+        <p class="mb-0" *ngIf="listArchiveFilter === 'archived'">لا توجد محادثات مؤرشفة</p>
+        <p class="mb-0" *ngIf="listArchiveFilter === 'inbox'">لا توجد محادثات في الصندوق</p>
+      </div>
+      <div
         *ngFor="let c of filteredCustomers"
-        class="wa-customer-item p-3 border-bottom"
+        class="wa-customer-item"
         [class.wa-customer-active]="customerId === c.id"
+        [class.wa-customer-item--archived]="isCustomerArchived(c)"
         (click)="selectCustomer(c)"
       >
-        <div class="d-flex justify-content-between align-items-center">
-          <div class="flex-grow-1 min-w-0">
-            <strong class="d-block text-truncate">{{ c.name }}</strong>
-            <small class="text-muted d-block text-truncate">{{ c.phone }}</small>
-            <small class="text-muted" *ngIf="c.messages_count > 0">
-              {{ c.messages_count }} رسالة
-            </small>
+        <div class="wa-customer-avatar" [attr.data-letter]="customerInitial(c)">
+          {{ customerInitial(c) }}
+        </div>
+        <div class="wa-customer-body">
+          <div class="wa-customer-row1">
+            <span class="wa-customer-name text-truncate">{{ c.name || c.phone }}</span>
+            <span class="wa-customer-time" *ngIf="customerLastTime(c) as t">{{ t }}</span>
           </div>
+          <div class="wa-customer-row2">
+            <span class="wa-customer-preview text-truncate">{{ customerLastPreview(c) }}</span>
+            <span class="wa-customer-badge" *ngIf="c.messages_count > 0">{{ c.messages_count }}</span>
+          </div>
+        </div>
+        <div class="wa-customer-actions">
           <button
             mat-icon-button
             type="button"
+            class="wa-customer-archive-btn"
+            [disabled]="archiveBusyId === c.id || (!isCustomerArchived(c) && isAwaitingReply(c))"
+            (click)="toggleCustomerArchive(c, $event)"
+            [matTooltip]="archiveButtonTooltip(c)"
+            [attr.aria-label]="archiveButtonTooltip(c)"
+          >
+            <mat-icon>{{ isCustomerArchived(c) ? 'unarchive' : 'archive' }}</mat-icon>
+          </button>
+          <button
+            mat-icon-button
+            type="button"
+            class="wa-customer-wa-btn"
             (click)="openWhatsApp(c); $event.stopPropagation()"
             matTooltip="فتح واتساب"
+            aria-label="فتح واتساب"
           >
-            <mat-icon>chat</mat-icon>
+            <mat-icon>open_in_new</mat-icon>
           </button>
         </div>
+      </div>
+      </div>
+      <div
+        *ngIf="canLoadMoreCustomers"
+        class="wa-list-paginate-more border-top p-2 bg-white"
+      >
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm w-100 wa-load-more-btn"
+          (click)="loadMoreCustomers($event)"
+          [disabled]="listLoadingMore"
+        >
+          <span *ngIf="!listLoadingMore">تحميل المزيد ({{ customers.length }} / {{ listTotalCustomers }})</span>
+          <span *ngIf="listLoadingMore">جاري التحميل…</span>
+        </button>
       </div>
     </div>
 
     <!-- Chat area -->
     <div
-      class="col-md-9 d-flex flex-column wa-chat-main wa-chat-main-col"
-      *ngIf="customerId && customer"
+      class="col-12 col-md-9 d-flex flex-column wa-chat-main wa-chat-main-col"
+      *ngIf="customerId"
     >
       <div
-        class="p-3 border-bottom wa-chat-header d-flex justify-content-between align-items-center"
+        class="p-3 border-bottom wa-chat-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+        [class.wa-chat-header--filters-open]="threadFiltersOpen"
       >
-        <div class="min-w-0">
-          <h5 class="mb-0 text-truncate">{{ customer.name }}</h5>
-          <small class="text-muted">{{ customer.phone }}</small>
-        </div>
-        <button
-          mat-icon-button
-          type="button"
-          (click)="openWhatsApp(customer)"
-          matTooltip="فتح واتساب"
+        <div
+          class="d-flex align-items-center gap-1 flex-shrink-0 min-w-0 wa-chat-header-lead"
         >
-          <mat-icon>open_in_new</mat-icon>
-        </button>
-      </div>
-
-      <!-- تصفية الرسائل: نطاق التاريخ + بحث داخل نصّ الرسائل (العمود الأيسر = بحث أسماء العملاء) -->
-      <form [formGroup]="filtersForm" class="wa-filters border-bottom">
-        <div class="wa-filters-row">
-          <div class="wa-filter-dates">
-            <input type="date" formControlName="from_date" aria-label="من تاريخ" />
-            <span class="wa-filter-sep">—</span>
-            <input type="date" formControlName="to_date" aria-label="إلى تاريخ" />
+          <button
+            type="button"
+            mat-icon-button
+            class="d-md-none wa-chat-back flex-shrink-0"
+            (click)="backToConversations()"
+            aria-label="العودة لقائمة المحادثات"
+          >
+            <mat-icon>arrow_forward</mat-icon>
+          </button>
+          <div
+            class="d-flex align-items-center gap-2 wa-chat-header-identity min-w-0"
+          >
+            <div class="min-w-0 wa-chat-header-name">
+              <h5 class="mb-0 text-truncate">{{ customer?.name || 'محادثة' }}</h5>
+              <small class="text-muted d-block text-truncate">{{ customer?.phone }}</small>
+            </div>
+            <button
+              mat-icon-button
+              type="button"
+              class="flex-shrink-0"
+              (click)="customer && openWhatsApp(customer)"
+              matTooltip="فتح واتساب"
+              [disabled]="!customer?.phone"
+            >
+              <mat-icon>open_in_new</mat-icon>
+            </button>
           </div>
           <button
             type="button"
-            class="wa-filter-clear"
-            (click)="clearFilters()"
-            *ngIf="filtersForm.value.search || filtersForm.value.from_date || filtersForm.value.to_date"
+            class="wa-header-archive-btn flex-shrink-0"
+            [disabled]="!customerId || archiveBusyId === customerId || !canArchiveOpenConversation"
+            (click)="toggleOpenConversationArchive()"
+            [matTooltip]="
+              isOpenConversationArchived
+                ? 'إرجاع للصندوق'
+                : isOpenConversationAwaitingReply
+                ? 'لا يمكن الأرشفة قبل الرد على رسالة العميل'
+                : 'أرشفة المحادثة'
+            "
+            [attr.aria-label]="
+              isOpenConversationArchived
+                ? 'إرجاع للصندوق'
+                : isOpenConversationAwaitingReply
+                ? 'لا يمكن الأرشفة قبل الرد على رسالة العميل'
+                : 'أرشفة المحادثة'
+            "
           >
-            مسح
+            <mat-icon>{{ isOpenConversationArchived ? 'unarchive' : 'archive' }}</mat-icon>
+            <span class="wa-header-archive-label">{{
+              isOpenConversationArchived ? 'إرجاع' : 'أرشفة'
+            }}</span>
+          </button>
+          <button
+            type="button"
+            class="wa-header-orders-btn flex-shrink-0"
+            (click)="openOrderPanel()"
+            matTooltip="طلبات العميل والمنتجات"
+            aria-label="طلبات العميل"
+          >
+            <mat-icon>shopping_bag</mat-icon>
+            <span>الطلبات</span>
+          </button>
+          <button
+            type="button"
+            mat-icon-button
+            class="d-md-none wa-chat-filter-toggle flex-shrink-0"
+            (click)="toggleThreadFilters()"
+            [attr.aria-expanded]="threadFiltersOpen"
+            aria-label="فلترة الرسائل"
+          >
+            <mat-icon>{{ threadFiltersOpen ? 'expand_less' : 'tune' }}</mat-icon>
           </button>
         </div>
-        <div class="wa-filters-row wa-filters-messages">
-          <div class="wa-filter-input wa-filter-messages">
-            <mat-icon class="wa-filter-icon">text_fields</mat-icon>
-            <input
-              type="text"
-              formControlName="search"
-              placeholder="بحث داخل نصّ الرسائل (اختياري)…"
-              autocomplete="off"
-            />
+
+        <form
+          [formGroup]="filtersForm"
+          class="wa-header-filters flex-grow-1 min-w-0"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="wa-header-filters-inner">
+            <div class="wa-filter-dates wa-filter-dates--compact">
+              <input type="date" formControlName="from_date" aria-label="من تاريخ" />
+              <span class="wa-filter-sep">—</span>
+              <input type="date" formControlName="to_date" aria-label="إلى تاريخ" />
+            </div>
+            <div class="wa-filter-input wa-filter-messages wa-filter-messages--header">
+              <mat-icon class="wa-filter-icon">text_fields</mat-icon>
+              <input
+                type="text"
+                formControlName="search"
+                placeholder="بحث داخل نصّ الرسائل (اختياري)…"
+                autocomplete="off"
+              />
+            </div>
+            <button
+              type="button"
+              class="wa-filter-clear flex-shrink-0"
+              (click)="clearFilters()"
+              *ngIf="
+                filtersForm.value.search ||
+                filtersForm.value.from_date ||
+                filtersForm.value.to_date
+              "
+            >
+              مسح
+            </button>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
 
       <!-- Messages scroll area -->
       <div
@@ -314,6 +478,16 @@
                   {{ isMessageBodyExpanded(m) ? 'إظهار أقل' : 'اقرأ المزيد' }}
                 </button>
 
+                <button
+                  *ngIf="messageOrderId(m) as oid"
+                  type="button"
+                  class="wa-order-chip"
+                  (click)="openOrderPanel(oid, $event)"
+                >
+                  <mat-icon>shopping_bag</mat-icon>
+                  <span>طلب #{{ oid }} — المنتجات</span>
+                </button>
+
                 <div class="wa-msg-meta">
                   <span>{{ formatDate(m.created_at) }}</span>
                   <span *ngIf="m.sender" class="wa-msg-sender">
@@ -349,7 +523,21 @@
       </div>
 
       <!-- Suggestions + input -->
-      <div class="wa-footer border-top bg-white">
+      <div
+        class="wa-footer border-top bg-white"
+        [class.wa-footer--suggestions-open]="suggestionsOpen"
+      >
+        <div class="wa-footer-toolbar d-md-none">
+          <button
+            type="button"
+            class="wa-footer-toggle-btn"
+            (click)="toggleSuggestions()"
+            *ngIf="templates.length > 0 || quickSnippets.length > 0"
+          >
+            <mat-icon>{{ suggestionsOpen ? 'expand_more' : 'lightbulb' }}</mat-icon>
+            {{ suggestionsOpen ? 'إخفاء الاقتراحات' : 'اقتراحات سريعة' }}
+          </button>
+        </div>
         <div
           class="wa-suggestions"
           *ngIf="templates.length > 0 || quickSnippets.length > 0"
@@ -405,12 +593,93 @@
 
     <!-- Empty placeholder -->
     <div
-      class="col-md-9 d-flex flex-column align-items-center justify-content-center wa-empty-bg wa-chat-main-col"
+      class="col-12 col-md-9 d-flex flex-column align-items-center justify-content-center wa-empty-bg wa-chat-main-col"
       *ngIf="!customerId"
     >
       <div class="text-center text-muted">
         <mat-icon class="wa-empty-icon">chat</mat-icon>
         <p class="mt-3 mb-0">اختر محادثة لعرض الرسائل</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer orders + products -->
+  <div class="wa-orders-overlay" *ngIf="ordersPanelOpen" (click)="closeOrderPanel()">
+    <div class="wa-orders-sheet" (click)="$event.stopPropagation()" dir="rtl">
+      <div class="wa-orders-sheet-bar">
+        <div class="wa-orders-sheet-title">
+          <strong *ngIf="focusedOrderId">طلب #{{ focusedOrderId }}</strong>
+          <strong *ngIf="!focusedOrderId">طلبات العميل</strong>
+          <small *ngIf="customer">{{ customer.name || customer.phone }}</small>
+        </div>
+        <div class="wa-orders-sheet-actions">
+          <button
+            *ngIf="focusedOrderId && conversationOrders.length > 1"
+            type="button"
+            class="wa-orders-text-btn"
+            (click)="showAllConversationOrders()"
+          >
+            كل الطلبات
+          </button>
+          <button type="button" class="wa-lightbox-btn wa-lightbox-close" (click)="closeOrderPanel()">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <div class="wa-orders-sheet-body">
+        <div *ngIf="ordersPanelLoading" class="text-center text-muted p-4">
+          جاري تحميل الطلبات…
+        </div>
+        <div *ngIf="!ordersPanelLoading && ordersPanelError" class="wa-orders-error">
+          {{ ordersPanelError }}
+        </div>
+        <div
+          *ngIf="!ordersPanelLoading && !ordersPanelError && !displayedOrders().length"
+          class="text-center text-muted p-4"
+        >
+          لا توجد طلبات مرتبطة بهذا الرقم.
+        </div>
+
+        <article
+          class="wa-order-card"
+          *ngFor="let o of displayedOrders()"
+          [class.wa-order-card--open]="isOrderExpanded(o.id)"
+        >
+          <button type="button" class="wa-order-card-head" (click)="toggleOrderExpand(o.id, $event)">
+            <div class="wa-order-card-id">
+              <span>طلب #{{ o.id }}</span>
+              <span class="wa-order-status" *ngIf="o.order_status">{{ o.order_status }}</span>
+            </div>
+            <div class="wa-order-card-meta">
+              <span *ngIf="o.order_type">{{ o.order_type }}</span>
+              <span *ngIf="o.order_date">{{ o.order_date }}</span>
+              <span dir="ltr">{{ formatMoney(o.net_total) }} EGP</span>
+            </div>
+            <mat-icon class="wa-order-card-chevron">
+              {{ isOrderExpanded(o.id) ? 'expand_less' : 'expand_more' }}
+            </mat-icon>
+          </button>
+
+          <div class="wa-order-card-body" *ngIf="isOrderExpanded(o.id)">
+            <div class="wa-order-products" *ngIf="o.products?.length; else noProducts">
+              <div class="wa-order-product" *ngFor="let p of o.products">
+                <div class="wa-order-product-name">
+                  {{ p.name }}
+                  <small *ngIf="p.special_details">{{ p.special_details }}</small>
+                </div>
+                <div class="wa-order-product-qty" dir="ltr">× {{ p.quantity }}</div>
+                <div class="wa-order-product-total" dir="ltr">{{ formatMoney(p.total) }}</div>
+              </div>
+            </div>
+            <ng-template #noProducts>
+              <p class="text-muted small mb-2">لا توجد منتجات مسجّلة على هذا الطلب.</p>
+            </ng-template>
+            <button type="button" class="wa-order-open-btn" (click)="openOrderDetails(o.id, $event)">
+              فتح تفاصيل الطلب
+            </button>
+          </div>
+        </article>
       </div>
     </div>
   </div>

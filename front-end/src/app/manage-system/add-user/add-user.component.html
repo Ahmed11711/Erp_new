@@ -34,8 +34,9 @@
         </div>
         <div class="col-md-3">
           <div class="form-group">
-            <select class="form-control" formControlName='department'>
-              <option disabled selected>الادارة</option>
+            <select class="form-control" formControlName="department">
+              <option [ngValue]="null" disabled>اختر القسم</option>
+              <option value="Admin">Admin</option>
               <option value="Data Entry">Data Entry</option>
               <option value="Review Management">Review Management</option>
               <option value="Shipping Management">Shipping Management</option>
@@ -45,6 +46,7 @@
               <option value="Account Management">Account Management</option>
               <option value="Logistics Specialist">Logistics Specialist</option>
               <option value="Finance and operations management">Finance and operations management</option>
+              <option value="Financial Accounts">Financial Accounts</option>
             </select>
             <!-- <input class="form-control"   placeholder="الادره"
             [class.is-valid]="form.get('department')?.errors ==null && form.get('department')?.touched"
@@ -72,9 +74,20 @@
 
       </div>
 
+      <div class="row mt-3">
+        <div class="col-12 col-lg-8 m-auto">
+          <label class="form-label fw-semibold">أدوار المستخدم (اختياري — يمكن تعديلها لاحقاً من صفحة الصلاحيات)</label>
+          <mat-form-field appearance="outline" class="w-100">
+            <mat-select formControlName="role_ids" multiple placeholder="اختر دوراً أو أكثر">
+              <mat-option *ngFor="let r of rolesCatalog" [value]="r.id">{{ r.name }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </div>
+
 
       <div class="text-center my-3">
-        <button [disabled]="form.invalid || form.value.department == 'الادارة'" class="btn submit my-3">اضافة </button>
+        <button [disabled]="form.invalid" class="btn submit my-3">اضافة </button>
       </div>
     </form>
 

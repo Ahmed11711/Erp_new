@@ -79,9 +79,17 @@ class Message extends Model
     protected static function booted(): void
     {
         static::created(function (self $message): void {
-            if ($message->customer_id) {
-                Customer::whereKey($message->customer_id)->update(['updated_at' => now()]);
+            if (! $message->customer_id) {
+                return;
             }
+
+            $updates = ['updated_at' => now()];
+            // أي رسالة واردة من العميل تُخرجه من الأرشيف وتعيده للصندوق.
+            if ($message->direction === 'inbound') {
+                $updates['whatsapp_archived_at'] = null;
+            }
+
+            Customer::whereKey($message->customer_id)->update($updates);
         });
     }
 }

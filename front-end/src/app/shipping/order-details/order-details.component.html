@@ -1,23 +1,82 @@
-<div class="container-fluid">
+<div class="container-fluid order-details-page" [class.shopify-review-page]="shopifyReviewMode" dir="rtl">
 
- <div class="row py-3" *ngIf="isDetails">
-  <div class="col-md-3">
+ <div class="order-details-hero" *ngIf="isDetails">
+  <div class="order-details-hero__time">
    <app-time></app-time>
   </div>
-  <div class="col-md-2 offset-md-2 p-3">
-   <div>
-    <p class="title header"> تفاصيل الطلب {{id}}</p>
-   </div>
-   <div class="d-flex justify-content-between ">
-    <p class="bg-main " (click)="printSticker()"> ملصقات <i class="fa-solid fa-print text-white"></i></p>
-    <p class="bg-main" (click)="printInvoice('A3')"> A3 <i class="fa-solid fa-print text-white"></i></p>
-    <p class="bg-main" (click)="printInvoice('A4')"> A4 <i class="fa-solid fa-print text-white"></i></p>
-   </div>
+  <div class="order-details-hero__title-wrap">
+   <h1 class="order-details-hero__title" *ngIf="!shopifyReviewMode">تفاصيل الطلب #{{ id }}</h1>
+   <h1 class="order-details-hero__title shopify-review-page-title" *ngIf="shopifyReviewMode">
+    <span class="shopify-badge">Shopify</span>
+    مراجعة طلب #{{ id }}
+   </h1>
+   <p class="order-details-hero__subtitle" *ngIf="order?.order_status">{{ order?.order_status }} · {{ order?.order_type }}</p>
+  </div>
+  <div class="order-details-hero__actions" *ngIf="!isFinancialAccountsReadonly && !shopifyReviewMode">
+   <button type="button" class="order-details-hero__action-btn order-details-hero__action-btn--prepaid"
+     *ngIf="canShowPrepaidAdjustment && isDetails"
+     (click)="openPrepaidAdjustmentDialog()"
+     title="عكس أو تغيير مصدر الدفعة المقدمة">
+    <i class="fa-solid fa-money-bill-transfer"></i> تحت الحساب
+   </button>
+   <button type="button" class="order-details-hero__action-btn" (click)="printSticker()">
+    <i class="fa-solid fa-tags"></i> ملصقات
+   </button>
+   <button type="button" class="order-details-hero__action-btn" (click)="printInvoice('A3')">
+    <i class="fa-solid fa-file-lines"></i> A3
+   </button>
+   <button type="button" class="order-details-hero__action-btn" (click)="printInvoice('A4')">
+    <i class="fa-solid fa-file"></i> A4
+   </button>
   </div>
  </div>
 
- <div class="container-fluid table-responsive text-center ">
-  <table class="table table-bordered table-hover w-100">
+ <div class="alert alert-info text-center m-2" dir="rtl" *ngIf="pageLoading && !order">جاري تحميل بيانات الطلب...</div>
+ <div class="alert alert-danger m-2" dir="rtl" *ngIf="pageError">
+  {{ pageError }}
+  <button type="button" class="btn btn-sm btn-outline-danger mx-2" (click)="getOrder()">إعادة المحاولة</button>
+ </div>
+
+ <app-order-fulfillment-panel *ngIf="isDetails && id && !shopifyReviewMode" [orderId]="id" [readonly]="isFinancialAccountsReadonly"></app-order-fulfillment-panel>
+
+ <div class="shopify-review-bar shopify-review-bar--top" dir="rtl" *ngIf="isDetails && shopifyReviewMode && isShopifyOrder">
+  <div class="shopify-review-bar__status" [class.is-reviewed]="isShopifyReviewed">
+   <strong>{{ isShopifyReviewed ? 'تمت المراجعة' : 'بانتظار المراجعة' }}</strong>
+   <span *ngIf="isShopifyReviewed"> — {{ order?.shopify_reviewer?.name }} · {{ order?.shopify_reviewed_at | date:'yyyy-MM-dd HH:mm' }}</span>
+   <span class="shopify-review-bar__pay"> · حالة الدفع: {{ shopifyFinancialStatusLabel }}</span>
+  </div>
+  <ng-container *ngTemplateOutlet="shopifyReviewActions"></ng-container>
+ </div>
+
+ <div class="alert alert-danger m-2" dir="rtl"
+   *ngIf="isDetails && shopifyReviewMode && isShopifyOrder && (order?.shopify_needs_product_review || hasUnmatchedReviewProducts)">
+  <strong>تنبيه:</strong> هذا الطلب يحتوي منتج Shopify غير مربوط بصنف ERP (مُعلّم بـ ⚠️ في جدول المنتجات).
+  اربطه بالصنف الصحيح من القائمة قبل تأكيد المراجعة. لن يُسمح بتأكيد/شحن الطلب قبل ربط المنتج.
+ </div>
+
+ <ng-template #shopifyReviewActions>
+  <div class="shopify-review-bar__actions">
+   <button type="button" class="btn btn-outline-secondary" (click)="exitShopifyReview()">رجوع للقائمة</button>
+   <button type="button" class="btn btn-success btn-lg shopify-review-save-btn"
+     [disabled]="reviewSubmitting || !canConfirmShopifyReview"
+     [title]="!canConfirmShopifyReview ? 'ليس لديك صلاحية orders.shopify.review' : ''"
+     (click)="confirmShopifyReview()">
+     <span *ngIf="reviewSubmitting">جاري الحفظ...</span>
+     <span *ngIf="!reviewSubmitting">{{ isShopifyReviewed ? 'حفظ التعديلات' : 'تأكيد المراجعة وحفظ' }}</span>
+   </button>
+  </div>
+  <p class="shopify-review-perm-hint text-danger small mb-0" *ngIf="!canConfirmShopifyReview">
+   لا تملك صلاحية تأكيد مراجعة Shopify — اطلب من المسؤول تفعيل «Review imported Shopify orders».
+  </p>
+ </ng-template>
+
+ <div class="order-section-card order-info-card mb-3">
+  <div class="order-section-card__header">
+   <h5 class="order-section-card__title">بيانات الطلب</h5>
+  </div>
+
+  <div class="table-responsive text-center">
+   <table class="table table-bordered table-hover order-details-table w-100 mb-0">
    <thead class="thead-dark">
     <th>نوع الطلب</th>
     <th>حالة الطلب</th>
@@ -25,6 +84,7 @@
     <th *ngIf="order?.delivery_date">تاريخ التسليم ( حسب العميل )</th>
     <th *ngIf="order?.order_details?.status_date">تاريخ الحالة</th>
     <th *ngIf="order?.order_details?.shipping_date">تاريخ الشحن</th>
+    <th *ngIf="order?.order_status === 'طلب مؤكد' || order?.order_details?.confirm_date || order?.order_details?.confirmed_by_name || order?.order_details?.confirmed_by_user">تم التأكيد بواسطة</th>
     <th>مصدر الطلب</th>
     <th>طريقة الشحن</th>
    </thead>
@@ -35,14 +95,24 @@
     <td *ngIf="order?.delivery_date">{{order?.delivery_date}}</td>
     <td *ngIf="order?.order_details?.status_date">{{order?.order_details?.status_date || ''}}</td>
     <td *ngIf="order?.order_details?.shipping_date">{{order?.order_details?.shipping_date || ''}}</td>
+    <td *ngIf="order?.order_status === 'طلب مؤكد' || order?.order_details?.confirm_date || order?.order_details?.confirmed_by_name || order?.order_details?.confirmed_by_user">
+      {{ order?.order_details?.confirmed_by_name || order?.order_details?.confirmed_by_user?.name || '—' }}
+      <span *ngIf="order?.order_details?.confirm_date" class="text-muted"> · {{ order?.order_details?.confirm_date }}</span>
+    </td>
     <td>{{order?.order_source?.name}}</td>
-    <td>{{order?.shipping_method?.name}}</td>
+    <td *ngIf="!shopifyReviewMode">{{order?.shipping_method?.name}}</td>
+    <td *ngIf="shopifyReviewMode">
+     <select class="form-control form-control-sm" [(ngModel)]="reviewDraft.shipping_method_id">
+      <option [ngValue]="null">—</option>
+      <option *ngFor="let w of shippingWays" [ngValue]="w.id">{{ w.name }}</option>
+     </select>
+    </td>
    </tbody>
   </table>
- </div>
+  </div>
 
- <div class="container-fluid table-responsive text-center ">
-  <table class="table table-bordered table-hover w-100">
+  <div class="table-responsive text-center">
+   <table class="table table-bordered table-hover order-details-table w-100 mb-0">
    <thead class="thead-dark">
     <th>اسم العميل</th>
     <th>رقم الموبيل 1</th>
@@ -54,6 +124,7 @@
     <th class="w-25">العنوان</th>
    </thead>
    <tbody>
+    <ng-container *ngIf="!shopifyReviewMode">
     <td>{{order?.customer_name}}</td>
     <td>{{order?.customer_phone_1}}</td>
     <td *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">
@@ -62,18 +133,29 @@
     <td>{{order?.governorate}}</td>
     <td *ngIf="order?.city">{{order?.city}}</td>
     <td>{{order?.address}}</td>
+    </ng-container>
+    <ng-container *ngIf="shopifyReviewMode">
+     <td><input class="form-control form-control-sm" [(ngModel)]="reviewDraft.customer_name"></td>
+     <td><input class="form-control form-control-sm" dir="ltr" [(ngModel)]="reviewDraft.customer_phone_1"></td>
+     <td *ngIf="order?.customer_phone_2 != 'null' && order?.customer_phone_1 != order?.customer_phone_2">
+      <input class="form-control form-control-sm" dir="ltr" [(ngModel)]="reviewDraft.customer_phone_2"></td>
+     <td *ngIf="order?.tel != 'null'"><input class="form-control form-control-sm" dir="ltr" [(ngModel)]="reviewDraft.tel"></td>
+     <td><input class="form-control form-control-sm" [(ngModel)]="reviewDraft.governorate"></td>
+     <td *ngIf="order?.city"><input class="form-control form-control-sm" [(ngModel)]="reviewDraft.city"></td>
+     <td><input class="form-control form-control-sm" [(ngModel)]="reviewDraft.address"></td>
+    </ng-container>
    </tbody>
   </table>
- </div>
+  </div>
 
- <div class="container-fluid table-responsive text-center ">
-  <table class="table table-bordered table-hover w-100">
+  <div class="table-responsive text-center">
+   <table class="table table-bordered table-hover order-details-table w-100 mb-0">
    <thead class="thead-dark">
     <th *ngIf="order?.order_details?.shipping_line?.name">خط التوزيع</th>
     <th *ngIf="maintenReasons.length > 0">سبب الصيانة</th>
     <th *ngIf="order?.order_details?.shipping_company?.name">شركة الشحن</th>
     <th *ngIf="order?.order_status!='طلب جديد' && order?.order_status!='طلب مؤكد'">رقم البوليصة </th>
-    <th *ngIf="order?.collect_note">ملحوظة التحصيل المتغير</th>
+    <th *ngIf="order?.collect_note || shopifyReviewMode">ملحوظة التحصيل المتغير</th>
 
    </thead>
    <tbody>
@@ -97,12 +179,17 @@
       </table>
      </div>
     </td>
-    <td *ngIf="order?.collect_note">{{order?.collect_note}}</td>
+    <td *ngIf="order?.collect_note && !shopifyReviewMode">{{order?.collect_note}}</td>
+    <td *ngIf="shopifyReviewMode">
+     <textarea class="form-control form-control-sm" rows="2" [(ngModel)]="reviewDraft.collect_note" placeholder="ملحوظة التحصيل"></textarea>
+    </td>
    </tbody>
   </table>
+  </div>
  </div>
 
- <div class="row">
+ <div class="order-section-card order-review-tools mb-3">
+  <div class="row g-3">
   <div class="col-md-2 mt-2" *ngIf="user == 'Admin'">
    <textarea class="form-control" [(ngModel)]="reviewdNote" placeholder="ملحوظة مراجعة الادمن" type="text"></textarea>
    <input class="my-2" id="reviewed" [(ngModel)]="reviewd" type="checkbox" name=""> <span class="m-2">تم المراجعة</span>
@@ -154,61 +241,103 @@
     </tbody>
    </table>
   </div>
- </div> <br>
+ </div>
+ </div>
 
- <div class="row">
-  <div class="col-md-8 table-responsive" *ngIf="order?.order_products_archive.length > 0 && user == 'Admin'">
-   <button class="btn bg-main" (click)="toggleUpdatedProduct()">طلب معدل</button>
-   <table class="table table-bordered table-hover" *ngIf="oldProduct">
-    <thead>
-     <tr>
-      <th>اسم المنتج</th>
-      <th>الكمية المطلوبة</th>
-      <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
-      <th>سعر البيع</th>
-      <th>اجمالى سعر البيع</th>
-      <th>بواسطة</th>
-      <th>التاريخ</th>
-     </tr>
-    </thead>
-    <tbody>
-     <tr *ngFor="let elm of order?.order_products_archive;">
-      <td>{{elm.category.category_name}}</td>
-      <td dir="ltr">{{elm.quantity}}</td>
-      <td *ngIf="order?.customer_type=='شركة'">{{elm.shipped_quantity}}</td>
-      <td dir="ltr">{{elm.price | customNumber}}</td>
-      <td dir="ltr">{{elm.total_price | customNumber}}</td>
-      <td>{{elm.updated_by}}</td>
-      <td>{{elm.created_at | customDate}}</td>
-     </tr>
-    </tbody>
-   </table>
-   <hr>
+ <div class="row g-3 order-details-main">
+  <div class="col-12" *ngIf="order?.order_products_archive.length > 0 && user == 'Admin'">
+   <div class="order-section-card">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title">نسخة الطلب قبل التعديل</h5>
+     <button type="button" class="btn btn-sm bg-main" (click)="toggleUpdatedProduct()">طلب معدل</button>
+    </div>
+    <div class="table-responsive" *ngIf="oldProduct">
+     <table class="table table-bordered table-hover order-details-table w-100 mb-0">
+      <thead>
+       <tr>
+        <th>اسم المنتج</th>
+        <th>الكمية المطلوبة</th>
+        <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
+        <th>سعر البيع</th>
+        <th>اجمالى سعر البيع</th>
+        <th>بواسطة</th>
+        <th>التاريخ</th>
+       </tr>
+      </thead>
+      <tbody>
+       <tr *ngFor="let elm of order?.order_products_archive;">
+        <td>{{elm.category.category_name}}</td>
+        <td dir="ltr">{{elm.quantity}}</td>
+        <td *ngIf="order?.customer_type=='شركة'">{{elm.shipped_quantity}}</td>
+        <td dir="ltr">{{elm.price | customNumber}}</td>
+        <td dir="ltr">{{elm.total_price | customNumber}}</td>
+        <td>{{elm.updated_by}}</td>
+        <td>{{elm.created_at | customDate}}</td>
+       </tr>
+      </tbody>
+     </table>
+    </div>
+   </div>
   </div>
 
-  <div class="col-md-8 table-responsive">
-   <table class="table table-bordered table-hover">
+  <div class="col-12">
+   <div class="order-section-card">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title">منتجات الطلب</h5>
+    </div>
+    <div class="shopify-review-add-product mb-2" *ngIf="shopifyReviewMode">
+     <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+       <ng-autocomplete
+         [data]="catalogProducts"
+         [searchKeyword]="catword"
+         placeholder="إضافة صنف"
+         (selected)="onReviewProductSelected($event)"
+         [itemTemplate]="reviewItemTpl"
+         [notFoundTemplate]="reviewNotFoundTpl">
+       </ng-autocomplete>
+       <ng-template #reviewItemTpl let-item><a [innerHTML]="item.category_name"></a></ng-template>
+       <ng-template #reviewNotFoundTpl let-notFound><div [innerHTML]="notFound"></div></ng-template>
+      </div>
+      <div class="col-md-2"><input type="number" min="1" class="form-control form-control-sm" placeholder="كمية" [(ngModel)]="reviewAddQty"></div>
+      <div class="col-md-2"><input type="number" min="0" class="form-control form-control-sm" placeholder="سعر" [(ngModel)]="reviewAddPrice"></div>
+      <div class="col-md-2"><button type="button" class="btn btn-sm btn-dark w-100" (click)="addReviewProduct()">إضافة</button></div>
+     </div>
+    </div>
+    <div class="table-responsive">
+     <table class="table table-bordered table-hover order-details-table w-100 mb-0">
     <thead>
      <tr>
       <th>اسم المنتج</th>
       <th>الكمية المطلوبة</th>
       <!-- <th *ngIf="order?.customer_type=='شركة' && order?.order_status=='طلب جديد' || order?.order_status=='طلب مؤكد'">الكمية التي تم شحنها</th> -->
-      <th *ngIf="order?.customer_type=='شركة'">الكمية التي تم شحنها</th>
+      <th>الكمية التي تم شحنها</th>
+      <th>ملغي</th>
+      <th>المتبقي</th>
       <th>سعر البيع</th>
       <th>اجمالى سعر البيع</th>
       <th>صورة المنتج</th>
       <th> الرصيد</th>
       <th *ngIf="special_order">خاص</th>
-      <th *ngIf="order?.customer_type=='شركة' && isShipCompany">كمية الشحن المطلوبة</th>
-      <!-- <th>a</th> -->
+      <th *ngIf="shopifyReviewMode">—</th>
+      <th *ngIf="isShipCompany && user !== 'Financial Accounts'">كمية الشحن المطلوبة</th>
+      <th *ngIf="canCancelOrderLines && isDetails && !shopifyReviewMode">إجراء</th>
      </tr>
     </thead>
     <tbody>
+     <ng-container *ngIf="!shopifyReviewMode">
      <tr *ngFor="let product of order_products; let i = index">
       <td>{{product.category.category_name}}</td>
       <td dir="ltr">{{product.quantity}}</td>
-      <!-- <td *ngIf="order?.customer_type=='شركة' && order.order_status=='طلب جديد' || order.order_status=='طلب مؤكد'">{{product.shipped_quantity}}</td> -->
-      <td *ngIf="order?.customer_type=='شركة'">{{product.shipped_quantity}}</td>
+      <td dir="ltr">{{product.shipped_quantity || 0}}</td>
+      <td dir="ltr">
+        <span *ngIf="product.cancelled_quantity > 0">{{ product.cancelled_quantity }}</span>
+        <span *ngIf="!product.cancelled_quantity">—</span>
+        <div class="small text-muted" *ngIf="product.cancellation_reason" [title]="product.cancellation_reason">
+          {{ product.cancellation_reason | slice:0:40 }}<span *ngIf="product.cancellation_reason?.length > 40">…</span>
+        </div>
+      </td>
+      <td dir="ltr">{{ product.remaining_quantity }}</td>
       <td dir="ltr">{{product.price | customNumber}}</td>
       <td dir="ltr">{{product.total_price | customNumber}}</td>
       <td><img class="img-fluid" style="width: 50px;" [src]="imgUrl+product.category.category_image"></td>
@@ -224,68 +353,140 @@
       </td>
 
       <td class="special_details" *ngIf="special_order">{{product.special_details}}</td>
-      <td *ngIf="order?.customer_type=='شركة' && isShipCompany">
+      <td *ngIf="isShipCompany && user !== 'Financial Accounts'">
        <input class="form-control" *ngIf="!product.hideinput" [value]="product.requiredQuantity"
         (keyup)="shippedQuantity($event,product.id)" type="number">
-       <p class="text-danger" *ngIf="product.requiredQuantity > ( product.quantity-product.shipped_quantity) ">الكمية
+       <p class="text-danger" *ngIf="product.requiredQuantity > product.remaining_quantity">الكمية
         المطلوبة اكبر من الموجود</p>
-       <p class="text-success" *ngIf="product.quantity-product.shipped_quantity ==0 ">تم الشحن </p>
+       <p class="text-success" *ngIf="product.remaining_quantity == 0">تم الشحن أو الإلغاء</p>
       </td>
-      <!-- <td></td> -->
+      <td *ngIf="canCancelOrderLines && isDetails && !shopifyReviewMode">
+       <button type="button" class="btn btn-sm btn-outline-danger"
+         *ngIf="canCancelProduct(product)"
+         (click)="openCancelLineDialog(product)">
+         إلغاء
+       </button>
+      </td>
      </tr>
+     </ng-container>
+     <ng-container *ngIf="shopifyReviewMode">
+     <tr *ngFor="let product of reviewProductsDraft; let i = index" [class.table-warning]="product.is_unmatched">
+      <td>
+       <ng-container *ngIf="product.is_unmatched">
+        <div class="text-danger fw-bold small mb-1">⚠️ غير مربوط بصنف</div>
+        <div class="small mb-1">اسم Shopify: <strong>{{ product.shopify_name }}</strong></div>
+        <ng-autocomplete
+          [data]="catalogProducts"
+          [searchKeyword]="catword"
+          placeholder="اختر الصنف الصحيح"
+          (selected)="onReviewRowCategorySelected(i, $event)"
+          [itemTemplate]="rowItemTpl"
+          [notFoundTemplate]="rowNotFoundTpl">
+        </ng-autocomplete>
+        <ng-template #rowItemTpl let-item><a [innerHTML]="item.category_name"></a></ng-template>
+        <ng-template #rowNotFoundTpl let-notFound><div [innerHTML]="notFound"></div></ng-template>
+       </ng-container>
+       <ng-container *ngIf="!product.is_unmatched">{{ product.category_name }}</ng-container>
+      </td>
+      <td><input class="form-control form-control-sm text-center" type="number" min="1"
+        [ngModel]="product.quantity" (ngModelChange)="onReviewProductQtyChange(i, $event)"></td>
+      <td *ngIf="order?.customer_type=='شركة'">—</td>
+      <td><input class="form-control form-control-sm text-center" type="number" min="0" step="0.01"
+        [ngModel]="product.price" (ngModelChange)="onReviewProductPriceChange(i, $event)"></td>
+      <td dir="ltr">{{ product.total | customNumber }}</td>
+      <td><img *ngIf="product.imgsrc" class="img-fluid" style="width: 50px;" [src]="imgUrl+product.imgsrc"></td>
+      <td>—</td>
+      <td *ngIf="special_order"><input class="form-control form-control-sm" [(ngModel)]="product.special_details"></td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger" (click)="removeReviewProduct(i)">حذف</button></td>
+     </tr>
+     </ng-container>
     </tbody>
    </table>
-   <hr>
+    </div>
+   </div>
   </div>
 
-  <div class="col-md-4 ">
-   <!-- <textarea disabled name="" id="" cols="31" rows="5" [placeholder]="order?.order_notes"></textarea> -->
-   <div class="text-center table-responsive w-100" *ngIf="user != 'Review Management'">
-    <button class="btn bg-main mb-2" (click)="addNote(order?.id)">اضف ملاحظة</button>
-
-    <table class="table w-100 my-0">
-     <thead>
-      <th>ملحوظة</th>
-      <th>بواسطة</th>
-     </thead>
-    </table>
-    <div class="content">
-     <table class="table w-100 table-hover">
-      <tbody>
-       <ng-container *ngFor="let item of notes">
-        <ng-container *ngIf="item?.note">
-         <tr *ngIf="item?.note !='null'" [ngClass]="item?.is_problem ? 'text-danger' : ''">
-          <td>{{item?.note}}</td>
-          <td>{{item?.user?.name}}</td>
-         </tr>
-        </ng-container>
-       </ng-container>
-      </tbody>
-     </table>
+  <div class="col-lg-5" *ngIf="canManageOrderNotes">
+   <div class="order-notes-panel order-section-card">
+    <div class="order-notes-panel__header">
+     <div class="order-notes-panel__header-text">
+      <h5 class="order-notes-panel__title"><i class="fa-solid fa-comments"></i> ملاحظات الطلب</h5>
+      <p class="order-notes-panel__subtitle">سجل زمني لكل ملاحظة مع اسم المُضيف والوقت</p>
+     </div>
+     <button type="button" class="btn btn-sm order-notes-panel__add-btn" (click)="addNote(order?.id)">
+      <i class="fa-solid fa-plus"></i>
+      إضافة ملاحظة
+     </button>
     </div>
 
+    <div class="order-notes-list" *ngIf="visibleNotes.length; else emptyOrderNotes">
+     <article
+      class="order-note-card"
+      *ngFor="let item of visibleNotes"
+      [class.order-note-card--problem]="item?.is_problem">
+      <div class="order-note-card__top">
+       <span class="order-note-card__source" *ngIf="item?.added_from">{{ item.added_from }}</span>
+       <span class="order-note-card__badge order-note-card__badge--problem" *ngIf="item?.is_problem">مشكلة</span>
+      </div>
+      <p class="order-note-card__body">{{ item.note }}</p>
+      <div class="order-note-card__meta">
+       <span class="order-note-card__author">
+        <i class="fa-regular fa-user"></i>
+        {{ item?.user?.name || '—' }}
+       </span>
+       <span class="order-note-card__time" dir="ltr">
+        <i class="fa-regular fa-clock"></i>
+        {{ item?.created_at | date:'dd/MM/yyyy HH:mm:ss' }}
+       </span>
+      </div>
+      <div class="order-note-card__edit-meta" *ngIf="isNoteEdited(item)">
+       <i class="fa-solid fa-pen-to-square"></i>
+       آخر تعديل: {{ noteEditorName(item) }} · {{ item?.updated_at | date:'dd/MM/yyyy HH:mm:ss' }}
+      </div>
+      <div class="order-note-card__actions" *ngIf="item?.can_edit">
+       <button type="button" class="btn btn-sm btn-outline-secondary order-note-card__edit-btn" (click)="editNote(item)">
+        <i class="fa-solid fa-pen"></i>
+        تعديل
+       </button>
+      </div>
+     </article>
+    </div>
+
+    <ng-template #emptyOrderNotes>
+     <div class="order-notes-empty">
+      <i class="fa-regular fa-note-sticky"></i>
+      <p>لا توجد ملاحظات على هذا الطلب بعد</p>
+     </div>
+    </ng-template>
    </div>
-   <div class="table-responsive mb-2">
-    <table class="table w-100 my-0 mt-3">
-     <thead class="text-center notification-head">
-      <th>رقم الاشعار</th>
-      <th>النوع</th>
-      <th>المرسل</th>
-      <th>المرسل اليه</th>
-      <th>الملاحظة</th>
-      <th>تاريخ الارسال</th>
-     </thead>
-    </table>
-    <div class="content">
-     <table class="table table-hover w-100">
+  </div>
+
+  <div [ngClass]="canManageOrderNotes ? 'col-lg-7' : 'col-12'">
+   <div class="order-section-card order-side-panel order-notifications-panel">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title"><i class="fa-solid fa-bell"></i> الإشعارات</h5>
+    </div>
+    <div class="table-responsive mb-0">
+     <table class="table w-100 my-0 order-details-table order-panel-table">
+      <thead class="text-center">
+       <th>رقم الاشعار</th>
+       <th>النوع</th>
+       <th>المرسل</th>
+       <th>المرسل اليه</th>
+       <th class="order-notif-note-col">الملاحظة</th>
+       <th>تاريخ الارسال</th>
+      </thead>
       <tbody class="text-center">
        <tr *ngFor="let elm of notifications" [ngClass]="elm?.type=='مرتجع' ? 'text-danger' : ''">
         <td>{{elm?.notification_number}}</td>
-        <td>{{elm?.type}}</td>
+        <td><span class="order-notif-type-badge">{{elm?.type}}</span></td>
         <td>{{elm?.sender?.name}}</td>
         <td>{{elm?.receiver?.name}}</td>
-        <td>{{elm?.note}}</td>
-        <td>{{elm?.created_at | date:'dd/MM/yyyy' }}</td>
+        <td class="order-notif-note-cell">{{elm?.note}}</td>
+        <td dir="ltr">{{elm?.created_at | date:'dd/MM/yyyy HH:mm' }}</td>
+       </tr>
+       <tr *ngIf="!notifications || notifications.length === 0">
+        <td colspan="6" class="order-empty-table-msg">لا توجد إشعارات</td>
        </tr>
       </tbody>
      </table>
@@ -296,10 +497,33 @@
 
 
 
- <div class="row mb-4 text-center">
+ <div class="row mb-3" *ngIf="shopifyReviewMode">
+  <div class="col-12">
+   <label class="form-label">ملاحظة المراجعة (اختياري — تُضاف بجانب سجل التعديلات التلقائي)</label>
+   <textarea class="form-control" rows="3" [(ngModel)]="reviewNote" placeholder="مثال: تم التحقق مع العميل هاتفياً"></textarea>
+   <p class="text-muted small mt-1 mb-0" *ngIf="order?.shopify_review_note">آخر ملاحظة مراجعة: {{ order.shopify_review_note }}</p>
+  </div>
+ </div>
 
-  <div class="col-md-8 container-fluid table-responsive text-center ">
-   <table class="table table-bordered table-hover w-100">
+ <div class="row g-3 order-details-footer mb-4">
+  <div class="col-lg-8">
+   <div class="order-section-card order-financial-card">
+    <div class="order-section-card__header order-financial-card__header">
+     <h5 class="order-section-card__title"><i class="fa-solid fa-coins"></i> الملخص المالي</h5>
+     <button type="button" class="btn btn-sm btn-warning order-prepaid-adjust-btn"
+       *ngIf="canShowPrepaidAdjustment"
+       (click)="openPrepaidAdjustmentDialog()">
+      <i class="fa-solid fa-money-bill-transfer me-1"></i>
+      عكس / تغيير مصدر الدفع ({{ order?.prepaid_amount | customNumber }})
+     </button>
+    </div>
+    <div class="alert alert-warning py-2 px-3 mb-2 small" dir="rtl"
+      *ngIf="!canShowPrepaidAdjustment && hasPrepaidEditPermission && (order?.prepaid_amount || 0) > 0 && order?.prepaid_adjust_block_reason">
+     <i class="fa-solid fa-circle-info me-1"></i>
+     {{ order.prepaid_adjust_block_reason }}
+    </div>
+    <div class="table-responsive text-center">
+     <table class="table table-bordered table-hover order-details-table w-100 mb-0">
     <thead class="thead-dark">
      <th>مصاريف الشحن</th>
      <th *ngIf="order?.order_type == 'طلب صيانة'">مصاريف الصيانة</th>
@@ -311,52 +535,242 @@
      <th>صافي القيمة</th>
     </thead>
     <tbody>
+     <ng-container *ngIf="!shopifyReviewMode">
      <td dir="ltr">{{order?.shipping_cost || 0 | customNumber }}</td>
      <td *ngIf="order?.order_type == 'طلب صيانة'" dir="ltr">{{order?.order_details?.maintenance_cost || 0 | customNumber
       }}</td>
      <td dir="ltr" *ngIf="order?.customer_type == 'شركة'">{{order?.vat || 0 | customNumber }}</td>
      <td dir="ltr">{{order?.total_invoice || 0 | customNumber}}</td>
-     <td dir="ltr">{{order?.prepaid_amount || 0 | customNumber}}</td>
+     <td dir="ltr">
+      {{order?.prepaid_amount || 0 | customNumber}}
+      <button *ngIf="canShowPrepaidAdjustment" type="button"
+        class="btn btn-outline-warning btn-sm ms-2 prepaid-adjust-btn"
+        (click)="openPrepaidAdjustmentDialog()"
+        title="عكس أو تغيير مصدر الدفع">
+        <i class="fa-solid fa-pen-to-square me-1"></i> تعديل
+      </button>
+     </td>
      <td *ngIf="order?.bank">{{order?.bank?.name}}</td>
      <td dir="ltr">{{order?.discount || 0 | customNumber}}</td>
      <td dir="ltr">{{order?.net_total || 0 | customNumber}}</td>
+     </ng-container>
+     <ng-container *ngIf="shopifyReviewMode">
+     <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" [(ngModel)]="reviewDraft.shipping_cost" (ngModelChange)="calcReviewTotals()"></td>
+     <td *ngIf="order?.order_type == 'طلب صيانة'" dir="ltr">{{order?.order_details?.maintenance_cost || 0 | customNumber }}</td>
+     <td *ngIf="order?.customer_type == 'شركة'"><input type="number" min="0" class="form-control form-control-sm" [(ngModel)]="reviewDraft.vat" (ngModelChange)="calcReviewTotals()"></td>
+     <td dir="ltr">{{ reviewDraft.total_invoice | customNumber }}</td>
+     <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" [(ngModel)]="reviewDraft.prepaid_amount" (ngModelChange)="calcReviewTotals()"></td>
+     <td *ngIf="order?.bank">{{order?.bank?.name}}</td>
+     <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" [(ngModel)]="reviewDraft.discount" (ngModelChange)="calcReviewTotals()"></td>
+     <td dir="ltr">{{ reviewDraft.net_total | customNumber }}</td>
+     </ng-container>
     </tbody>
    </table>
-  </div>
+    </div>
 
-  <div class="col-md-4 table-responsive">
-   <table class="table w-100 my-0 table-hover">
-    <thead>
-     <th>action</th>
-     <th>date</th>
-     <th>user</th>
-    </thead>
-   </table>
-   <div class="content">
-    <table class="table w-100 table-hover">
-     <tbody>
-      <tr *ngFor="let item of tracking">
-       <td>
-        <span [id]="item.id">{{item.action}}</span>
-       </td>
-       <td>
-        <div class="date">
-         <span [id]="item.id" (mouseenter)="showTime($event)" (mouseleave)="showTime($event)">{{item.date}} </span>
-         <span [id]="'date'+item.id" class="date-time d-none">{{item.created_at | date:'EEEE, hh:mm a'}}</span>
-        </div>
-       </td>
-       <td>{{item.user.name}}</td>
-
-      </tr>
-     </tbody>
-    </table>
+    <div class="shopify-review-save-block" *ngIf="shopifyReviewMode && isShopifyOrder">
+     <button type="button" class="btn btn-success btn-lg shopify-review-save-main"
+       [disabled]="reviewSubmitting || !canConfirmShopifyReview"
+       (click)="confirmShopifyReview()">
+      <i class="fa-solid fa-check me-2"></i>
+      <span *ngIf="reviewSubmitting">جاري الحفظ...</span>
+      <span *ngIf="!reviewSubmitting">تم المراجعة — حفظ</span>
+     </button>
+     <p class="text-danger small mb-0 mt-2" *ngIf="!canConfirmShopifyReview">
+      لا تملك صلاحية حفظ المراجعة — اطلب تفعيل «Review imported Shopify orders».
+     </p>
+    </div>
    </div>
   </div>
 
+  <div class="col-lg-4">
+   <div class="order-section-card order-tracking-panel h-100">
+    <div class="order-section-card__header">
+     <h5 class="order-section-card__title"><i class="fa-solid fa-clock-rotate-left"></i> سجل الإجراءات</h5>
+    </div>
+    <div class="order-tracking-list">
+     <div class="order-tracking-item" *ngFor="let item of tracking">
+      <div class="order-tracking-item__icon">
+       <i class="fa-solid fa-circle-dot"></i>
+      </div>
+      <div class="order-tracking-item__content">
+       <span class="order-tracking-item__action" [id]="item.id">{{item.action}}</span>
+       <div class="order-tracking-item__details">
+        <span class="order-tracking-item__user"><i class="fa-regular fa-user"></i> {{item?.user?.name || item?.user_name || '—'}}</span>
+        <span class="order-tracking-item__date" dir="ltr"
+          [id]="item.id"
+          (mouseenter)="showTime($event)"
+          (mouseleave)="showTime($event)">{{item.date}}</span>
+        <span [id]="'date'+item.id" class="order-tracking-item__datetime d-none">{{item.created_at | date:'EEEE, hh:mm a'}}</span>
+       </div>
+      </div>
+     </div>
+     <div class="order-empty-table-msg" *ngIf="!tracking || tracking.length === 0">لا توجد إجراءات</div>
+    </div>
+   </div>
+  </div>
+ </div>
 
+ <div class="row g-3 mb-4" *ngIf="isDetails">
+  <div class="col-12">
+   <div class="order-section-card order-accounting-cycle" [class.is-open]="accountingCycleOpen">
+    <div class="order-section-card__header order-accounting-cycle__toggle" (click)="toggleAccountingCycle()" [attr.aria-expanded]="accountingCycleOpen" role="button" tabindex="0" (keydown.enter)="toggleAccountingCycle()" (keydown.space)="$event.preventDefault(); toggleAccountingCycle()">
+     <h5 class="order-section-card__title">
+      <i class="fa-solid fa-book"></i>
+      الدورة المحاسبية
+      <i class="fa-solid fa-chevron-down order-accounting-cycle__chevron"></i>
+     </h5>
+     <div class="order-accounting-cycle__actions">
+      <span class="order-accounting-cycle__meta" *ngIf="accountingCycle && !accountingCycleLoading">
+       {{ accountingCycle.journals_count }} قيد · {{ accountingCycle.lines_count }} طرف
+      </span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadAccountingCycle($event)" [disabled]="accountingCycleLoading">
+       <i class="fa-solid fa-rotate"></i>
+       {{ accountingCycleLoading ? 'جاري التحميل…' : 'تحديث' }}
+      </button>
+     </div>
+    </div>
+
+    <div class="order-accounting-cycle__body" *ngIf="accountingCycleOpen">
+    <p class="order-accounting-cycle__hint mb-3">
+     القيود المعتمدة حسب حالة الطلب: السداد المقدم، الشحن، التسليم، رد البضاعة، ورد قيمة السداد. التاريخ المعتمد يظهر مع كل مرحلة.
+    </p>
+
+    <div class="order-empty-table-msg" *ngIf="accountingCycleLoading">جاري تحميل القيود…</div>
+    <div class="alert alert-warning py-2 px-3 mb-0" *ngIf="!accountingCycleLoading && accountingCycleError">
+     {{ accountingCycleError }}
+    </div>
+    <div class="order-empty-table-msg" *ngIf="!accountingCycleLoading && !accountingCycleError && accountingCycle && accountingCycle.journals_count === 0 && !visibleAccountingStages().length">
+     لا توجد قيود محاسبية مسجّلة لهذا الطلب.
+    </div>
+
+    <ng-container *ngIf="!accountingCycleLoading && accountingCycle && (accountingCycle.journals_count || visibleAccountingStages().length)">
+     <div class="order-accounting-cycle__totals">
+      <div>
+       <span>إجمالي المدين</span>
+       <strong dir="ltr">{{ accountingCycle.total_debit | customNumber }}</strong>
+      </div>
+      <div>
+       <span>إجمالي الدائن</span>
+       <strong dir="ltr">{{ accountingCycle.total_credit | customNumber }}</strong>
+      </div>
+     </div>
+
+     <section class="order-journal-stage" *ngFor="let stage of visibleAccountingStages()" [attr.data-stage]="stage.key" [class.has-anomaly]="stage.anomaly">
+      <header class="order-journal-stage__head">
+       <div>
+        <h6>{{ stage.title }}</h6>
+        <p>{{ stage.rule }}</p>
+       </div>
+       <div class="order-journal-stage__meta">
+        <span *ngIf="stage.approved_date" dir="ltr">{{ stage.approved_date }}</span>
+        <span class="order-journal-stage__status" [class.is-missing]="stage.missing" [class.is-anomaly]="stage.anomaly">
+         {{ stage.anomaly ? 'تكرار محاسبي' : (stage.posted ? 'مرحّل' : (stage.missing ? 'ناقص' : 'غير مطلوب')) }}
+        </span>
+       </div>
+      </header>
+      <p class="order-journal-stage__missing" *ngIf="stage.missing">
+       هذا القيد مطلوب حسب حالة الطلب الحالية ولم يُرحَّل بعد.
+      </p>
+      <ul class="order-journal-stage__notes" *ngIf="stage.notes?.length">
+       <li *ngFor="let note of stage.notes" [attr.data-level]="note.level">{{ note.text }}</li>
+      </ul>
+      <article class="order-journal-card" *ngFor="let journal of stage.journals" [attr.data-type]="journal.type">
+      <header class="order-journal-card__head">
+       <div>
+        <span class="order-journal-card__badge">{{ journal.title }}</span>
+        <p class="order-journal-card__desc mb-0">{{ journal.description }}</p>
+        <p class="order-journal-card__note mb-0" *ngIf="journal.note">{{ journal.note }}</p>
+       </div>
+       <div class="order-journal-card__meta">
+        <span *ngIf="journal.entry_number">قيد رقم {{ journal.entry_number }}</span>
+        <span *ngIf="journal.date" dir="ltr">{{ journal.date }}</span>
+        <span *ngIf="journal.batch_code" class="order-journal-card__batch" [title]="journal.batch_code">{{ journal.batch_code }}</span>
+       </div>
+      </header>
+      <div class="table-responsive">
+       <table class="table table-bordered table-hover order-details-table w-100 mb-0">
+        <thead class="thead-dark">
+         <tr>
+          <th>الحساب</th>
+          <th>البيان</th>
+          <th>مدين</th>
+          <th>دائن</th>
+         </tr>
+        </thead>
+        <tbody>
+         <tr *ngFor="let line of journal.lines">
+          <td class="order-journal-card__account">
+           <strong>{{ line.account_name || '—' }}</strong>
+           <small *ngIf="line.account_code">{{ line.account_code }}</small>
+          </td>
+          <td class="text-start">{{ line.description }}</td>
+          <td dir="ltr">{{ line.debit | customNumber }}</td>
+          <td dir="ltr">{{ line.credit | customNumber }}</td>
+         </tr>
+        </tbody>
+        <tfoot>
+         <tr>
+          <th colspan="2">مجموع القيد</th>
+          <th dir="ltr">{{ journal.total_debit | customNumber }}</th>
+          <th dir="ltr">{{ journal.total_credit | customNumber }}</th>
+         </tr>
+        </tfoot>
+       </table>
+      </div>
+     </article>
+     </section>
+
+     <article class="order-journal-card" *ngFor="let journal of otherAccountingJournals()" [attr.data-type]="journal.type">
+      <header class="order-journal-card__head">
+       <div>
+        <span class="order-journal-card__badge">{{ journal.title }}</span>
+        <p class="order-journal-card__desc mb-0">{{ journal.description }}</p>
+       </div>
+       <div class="order-journal-card__meta">
+        <span *ngIf="journal.entry_number">قيد رقم {{ journal.entry_number }}</span>
+        <span *ngIf="journal.date" dir="ltr">{{ journal.date }}</span>
+        <span *ngIf="journal.batch_code" class="order-journal-card__batch" [title]="journal.batch_code">{{ journal.batch_code }}</span>
+       </div>
+      </header>
+      <div class="table-responsive">
+       <table class="table table-bordered table-hover order-details-table w-100 mb-0">
+        <thead class="thead-dark">
+         <tr>
+          <th>الحساب</th>
+          <th>البيان</th>
+          <th>مدين</th>
+          <th>دائن</th>
+         </tr>
+        </thead>
+        <tbody>
+         <tr *ngFor="let line of journal.lines">
+          <td class="order-journal-card__account">
+           <strong>{{ line.account_name || '—' }}</strong>
+           <small *ngIf="line.account_code">{{ line.account_code }}</small>
+          </td>
+          <td class="text-start">{{ line.description }}</td>
+          <td dir="ltr">{{ line.debit | customNumber }}</td>
+          <td dir="ltr">{{ line.credit | customNumber }}</td>
+         </tr>
+        </tbody>
+        <tfoot>
+         <tr>
+          <th colspan="2">مجموع القيد</th>
+          <th dir="ltr">{{ journal.total_debit | customNumber }}</th>
+          <th dir="ltr">{{ journal.total_credit | customNumber }}</th>
+         </tr>
+        </tfoot>
+       </table>
+      </div>
+     </article>
+    </ng-container>
+    </div>
+   </div>
+  </div>
  </div>
 
 </div> <br>
 
-<app-print-invoice class="d-none" [data]="data"></app-print-invoice>
+<app-print-invoice class="d-none" [data]="data" [showInvoiceDate]="showInvoiceDate" [reloadAfterPrint]="true"></app-print-invoice>
 <app-sticker class="d-none" [sticker]="sticker"></app-sticker>

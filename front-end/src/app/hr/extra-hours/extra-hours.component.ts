@@ -1,85 +1,168 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
+import { OvertimeMeritDialogComponent } from '../overtime-merit-dialog/overtime-merit-dialog.component';
 import { EmployeeService } from '../services/employee.service';
-import Swal from 'sweetalert2';
+import { extraDayMeritAmountAction, defaultFingerprintMonthValue, fingerprintPeriodForMonth, overtimeDeductionRate, parseYearMonthValue } from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-extra-hours',
   templateUrl: './extra-hours.component.html',
   styleUrls: ['./extra-hours.component.css']
 })
-export class ExtraHoursComponent {
+export class ExtraHoursComponent implements OnInit {
+  employees: any[] = [];
+  catword = 'name';
+  currentMonthValue!: string;
+  dateFrom!: string;
+  dateTo!: string;
+  month!: number;
+  year!: number;
 
-  employees:any[]=[];
-  catword:any="name"
-  currentMonthValue!:any
-  month!:any
-  year!:any
+  id = 0;
+  name!: string;
+  fixed_salary = 0;
+  dayHours = 8;
+  incentivesTotal = 0;
 
-  id:number=0;
-  name!:string;
-  fixed_salary!:string;
-  hourPrice!:number;
-  extraHours:number=0;
-  errorMessage: any;
+  user!: string;
 
-  constructor(private empService:EmployeeService){
-    const today = new Date();
-    this.year = today.getFullYear();
-    this.month = today.getMonth() + 1;
-    this.currentMonthValue = `${this.year}-${this.month.toString().padStart(2, '0')}`;
+  get canManage(): boolean {
+    if (this.rbac.canAny(RBAC_ROUTE.hrManageSheet)) {
+      return true;
+    }
+    return this.user == 'Admin'
+      || this.user == 'Operation Management'
+      || this.user == 'Finance and operations management'
+      || this.user == 'Financial Accounts';
   }
 
+  get hourPrice(): number {
+    return overtimeDeductionRate(this.fixed_salary || 0, this.dayHours || 8);
+  }
 
+  get dayAmount(): number {
+    return extraDayMeritAmountAction(this.fixed_salary || 0, this.dayHours || 8);
+  }
+
+  constructor(
+    private empService: EmployeeService,
+    private dialog: MatDialog,
+    private authService: AuthService,
+    private rbac: RbacService,
+  ) {
+    this.applyMonthValue(defaultFingerprintMonthValue());
+  }
 
   ngOnInit(): void {
-    this.empService.data().subscribe(result=>this.employees=result);
+    this.user = this.authService.getUser();
+    this.empService.data().subscribe(result => this.employees = result);
   }
 
-  empChange(e:any){
+  empChange(e: any): void {
     this.id = e.id;
     this.name = e.name;
-    this.fixed_salary = e.fixed_salary;
-    this.hourPrice = e.fixed_salary/30/9*1.5;
-    this.extraHours = e.extra_hours.reduce((acc, item) => acc + item.hours, 0);
+    this.fixed_salary = Number(e.fixed_salary || 0);
+    this.dayHours = Number(e.working_hours || 8);
+    this.loadIncentives();
   }
 
-
-  resetData(e:any){
-    this.id=0;
-    this.errorMessage = undefined;
+  resetData(): void {
+    this.id = 0;
+    this.name = '';
+    this.fixed_salary = 0;
+    this.incentivesTotal = 0;
   }
 
+  onMonthChange(event: Event): void {
+    const val = (event.target as HTMLInputElement)?.value;
+    if (!val) {
+      return;
+    }
+    this.applyMonthValue(val);
+    if (this.id) {
+      this.loadIncentives();
+    }
+  }
 
+  private applyMonthValue(value: string): void {
+    this.currentMonthValue = value;
+    const parsed = parseYearMonthValue(value);
+    if (!parsed) {
+      return;
+    }
+    this.year = parsed.year;
+    this.month = parsed.month;
+    const period = fingerprintPeriodForMonth(parsed.year, parsed.month);
+    this.dateFrom = period.dateFrom;
+    this.dateTo = period.dateTo;
+  }
 
-  addExtraHours(){
-    Swal.fire({
-      title: 'اضافات ساعات اضافية',
-      input: 'number',
-      inputPlaceholder:'عدد الساعات',
-      showCancelButton: true,
-      inputValidator: (value) => {
-        if (!value) {
-          return 'يجب ادخال قيمة'
-        }
-        if (value !== '') {
-          const data = {
-            'employee_id':this.id,
-            'month':this.month,
-            'year':this.year,
-            'hours':value,
-          }
-          this.empService.addExtraHours(data).subscribe((res)=>{
-            if (res) {
-              this.employees = res;
-              this.extraHours= res.find(item => item.id === this.id).extra_hours.reduce((acc, item) => acc + item.hours, 0);
-            }
-          })
-        }
-        return undefined
+  private loadIncentives(): void {
+    this.empService.dataPerMonth(this.id, this.month, this.year).subscribe({
+      next: (res: any) => {
+        const merits = res?.merits || [];
+        this.incentivesTotal = merits
+          .filter((m: any) => m.type === 'حوافز')
+          .reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
+      },
+      error: () => {
+        this.incentivesTotal = 0;
+      },
+    });
+  }
+
+  openOvertimeDialog(): void {
+    if (!this.id || !this.canManage) {
+      return;
+    }
+    const ref = this.dialog.open(OvertimeMeritDialogComponent, {
+      width: '780px',
+      maxWidth: '95vw',
+      data: {
+        employeeId: this.id,
+        employeeName: this.name || '',
+        month: this.month,
+        year: this.year,
+        fixedSalary: this.fixed_salary,
+        dayHours: this.dayHours,
+        mode: 'merit',
+        dateFrom: this.dateFrom,
+        dateTo: this.dateTo,
+      },
+    });
+    ref.afterClosed().subscribe((result) => {
+      if (result?.saved) {
+        this.loadIncentives();
       }
-    })
+    });
   }
 
-
-
+  openDeductionDialog(): void {
+    if (!this.id || !this.canManage) {
+      return;
+    }
+    const ref = this.dialog.open(OvertimeMeritDialogComponent, {
+      width: '780px',
+      maxWidth: '95vw',
+      data: {
+        employeeId: this.id,
+        employeeName: this.name || '',
+        month: this.month,
+        year: this.year,
+        fixedSalary: this.fixed_salary,
+        dayHours: this.dayHours,
+        mode: 'deduction',
+        dateFrom: this.dateFrom,
+        dateTo: this.dateTo,
+      },
+    });
+    ref.afterClosed().subscribe((result) => {
+      if (result?.saved) {
+        this.loadIncentives();
+      }
+    });
+  }
 }

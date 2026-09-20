@@ -7,29 +7,74 @@
       <div><p class="title header w-50 m-auto"> الاضافات الخاصه للتصنيع</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
+  <div class="container mt-3" *ngIf="error">
+    <div class="alert alert-danger">{{ error }}</div>
+  </div>
 
+  <div class="container mt-3" *ngIf="showForm">
+    <div class="row justify-content-center">
+      <div class="col-md-8">
+        <div class="card p-3">
+          <h5>{{ editingId ? 'تعديل إضافة' : 'إضافة جديدة' }}</h5>
+          <div class="row align-items-end">
+            <div class="col-md-4 mb-2">
+              <label class="small text-muted d-block">اسم الاضافة</label>
+              <input class="form-control" [(ngModel)]="name" placeholder="اسم الاضافة" />
+            </div>
+            <div class="col-md-3 mb-2">
+              <label class="small text-muted d-block">التكلفة</label>
+              <input class="form-control" type="number" min="0" step="any" [(ngModel)]="cost" />
+            </div>
+            <div class="col-md-3 mb-2">
+              <label class="small text-muted d-block">الوحدة</label>
+              <input class="form-control" [(ngModel)]="unit" placeholder="قطعة / ساعة…" />
+            </div>
+            <div class="col-md-2 mb-2">
+              <button class="btn btn-sm btn-success mx-1" type="button" [disabled]="saving" (click)="save()">
+                {{ saving ? 'جاري الحفظ…' : 'حفظ' }}
+              </button>
+              <button class="btn btn-sm btn-secondary" type="button" (click)="cancelForm()">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="container-fluid text-center mt-5">
+    <p *ngIf="loading" class="text-muted">جاري التحميل…</p>
     <table class="table w-50 m-auto">
       <thead class="bg-dark text-white">
-        <th  class="w-50">اسم الاضافة</th>
-        <th  class="w-25">التكلفة</th>
+        <th class="w-50">اسم الاضافة</th>
+        <th class="w-25">التكلفة</th>
         <th class="w-25">الوحدة</th>
         <th>تعديل</th>
         <th>حذف</th>
       </thead>
       <tbody>
-
+        <tr *ngIf="!loading && rows.length === 0">
+          <td colspan="5" class="text-muted">لا توجد إضافات مسجّلة.</td>
+        </tr>
+        <tr *ngFor="let row of rows">
+          <td>{{ row.name }}</td>
+          <td>{{ row.cost }}</td>
+          <td>{{ row.unit || '—' }}</td>
+          <td>
+            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="startEdit(row)">تعديل</button>
+          </td>
+          <td>
+            <button type="button" class="btn btn-sm btn-outline-danger" (click)="remove(row)">حذف</button>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
   <hr>
   <div class="text-center">
-    <a  class="btn btn-add mt-2 mx-1">اضافة <i class="fa-solid fa-plus"></i></a>
+    <a class="btn btn-add mt-2 mx-1" (click)="openCreate()">اضافة <i class="fa-solid fa-plus"></i></a>
   </div>
 
 </div>

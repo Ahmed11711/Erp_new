@@ -1,0 +1,458 @@
+<div class="price-list-page">
+
+  <!-- ===== قوائم الأسعار ===== -->
+  <ng-container *ngIf="view === 'lists'">
+    <div class="pl-toolbar">
+      <button type="button" class="pl-btn pl-btn-primary" *ngIf="canEdit()" (click)="openCreateList()">
+        <i class="fa-solid fa-plus"></i>
+        قائمة أسعار جديدة
+      </button>
+      <button type="button" class="pl-btn pl-btn-ghost" (click)="loadCatalogs()" [disabled]="loading">
+        <i class="fa-solid fa-rotate"></i>
+        تحديث
+      </button>
+    </div>
+
+    <div class="pl-lists-head" dir="rtl">
+      <h2>قوائم الأسعار</h2>
+      <p>كل قائمة بمسمى مستقل — افتح أي قائمة لإدارة منتجاتها وطباعتها</p>
+    </div>
+
+    <div class="pl-loading" *ngIf="loading">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      جاري التحميل...
+    </div>
+
+    <div class="pl-empty" *ngIf="!loading && !catalogs.length">
+      لا توجد قوائم بعد.
+      <button type="button" class="pl-btn pl-btn-primary mt-2" *ngIf="canEdit()" (click)="openCreateList()">
+        إنشاء أول قائمة
+      </button>
+    </div>
+
+    <div class="pl-lists-grid" *ngIf="!loading && catalogs.length" dir="rtl">
+      <button
+        type="button"
+        class="pl-list-card"
+        *ngFor="let list of catalogs; trackBy: trackById"
+        (click)="openCatalog(list)">
+        <div class="pl-list-card-main">
+          <div class="pl-list-card-icon">
+            <i class="fa-solid fa-tags"></i>
+          </div>
+          <div class="pl-list-card-text">
+            <h3>{{ list.name }}</h3>
+            <span>{{ list.items_count || 0 }} منتج</span>
+          </div>
+        </div>
+        <div class="pl-list-card-actions" (click)="$event.stopPropagation()">
+          <button
+            type="button"
+            class="pl-icon-btn pl-icon-danger"
+            *ngIf="canDelete()"
+            (click)="deleteCatalog(list, $event)"
+            [disabled]="deletingListId === list.id"
+            title="حذف القائمة">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+          <i class="fa-solid fa-chevron-left pl-list-card-arrow"></i>
+        </div>
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- ===== تفاصيل قائمة واحدة ===== -->
+  <ng-container *ngIf="view === 'detail'">
+    <div class="pl-toolbar">
+      <button type="button" class="pl-btn pl-btn-ghost" (click)="backToLists()">
+        <i class="fa-solid fa-arrow-right"></i>
+        كل القوائم
+      </button>
+      <button type="button" class="pl-btn pl-btn-primary" *ngIf="canEdit()" (click)="openAdd()">
+        <i class="fa-solid fa-plus"></i>
+        إضافة منتج
+      </button>
+      <button type="button" class="pl-btn pl-btn-shopify" *ngIf="canEdit()" (click)="openShopifyPicker()">
+        <i class="fa-brands fa-shopify"></i>
+        من Shopify
+      </button>
+      <button
+        type="button"
+        class="pl-btn pl-btn-pdf"
+        (click)="exportPdf()"
+        [disabled]="exportingPdf || loading || !items.length">
+        <i class="fa-solid fa-file-pdf"></i>
+        {{ exportingPdf ? 'جاري التجهيز...' : 'طباعة / PDF' }}
+      </button>
+      <button type="button" class="pl-btn pl-btn-ghost" (click)="loadDetail()" [disabled]="loading">
+        <i class="fa-solid fa-rotate"></i>
+        تحديث
+      </button>
+    </div>
+
+    <div class="pl-catalog" dir="ltr" [class.pl-with-actions]="canEdit() || canDelete()">
+      <div class="pl-header">
+        <div class="pl-brand-row">
+          <img class="pl-logo" src="assets/images/logowhite.png" alt="MAGALIS">
+        </div>
+
+        <div class="pl-title-row">
+          <h1 class="pl-title">{{ title }}</h1>
+          <button
+            type="button"
+            class="pl-title-edit"
+            *ngIf="canEdit()"
+            (click)="startEditTitle()"
+            title="تعديل اسم القائمة">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+        </div>
+
+        <div class="pl-col-headers">
+          <div class="pl-col pl-col-code">Code</div>
+          <div class="pl-col pl-col-name">Product Name</div>
+          <div class="pl-col pl-col-price">Price</div>
+          <div class="pl-col pl-col-photo">Photo 1</div>
+          <div class="pl-col pl-col-photo">Photo 2</div>
+          <div class="pl-col pl-col-actions" *ngIf="canEdit() || canDelete()"></div>
+        </div>
+      </div>
+
+      <div class="pl-loading" *ngIf="loading">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        Loading...
+      </div>
+
+      <div class="pl-empty" *ngIf="!loading && !items.length">
+        لا توجد منتجات في هذه القائمة بعد.
+      </div>
+
+      <div class="pl-body" *ngIf="!loading && items.length">
+        <div class="pl-row" *ngFor="let item of items; trackBy: trackById">
+          <div class="pl-col pl-col-code">{{ item.code }}</div>
+          <div class="pl-col pl-col-name">{{ item.product_name }}</div>
+          <div class="pl-col pl-col-price">
+            <span class="pl-price-chip">{{ formatPriceDisplay(item) }}</span>
+          </div>
+          <div class="pl-col pl-col-photo">
+            <div class="pl-photo-frame">
+              <img *ngIf="photoSrc(item.photo1) as src" [src]="src" [alt]="item.product_name + ' photo 1'">
+              <div class="pl-photo-empty" *ngIf="!item.photo1"></div>
+            </div>
+          </div>
+          <div class="pl-col pl-col-photo">
+            <div class="pl-photo-frame">
+              <img *ngIf="photoSrc(item.photo2) as src" [src]="src" [alt]="item.product_name + ' photo 2'">
+              <div class="pl-photo-empty" *ngIf="!item.photo2"></div>
+            </div>
+          </div>
+          <div class="pl-col pl-col-actions" *ngIf="canEdit() || canDelete()">
+            <button type="button" class="pl-icon-btn" *ngIf="canEdit()" (click)="openEdit(item)" title="تعديل">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button
+              type="button"
+              class="pl-icon-btn pl-icon-danger"
+              *ngIf="canDelete()"
+              (click)="deleteItem(item)"
+              [disabled]="deletingId === item.id"
+              title="حذف">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Modal: اختيار من Shopify -->
+  <div class="pl-modal-backdrop" *ngIf="showShopifyPicker" (click)="closeShopifyPicker()"></div>
+  <div class="pl-modal pl-modal-shopify" *ngIf="showShopifyPicker" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div class="pl-modal-head">
+      <div class="pl-modal-head-text">
+        <h2>استيراد من Shopify</h2>
+        <p>ابحث واختر منتجاً — يُنسخ الاسم والكود والسعر والصور تلقائياً</p>
+      </div>
+      <button type="button" class="pl-icon-btn pl-modal-close" (click)="closeShopifyPicker()" aria-label="إغلاق">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="pl-modal-body" dir="rtl">
+      <div class="pl-shopify-filters">
+        <div class="pl-field pl-field-grow">
+          <label>بحث</label>
+          <input
+            type="text"
+            [(ngModel)]="shopifyQuery"
+            placeholder="اسم المنتج أو SKU"
+            (keyup.enter)="searchShopify(1)">
+        </div>
+        <div class="pl-field">
+          <label>العملة</label>
+          <input type="text" list="pl-currencies-shopify" [(ngModel)]="shopifyCurrency" maxlength="16">
+          <datalist id="pl-currencies-shopify">
+            <option *ngFor="let c of currencies" [value]="c"></option>
+          </datalist>
+        </div>
+        <button type="button" class="pl-btn pl-btn-primary" (click)="searchShopify(1)" [disabled]="shopifyLoading">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          بحث
+        </button>
+      </div>
+
+      <div class="pl-loading" *ngIf="shopifyLoading">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        جاري التحميل...
+      </div>
+
+      <div class="pl-empty" *ngIf="!shopifyLoading && !shopifyProducts.length">
+        لا توجد منتجات. قم بمزامنة منتجات Shopify من لوحة التكامل أولاً.
+      </div>
+
+      <div class="pl-shopify-list" *ngIf="!shopifyLoading && shopifyProducts.length">
+        <div class="pl-shopify-row" *ngFor="let p of shopifyProducts">
+          <div class="pl-shopify-thumb">
+            <img *ngIf="p.image_url_1" [src]="p.image_url_1" [alt]="p.name" referrerpolicy="no-referrer">
+            <div class="pl-upload-placeholder" *ngIf="!p.image_url_1">
+              <i class="fa-regular fa-image"></i>
+            </div>
+          </div>
+          <div class="pl-shopify-meta">
+            <strong>{{ p.name }}</strong>
+            <span>SKU: {{ p.sku || '—' }}</span>
+            <span class="pl-price-chip">{{ p.price }} {{ shopifyCurrency || 'EGP' }}</span>
+          </div>
+          <button
+            type="button"
+            class="pl-btn pl-btn-primary"
+            (click)="importShopifyProduct(p)"
+            [disabled]="shopifyImportingId != null">
+            <i class="fa-solid" [ngClass]="shopifyImportingId === p.id ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+            {{ shopifyImportingId === p.id ? 'جاري...' : 'استيراد' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="pl-shopify-pager" *ngIf="shopifyLastPage > 1">
+        <button type="button" class="pl-btn pl-btn-ghost" [disabled]="shopifyPage <= 1 || shopifyLoading" (click)="searchShopify(shopifyPage - 1)">السابق</button>
+        <span>{{ shopifyPage }} / {{ shopifyLastPage }}</span>
+        <button type="button" class="pl-btn pl-btn-ghost" [disabled]="shopifyPage >= shopifyLastPage || shopifyLoading" (click)="searchShopify(shopifyPage + 1)">التالي</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: إنشاء / إعادة تسمية قائمة -->
+  <div class="pl-modal-backdrop" *ngIf="showListForm" (click)="closeListForm()"></div>
+  <div class="pl-modal pl-modal-sm" *ngIf="showListForm" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div class="pl-modal-head">
+      <div class="pl-modal-head-text">
+        <h2>{{ renamingList ? 'تعديل اسم القائمة' : 'قائمة أسعار جديدة' }}</h2>
+        <p>{{ renamingList ? 'غيّر الاسم الظاهر في الهيدر والـ PDF' : 'اختر اسماً مميزاً مثل Summer 26 أو Winter 27' }}</p>
+      </div>
+      <button type="button" class="pl-icon-btn pl-modal-close" (click)="closeListForm()" aria-label="إغلاق">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="pl-modal-body" dir="rtl">
+      <div class="pl-field">
+        <label for="pl-list-name">اسم القائمة</label>
+        <input
+          id="pl-list-name"
+          type="text"
+          [(ngModel)]="listFormName"
+          placeholder="Price list for summer 26"
+          (keyup.enter)="saveListForm()">
+      </div>
+      <div class="pl-modal-actions">
+        <button type="button" class="pl-btn pl-btn-primary pl-btn-wide" (click)="saveListForm()" [disabled]="saving">
+          {{ saving ? 'جاري الحفظ...' : (renamingList ? 'حفظ الاسم' : 'إنشاء القائمة') }}
+        </button>
+        <button type="button" class="pl-btn pl-btn-ghost" (click)="closeListForm()" [disabled]="saving">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: منتج -->
+  <div class="pl-modal-backdrop" *ngIf="showForm" (click)="closeForm()"></div>
+  <div class="pl-modal" *ngIf="showForm" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div class="pl-modal-head">
+      <div class="pl-modal-head-text">
+        <h2>{{ editingItem ? 'تعديل منتج' : 'إضافة منتج' }}</h2>
+        <p>{{ editingItem ? 'حدّث البيانات أو استبدل الصور' : 'أدخل بيانات المنتج وصوره' }}</p>
+      </div>
+      <button type="button" class="pl-icon-btn pl-modal-close" (click)="closeForm()" aria-label="إغلاق">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <form class="pl-modal-body" [formGroup]="form" (ngSubmit)="saveItem()" dir="rtl">
+      <div class="pl-form-section">
+        <div class="pl-section-label">البيانات الأساسية</div>
+        <div class="pl-field-row pl-field-row-2">
+          <div class="pl-field">
+            <label for="pl-code">الكود</label>
+            <input id="pl-code" type="text" formControlName="code" placeholder="1110">
+          </div>
+          <div class="pl-field pl-field-grow">
+            <label for="pl-name">اسم المنتج</label>
+            <input id="pl-name" type="text" formControlName="product_name" placeholder="Beach Mat">
+          </div>
+        </div>
+
+        <div class="pl-field-row">
+          <div class="pl-field">
+            <label for="pl-price">السعر</label>
+            <input id="pl-price" type="number" formControlName="price" min="0" step="0.01" placeholder="305">
+          </div>
+          <div class="pl-field">
+            <label for="pl-currency">العملة</label>
+            <input
+              id="pl-currency"
+              type="text"
+              list="pl-currencies"
+              formControlName="currency"
+              maxlength="16"
+              placeholder="EGP"
+              (blur)="normalizeCurrency()">
+            <datalist id="pl-currencies">
+              <option *ngFor="let c of currencies" [value]="c"></option>
+            </datalist>
+          </div>
+        </div>
+      </div>
+
+      <div class="pl-form-section">
+        <div class="pl-section-label">الصور</div>
+        <div class="pl-photos-grid">
+          <div class="pl-upload-card" [class.has-preview]="!!photo1Preview">
+            <div class="pl-upload-thumb">
+              <img *ngIf="photo1Preview" [src]="photo1Preview" alt="photo 1" referrerpolicy="no-referrer">
+              <div class="pl-upload-placeholder" *ngIf="!photo1Preview">
+                <i class="fa-regular fa-image"></i>
+              </div>
+              <button
+                type="button"
+                class="pl-upload-remove"
+                *ngIf="photo1Preview"
+                (click)="clearPhoto(1)"
+                title="إزالة">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div class="pl-upload-meta">
+              <span class="pl-upload-title">Photo 1</span>
+              <div class="pl-upload-actions">
+                <label class="pl-upload-btn" for="pl-file-1">
+                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                  {{ photo1Preview ? 'رفع' : 'رفع صورة' }}
+                </label>
+                <button type="button" class="pl-upload-btn pl-upload-btn-shopify" (click)="openImageCatalog(1)">
+                  <i class="fa-brands fa-shopify"></i>
+                  من Shopify
+                </button>
+              </div>
+              <input id="pl-file-1" type="file" accept="image/*" hidden (change)="onPhotoChange($event, 1)">
+            </div>
+          </div>
+
+          <div class="pl-upload-card" [class.has-preview]="!!photo2Preview">
+            <div class="pl-upload-thumb">
+              <img *ngIf="photo2Preview" [src]="photo2Preview" alt="photo 2" referrerpolicy="no-referrer">
+              <div class="pl-upload-placeholder" *ngIf="!photo2Preview">
+                <i class="fa-regular fa-image"></i>
+              </div>
+              <button
+                type="button"
+                class="pl-upload-remove"
+                *ngIf="photo2Preview"
+                (click)="clearPhoto(2)"
+                title="إزالة">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div class="pl-upload-meta">
+              <span class="pl-upload-title">Photo 2</span>
+              <div class="pl-upload-actions">
+                <label class="pl-upload-btn" for="pl-file-2">
+                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                  {{ photo2Preview ? 'رفع' : 'رفع صورة' }}
+                </label>
+                <button type="button" class="pl-upload-btn pl-upload-btn-shopify" (click)="openImageCatalog(2)">
+                  <i class="fa-brands fa-shopify"></i>
+                  من Shopify
+                </button>
+              </div>
+              <input id="pl-file-2" type="file" accept="image/*" hidden (change)="onPhotoChange($event, 2)">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pl-modal-actions">
+        <button type="submit" class="pl-btn pl-btn-primary pl-btn-wide" [disabled]="saving || form.invalid">
+          <i class="fa-solid" [ngClass]="saving ? 'fa-spinner fa-spin' : (editingItem ? 'fa-check' : 'fa-plus')"></i>
+          {{ saving ? 'جاري الحفظ...' : (editingItem ? 'حفظ التعديل' : 'إضافة المنتج') }}
+        </button>
+        <button type="button" class="pl-btn pl-btn-ghost" (click)="closeForm()" [disabled]="saving">إلغاء</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal: كتالوج صور Shopify لاختيار Photo 1 / 2 -->
+  <div class="pl-modal-backdrop pl-modal-backdrop-top" *ngIf="showImageCatalog" (click)="closeImageCatalog()"></div>
+  <div class="pl-modal pl-modal-shopify pl-modal-catalog" *ngIf="showImageCatalog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div class="pl-modal-head">
+      <div class="pl-modal-head-text">
+        <h2>كتالوج صور Shopify — Photo {{ imageCatalogTarget }}</h2>
+        <p>اختر صورة من منتجات المتجر</p>
+      </div>
+      <button type="button" class="pl-icon-btn pl-modal-close" (click)="closeImageCatalog()" aria-label="إغلاق">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="pl-modal-body" dir="rtl">
+      <div class="pl-shopify-filters pl-shopify-filters-simple">
+        <div class="pl-field pl-field-grow">
+          <label>بحث</label>
+          <input
+            type="text"
+            [(ngModel)]="imageCatalogQuery"
+            placeholder="اسم المنتج أو SKU"
+            (keyup.enter)="loadImageCatalog(1)">
+        </div>
+        <button type="button" class="pl-btn pl-btn-primary" (click)="loadImageCatalog(1)" [disabled]="imageCatalogLoading">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          بحث
+        </button>
+      </div>
+
+      <div class="pl-loading" *ngIf="imageCatalogLoading">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        جاري تحميل الصور...
+      </div>
+
+      <div class="pl-empty" *ngIf="!imageCatalogLoading && !imageCatalogItems.length">
+        لا توجد صور محفوظة. قم بمزامنة منتجات Shopify من لوحة التكامل أولاً.
+      </div>
+
+      <div class="pl-image-catalog-grid" *ngIf="!imageCatalogLoading && imageCatalogItems.length">
+        <button
+          type="button"
+          class="pl-image-catalog-card"
+          *ngFor="let img of imageCatalogItems"
+          (click)="selectCatalogImage(img)"
+          [title]="img.name || img.sku || ''">
+          <img [src]="img.url" [alt]="img.name || 'shopify image'" referrerpolicy="no-referrer">
+          <span>{{ img.sku || img.name || 'صورة' }}</span>
+        </button>
+      </div>
+
+      <div class="pl-shopify-pager" *ngIf="imageCatalogLastPage > 1">
+        <button type="button" class="pl-btn pl-btn-ghost" [disabled]="imageCatalogPage <= 1 || imageCatalogLoading" (click)="loadImageCatalog(imageCatalogPage - 1)">السابق</button>
+        <span>{{ imageCatalogPage }} / {{ imageCatalogLastPage }}</span>
+        <button type="button" class="pl-btn pl-btn-ghost" [disabled]="imageCatalogPage >= imageCatalogLastPage || imageCatalogLoading" (click)="loadImageCatalog(imageCatalogPage + 1)">التالي</button>
+      </div>
+    </div>
+  </div>
+</div>

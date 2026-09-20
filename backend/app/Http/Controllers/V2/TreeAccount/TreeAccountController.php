@@ -9,10 +9,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\BaseController\BaseController;
 use App\Http\Resources\V2\TreeAccount\TreeAccountResource;
+use App\Http\Resources\V2\TreeAccount\TreeAccountAuditResource;
+use App\Models\TreeAccountAudit;
 use App\Http\Requests\V2\TreeAccount\TreeAccountStoreRequest;
 use App\Http\Requests\V2\TreeAccount\TreeAccountUpdateRequest;
 use App\Repositories\TreeAccount\TreeAccountRepositoryInterface;
 use App\Services\Accounting\ManualBalanceAdjustmentService;
+use App\Services\TreeAccount\TreeAccountSoftDeleteService;
 use Illuminate\Support\Facades\Validator;
 
 class TreeAccountController extends BaseController
@@ -27,8 +30,10 @@ class TreeAccountController extends BaseController
     }
 
     /**
-     * تسوية رصيد حساب شجري عبر قيد يومي مع حساب مقابل (قيد مزدوج + وصف تدقيق).
-     * body: target_balance, counter_account_id, reason?, date?
+     * تعديل/تسوية رصيد حساب شجري عبر قيد يومي مع حساب مقابل (قيد مزدوج + وصف تدقيق).
+     * body: target_balance, counter_account_id, reason?, date?, mode?
+     *   mode=current  (افتراضي): يجعل الرصيد الحالي الكلي = المستهدف (الفرق من كل القيود).
+     *   mode=opening : رصيد افتتاحي بتاريخ — يجعل الرصيد عند التاريخ = المستهدف والعمليات اللاحقة تمشي فوقه.
      */
     public function balanceAdjustment(Request $request, int $id): JsonResponse
     {
@@ -37,10 +42,17 @@ class TreeAccountController extends BaseController
             'counter_account_id' => 'required|integer|exists:tree_accounts,id',
             'reason' => 'nullable|string|max:2000',
             'date' => 'nullable|date',
+            'mode' => 'nullable|in:current,opening',
         ]);
 
         if ($validator->fails()) {
             return $this->errorResponse($validator->errors()->first(), 422);
+        }
+
+        $mode = $request->input('mode', 'current');
+
+        if ($mode === 'opening' && ! $request->filled('date')) {
+            return $this->errorResponse('تاريخ الرصيد الافتتاحي مطلوب.', 422);
         }
 
         $account = $this->repository->find($id);
@@ -57,6 +69,30 @@ class TreeAccountController extends BaseController
         $date = $request->input('date') ? \Carbon\Carbon::parse($request->input('date'))->format('Y-m-d') : now()->format('Y-m-d');
 
         try {
+            if ($mode === 'opening') {
+                $result = $service->setOpeningBalance(
+                    $account,
+                    (float) $request->target_balance,
+                    $counter,
+                    $request->input('reason'),
+                    $date,
+                    (int) auth()->id()
+                );
+
+                return $this->successResponse(
+                    [
+                        'daily_entry' => $result['daily_entry'],
+                        'prior_net_before_date' => $result['prior_net'],
+                        'delta_posted' => $result['delta'],
+                        'target_balance' => $result['target_balance'],
+                        'replaced_previous' => $result['replaced_previous'],
+                    ],
+                    $result['replaced_previous']
+                        ? 'تم تحديث الرصيد الافتتاحي (استبدال القيد السابق) بتاريخ ' . $date
+                        : 'تم تسجيل الرصيد الافتتاحي كقيد يومي بتاريخ ' . $date
+                );
+            }
+
             $result = $service->adjustToTarget(
                 $account,
                 (float) $request->target_balance,
@@ -84,6 +120,21 @@ class TreeAccountController extends BaseController
             ],
             'تم تسجيل تسوية الرصيد كقيد يومي بنجاح'
         );
+    }
+
+    /**
+     * معلومات الرصيد الافتتاحي المسجّل حالياً للحساب (للعرض قبل التعديل).
+     */
+    public function openingBalanceInfo(int $id): JsonResponse
+    {
+        $account = $this->repository->find($id);
+        if (!$account) {
+            return $this->errorResponse('Record not found', 404);
+        }
+
+        $info = app(ManualBalanceAdjustmentService::class)->getOpeningBalanceInfo($account);
+
+        return $this->successResponse($info, 'ok');
     }
 
     /**
@@ -186,14 +237,15 @@ class TreeAccountController extends BaseController
         try {
             DB::transaction(function () use (&$validated) {
                 if (empty($validated['parent_id'])) {
-                    $lastRoot = TreeAccount::whereNull('parent_id')
+                    $lastRoot = TreeAccount::withTrashed()
+                        ->whereNull('parent_id')
                         ->orderByDesc('code')
                         ->lockForUpdate()
                         ->first();
 
                     $code = (string) ($lastRoot ? ((int) $lastRoot->code + 1) : 1);
 
-                    while (TreeAccount::where('code', $code)->exists()) {
+                    while (TreeAccount::withTrashed()->where('code', $code)->exists()) {
                         $code = (string) ((int) $code + 1);
                     }
 
@@ -214,7 +266,7 @@ class TreeAccountController extends BaseController
                     $resolved = TreeAccount::resolveNextChildCodeAndLevel($parent, $lastChild);
                     $code = $resolved['code'];
 
-                    while (TreeAccount::where('code', $code)->exists()) {
+                    while (TreeAccount::withTrashed()->where('code', $code)->exists()) {
                         $code = (string) ((int) $code + 1);
                     }
 
@@ -229,7 +281,7 @@ class TreeAccountController extends BaseController
             });
 
             return $this->successResponse(
-                new $this->resourceClass(TreeAccount::find($validated['id'])),
+                new $this->resourceClass(TreeAccount::with(['createdByUser:id,name', 'updatedByUser:id,name'])->find($validated['id'])),
                 'Account created successfully',
                 201
             );
@@ -253,13 +305,88 @@ class TreeAccountController extends BaseController
          if (!$record) {
             return $this->errorResponse("Record not found", 404);
         }
-        $record->load(['children']);
+        $record->load(['children', 'createdByUser:id,name', 'updatedByUser:id,name']);
         // Log::alert("Tree Account Show with Children", ['account'=>$record]);
         return $this->successResponse(
             new TreeAccountResource($record),
             'Tree account with parent and children retrieved successfully'
         );
     }
+
+    public function audits(int $id): JsonResponse
+    {
+        $record = TreeAccount::withTrashed()->find($id);
+        if (! $record) {
+            return $this->errorResponse('Record not found', 404);
+        }
+
+        $audits = TreeAccountAudit::query()
+            ->with('performer:id,name')
+            ->where('tree_account_id', $id)
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+
+        return $this->successResponse(
+            TreeAccountAuditResource::collection($audits),
+            'Tree account audit log retrieved successfully'
+        );
+    }
+
+    public function trash(): JsonResponse
+    {
+        $items = app(TreeAccountSoftDeleteService::class)->listTrash();
+
+        return $this->successResponse(
+            TreeAccountResource::collection($items),
+            'تم جلب الحسابات المحذوفة'
+        );
+    }
+
+    public function restore(int $id): JsonResponse
+    {
+        $record = TreeAccount::onlyTrashed()->find($id);
+        if (! $record) {
+            return $this->errorResponse('الحساب غير موجود في سلة المحذوفات', 404);
+        }
+
+        try {
+            $restored = app(TreeAccountSoftDeleteService::class)->restore($record);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Throwable $e) {
+            Log::error('tree account restore failed', ['e' => $e->getMessage()]);
+
+            return $this->errorResponse('فشل استرجاع الحساب: '.$e->getMessage(), 500);
+        }
+
+        return $this->successResponse(
+            new TreeAccountResource($restored),
+            'تم استرجاع الحساب وحساباته الفرعية بنجاح',
+            200
+        );
+    }
+
+    public function forceDestroy(int $id): JsonResponse
+    {
+        $record = TreeAccount::onlyTrashed()->find($id);
+        if (! $record) {
+            return $this->errorResponse('الحساب غير موجود في سلة المحذوفات', 404);
+        }
+
+        try {
+            app(TreeAccountSoftDeleteService::class)->forceDelete($record);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Throwable $e) {
+            Log::error('tree account force delete failed', ['e' => $e->getMessage()]);
+
+            return $this->errorResponse('فشل الحذف النهائي: '.$e->getMessage(), 500);
+        }
+
+        return $this->successResponse(null, 'تم الحذف النهائي للحساب وجميع فروعه وقيوده المرتبطة');
+    }
+
     public function destroy($id): JsonResponse
     {
         $record = $this->repository->find($id);
@@ -267,18 +394,14 @@ class TreeAccountController extends BaseController
             return $this->errorResponse("Record not found", 404);
         }
 
-        $this->deleteChildren($record);
+        try {
+            app(TreeAccountSoftDeleteService::class)->softDelete($record);
+        } catch (\Throwable $e) {
+            Log::error('tree account soft delete failed', ['e' => $e->getMessage()]);
 
-        $record->delete();
-
-        return $this->successResponse(null, 'Account and its children deleted successfully');
-    }
-
-    private function deleteChildren($account)
-    {
-        foreach ($account->children as $child) {
-            $this->deleteChildren($child);
-            $child->delete();
+            return $this->errorResponse('فشل حذف الحساب: '.$e->getMessage(), 500);
         }
+
+        return $this->successResponse(null, 'تم نقل الحساب وفروعه إلى سلة المحذوفات — يمكن استرجاعها لاحقاً');
     }
 }

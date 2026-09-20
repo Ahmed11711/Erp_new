@@ -5,10 +5,14 @@ namespace App\Http\Controllers\V2\Accounting;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V2\TreeAccount\TreeAccountResource;
 use App\Models\AccountEntry;
+use App\Repositories\TreeAccount\TreeAccountRepositoryInterface;
 use App\Models\DailyEntry;
 use App\Models\TreeAccount;
+use App\Services\Accounting\AccountEntryEditLinkService;
 use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\BankOperationalLedgerService;
 use App\Services\Accounting\ProductPerformanceReportService;
+use App\Services\Accounting\TrialBalanceLevelView;
 use App\Services\CategoryInventoryCostService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +37,7 @@ class AccountingReportController extends Controller
     {
         $effectiveDateExpr = 'DATE(COALESCE(de.date, v.date, account_entries.created_at))';
 
-        $query = AccountEntry::with(['account', 'dailyEntry', 'voucher'])
+        $query = AccountEntry::with(['account', 'dailyEntry.user', 'voucher.user'])
             ->select('account_entries.*')
             ->join('tree_accounts', 'account_entries.tree_account_id', '=', 'tree_accounts.id')
             ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
@@ -57,6 +61,10 @@ class AccountingReportController extends Controller
             $query->whereNotNull('account_entries.daily_entry_id');
         }
 
+        if ($request->filled('user_id')) {
+            $this->applyAccountEntryUserFilter($query, (int) $request->user_id);
+        }
+
         // إجمالي المدين/الدائن لكل النتائج المصفّاة — وليس للصفحة الحالية فقط
         $totalsQuery = clone $query;
         $totals = [
@@ -76,6 +84,12 @@ class AccountingReportController extends Controller
                 'entry_date',
                 $entry->dailyEntry?->date ?? $entry->voucher?->date ?? $entry->created_at
             );
+            $entry->setAttribute(
+                'posted_at',
+                $entry->dailyEntry?->created_at
+                    ?? $entry->voucher?->created_at
+                    ?? $entry->created_at
+            );
 
             // رقم القيد الظاهر للمستخدم: يطابق شاشة القيود اليومية؛ وإلا سند/دفعة دفعة دُفعت بدون قيد يومي
             $journalRef = $entry->dailyEntry?->entry_number;
@@ -93,6 +107,22 @@ class AccountingReportController extends Controller
                 'journal_header_description',
                 $entry->dailyEntry?->description
             );
+            $entry->setAttribute(
+                'journal_user_name',
+                $entry->dailyEntry?->user?->name ?? $entry->voucher?->user?->name
+            );
+
+            return $entry;
+        });
+
+        $this->attachPerformedByUserNames($entries->getCollection());
+        $entries->getCollection()->transform(function (AccountEntry $entry) {
+            if (! $entry->getAttribute('journal_user_name') && $entry->getAttribute('user_name')) {
+                $entry->setAttribute('journal_user_name', $entry->getAttribute('user_name'));
+            }
+            if (! $entry->getAttribute('journal_header_description') && $entry->description) {
+                $entry->setAttribute('journal_header_description', $entry->description);
+            }
 
             return $entry;
         });
@@ -131,17 +161,21 @@ class AccountingReportController extends Controller
 
         // Calculate balances from entries
         foreach ($accounts as $account) {
-            $entries = AccountEntry::where('tree_account_id', $account->id);
-            
+            $entries = AccountEntry::query()
+                ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+                ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
+                ->where('account_entries.tree_account_id', $account->id);
+
             if ($request->has('date_from') && $request->has('date_to')) {
-                $entries->whereBetween('created_at', [
-                    $request->date_from . ' 00:00:00',
-                    $request->date_to . ' 23:59:59'
+                $effectiveDateExpr = 'DATE(COALESCE(de.date, v.date, account_entries.created_at))';
+                $entries->whereRaw("{$effectiveDateExpr} BETWEEN ? AND ?", [
+                    $request->date_from,
+                    $request->date_to,
                 ]);
             }
 
-            $account->calculated_debit = $entries->sum('debit');
-            $account->calculated_credit = $entries->sum('credit');
+            $account->calculated_debit = $entries->sum('account_entries.debit');
+            $account->calculated_credit = $entries->sum('account_entries.credit');
             $account->calculated_balance = $account->calculated_debit - $account->calculated_credit;
         }
 
@@ -174,6 +208,10 @@ class AccountingReportController extends Controller
         $dateTo = $request->date_to ?? now()->format('Y-m-d');
         $leafOnly = $request->boolean('leaf_only', false);
         $includeZeroBalance = $request->boolean('include_zero_balance', false);
+        $level = $request->filled('level') ? (int) $request->level : null;
+        $search = $request->filled('search') ? trim((string) $request->search) : '';
+        // عند فلترة مستوى معيّن: الأرصدة = الحساب + كل الفروع (تجميع شجري)
+        $rollupSubtree = $level !== null;
 
         // Build accounts query - include ALL accounts (roots + children)
         $accountsQuery = TreeAccount::with(['parent']);
@@ -186,12 +224,8 @@ class AccountingReportController extends Controller
             $accountsQuery->where('type', $request->account_type);
         }
 
-        if ($request->filled('level')) {
-            $accountsQuery->where('level', $request->level);
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->search;
+        // البحث على مستوى معيّن يتم بعد اختيار صفوف القطع (الحساب أو فروعه أو آبائه).
+        if (!$rollupSubtree && $search !== '') {
             $accountsQuery->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('name_en', 'like', "%{$search}%")
@@ -201,7 +235,21 @@ class AccountingReportController extends Controller
 
         // Standard order: asset, liability, equity, revenue, expense, settlement
         $typeOrder = ['asset' => 1, 'liability' => 2, 'equity' => 3, 'revenue' => 4, 'expense' => 5, 'settlement' => 6];
-        $accounts = $accountsQuery->get()->sortBy(function ($a) use ($typeOrder) {
+        $accounts = $accountsQuery->get();
+
+        if ($rollupSubtree) {
+            $treeRows = TreeAccount::query()->get(['id', 'parent_id', 'level', 'name', 'name_en', 'code']);
+            $displayIds = (new TrialBalanceLevelView())->displayAccountIds(
+                $treeRows,
+                $level,
+                $search !== '' ? $search : null,
+                $accounts->pluck('id')->map(fn ($id) => (int) $id)->all()
+            );
+            $displaySet = array_fill_keys($displayIds, true);
+            $accounts = $accounts->filter(fn ($account) => isset($displaySet[(int) $account->id]));
+        }
+
+        $accounts = $accounts->sortBy(function ($a) use ($typeOrder) {
             return ($typeOrder[$a->type] ?? 99) * 100000 + (int) $a->code;
         })->values();
 
@@ -220,42 +268,80 @@ class AccountingReportController extends Controller
                 ],
                 'validation' => ['is_balanced' => true, 'message' => 'ميزان المراجعة متوازن'],
                 'count' => 0,
-                'options' => ['leaf_only' => $leafOnly, 'include_zero_balance' => $includeZeroBalance],
+                'options' => [
+                    'leaf_only' => $leafOnly,
+                    'include_zero_balance' => $includeZeroBalance,
+                    'rollup_subtree' => $rollupSubtree,
+                ],
             ], 200);
         }
 
-        // Optimized: single query for all opening balances (before date_from)
-        $openingRows = collect();
-        if ($dateFrom && !empty($accountIds)) {
-            $openingRows = AccountEntry::whereIn('tree_account_id', $accountIds)
-                ->where('created_at', '<', $dateFrom . ' 00:00:00')
-                ->selectRaw('tree_account_id, COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
-                ->groupBy('tree_account_id')
-                ->get()
-                ->keyBy('tree_account_id');
+        $childrenMap = [];
+        if ($rollupSubtree) {
+            $childrenMap = $this->buildTreeAccountChildrenMap();
         }
 
-        // Optimized: single query for all movement (date_from to date_to)
-        $movementRows = AccountEntry::whereIn('tree_account_id', $accountIds)
-            ->when($dateFrom, fn ($q) => $q->where('created_at', '>=', $dateFrom . ' 00:00:00'))
-            ->where('created_at', '<=', $dateTo . ' 23:59:59')
-            ->selectRaw('tree_account_id, COALESCE(SUM(debit),0) as total_debit, COALESCE(SUM(credit),0) as total_credit')
-            ->groupBy('tree_account_id')
-            ->get()
-            ->keyBy('tree_account_id');
+        // قيود كل الحسابات عند التجميع (حتى تُحسب حركة الأبناء تحت المستوى المختار)
+        $entryAccountScope = $rollupSubtree
+            ? null
+            : $accountIds;
 
+        $effectiveDateExpr = 'DATE(COALESCE(de.date, v.date, account_entries.created_at))';
+
+        $openingRows = collect();
+        if ($dateFrom) {
+            $openingQuery = AccountEntry::query()
+                ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+                ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
+                ->selectRaw('account_entries.tree_account_id, COALESCE(SUM(account_entries.debit),0) as total_debit, COALESCE(SUM(account_entries.credit),0) as total_credit')
+                ->groupBy('account_entries.tree_account_id');
+            $this->applyOpeningPeriodFilter($openingQuery, $effectiveDateExpr, $dateFrom);
+            if ($entryAccountScope !== null) {
+                $openingQuery->whereIn('account_entries.tree_account_id', $entryAccountScope);
+            }
+            $openingRows = $openingQuery->get()->keyBy('tree_account_id');
+        }
+
+        $movementQuery = AccountEntry::query()
+            ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+            ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
+            ->selectRaw('account_entries.tree_account_id, COALESCE(SUM(account_entries.debit),0) as total_debit, COALESCE(SUM(account_entries.credit),0) as total_credit')
+            ->groupBy('account_entries.tree_account_id');
+        $this->applyMovementPeriodFilter($movementQuery, $effectiveDateExpr, $dateFrom, $dateTo);
+        if ($entryAccountScope !== null) {
+            $movementQuery->whereIn('account_entries.tree_account_id', $entryAccountScope);
+        }
+        $movementRows = $movementQuery->get()->keyBy('tree_account_id');
+
+        $openingMemo = [];
+        $movementMemo = [];
         $trialBalance = [];
 
         foreach ($accounts as $account) {
-            $openingRow = $openingRows->get($account->id);
-            $openingDebit = (float) ($openingRow?->total_debit ?? 0);
-            $openingCredit = (float) ($openingRow?->total_credit ?? 0);
+            if ($rollupSubtree) {
+                [$openingDebit, $openingCredit] = $this->sumAccountSubtreeTotals(
+                    (int) $account->id,
+                    $childrenMap,
+                    $openingRows,
+                    $openingMemo
+                );
+                [$movementDebit, $movementCredit] = $this->sumAccountSubtreeTotals(
+                    (int) $account->id,
+                    $childrenMap,
+                    $movementRows,
+                    $movementMemo
+                );
+            } else {
+                $openingRow = $openingRows->get($account->id);
+                $openingDebit = (float) ($openingRow?->total_debit ?? 0);
+                $openingCredit = (float) ($openingRow?->total_credit ?? 0);
+
+                $movRow = $movementRows->get($account->id);
+                $movementDebit = (float) ($movRow->total_debit ?? 0);
+                $movementCredit = (float) ($movRow->total_credit ?? 0);
+            }
+
             $openingBalance = $openingDebit - $openingCredit;
-
-            $movRow = $movementRows->get($account->id);
-            $movementDebit = (float) ($movRow->total_debit ?? 0);
-            $movementCredit = (float) ($movRow->total_credit ?? 0);
-
             $closingBalance = $openingBalance + ($movementDebit - $movementCredit);
 
             $hasActivity = $openingBalance != 0 || $movementDebit != 0 || $movementCredit != 0 || $closingBalance != 0;
@@ -315,8 +401,66 @@ class AccountingReportController extends Controller
             'options' => [
                 'leaf_only' => $leafOnly,
                 'include_zero_balance' => $includeZeroBalance,
+                'rollup_subtree' => $rollupSubtree,
             ],
         ], 200);
+    }
+
+    /**
+     * خريطة parent_id => [child_id, ...] لكل شجرة الحسابات.
+     *
+     * @return array<int, list<int>>
+     */
+    private function buildTreeAccountChildrenMap(): array
+    {
+        $map = [];
+        $rows = TreeAccount::query()->get(['id', 'parent_id']);
+        foreach ($rows as $row) {
+            if ($row->parent_id) {
+                $map[(int) $row->parent_id][] = (int) $row->id;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * مجموع مدين/دائن الحساب + كل الأبناء (مع memo).
+     *
+     * @param  array<int, list<int>>  $childrenMap
+     * @param  \Illuminate\Support\Collection<int|string, object>  $rowsByAccountId
+     * @param  array<int, array{0: float, 1: float}>  $memo
+     * @return array{0: float, 1: float}
+     */
+    private function sumAccountSubtreeTotals(
+        int $accountId,
+        array $childrenMap,
+        $rowsByAccountId,
+        array &$memo
+    ): array {
+        if (isset($memo[$accountId])) {
+            return $memo[$accountId];
+        }
+
+        // منع الدوران في الشجرة (parent_id دائري) من الدخول في تكرار لا نهائي.
+        $memo[$accountId] = [0.0, 0.0];
+
+        $row = $rowsByAccountId->get($accountId);
+        $debit = (float) ($row->total_debit ?? 0);
+        $credit = (float) ($row->total_credit ?? 0);
+
+        foreach ($childrenMap[$accountId] ?? [] as $childId) {
+            [$childDebit, $childCredit] = $this->sumAccountSubtreeTotals(
+                (int) $childId,
+                $childrenMap,
+                $rowsByAccountId,
+                $memo
+            );
+            $debit += $childDebit;
+            $credit += $childCredit;
+        }
+
+        return $memo[$accountId] = [$debit, $credit];
     }
 
     /**
@@ -417,18 +561,7 @@ class AccountingReportController extends Controller
      */
     public function accountingTree(Request $request)
     {
-        $accounts = TreeAccount::with([
-                'children.children.children.children.safes',
-                'children.children.children.safes',
-                'children.children.safes',
-                'children.safes',
-                'safes',
-                'parent',
-                'mainAccount',
-            ])
-            ->whereNull('parent_id')
-            ->orderBy('code')
-            ->get();
+        $accounts = app(TreeAccountRepositoryInterface::class)->getNestedTree();
 
         return response()->json(
             TreeAccountResource::collection($accounts),
@@ -445,13 +578,21 @@ class AccountingReportController extends Controller
             'account_id' => 'required|exists:tree_accounts,id',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date',
+            'user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $accountId = (int) $request->input('account_id');
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
+        $userId = $request->filled('user_id') ? (int) $request->user_id : null;
 
-        $account = TreeAccount::find($accountId);
+        // Soft-deleted accounts still exist in tree_accounts (exists validation passes) but
+        // TreeAccount::find() excludes them — keep statements available for historical review.
+        $account = TreeAccount::withTrashed()->find($accountId);
+        if (! $account) {
+            return response()->json(['message' => 'الحساب غير موجود'], 404);
+        }
+
         $scopeAccountIds = $this->descendantTreeAccountIdsIncludingSelf($accountId);
         $consolidated = count($scopeAccountIds) > 1;
 
@@ -469,8 +610,12 @@ class AccountingReportController extends Controller
             $openingQuery = AccountEntry::query()
                 ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
                 ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
-                ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
-                ->whereRaw("{$effectiveDateExpr} < ?", [$dateFrom]);
+                ->whereIn('account_entries.tree_account_id', $scopeAccountIds);
+            $this->applyOpeningPeriodFilter($openingQuery, $effectiveDateExpr, $dateFrom);
+
+            if ($userId !== null) {
+                $this->applyAccountEntryUserFilter($openingQuery, $userId);
+            }
 
             $totalDebit = (clone $openingQuery)->sum(DB::raw('account_entries.debit'));
             $totalCredit = (clone $openingQuery)->sum(DB::raw('account_entries.credit'));
@@ -483,17 +628,20 @@ class AccountingReportController extends Controller
         }
 
         // 2. Fetch Entries (filter & sort by accounting date, not only system created_at)
-        $query = AccountEntry::with(['voucher', 'dailyEntry', 'account'])
+        $query = AccountEntry::with([
+                'voucher.user:id,name',
+                'dailyEntry.user:id,name',
+                'account',
+            ])
             ->select('account_entries.*')
             ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
             ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
             ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id');
 
-        if ($dateFrom) {
-            $query->whereRaw("{$effectiveDateExpr} >= ?", [$dateFrom]);
-        }
-        if ($dateTo) {
-            $query->whereRaw("{$effectiveDateExpr} <= ?", [$dateTo]);
+        $this->applyMovementPeriodFilter($query, $effectiveDateExpr, $dateFrom, $dateTo);
+
+        if ($userId !== null) {
+            $this->applyAccountEntryUserFilter($query, $userId);
         }
 
         $entries = $query->orderByRaw("{$effectiveDateExpr} ASC")
@@ -501,20 +649,62 @@ class AccountingReportController extends Controller
             ->orderBy('account_entries.id', 'asc')
             ->get();
 
-        // 3. Calculate Running Balance
+        $openingImportEntries = collect();
+        if ($dateFrom) {
+            $openingImportQuery = AccountEntry::with([
+                    'voucher.user:id,name',
+                    'dailyEntry.user:id,name',
+                    'account',
+                ])
+                ->select('account_entries.*')
+                ->whereIn('account_entries.tree_account_id', $scopeAccountIds)
+                ->leftJoin('daily_entries as de', 'account_entries.daily_entry_id', '=', 'de.id')
+                ->leftJoin('vouchers as v', 'account_entries.voucher_id', '=', 'v.id')
+                ->where('account_entries.entry_batch_code', 'like', 'OPENING-IMPORT-%');
+            $this->applyOpeningPeriodFilter($openingImportQuery, $effectiveDateExpr, $dateFrom);
+            if ($userId !== null) {
+                $this->applyAccountEntryUserFilter($openingImportQuery, $userId);
+            }
+            $openingImportEntries = $openingImportQuery
+                ->orderByRaw("{$effectiveDateExpr} ASC")
+                ->orderBy('account_entries.id', 'asc')
+                ->get();
+        }
+
+        $displayEntries = $openingImportEntries->concat($entries)->values();
+
+        $this->attachPerformedByUserNames($displayEntries);
+
+        $forAdmin = $this->userCanEditAccountStatementEntries();
+        app(AccountEntryEditLinkService::class)->attachEditLinks($displayEntries, $forAdmin);
+
+        $openingImportIds = $openingImportEntries->pluck('id')->all();
+
+        // 3. Calculate Running Balance — سطور الاستيراد توضيحية فقط (مضمّنة في الافتتاحي)
         $runningBalance = $openingBalance;
-        $processedEntries = $entries->map(function ($entry) use (&$runningBalance, $isDebitNature) {
+        $processedEntries = $displayEntries->map(function ($entry) use (&$runningBalance, $isDebitNature, $openingImportIds) {
             $entry->setAttribute(
                 'entry_date',
                 $entry->dailyEntry?->date ?? $entry->voucher?->date ?? $entry->created_at
             );
+            $entry->setAttribute(
+                'posted_at',
+                $entry->dailyEntry?->created_at
+                    ?? $entry->voucher?->created_at
+                    ?? $entry->created_at
+            );
 
-            if ($isDebitNature) {
-                $change = $entry->debit - $entry->credit;
-            } else {
-                $change = $entry->credit - $entry->debit;
+            $isOpeningImport = in_array((int) $entry->id, $openingImportIds, true);
+            $entry->setAttribute('is_opening_import', $isOpeningImport);
+
+            if (! $isOpeningImport) {
+                if ($isDebitNature) {
+                    $change = $entry->debit - $entry->credit;
+                } else {
+                    $change = $entry->credit - $entry->debit;
+                }
+                $runningBalance += $change;
             }
-            $runningBalance += $change;
 
             $entry->running_balance = $runningBalance;
 
@@ -534,6 +724,158 @@ class AccountingReportController extends Controller
     }
 
     /**
+     * أول المدة: كل ما قبل تاريخ البداية،
+     * بالإضافة إلى قيد استيراد الرصيد الافتتاحي المؤرخ بنفس يوم البداية
+     * حتى يظهر كرصيد أول المدة عند عرض الميزان/الكشف من تاريخ الاستيراد.
+     */
+    private function applyOpeningPeriodFilter($query, string $effectiveDateExpr, string $dateFrom): void
+    {
+        $query->where(function ($q) use ($effectiveDateExpr, $dateFrom) {
+            $q->whereRaw("{$effectiveDateExpr} < ?", [$dateFrom])
+                ->orWhere(function ($q2) use ($effectiveDateExpr, $dateFrom) {
+                    $q2->where('account_entries.entry_batch_code', 'like', 'OPENING-IMPORT-%')
+                        ->whereRaw("{$effectiveDateExpr} = ?", [$dateFrom]);
+                });
+        });
+    }
+
+    /**
+     * حركة الفترة: من تاريخ البداية إلى النهاية، مع استثناء استيراد أول المدة
+     * المؤرخ بنفس يوم البداية لأنه يُحسب في عمود الافتتاح.
+     */
+    private function applyMovementPeriodFilter($query, string $effectiveDateExpr, ?string $dateFrom, ?string $dateTo): void
+    {
+        if ($dateFrom) {
+            $query->whereRaw("{$effectiveDateExpr} >= ?", [$dateFrom])
+                ->whereRaw(
+                    'NOT (COALESCE(account_entries.entry_batch_code, \'\') LIKE ? AND '.$effectiveDateExpr.' = ?)',
+                    ['OPENING-IMPORT-%', $dateFrom]
+                );
+        }
+        if ($dateTo) {
+            $query->whereRaw("{$effectiveDateExpr} <= ?", [$dateTo]);
+        }
+    }
+
+    private function applyAccountEntryUserFilter($query, int $userId): void
+    {
+        $opsPrefix = BankOperationalLedgerService::BATCH_PREFIX;
+
+        $query->where(function ($q) use ($userId, $opsPrefix) {
+            $q->where('de.user_id', $userId)
+                ->orWhere('v.user_id', $userId)
+                ->orWhereIn('account_entries.entry_batch_code', function ($sub) use ($userId) {
+                    $sub->select('entry_batch_code')
+                        ->from('bank_transactions')
+                        ->where('user_id', $userId)
+                        ->whereNotNull('entry_batch_code');
+                })
+                ->orWhereIn('account_entries.entry_batch_code', function ($sub) use ($userId) {
+                    $sub->select('entry_batch_code')
+                        ->from('safe_transactions')
+                        ->where('user_id', $userId)
+                        ->whereNotNull('entry_batch_code');
+                })
+                ->orWhere(function ($q2) use ($userId, $opsPrefix) {
+                    $q2->where('account_entries.entry_batch_code', 'like', $opsPrefix . '%')
+                        ->whereExists(function ($exists) use ($userId, $opsPrefix) {
+                            $exists->select(DB::raw(1))
+                                ->from('bank_details')
+                                ->where('bank_details.user_id', $userId)
+                                ->whereRaw(
+                                    'account_entries.entry_batch_code LIKE CONCAT(?, \'%-\', bank_details.ref)',
+                                    [$opsPrefix]
+                                );
+                        });
+                });
+        });
+    }
+
+    private function userCanEditAccountStatementEntries(): bool
+    {
+        $user = auth()->user();
+        if ($user && trim((string) ($user->department ?? '')) === 'Admin') {
+            return true;
+        }
+
+        return has_any_permission([
+            'finance.account_statement.edit',
+            'system.rbac',
+        ]);
+    }
+
+    /**
+     * يضيف user_name لكل قيد من السند/القيد اليومي أو حركات البنك/الخزنة المرتبطة بـ entry_batch_code.
+     *
+     * @param  \Illuminate\Support\Collection<int, AccountEntry>  $entries
+     */
+    private function attachPerformedByUserNames($entries): void
+    {
+        $batchCodes = $entries->pluck('entry_batch_code')->filter()->unique()->values()->all();
+        $userByBatch = [];
+
+        if ($batchCodes !== []) {
+            $bankRows = DB::table('bank_transactions')
+                ->join('users', 'bank_transactions.user_id', '=', 'users.id')
+                ->whereIn('bank_transactions.entry_batch_code', $batchCodes)
+                ->select('bank_transactions.entry_batch_code', 'users.name')
+                ->get();
+
+            foreach ($bankRows as $row) {
+                $userByBatch[$row->entry_batch_code] = $row->name;
+            }
+
+            $safeRows = DB::table('safe_transactions')
+                ->join('users', 'safe_transactions.user_id', '=', 'users.id')
+                ->whereIn('safe_transactions.entry_batch_code', $batchCodes)
+                ->select('safe_transactions.entry_batch_code', 'users.name')
+                ->get();
+
+            foreach ($safeRows as $row) {
+                $userByBatch[$row->entry_batch_code] = $row->name;
+            }
+
+            $opsPrefix = BankOperationalLedgerService::BATCH_PREFIX;
+            $opsRefs = [];
+            foreach ($batchCodes as $code) {
+                if (! str_starts_with((string) $code, $opsPrefix)) {
+                    continue;
+                }
+                $suffix = substr((string) $code, strlen($opsPrefix));
+                $parts = explode('-', $suffix);
+                if ($parts === []) {
+                    continue;
+                }
+                $opsRefs[(string) $code] = end($parts);
+            }
+
+            if ($opsRefs !== []) {
+                $detailRows = DB::table('bank_details')
+                    ->join('users', 'bank_details.user_id', '=', 'users.id')
+                    ->whereIn('bank_details.ref', array_values(array_unique(array_values($opsRefs))))
+                    ->select('bank_details.ref', 'users.name')
+                    ->get()
+                    ->keyBy('ref');
+
+                foreach ($opsRefs as $code => $ref) {
+                    $detail = $detailRows->get($ref);
+                    if ($detail) {
+                        $userByBatch[$code] = $detail->name;
+                    }
+                }
+            }
+        }
+
+        foreach ($entries as $entry) {
+            $name = $entry->voucher?->user?->name
+                ?? $entry->dailyEntry?->user?->name
+                ?? ($entry->entry_batch_code ? ($userByBatch[$entry->entry_batch_code] ?? null) : null);
+
+            $entry->setAttribute('user_name', $name);
+        }
+    }
+
+    /**
      * معرفات الحساب المحدد وجميع الحسابات التابعة له (BFS على شجرة parent_id).
      *
      * @return int[]
@@ -541,7 +883,8 @@ class AccountingReportController extends Controller
     private function descendantTreeAccountIdsIncludingSelf(int $rootId): array
     {
         $byParent = [];
-        foreach (TreeAccount::query()->select('id', 'parent_id')->get() as $row) {
+        // Include soft-deleted children so consolidated statements still cover deleted subtrees.
+        foreach (TreeAccount::withTrashed()->select('id', 'parent_id')->get() as $row) {
             $p = $row->parent_id;
             if (! isset($byParent[$p])) {
                 $byParent[$p] = [];
@@ -685,7 +1028,13 @@ class AccountingReportController extends Controller
                 if ($detail === 'sales' || $hasKeyword($name, ['مبيعات', 'sales'])) {
                     $sales += $net;
                 } elseif ($detail === 'shipping_revenue'
-                    || $hasKeyword($name, ['إيراد شحن', 'ايراد شحن', 'شحن محصل', 'شحن للعميل', 'shipping revenue', 'delivery revenue', 'handling revenue'])) {
+                    || $hasKeyword($name, [
+                        'إيراد شحن', 'ايراد شحن',
+                        'إيرادات الشحن', 'ايرادات الشحن',
+                        'إيرادات شحن', 'ايرادات شحن',
+                        'شحن محصل', 'شحن للعميل',
+                        'shipping revenue', 'delivery revenue', 'handling revenue',
+                    ])) {
                     /** إيراد شحن يُحصّل من العميل — منفصل عن مبيعات البضاعة (IFRS/GAAP: freight billed to customers). */
                     $shippingRevenue += $net;
                 } elseif ($detail === 'sales_returns' || $hasKeyword($name, ['مرتجع', 'مردود', 'returns'])) {

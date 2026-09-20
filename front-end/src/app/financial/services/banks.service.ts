@@ -17,9 +17,8 @@ export class BanksService {
     return this.http.post<Bank>(`${environment.Url}/banks`,formData)
   }
 
-  edit(id:number,formData:Bank):Observable<Bank>
-  {
-    return this.http.put<Bank>(`${environment.Url}/banks/${id}`,formData)
+  edit(id: number, formData: Partial<Bank>): Observable<Bank> {
+    return this.http.put<Bank>(`${environment.Url}/banks/${id}`, formData);
   }
 
   data(){
@@ -42,16 +41,16 @@ export class BanksService {
     return this.http.post(`${environment.Url}/pendingBanks` , data);
   }
 
-  depositBank(id:any , amount:number , reason:string){
-    return this.http.get(`${environment.Url}/banks/depositbank/${id}?amount=${amount}&reason=${reason}`);
+  depositBank(id:any , amount:number , reason:string, counterAccountId:number){
+    return this.http.get(`${environment.Url}/banks/depositbank/${id}?amount=${amount}&reason=${encodeURIComponent(reason)}&counter_account_id=${counterAccountId}`);
   }
 
-  editBankBalance(id:any , amount:number , reason:string){
-    return this.http.get(`${environment.Url}/banks/editBankBalance/${id}?amount=${amount}&reason=${reason}`);
+  editBankBalance(id:any , amount:number , reason:string, counterAccountId:number){
+    return this.http.get(`${environment.Url}/banks/editBankBalance/${id}?amount=${amount}&reason=${encodeURIComponent(reason)}&counter_account_id=${counterAccountId}`);
   }
 
-  withDrawBank(id:any , amount:number , reason:string){
-    return this.http.get(`${environment.Url}/banks/withDrawBank/${id}?amount=${amount}&reason=${reason}`);
+  withDrawBank(id:any , amount:number , reason:string, counterAccountId:number){
+    return this.http.get(`${environment.Url}/banks/withDrawBank/${id}?amount=${amount}&reason=${encodeURIComponent(reason)}&counter_account_id=${counterAccountId}`);
   }
 
   transferMoney(bankFrom:number , bankTo:number , amount:number ,reason:string){

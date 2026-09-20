@@ -9,6 +9,416 @@ WHERE ABS(IFNULL(unit_price, 0)) < 0.0000001
   AND category_price IS NOT NULL;
 
 
-     composer install --no-dev --optimize-autoloader
+      composer install --no-dev --optimize-autoloader
 
-        composer require phpoffice/phpspreadsheet:^5.7
+      composer require phpoffice/phpspreadsheet:^5.7
+
+
+      php artisan erp:reset-inventory-testing --force
+
+
+      php artisan db:seed --class=RbacFoundationSeeder
+      php artisan db:seed --class=RbacFoundationSeeder
+      php artisan db:seed --class=StockDocumentsFoundationSeeder
+
+
+
+      php artisan shopify:fix-category-image-column
+      php artisan optimize:clear
+
+-- لوكال: تأكد أن front-end/src/env/env.ts يشير إلى:
+-- http://localhost/Erp_new/backend/public/api
+-- ثم أعد تشغيل: ng serve
+-- اختبار الإدراج: php scripts/test_category_image_insert.php
+
+-- SQL (لوكال أو سيرفر):
+-- ALTER TABLE categories MODIFY category_image VARCHAR(255) NULL DEFAULT '';
+
+حhp artisan db:fix-procedure-definers
+
+php artisan accounting:reconcile-banks
+
+php artisan accounting:reconcile-banks --fix --counter-account-id=XXX
+
+سددت من شاشة المورد مباشرة؟
+  → تفاصيل حساب المورد + كشف البنك + القيود اليومية
+
+سددت من «نقد صادر»؟
+  → دفعات سابقة + سندات الموردين + القيود اليومية + كشف البنك
+
+دفعت لشركة شحن؟
+  → دفعات سابقة (شركات شحن) + كشف حساب الذمم + القيود اليومية
+
+
+
+  php artisan migrate
+php artisan db:seed --class=ProcessingModuleSeeder
+php artisan db:seed --class=RbacFoundationSeeder
+
+
+
+cd c:\xampp\htdocs\Erp_new\backend
+php artisan db:seed --class=RbacFoundationSeeder
+php artisan route:clear && php artisan config:clear
+
+php artisan db:seed --class=RbacFoundationSeeder
+
+php artisan db:fix-procedure-definers
+
+
+php artisan collection:backfill-receivables
+
+php artisan db:seed --class=AccountStatementEditPermissionSeeder
+
+php artisan db:seed --class=TreeAccountBalanceAdjustmentPermissionSeeder
+
+
+php artisan db:seed --class=OffersViewAllPermissionSeeder
+php artisan db:seed --class=ProcessingDeleteOrderPermissionSeeder
+
+php artisan db:seed --class=OrdersConvertFromOfferPermissionSeeder
+
+
+
+SELECT COUNT(*) AS account_entries FROM account_entries;
+SELECT COUNT(*) AS daily_entries FROM daily_entries;
+SELECT COUNT(*) AS daily_entry_items FROM daily_entry_items;
+SELECT SUM(balance) AS total_balance FROM tree_accounts;
+
+
+START TRANSACTION;
+
+DELETE FROM account_entries;
+DELETE FROM daily_entry_items;
+DELETE FROM daily_entries;
+
+UPDATE tree_accounts
+SET balance = 0,
+    debit_balance = 0,
+    credit_balance = 0,
+    updated_at = NOW();
+
+COMMIT;
+
+
+
+
+
+# تجربة بدون تعديل
+php artisan accounting:backfill-shipping-revenue --dry-run --from=2026-01-01
+
+# تنفيذ فعلي لنفس الفترة
+php artisan accounting:backfill-shipping-revenue --from=2026-01-01
+
+# طلب واحد
+php artisan accounting:backfill-shipping-revenue --order=45008
+
+
+php artisan db:seed --class=PartialDeliverStatusPermissionSeeder
+
+
+php artisan db:seed --class=PriceListPermissionSeeder
+
+
+php artisan db:seed --class=OperatingSuppliesWarehouseSeeder
+
+php artisan db:seed --class=AssignItemCodesPermissionSeeder
+
+
+php artisan db:seed --class=AssignItemCodesPermissionSeeder
+
+php artisan orders:clear-cancelled-gl --order=44362
+
+php artisan orders:clear-cancelled-gl --dry-run
+php artisan orders:clear-cancelled-gl
+
+
+SELECT id, tree_account_id, debit, credit, description, entry_batch_code, created_at
+FROM account_entries
+WHERE order_id = 44362;
+
+DELETE FROM account_entries
+WHERE order_id = 44362
+  AND id IN (حط_هنا_الـ_IDs_من_الخطوة_1);
+
+  UPDATE order_details
+SET remaining_amount = 0,
+    amount_to_collect = 0,
+    collection_receivable_amount = NULL
+WHERE order_id = 44362;
+
+
+
+-- =============================================
+-- 1) معاينة فقط — من غير تعديل
+-- =============================================
+SELECT t.id, t.code, t.name, t.balance, t.debit_balance, t.credit_balance, t.parent_id
+FROM tree_accounts t
+WHERE t.code = '10003034';
+
+SELECT ae.id, ae.order_id, ae.debit, ae.credit, ae.description, ae.entry_batch_code, ae.created_at
+FROM account_entries ae
+JOIN tree_accounts t ON t.id = ae.tree_account_id
+WHERE t.code = '10003034';
+
+SELECT ae.id, ae.order_id, t.code, t.name, ae.debit, ae.credit, ae.description
+FROM account_entries ae
+JOIN tree_accounts t ON t.id = ae.tree_account_id
+WHERE ae.order_id IN (
+  SELECT DISTINCT ae2.order_id
+  FROM account_entries ae2
+  JOIN tree_accounts t2 ON t2.id = ae2.tree_account_id
+  WHERE t2.code = '10003034' AND ae2.order_id IS NOT NULL
+);
+
+
+-- =============================================
+-- 2) التصفير — بعد ما تتأكد من المعاينة
+-- =============================================
+START TRANSACTION;
+
+SELECT @accId := id
+FROM tree_accounts
+WHERE code = '10003034'
+LIMIT 1;
+
+SELECT @custAmt := COALESCE(SUM(debit) - SUM(credit), 0)
+FROM account_entries
+WHERE tree_account_id = @accId;
+
+SELECT @p1 := parent_id FROM tree_accounts WHERE id = @accId;
+SELECT @p2 := parent_id FROM tree_accounts WHERE id = @p1;
+SELECT @p3 := parent_id FROM tree_accounts WHERE id = @p2;
+SELECT @p4 := parent_id FROM tree_accounts WHERE id = @p3;
+SELECT @p5 := parent_id FROM tree_accounts WHERE id = @p4;
+
+-- حذف قيود حساب العميلة + الطرف المقابل (إيراد الأوردر) حتى القيد يفضل متوازن
+DELETE FROM account_entries
+WHERE order_id IN (
+  SELECT order_id FROM (
+    SELECT DISTINCT order_id
+    FROM account_entries
+    WHERE tree_account_id = @accId
+      AND order_id IS NOT NULL
+  ) x
+);
+
+DELETE FROM account_entries
+WHERE tree_account_id = @accId;
+
+UPDATE order_details
+SET remaining_amount = 0,
+    amount_to_collect = 0,
+    collection_receivable_amount = NULL
+WHERE order_id IN (44362);
+
+-- تصفير الحساب نفسه
+UPDATE tree_accounts
+SET debit_balance = 0,
+    credit_balance = 0,
+    balance = 0
+WHERE id = @accId;
+
+-- تنزيل نفس المبلغ من الآباء (Shopify ← عملاء أفراد ← العملاء ← ...)
+UPDATE tree_accounts
+SET debit_balance = debit_balance - @custAmt,
+    balance = balance - @custAmt
+WHERE id IN (@p1, @p2, @p3, @p4, @p5)
+  AND id IS NOT NULL;
+
+-- تحقق
+SELECT id, code, name, balance, debit_balance, credit_balance
+FROM tree_accounts
+WHERE code = '10003034';
+
+SELECT COUNT(*) AS remaining_entries
+FROM account_entries
+WHERE tree_account_id = @accId;
+
+-- لو الرصيد بقى 0 ومفيش قيود: ثبّت
+COMMIT;
+
+-- لو حاجة غلط: مش COMMIT، نفّذ:
+-- ROLLBACK;
+
+
+
+
+أوردرات طلب صيانة الجديدة بتتحط على إيرادات الصيانة.
+إيراد الشحن زي ما هو، على حساب الشحن.
+مبيعات البضاعة العادية ما اتغيرتش.
+الأوردرات القديمة لسه على إيراد المبيعات. في النظام حالياً 791 طلب صيانة محتاجين إعادة تصنيف. من مجلد backend شغّل:
+
+php artisan accounting:reclassify-maintenance-revenue --dry-run
+php artisan accounting:reclassify-maintenance-revenue
+الأمر بيعيد بناء قيد الفاتورة فقط (من غير قيود التحصيل)، ويحوّل الإيراد لحساب 40004. لو حابب ننفّذه دلوقتي على الـ 791 طلب، قولي.
+
+
+php artisan migrate --path=database/migrations/2026_09_03_150000_add_sales_movement_query_indexes.php
+
+
+
+php artisan accounting:backfill-direct-cash-journals
+php artisan accounting:fix-manufacturing-journal-dates
+
+
+
+php artisan db:seed --class=SystemLockPermissionSeeder
+
+
+-- ============================================================
+-- LIVE phpMyAdmin: تغيير دفعة الافتتاحي من 5/5 إلى 4/5
+-- عشان الرفع الجديد بتاريخ 4/5 يستبدل القديم
+-- ============================================================
+
+-- 1) شوف الموجود
+SELECT entry_batch_code,
+       COUNT(*) AS cnt,
+       ROUND(SUM(debit), 2) AS debit,
+       ROUND(SUM(credit), 2) AS credit
+FROM account_entries
+WHERE entry_batch_code LIKE 'OPENING-IMPORT-%'
+GROUP BY entry_batch_code;
+
+START TRANSACTION;
+
+-- 2) لو ظهر في الخطوة 1 صف OPENING-IMPORT-2026-05-04 بمبلغ ~565:
+--    ده الرفع الغلط. شيل الكومنت عن الثلاثة DELETE دول ونفّذيهم.
+--    لو الصف ده مش موجود، سيبيهم زي ما هم.
+--
+-- DELETE FROM daily_entry_items
+-- WHERE daily_entry_id IN (
+--   SELECT daily_entry_id FROM (
+--     SELECT DISTINCT daily_entry_id FROM account_entries
+--     WHERE entry_batch_code = 'OPENING-IMPORT-2026-05-04'
+--   ) t
+-- );
+-- DELETE FROM daily_entries
+-- WHERE id IN (
+--   SELECT daily_entry_id FROM (
+--     SELECT DISTINCT daily_entry_id FROM account_entries
+--     WHERE entry_batch_code = 'OPENING-IMPORT-2026-05-04'
+--   ) t
+-- );
+-- DELETE FROM account_entries
+-- WHERE entry_batch_code = 'OPENING-IMPORT-2026-05-04';
+
+-- 3) تعديل كود الدفعة الأصلية (11.27 مليون)
+UPDATE account_entries
+SET entry_batch_code = 'OPENING-IMPORT-2026-05-04'
+WHERE entry_batch_code = 'OPENING-IMPORT-2026-05-05';
+
+-- 4) created_at / updated_at / تاريخ القيد = 4/5
+UPDATE account_entries
+SET created_at = '2026-05-04 00:00:00',
+    updated_at = '2026-05-04 00:00:00'
+WHERE entry_batch_code IN ('OPENING-IMPORT-2026-05-04', 'OPENING-IMPORT-2026-05-05');
+
+UPDATE daily_entries de
+JOIN (
+  SELECT DISTINCT daily_entry_id
+  FROM account_entries
+  WHERE entry_batch_code IN ('OPENING-IMPORT-2026-05-04', 'OPENING-IMPORT-2026-05-05')
+) ae ON ae.daily_entry_id = de.id
+SET de.date = '2026-05-04',
+    de.created_at = '2026-05-04 00:00:00',
+    de.updated_at = '2026-05-04 00:00:00';
+
+UPDATE daily_entry_items dei
+JOIN (
+  SELECT DISTINCT daily_entry_id
+  FROM account_entries
+  WHERE entry_batch_code IN ('OPENING-IMPORT-2026-05-04', 'OPENING-IMPORT-2026-05-05')
+) ae ON ae.daily_entry_id = dei.daily_entry_id
+SET dei.created_at = '2026-05-04 00:00:00',
+    dei.updated_at = '2026-05-04 00:00:00';
+
+-- 5) تحقق: المفروض صف واحد، والتواريخ 2026-05-04
+-- OPENING-IMPORT-2026-05-04 | 224 | 11271410.07
+SELECT entry_batch_code, COUNT(*) cnt, ROUND(SUM(debit),2) debit,
+       MIN(created_at) created_at
+FROM account_entries
+WHERE entry_batch_code LIKE 'OPENING-IMPORT-%'
+GROUP BY entry_batch_code;
+
+SELECT de.id, de.date, de.entry_number, de.created_at, de.updated_at
+FROM daily_entries de
+JOIN (
+  SELECT DISTINCT daily_entry_id
+  FROM account_entries
+  WHERE entry_batch_code LIKE 'OPENING-IMPORT-%'
+) ae ON ae.daily_entry_id = de.id;
+
+COMMIT;
+-- لو النتيجة مش زي المتوقع: ROLLBACK;
+
+-- ============================================================
+-- LIVE phpMyAdmin: حذف كل القيود قبل 4/5/2026
+-- تاريخ اليومية = de.date ثم voucher.date ثم created_at
+-- لا يمس OPENING-IMPORT-*
+-- بعد COMMIT شغّل: php artisan accounting:rebuild-tree-balances
+-- ============================================================
+
+-- 1) معاينة
+SELECT DATE(COALESCE(de.date, v.date, ae.created_at)) AS journal_date,
+       de.entry_number,
+       LEFT(de.description, 120) AS description,
+       COUNT(*) AS lines,
+       ROUND(SUM(ae.debit), 2) AS debit,
+       ROUND(SUM(ae.credit), 2) AS credit
+FROM account_entries ae
+LEFT JOIN daily_entries de ON de.id = ae.daily_entry_id
+LEFT JOIN vouchers v ON v.id = ae.voucher_id
+WHERE DATE(COALESCE(de.date, v.date, ae.created_at)) < '2026-05-04'
+  AND (ae.entry_batch_code IS NULL OR ae.entry_batch_code NOT LIKE 'OPENING-IMPORT-%')
+GROUP BY journal_date, de.entry_number, de.description
+ORDER BY journal_date, de.entry_number;
+
+START TRANSACTION;
+
+DROP TEMPORARY TABLE IF EXISTS tmp_gl_before_0504;
+CREATE TEMPORARY TABLE tmp_gl_before_0504 AS
+SELECT ae.id AS account_entry_id,
+       ae.daily_entry_id
+FROM account_entries ae
+LEFT JOIN daily_entries de ON de.id = ae.daily_entry_id
+LEFT JOIN vouchers v ON v.id = ae.voucher_id
+WHERE DATE(COALESCE(de.date, v.date, ae.created_at)) < '2026-05-04'
+  AND (ae.entry_batch_code IS NULL OR ae.entry_batch_code NOT LIKE 'OPENING-IMPORT-%');
+
+ALTER TABLE tmp_gl_before_0504 ADD INDEX (account_entry_id), ADD INDEX (daily_entry_id);
+
+DELETE dei
+FROM daily_entry_items dei
+JOIN tmp_gl_before_0504 t ON t.daily_entry_id = dei.daily_entry_id
+WHERE t.daily_entry_id IS NOT NULL;
+
+DELETE ae
+FROM account_entries ae
+JOIN tmp_gl_before_0504 t ON t.account_entry_id = ae.id;
+
+DELETE de
+FROM daily_entries de
+JOIN (
+  SELECT DISTINCT daily_entry_id
+  FROM tmp_gl_before_0504
+  WHERE daily_entry_id IS NOT NULL
+) t ON t.daily_entry_id = de.id
+WHERE NOT EXISTS (
+  SELECT 1 FROM account_entries ae WHERE ae.daily_entry_id = de.id
+);
+
+-- 2) تحقق: صفر قبل 4/5، ودفعة الافتتاحي لسه موجودة
+SELECT COUNT(*) AS remaining_before_4_5
+FROM account_entries ae
+LEFT JOIN daily_entries de ON de.id = ae.daily_entry_id
+LEFT JOIN vouchers v ON v.id = ae.voucher_id
+WHERE DATE(COALESCE(de.date, v.date, ae.created_at)) < '2026-05-04';
+
+SELECT entry_batch_code, COUNT(*) cnt, ROUND(SUM(debit),2) debit, ROUND(SUM(credit),2) credit
+FROM account_entries
+WHERE entry_batch_code LIKE 'OPENING-IMPORT-%'
+GROUP BY entry_batch_code;
+
+COMMIT;
+-- لو remaining_before_4_5 مش 0 أو الافتتاحي اختفى: ROLLBACK;

@@ -1,0 +1,93 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { environment } from 'src/env/env';
+import { httpOptionsFromParams } from 'src/app/shared/utils/http-query.util';
+
+@Injectable({ providedIn: 'root' })
+export class CollectionCompanyService {
+  constructor(private http: HttpClient) {}
+
+  list(params: Record<string, string> = {}) {
+    return this.http.get(`${environment.Url}/collection-companies`, httpOptionsFromParams(params));
+  }
+
+  unlinkedSummary() {
+    return this.http.get<any>(`${environment.Url}/collection-companies/unlinked-summary`);
+  }
+
+  linkUnlinked() {
+    return this.http.post<any>(`${environment.Url}/collection-companies/link-unlinked`, {});
+  }
+
+  linkAccount(id: number) {
+    return this.http.post<any>(`${environment.Url}/collection-companies/${id}/link-account`, {});
+  }
+
+  select() {
+    return this.http.get(`${environment.Url}/collection-companies/select`);
+  }
+
+  get(id: number) {
+    return this.http.get(`${environment.Url}/collection-companies/${id}`);
+  }
+
+  create(body: any) {
+    return this.http.post(`${environment.Url}/collection-companies`, body);
+  }
+
+  update(id: number, body: any) {
+    return this.http.put(`${environment.Url}/collection-companies/${id}`, body);
+  }
+
+  delete(id: number) {
+    return this.http.delete(`${environment.Url}/collection-companies/${id}`);
+  }
+
+  accountsReport(params: Record<string, string> = {}) {
+    return this.http.get(`${environment.Url}/reports/collection-accounts`, httpOptionsFromParams(params));
+  }
+
+  statementReport(id: number, params: Record<string, string> = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/collection-accounts/${id}/statement`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  settleWithShipping(
+    id: number,
+    body: { order_ids: number[]; cash_account_id: number; date: string; mode?: string; notes?: string }
+  ) {
+    return this.http.post<any>(
+      `${environment.Url}/reports/collection-accounts/${id}/settle-with-shipping`,
+      body
+    );
+  }
+
+  pendingOrdersReport(params: Record<string, string> = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/collection-accounts/pending-orders`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  reconcileCount(id: number, dateFrom: string, dateTo: string) {
+    return this.http.get<any>(`${environment.Url}/collection-companies/${id}/reconcile-count`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+  }
+
+  reconcileOrders(id: number, dateFrom: string, dateTo: string) {
+    return this.http.get<any>(`${environment.Url}/collection-companies/${id}/reconcile-orders`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+  }
+
+  reconcileReceivables(id: number, dateFrom: string, dateTo: string, orderIds?: number[]) {
+    return this.http.post<any>(`${environment.Url}/collection-companies/${id}/reconcile-receivables`, {
+      date_from: dateFrom,
+      date_to: dateTo,
+      order_ids: orderIds || null,
+    });
+  }
+}

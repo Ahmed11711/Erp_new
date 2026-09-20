@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\TreeAccount;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -51,6 +52,16 @@ class CategoryInventoryCostService
         return $v !== null ? (float) $v : 0.0;
     }
 
+    /**
+     * تكلفة الوحدة المرجعية عند تعديل الكمية يدوياً (تعيين رصيد) بحيث يبقى متوسط التكلفة المرجّح منطقياً:
+     * قيمة المخزون بالتكلفة ÷ الكمية (total_price) لجميع المخازن بما فيها منتج تام.
+     * sell_total_price يعبّر عن تتبع منفصل لقيمة البيع وليس متوسط تكلفة المخزون.
+     */
+    public static function averageValuationPerUnitForManualAdjustment(int $categoryId): float
+    {
+        return static::resolveReferenceUnitCost($categoryId);
+    }
+
     public static function syncUnitPriceFromWeightedAverage(int $categoryId): void
     {
         $row = DB::table('categories')->where('id', $categoryId)->first();
@@ -79,9 +90,8 @@ class CategoryInventoryCostService
     }
 
     /**
-     * صنف واحد لكل سطر فاتورة مشتريات (واجهة المشتريات تختار من مخزن مواد خام).
-     * يفضّل category_id المُرسل من الواجهة؛ وإلا يُطابق الاسم مع مخزن مواد خام فقط (أول صف عند التكرار).
-     * تحديث categories باسم الصنف فقط كان يُحدّث كل الصفوف ذات الاسم في كل المخازن فيفسد total_price ومتوسط التكلفة.
+     * صنف واحد لكل سطر فاتورة مشتريات.
+     * يفضّل category_id المُرسل من الواجهة؛ وإلا يُطابق الاسم مع مخزن مواد خام أو مستلزمات تشغيل.
      *
      * @param  array|object  $product
      */
@@ -97,12 +107,61 @@ class CategoryInventoryCostService
             return $cid;
         }
 
+        $preferredWarehouse = null;
+        if (is_array($product) && ! empty($product['warehouse'])) {
+            $preferredWarehouse = trim((string) $product['warehouse']);
+        } elseif (is_object($product) && ! empty($product->warehouse)) {
+            $preferredWarehouse = trim((string) $product->warehouse);
+        }
+
+        $warehouses = array_values(array_filter([
+            $preferredWarehouse,
+            'مخزن مواد خام',
+            'مستلزمات تشغيل وأدوات تشغيل',
+        ]));
+        $warehouses = array_values(array_unique($warehouses));
+
         $row = DB::table('categories')
             ->where('category_name', $productName)
-            ->where('warehouse', 'مخزن مواد خام')
+            ->whereIn('warehouse', $warehouses)
+            ->orderByRaw('CASE WHEN warehouse = ? THEN 0 ELSE 1 END', [$warehouses[0]])
             ->orderBy('id')
             ->first();
 
         return $row ? (int) $row->id : null;
+    }
+
+    /**
+     * تجميع إجماليات بنود الفاتورة حسب حساب المخزون في الشجرة (كل مخزن → asset_id في stocks).
+     *
+     * @param  iterable<int|string, mixed>  $invoiceCategoryRows
+     * @return array<int, float>  tree_account_id => مجموع التكلفة على هذا الحساب
+     */
+    public static function aggregatePurchaseLineTotalsByInventoryTreeAccount(iterable $invoiceCategoryRows): array
+    {
+        $map = [];
+        foreach ($invoiceCategoryRows as $line) {
+            $productName = is_object($line) ? ($line->product_name ?? '') : ($line['product_name'] ?? '');
+            $cid = static::resolveCategoryIdForPurchaseLine($line, (string) $productName);
+            if (! $cid) {
+                continue;
+            }
+            $acc = TreeAccount::resolveInventoryAccountForCategoryId((int) $cid);
+            if (! $acc) {
+                continue;
+            }
+            $total = abs(is_object($line)
+                ? (float) ($line->total ?? 0)
+                : (float) ($line['total'] ?? 0));
+            $map[$acc->id] = ($map[$acc->id] ?? 0) + $total;
+        }
+
+        return $map;
+    }
+
+    /** حساب مخزون الجرد لصنف (لمخزنه). */
+    public static function resolveInventoryTreeAccountForCategoryId(int $categoryId): ?TreeAccount
+    {
+        return TreeAccount::resolveInventoryAccountForCategoryId($categoryId);
     }
 }

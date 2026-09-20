@@ -12,7 +12,7 @@ import { Router } from '@angular/router';
 export class LeadListComponent {
 
   leads:any[]=[];
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15,50,100];
@@ -73,6 +73,46 @@ export class LeadListComponent {
   goToLeadDetails(leadId: number) {
     this.closeRecommenderDropdown();
     this.router.navigate(['/dashboard/corparates-sales/leads', leadId]);
+  }
+
+  leadQuotations(lead: any): any[] {
+    return Array.isArray(lead?.offers) ? lead.offers : [];
+  }
+
+  latestQuotation(lead: any): any | null {
+    const offers = this.leadQuotations(lead);
+    return offers.length ? offers[0] : null;
+  }
+
+  quotationDetailsLink(offer: any): any[] {
+    if (!offer?.id) {
+      return ['/dashboard/permissions/priceoffer'];
+    }
+    return offer.offer === 'offer2'
+      ? ['/dashboard/permissions/offer2', offer.id]
+      : ['/dashboard/permissions/offer1', offer.id];
+  }
+
+  quotationActionLink(lead: any): any[] {
+    const offer = this.latestQuotation(lead);
+    return offer
+      ? this.quotationDetailsLink(offer)
+      : ['/dashboard/permissions/priceoffer1'];
+  }
+
+  quotationActionQuery(lead: any): any {
+    return this.latestQuotation(lead) ? {} : { lead_id: lead.id };
+  }
+
+  quotationActionTitle(lead: any): string {
+    const offer = this.latestQuotation(lead);
+    if (!offer) {
+      return 'Create Quotation';
+    }
+    const count = this.leadQuotations(lead).length;
+    return count > 1
+      ? `Open latest quotation #${offer.id} (${count} quotations)`
+      : `Open quotation #${offer.id}`;
   }
 
   loadTeamUsers(): void {

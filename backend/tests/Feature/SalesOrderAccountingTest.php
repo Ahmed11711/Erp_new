@@ -41,6 +41,7 @@ class SalesOrderAccountingTest extends TestCase
 
     private ?TreeAccount $salesRevenueAcc = null;
     private ?TreeAccount $shippingRevenueAcc = null;
+    private ?TreeAccount $maintenanceRevenueAcc = null;
     private ?TreeAccount $customerAcc = null;
     private ?TreeAccount $bankAcc = null;
     private ?TreeAccount $freightOutAcc = null;
@@ -91,12 +92,35 @@ class SalesOrderAccountingTest extends TestCase
             'credit_balance' => 0,
         ]);
 
+        $cashParent = TreeAccount::create([
+            'code' => $p . '1000200',
+            'name' => 'النقدية',
+            'type' => 'asset',
+            'level' => 3,
+            'parent_id' => $root->id,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
         $this->bankAcc = TreeAccount::create([
             'code' => $p . '1000211',
             'name' => 'خزينة الشركة',
             'type' => 'asset',
             'level' => 4,
-            'parent_id' => $root->id,
+            'parent_id' => $cashParent->id,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
+        TreeAccount::create([
+            'code' => $p . '1000212',
+            'name' => 'مقبوضات بانتظار التسجيل',
+            'type' => 'asset',
+            'level' => 4,
+            'parent_id' => $cashParent->id,
+            'detail_type' => 'unallocated_prepaid_receipts',
             'balance' => 0,
             'debit_balance' => 0,
             'credit_balance' => 0,
@@ -132,6 +156,19 @@ class SalesOrderAccountingTest extends TestCase
             'level' => 4,
             'parent_id' => $revenueRoot->id,
             'detail_type' => 'shipping_revenue',
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
+        $this->maintenanceRevenueAcc = TreeAccount::create([
+            'code' => $p . '4041001',
+            'name' => 'إيرادات الصيانة',
+            'name_en' => 'Maintenance revenue',
+            'type' => 'revenue',
+            'level' => 4,
+            'parent_id' => $revenueRoot->id,
+            'detail_type' => 'maintenance_revenue',
             'balance' => 0,
             'debit_balance' => 0,
             'credit_balance' => 0,
@@ -243,6 +280,75 @@ class SalesOrderAccountingTest extends TestCase
     }
 
     /** @test */
+    public function maintenance_order_credits_maintenance_revenue_not_product_sales(): void
+    {
+        $service = app(SalesOrderAccountingService::class);
+
+        $order = $this->createTestOrder(
+            productTotal: 800,
+            shippingRevenue: 50,
+            prepaidAmount: 0,
+            discount: 0,
+            orderType: 'طلب صيانة',
+            zeroProductLineTotals: true,
+        );
+
+        $service->recordInitialOrderRecognition($order);
+
+        $maintenanceCredit = (float) AccountEntry::where('order_id', $order->id)
+            ->where('description', 'إيرادات الصيانة')
+            ->sum('credit');
+        $salesGoodsCredit = (float) AccountEntry::where('order_id', $order->id)
+            ->where('description', 'إيرادات المبيعات (بضاعة)')
+            ->sum('credit');
+        $shippingCredit = (float) AccountEntry::where('order_id', $order->id)
+            ->where('description', 'like', '%إيراد شحن%')
+            ->sum('credit');
+
+        $this->assertEquals(800.0, $maintenanceCredit, 'Maintenance fee must credit إيرادات الصيانة');
+        $this->assertEquals(0.0, $salesGoodsCredit, 'Maintenance orders must not credit product sales');
+        $this->assertEquals(50.0, $shippingCredit, 'Shipping stays on shipping revenue');
+
+        $resolvedMaint = TreeAccount::resolveMaintenanceRevenueAccount();
+        $this->assertNotNull($resolvedMaint);
+        $postedToMaint = (float) AccountEntry::where('order_id', $order->id)
+            ->where('tree_account_id', $resolvedMaint->id)
+            ->sum('credit');
+        $this->assertEquals(800.0, $postedToMaint);
+
+        $customerDebit = (float) AccountEntry::where('tree_account_id', $this->customerAcc->id)
+            ->where('order_id', $order->id)
+            ->sum('debit');
+        $this->assertEquals(850.0, $customerDebit, 'Customer debit = maintenance 800 + shipping 50');
+    }
+
+    /** @test */
+    public function preview_maintenance_invoice_uses_maintenance_account(): void
+    {
+        $order = $this->createTestOrder(
+            productTotal: 300,
+            shippingRevenue: 0,
+            prepaidAmount: 0,
+            discount: 0,
+            orderType: 'طلب صيانة',
+            zeroProductLineTotals: true,
+        );
+        $order->order_status = 'تم شحن';
+        $order->save();
+
+        $preview = app(SalesOrderAccountingService::class)->previewInvoiceRecognition($order->fresh());
+
+        $this->assertTrue($preview['can_post']);
+        $this->assertStringContainsString('فاتورة صيانة', $preview['description']);
+        $creditDescs = array_column(
+            array_filter($preview['lines'], fn ($line) => (float) $line['credit'] > 0),
+            'description'
+        );
+        $this->assertContains('إيرادات الصيانة', $creditDescs);
+        $this->assertNotContains('إيرادات المبيعات (بضاعة)', $creditDescs);
+    }
+
+    /** @test */
     public function prepaid_amount_correctly_reduces_customer_balance()
     {
         $service = app(SalesOrderAccountingService::class);
@@ -268,6 +374,95 @@ class SalesOrderAccountingTest extends TestCase
         // Net customer balance = 1200 - 500 = 700
         $customerBalance = $customerDebit - $customerCredit;
         $this->assertEquals(700, $customerBalance, 'Customer remaining balance should be 700');
+    }
+
+    /** @test */
+    public function prepaid_increase_posts_single_cash_journal_not_duplicate(): void
+    {
+        $service = app(SalesOrderAccountingService::class);
+
+        $order = $this->createTestOrder(
+            productTotal: 1000,
+            shippingRevenue: 200,
+            prepaidAmount: 0,
+            discount: 0,
+            bankId: $this->bank->id,
+            prepaidPaymentType: null,
+        );
+
+        $service->recordInitialOrderRecognition($order);
+
+        $increment = 140.0;
+        request()->merge(['payment_type' => 'bank', 'bank_id' => $this->bank->id]);
+        $order->prepaid_amount = $increment;
+        $order->net_total = (float) $order->net_total - $increment;
+        $order->save();
+
+        $bankDebits = (float) AccountEntry::query()
+            ->where('tree_account_id', $this->bankAcc->id)
+            ->where('order_id', $order->id)
+            ->sum('debit');
+
+        $this->assertEquals(
+            $increment,
+            round($bankDebits, 2),
+            'Bank should be debited once for the prepaid increase'
+        );
+
+        $this->assertSame(
+            1,
+            AccountEntry::query()
+                ->where('order_id', $order->id)
+                ->where('entry_batch_code', 'like', 'PARTCOLLECT-' . $order->id . '-%')
+                ->where('debit', '>', 0)
+                ->count()
+        );
+
+        $this->assertSame(
+            0,
+            AccountEntry::query()
+                ->where('order_id', $order->id)
+                ->where('entry_batch_code', 'like', 'ORD-PREPAID-' . $order->id . '-%')
+                ->where('debit', '>', 0)
+                ->count(),
+            'ORD-PREPAID must not duplicate PARTCOLLECT when only prepaid_amount changes'
+        );
+    }
+
+    /** @test */
+    public function pending_prepaid_reduces_customer_balance_without_cash_journal()
+    {
+        $service = app(SalesOrderAccountingService::class);
+
+        $order = $this->createTestOrder(
+            productTotal: 1000,
+            shippingRevenue: 200,
+            prepaidAmount: 500,
+            discount: 0,
+            bankId: null,
+            prepaidPaymentType: 'pending'
+        );
+
+        $service->recordInitialOrderRecognition($order);
+
+        $customerEntries = AccountEntry::where('tree_account_id', $this->customerAcc->id)->get();
+        $customerDebit = $customerEntries->sum('debit');
+        $customerCredit = $customerEntries->sum('credit');
+        $customerBalance = $customerDebit - $customerCredit;
+
+        $this->assertEquals(1200, $customerDebit);
+        $this->assertEquals(500, $customerCredit);
+        $this->assertEquals(700, $customerBalance);
+
+        $cashPrepaidEntries = AccountEntry::where('order_id', $order->id)
+            ->where('entry_batch_code', 'like', 'ORD-PREPAID-' . $order->id . '-%')
+            ->count();
+        $this->assertSame(0, $cashPrepaidEntries);
+
+        $pendingEntries = AccountEntry::where('order_id', $order->id)
+            ->where('entry_batch_code', 'like', 'ORD-PREPAID-PENDING-' . $order->id . '-%')
+            ->count();
+        $this->assertGreaterThan(0, $pendingEntries);
     }
 
     /** @test */
@@ -562,7 +757,10 @@ class SalesOrderAccountingTest extends TestCase
         float $shippingRevenue,
         float $prepaidAmount,
         float $discount,
-        ?int $bankId = null
+        ?int $bankId = null,
+        ?string $prepaidPaymentType = null,
+        string $orderType = 'طلب عادي',
+        bool $zeroProductLineTotals = false
     ): Order {
         $totalInvoice = $productTotal + $shippingRevenue;
         // net_total = total_invoice - prepaid - discount (matches frontend formula)
@@ -576,7 +774,9 @@ class SalesOrderAccountingTest extends TestCase
             $prepaidAmount,
             $discount,
             $netTotal,
-            $bankId
+            $bankId,
+            $prepaidPaymentType,
+            $orderType
         ) {
             return Order::create([
                 'customer_name' => 'عميل تجريبي',
@@ -590,7 +790,7 @@ class SalesOrderAccountingTest extends TestCase
                 'order_date' => now()->toDateString(),
                 'shipping_method_id' => 1,
                 'order_source_id' => 1,
-                'order_type' => 'طلب عادي',
+                'order_type' => $orderType,
                 'shipping_cost' => $shippingRevenue,
                 'shipping_revenue' => $shippingRevenue,
                 'total_invoice' => $totalInvoice,
@@ -598,16 +798,18 @@ class SalesOrderAccountingTest extends TestCase
                 'discount' => $discount,
                 'net_total' => $netTotal,
                 'bank_id' => $bankId,
+                'prepaid_payment_type' => $prepaidPaymentType,
                 'order_status' => 'طلب جديد',
             ]);
         });
 
+        $lineTotal = $zeroProductLineTotals ? 0 : $productTotal;
         OrderProduct::create([
             'order_id' => $order->id,
             'category_id' => 1,
             'quantity' => 1,
             'price' => $productTotal,
-            'total_price' => $productTotal,
+            'total_price' => $lineTotal,
             'special_details' => null,
         ]);
 

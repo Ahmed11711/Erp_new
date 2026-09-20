@@ -1,0 +1,38 @@
+<div class="container-fluid">
+  <div class="header d-flex justify-content-between py-3">
+    <div>
+      <app-time></app-time>
+    </div>
+    <div><p class="header2">تصنيفات الأصناف</p></div>
+    <div class="d-flex align-items-center" style="gap: 10px;">
+      <button type="button" class="btn btn-dark btn-sm add-btn" (click)="addClassification()">
+        <i class="fa-solid fa-plus me-1"></i>
+        إضافة جديد
+      </button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-12">
+      <div class="container table-responsive py-5">
+        <table class="table table-bordered table-hover">
+          <thead class="thead-dark">
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">التصنيف</th>
+              <th scope="col">المخزن</th>
+              <th scope="col">الخيارات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of tableData; let i = index">
+              <th scope="row">{{ i + 1 }}</th>
+              <td>{{ item.classification_name }}</td>
+              <td>{{ item.warehouse }}</td>
+              <td><i (click)="deleteClassification(item.id)" class="fa fa-trash" aria-hidden="true"></i></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

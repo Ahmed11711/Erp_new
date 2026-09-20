@@ -87,12 +87,42 @@ class OrderFilters
 
     protected function order_date($value)
     {
-        $this->query->where('order_date', $value);
+        $this->query->whereDate('order_date', $value);
+    }
+
+    protected function order_date_from($value)
+    {
+        $this->query->whereDate('order_date', '>=', $value);
+    }
+
+    protected function order_date_to($value)
+    {
+        $this->query->whereDate('order_date', '<=', $value);
+    }
+
+    protected function from_date($value)
+    {
+        $this->query->whereDate('order_date', '>=', $value);
+    }
+
+    protected function to_date($value)
+    {
+        $this->query->whereDate('order_date', '<=', $value);
     }
 
     protected function delivery_date($value)
     {
-        $this->query->where('delivery_date', '<=', $value);
+        $this->query->whereDate('delivery_date', $value);
+    }
+
+    protected function delivery_date_from($value)
+    {
+        $this->query->whereDate('delivery_date', '>=', $value);
+    }
+
+    protected function delivery_date_to($value)
+    {
+        $this->query->whereDate('delivery_date', '<=', $value);
     }
 
     protected function order_type($value)
@@ -112,12 +142,32 @@ class OrderFilters
 
     protected function need_by_date($value)
     {
-        $this->query->whereHas('order_details', fn($q) => $q->where('need_by_date', $value));
+        $this->query->whereHas('order_details', fn($q) => $q->whereDate('need_by_date', $value));
+    }
+
+    protected function need_by_date_from($value)
+    {
+        $this->query->whereHas('order_details', fn($q) => $q->whereDate('need_by_date', '>=', $value));
+    }
+
+    protected function need_by_date_to($value)
+    {
+        $this->query->whereHas('order_details', fn($q) => $q->whereDate('need_by_date', '<=', $value));
     }
 
     protected function status_date($value)
     {
-        $this->query->whereHas('order_details', fn($q) => $q->where('status_date', $value));
+        $this->query->whereHas('order_details', fn($q) => $q->whereDate('status_date', $value));
+    }
+
+    protected function status_date_from($value)
+    {
+        $this->query->whereHas('order_details', fn($q) => $q->whereDate('status_date', '>=', $value));
+    }
+
+    protected function status_date_to($value)
+    {
+        $this->query->whereHas('order_details', fn($q) => $q->whereDate('status_date', '<=', $value));
     }
 
     protected function vip($value)

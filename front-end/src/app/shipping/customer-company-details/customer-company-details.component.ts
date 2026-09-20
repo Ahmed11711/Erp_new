@@ -11,6 +11,19 @@ import { ShippingCompanyService } from '../services/shipping-company.service';
 import { ShippingLinesService } from '../services/shipping-lines.service';
 import { ShippingWayService } from '../services/shipping-way.service';
 import { ActivatedRoute } from '@angular/router';
+import { BanksService } from 'src/app/financial/services/banks.service';
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { CollectionCompanyService } from '../services/collection-company.service';
+import { collectRenewPrepaidParams } from '../utils/order-renew-prepaid.flow';
+import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import {
+  isCompanyCustomerType,
+  isIndividualCustomerType,
+  isRefuseEligibleOrderStatus,
+} from '../utils/order-refuse.utils';
 
 @Component({
   selector: 'app-customer-company-details',
@@ -31,22 +44,46 @@ export class CustomerCompanyDetailsComponent {
 
   comapnyName:string='';
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15,50,100];
 
   company_id!:number;
+  banks: { id: number; name: string }[] = [];
+  safes: { id: number; name: string }[] = [];
+  serviceAccounts: { id: number; name: string }[] = [];
+  collectionCompanies: { id: number; name: string }[] = [];
+  user!: string;
 
     constructor(private orderSource:OrderSourceService ,private shippingWay: ShippingWayService , private datePipe:DatePipe,
       private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
-      private filterService:FilterOrderService , private shippingLine:ShippingLinesService, private route:ActivatedRoute
+      private filterService:FilterOrderService , private shippingLine:ShippingLinesService, private route:ActivatedRoute,
+      private bankService: BanksService, private safeService: SafeService,
+      private serviceAccountsService: ServiceAccountsService,
+      private collectionCompanyService: CollectionCompanyService,
+      private authService: AuthService, private rbac: RbacService,
       ) {
 
     }
 
+    canCreateOffer(): boolean {
+      return this.rbac.canAny(['nav.receipts.quotes', 'orders.view', 'orders.convert_from_offer', 'system.rbac']);
+    }
+
     ngOnInit(): void {
+      this.user = this.authService.getUser();
       this.company_id = this.route.snapshot.params['id'];
+      this.bankService.bankSelect().subscribe((res: any) => (this.banks = res || []));
+      this.safeService.getAll().subscribe((res: any) => {
+        this.safes = res?.data ?? res ?? [];
+      });
+      this.serviceAccountsService.index().subscribe((res: any) => {
+        this.serviceAccounts = res ?? [];
+      });
+      this.collectionCompanyService.select().subscribe((res: any) => {
+        this.collectionCompanies = res ?? [];
+      });
       console.log(this.company_id);
 
       this.filter(arguments);
@@ -192,6 +229,8 @@ export class CustomerCompanyDetailsComponent {
         return 'shipped';
       case 'شحن جزئي':
         return 'partshipped';
+      case 'تسليم جزئي':
+        return 'partdelivered';
       case 'تم الاستلام':
         return 'received';
       case 'مؤجل':
@@ -209,8 +248,93 @@ export class CustomerCompanyDetailsComponent {
     }
   }
 
+  canRefuseOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
 
-  changeOrderStatus(type:string,id:number,title:string,action:string){
+  /** قائمة تأكيد الطلب: صلاحية orders.change_status فقط. */
+  canConfirmOrderMenu(): boolean {
+    return this.rbac.can('orders.change_status');
+  }
+
+  /** تأكيد الطلب: صلاحية + حالة الطلب المسموح. */
+  canConfirmOrder(item: any): boolean {
+    if (!this.canConfirmOrderMenu()) {
+      return false;
+    }
+    const status = String(item?.order_status ?? '').trim();
+    return ['جديد', 'طلب جديد', 'تم الصيانة'].includes(status);
+  }
+
+  canCancelOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  canCancelOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    return ['طلب جديد', 'طلب مؤكد', 'مؤجل'].includes(status);
+  }
+
+  /** تجديد الطلب: صلاحية orders.change_status أو أقسام مسموحة (مع تقييد إدارة الشحن). */
+  canRenewOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    if (!['ملغي', 'أرشيف', 'ارشيف', 'مؤجل', 'رفض استلام', 'طلب مؤكد'].includes(status)) {
+      return false;
+    }
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
+    const dept = String(this.user || '').trim().toLowerCase();
+    if (dept === 'admin' || dept === 'data entry' || dept === 'customer service') {
+      return true;
+    }
+    if (dept === 'shipping management') {
+      return status === 'رفض استلام' || status === 'مؤجل';
+    }
+    return false;
+  }
+
+  private canChangeOrderStatusMenu(): boolean {
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
+    const allowed = new Set([
+      'admin',
+      'shipping management',
+      'operation management',
+      'finance and operations management',
+      'operation specialist',
+      'logistics specialist',
+      'data entry',
+      'review management',
+      'customer service',
+    ]);
+    const dept = String(this.user || '').trim().toLowerCase();
+    return allowed.has(dept);
+  }
+
+  canRefuseOrder(item: any): boolean {
+    return isRefuseEligibleOrderStatus(item?.order_status);
+  }
+
+  isCompanyCustomer(item: any): boolean {
+    return isCompanyCustomerType(item?.customer_type);
+  }
+
+  isIndividualCustomer(item: any): boolean {
+    return isIndividualCustomerType(item?.customer_type);
+  }
+
+  refuseOrder(type: string, id: number): void {
+    const dialogRef = this.dialog.open(DialogCancelRefuseOrderComponent, {
+      width: '25%',
+      data: { data: { id, action: 'refused', type }, refreshData: () => this.filter(arguments) },
+    });
+    dialogRef.afterClosed().subscribe(() => {});
+  }
+
+
+  changeOrderStatus(type:string,id:number,title:string,action:string, orderItem?: any){
     if (type =='شركة' && (action=='cancel' || action=='refused')) {
       Swal.fire({
         title: title,
@@ -254,11 +378,26 @@ export class CustomerCompanyDetailsComponent {
             return 'يجب ادخال ملاحظة'
           }
           if (value !== '') {
-            this.order.chngeStatus(id,action,value,0,0,0).subscribe(res=>{
-              console.log(res);
-              this.filter(arguments);
-            }
-            )
+            const runChange = async () => {
+              const param: Record<string, string | number> = {};
+              if (action === 'renew' && orderItem) {
+                const renewParams = await collectRenewPrepaidParams(orderItem, {
+                  banks: this.banks,
+                  safes: this.safes,
+                  serviceAccounts: this.serviceAccounts,
+                  collectionCompanies: this.collectionCompanies,
+                });
+                if (renewParams === null) {
+                  return;
+                }
+                Object.assign(param, renewParams);
+              }
+              this.order.chngeStatus(id, action, value, 0, 0, 0, param).subscribe((res) => {
+                console.log(res);
+                this.filter(arguments);
+              });
+            };
+            runChange();
           }
           return undefined
         }

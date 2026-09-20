@@ -5,18 +5,22 @@ import { RecievedNotificationComponent } from './recieved-notification/recieved-
 import { SentNotificationComponent } from './sent-notification/sent-notification.component';
 import { MovesNotificationComponent } from './moves-notification/moves-notification.component';
 import { departmentGuard } from '../guards/department.guard';
+import { RBAC_ROUTE } from '../guards/rbac-route-data';
 
 const routes: Routes = [
-  {path:'' , component:NotificationHomeComponent},
-  {path:'recieved' , component:RecievedNotificationComponent},
-  {path:'sent' , component:SentNotificationComponent},
-  {path:'moves' , component:MovesNotificationComponent,
-    canActivate: [departmentGuard], data: {allowedDepartments:['Admin']}
+  { path: '', component: NotificationHomeComponent },
+  { path: 'recieved', component: RecievedNotificationComponent },
+  { path: 'sent', component: SentNotificationComponent },
+  {
+    path: 'moves',
+    component: MovesNotificationComponent,
+    canActivate: [departmentGuard],
+    data: { rbacPermissions: [...RBAC_ROUTE.systemAdmin] },
   },
 ];
 
 @NgModule({
   imports: [RouterModule.forChild(routes)],
-  exports: [RouterModule]
+  exports: [RouterModule],
 })
-export class NotificationRoutingModule { }
+export class NotificationRoutingModule {}

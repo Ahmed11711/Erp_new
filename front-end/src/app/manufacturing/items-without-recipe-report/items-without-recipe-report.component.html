@@ -1,0 +1,117 @@
+<div class="report-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
+      <app-time></app-time>
+    </div>
+    <h1 class="report-title">أصناف بدون وصفة</h1>
+    <div class="report-topbar-side">
+      <a class="add-recipe-link" routerLink="/dashboard/manufacturing/addrecipe">
+        <i class="fa-solid fa-plus"></i>
+        إضافة وصفة
+      </a>
+    </div>
+  </div>
+
+  <p class="report-hint">
+    الأصناف الأساسية (منتج تام / تحت التشغيل) التي لا تملك وصفة تصنيع — أضف لها وصفة من
+    <a routerLink="/dashboard/manufacturing/addrecipe">إضافة وصفة</a>.
+  </p>
+
+  <div class="filter-chips">
+    <button type="button" class="chip chip-filter" (click)="toggleFilters()">
+      <i class="fa-solid fa-sliders"></i>
+      <span>فلترة</span>
+    </button>
+    <div class="chip chip-select" *ngIf="showFilters">
+      <i class="fa-solid fa-warehouse"></i>
+      <select [(ngModel)]="warehouse" name="warehouse" (change)="onFilterChange()">
+        <option *ngFor="let w of warehouseOptions" [value]="w.value">{{ w.label }}</option>
+      </select>
+    </div>
+    <div class="chip chip-select" *ngIf="showFilters">
+      <i class="fa-solid fa-tag"></i>
+      <select [(ngModel)]="productType" name="productType" (change)="onFilterChange()">
+        <option *ngFor="let t of productTypeOptions" [value]="t.value">{{ t.label }}</option>
+      </select>
+    </div>
+    <div class="chip chip-search" *ngIf="showFilters">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input
+        type="search"
+        placeholder="بحث بالاسم أو الكود..."
+        [(ngModel)]="searchTerm"
+        name="searchTerm"
+        (keyup.enter)="load()"
+        autocomplete="off"
+        aria-label="بحث">
+    </div>
+    <div class="chip chip-apply" *ngIf="showFilters">
+      <button type="button" (click)="load()" [disabled]="loading">تحديث</button>
+    </div>
+  </div>
+
+  <div class="summary-grid" *ngIf="!loading && !loadError">
+    <div class="summary-card returns">
+      <div class="summary-icon"><i class="fa-solid fa-list-check"></i></div>
+      <div class="summary-label">أصناف بدون وصفة</div>
+      <div class="summary-value">{{ totals.items_count | customNumber }}</div>
+      <div class="summary-unit">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="report-state" *ngIf="loading">
+    <i class="fa-solid fa-spinner fa-spin"></i>
+    جاري التحميل...
+  </div>
+
+  <div class="report-state report-state-error" *ngIf="!loading && loadError">
+    تعذر تحميل التقرير. حاول مرة أخرى.
+  </div>
+
+  <div class="report-state" *ngIf="!loading && !loadError && rows.length === 0">
+    <i class="fa-solid fa-circle-check"></i>
+    لا توجد أصناف بدون وصفة ضمن الفلتر الحالي.
+  </div>
+
+  <div class="items-table-wrap" *ngIf="!loading && !loadError && rows.length > 0">
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>اسم الصنف</th>
+          <th>الكود</th>
+          <th>المخزن</th>
+          <th>النوع</th>
+          <th>اللون</th>
+          <th>الكمية</th>
+          <th>سعر البيع</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows; let i = index; trackBy: trackById">
+          <td>{{ i + 1 }}</td>
+          <td class="name-cell">{{ row.category_name }}</td>
+          <td>{{ row.item_code || '—' }}</td>
+          <td>{{ row.warehouse || '—' }}</td>
+          <td>{{ row.product_type_label }}</td>
+          <td>{{ row.color || '—' }}</td>
+          <td>{{ row.quantity | customNumber }}</td>
+          <td>{{ row.category_price | customNumber }}</td>
+          <td>
+            <a
+              class="row-action"
+              [routerLink]="['/dashboard/manufacturing/addrecipe']"
+              [queryParams]="{
+                productId: row.id,
+                warehouse: row.warehouse,
+                productName: row.category_name
+              }">
+              إضافة وصفة
+            </a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -13,6 +13,10 @@ return new class extends Migration
      */
     public function up()
     {
+        if (Schema::hasColumn('banks', 'asset_id')) {
+            return;
+        }
+
         Schema::table('banks', function (Blueprint $table) {
             $table->foreignId('asset_id')
                 ->nullable()
@@ -28,8 +32,13 @@ return new class extends Migration
      */
     public function down()
     {
+        if (! Schema::hasColumn('banks', 'asset_id')) {
+            return;
+        }
+
         Schema::table('banks', function (Blueprint $table) {
-            //
+            $table->dropForeign(['asset_id']);
+            $table->dropColumn('asset_id');
         });
     }
 };

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone } from '@angular/core';
+import { Component } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs';
 import { LoadingService } from './loading.service';
@@ -7,8 +7,8 @@ import { LoadingService } from './loading.service';
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
-
+  // Default CD: GET page loads skip the global overlay, so OnPush on the root
+  // skipped the whole tree until a click marked it dirty.
 })
 export class AppComponent {
   title = 'front-end';
@@ -38,11 +38,12 @@ export class AppComponent {
     '/dashboard/permissions/offer1',
     '/dashboard/permissions/offer2',
     '/dashboard/categoriesreports',
+    '/dashboard/categoriesstatusreports',
     '/dashboard/hr/workinghoursdetails',
     '/dashboard/approvals',
   ];
 
-  constructor(private route:Router, public loadingService:LoadingService , private cdr: ChangeDetectorRef ,private ngZone: NgZone) {}
+  constructor(private route:Router, public loadingService:LoadingService) {}
 
   ngOnInit() {
 
@@ -92,16 +93,6 @@ export class AppComponent {
 
   backPage(){
     window.history.back();
-  }
-
-  ngAfterViewInit() {
-    this.route.events
-      .pipe(filter(event => event instanceof NavigationEnd))
-      .subscribe(() => {
-        this.ngZone.run(() => {
-          this.cdr.detectChanges();
-        });
-      });
   }
 
 }

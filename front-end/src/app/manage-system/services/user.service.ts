@@ -20,12 +20,24 @@ export class UserService {
     return this.http.get<any>(`${environment.Url}/users`)
   }
 
+  /** للتتبع ومراجع قصيرة — لا يتطلب قسم Admin (system.rbac أو Admin قديماً) */
+  compactDirectory(){
+    return this.http.get<any>(`${environment.Url}/users/compact-directory`)
+  }
+
   usersForNotifi(){
     return this.http.get<any>(`${environment.Url}/usersnotification`)
   }
 
   deleteUser(id:number){
     return this.http.delete<any>(`${environment.Url}/user/delete/${id}`)
+  }
+
+  changePassword(id: number, password: string, password_confirmation: string) {
+    return this.http.post<any>(`${environment.Url}/users/${id}/change-password`, {
+      password,
+      password_confirmation
+    });
   }
 
 }

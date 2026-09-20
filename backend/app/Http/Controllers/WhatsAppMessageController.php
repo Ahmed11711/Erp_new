@@ -130,6 +130,8 @@ class WhatsAppMessageController extends Controller
                     'phone_number_id' => $phoneNumberId,
                 ]);
 
+                $customer = $this->archiveConversationAfterAgentReply($customer);
+
                 Log::info('WhatsApp message sent successfully', [
                     'customer_id' => $customer->id,
                     'message_id' => $message->id,
@@ -141,6 +143,7 @@ class WhatsAppMessageController extends Controller
                     'success' => true,
                     'message' => 'Message sent successfully',
                     'data' => $message->load('customer', 'sender'),
+                    'conversation' => $this->conversationArchivePayload($customer),
                 ], 200);
             } else {
                 return response()->json([
@@ -232,10 +235,13 @@ class WhatsAppMessageController extends Controller
                     'twilio_message_sid' => $result['message_sid'] ?? null,
                 ]);
 
+                $customer = $this->archiveConversationAfterAgentReply($customer);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Template message sent successfully',
                     'data' => $message->load('customer', 'sender'),
+                    'conversation' => $this->conversationArchivePayload($customer),
                 ], 200);
             } else {
                 return response()->json([
@@ -287,9 +293,43 @@ class WhatsAppMessageController extends Controller
     public function getCustomers(Request $request)
     {
         try {
-            $query = Customer::with(['assignedAgent', 'messages' => function ($query) {
-                $query->latest()->limit(1);
-            }])
+            Customer::restoreInboxFromNewerInboundReplies();
+
+            // Subqueries أسرع من eager-load messages لكل صف (مهم لـ «تحميل المزيد» على الموبايل).
+            $latestMessage = Message::query()
+                ->select('content')
+                ->whereColumn('messages.customer_id', 'customers.id')
+                ->orderByDesc('messages.created_at')
+                ->orderByDesc('messages.id')
+                ->limit(1);
+
+            $latestType = Message::query()
+                ->select('type')
+                ->whereColumn('messages.customer_id', 'customers.id')
+                ->orderByDesc('messages.created_at')
+                ->orderByDesc('messages.id')
+                ->limit(1);
+
+            $latestId = Message::query()
+                ->select('id')
+                ->whereColumn('messages.customer_id', 'customers.id')
+                ->orderByDesc('messages.created_at')
+                ->orderByDesc('messages.id')
+                ->limit(1);
+
+            $latestDirection = Message::query()
+                ->select('direction')
+                ->whereColumn('messages.customer_id', 'customers.id')
+                ->orderByDesc('messages.created_at')
+                ->orderByDesc('messages.id')
+                ->limit(1);
+
+            $query = Customer::query()
+                ->select('customers.*')
+                ->selectSub($latestMessage, 'last_message_content')
+                ->selectSub($latestType, 'last_message_type')
+                ->selectSub($latestId, 'last_message_id')
+                ->selectSub($latestDirection, 'last_message_direction')
                 ->withCount('messages')
                 ->withMax('messages', 'created_at')
                 // Newest activity first: last message time; customers with no messages sink to the bottom.
@@ -298,54 +338,202 @@ class WhatsAppMessageController extends Controller
                 ->orderByDesc('updated_at')
                 ->orderByDesc('id');
 
-            // Filter list: only customers who had at least one message in the date range (inclusive).
-            $fromRaw = $request->query('from_date');
-            $toRaw = $request->query('to_date');
-            if (! empty($fromRaw) || ! empty($toRaw)) {
-                $fromAt = null;
-                $toAt = null;
-                if (! empty($fromRaw)) {
-                    try {
-                        $fromAt = Carbon::parse($fromRaw)->startOfDay();
-                    } catch (\Throwable $e) {
-                        $fromAt = null;
-                    }
-                }
-                if (! empty($toRaw)) {
-                    try {
-                        $toAt = Carbon::parse($toRaw)->endOfDay();
-                    } catch (\Throwable $e) {
-                        $toAt = null;
-                    }
-                }
+            $this->applyCustomerMessageDateFilter($query, $request);
 
-                if ($fromAt && $toAt && $fromAt->gt($toAt)) {
-                    [$fromAt, $toAt] = [$toAt->copy()->startOfDay(), $fromAt->copy()->endOfDay()];
-                }
-
-                $query->whereHas('messages', function ($q) use ($fromAt, $toAt) {
-                    if ($fromAt && $toAt) {
-                        $q->whereBetween('created_at', [$fromAt, $toAt]);
-                    } elseif ($fromAt) {
-                        $q->where('created_at', '>=', $fromAt);
-                    } elseif ($toAt) {
-                        $q->where('created_at', '<=', $toAt);
-                    }
-                });
+            $archive = strtolower((string) $request->query('archive', 'inbox'));
+            if (! in_array($archive, ['inbox', 'archived', 'all'], true)) {
+                $archive = 'inbox';
             }
 
-            $customers = $query->paginate($request->get('per_page', 20));
+            $countBase = Customer::query();
+            $this->applyCustomerMessageDateFilter($countBase, $request);
+            $inboxCount = (clone $countBase)->whereNull('whatsapp_archived_at')->count();
+            $archivedCount = (clone $countBase)->whereNotNull('whatsapp_archived_at')->count();
+
+            if ($archive === 'inbox') {
+                $query->whereNull('customers.whatsapp_archived_at');
+            } elseif ($archive === 'archived') {
+                $query->whereNotNull('customers.whatsapp_archived_at');
+            }
+
+            $perPage = min(max((int) $request->get('per_page', 30), 10), 50);
+            $customers = $query->paginate($perPage);
+            $customers->getCollection()->transform(function (Customer $customer) {
+                $customer->setAttribute('is_archived', $customer->isWhatsappArchived());
+                $customer->setAttribute('awaiting_reply', $customer->last_message_direction === 'inbound');
+
+                return $customer;
+            });
 
             return response()->json([
                 'success' => true,
                 'data' => $customers,
+                'archive' => $archive,
+                'archive_counts' => [
+                    'inbox' => $inboxCount,
+                    'archived' => $archivedCount,
+                ],
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('whatsapp.getCustomers failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'success' => false,
                 'error' => 'Failed to fetch customers',
             ], 500);
         }
+    }
+
+    private function archiveConversationAfterAgentReply(Customer $customer): Customer
+    {
+        $customer->archiveWhatsappConversation();
+
+        return $customer->fresh() ?? $customer;
+    }
+
+    /**
+     * @return array{id: int, is_archived: bool, whatsapp_archived_at: string|null, awaiting_reply: bool}
+     */
+    private function conversationArchivePayload(Customer $customer): array
+    {
+        return [
+            'id' => $customer->id,
+            'is_archived' => $customer->isWhatsappArchived(),
+            'whatsapp_archived_at' => optional($customer->whatsapp_archived_at)->format('Y-m-d H:i:s'),
+            'awaiting_reply' => $customer->isAwaitingWhatsappReply(),
+        ];
+    }
+
+    /**
+     * Archive / unarchive a WhatsApp conversation (customer).
+     * Inbound customer messages restore the row automatically.
+     */
+    public function setCustomerArchive(Request $request, int $customerId)
+    {
+        $validator = Validator::make($request->all(), [
+            'archived' => 'required|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 422);
+        }
+
+        $customer = Customer::find($customerId);
+        if (! $customer) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Conversation not found',
+            ], 404);
+        }
+
+        if ($request->boolean('archived')) {
+            if ($customer->isAwaitingWhatsappReply()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'لا يمكن أرشفة المحادثة قبل الرد على رسالة العميل',
+                ], 422);
+            }
+            $customer->archiveWhatsappConversation();
+        } else {
+            $customer->restoreWhatsappConversationFromArchive();
+        }
+
+        $customer->refresh();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $customer->id,
+                'is_archived' => $customer->isWhatsappArchived(),
+                'whatsapp_archived_at' => optional($customer->whatsapp_archived_at)->format('Y-m-d H:i:s'),
+                'awaiting_reply' => $customer->isAwaitingWhatsappReply(),
+            ],
+        ]);
+    }
+
+    /**
+     * Archive every inbox conversation, optionally limited by the same date filter as the list.
+     */
+    public function archiveAllCustomers(Request $request)
+    {
+        try {
+            $query = Customer::query()
+                ->whereNull('whatsapp_archived_at')
+                ->whereNotAwaitingWhatsappReply();
+            $this->applyCustomerMessageDateFilter($query, $request);
+            $archivedCount = $query->update(['whatsapp_archived_at' => now()]);
+
+            $countBase = Customer::query();
+            $this->applyCustomerMessageDateFilter($countBase, $request);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'archived_count' => (int) $archivedCount,
+                ],
+                'archive_counts' => [
+                    'inbox' => (clone $countBase)->whereNull('whatsapp_archived_at')->count(),
+                    'archived' => (clone $countBase)->whereNotNull('whatsapp_archived_at')->count(),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('whatsapp.archiveAllCustomers failed', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to archive conversations',
+            ], 500);
+        }
+    }
+
+    private function applyCustomerMessageDateFilter($query, Request $request): void
+    {
+        $fromRaw = $request->input('from_date', $request->query('from_date'));
+        $toRaw = $request->input('to_date', $request->query('to_date'));
+        if (empty($fromRaw) && empty($toRaw)) {
+            return;
+        }
+
+        $fromAt = null;
+        $toAt = null;
+        if (! empty($fromRaw)) {
+            try {
+                $fromAt = Carbon::parse($fromRaw)->startOfDay();
+            } catch (\Throwable $e) {
+                $fromAt = null;
+            }
+        }
+        if (! empty($toRaw)) {
+            try {
+                $toAt = Carbon::parse($toRaw)->endOfDay();
+            } catch (\Throwable $e) {
+                $toAt = null;
+            }
+        }
+
+        if ($fromAt && $toAt && $fromAt->gt($toAt)) {
+            [$fromAt, $toAt] = [$toAt->copy()->startOfDay(), $fromAt->copy()->endOfDay()];
+        }
+
+        if (! $fromAt && ! $toAt) {
+            return;
+        }
+
+        $query->whereHas('messages', function ($q) use ($fromAt, $toAt) {
+            if ($fromAt && $toAt) {
+                $q->whereBetween('created_at', [$fromAt, $toAt]);
+            } elseif ($fromAt) {
+                $q->where('created_at', '>=', $fromAt);
+            } elseif ($toAt) {
+                $q->where('created_at', '<=', $toAt);
+            }
+        });
     }
 
     /**
@@ -473,10 +661,13 @@ class WhatsAppMessageController extends Controller
                     'twilio_message_sid' => $result['message_sid'] ?? null,
                 ]);
 
+                $customer = $this->archiveConversationAfterAgentReply($customer);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Message sent successfully',
                     'data' => $message->load('customer', 'sender'),
+                    'conversation' => $this->conversationArchivePayload($customer),
                 ], 200);
             } else {
                 return response()->json([
@@ -515,8 +706,8 @@ class WhatsAppMessageController extends Controller
                     ['name' => 'review_request', 'language' => 'ar', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
                     ['name' => 'client_review', 'language' => 'ar', 'ui_label' => 'تقييم العميل بالعربية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
                     ['name' => 'client_review', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'تقييم العميل بالإنجليزية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
-                    ['name' => 'feedback', 'language' => 'ar', 'ui_label' => 'فيد باك بالعربية', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
-                    ['name' => 'feedback', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'فيد باك بالانجليزية', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
+                    ['name' => 'feedback', 'language' => 'ar', 'ui_label' => 'فيد باك بالعربية', 'header_format' => 'omit', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
+                    ['name' => 'feedback', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'فيد باك بالانجليزية', 'header_format' => 'omit', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
                 ];
                 Log::warning('Meta templates loaded from fallback - config may be empty. Run: php artisan config:clear && php artisan config:cache');
             }
@@ -624,6 +815,12 @@ class WhatsAppMessageController extends Controller
                 $headerFormat = 'text';
             }
 
+            // قالب feedback (عربي وإنجليزي) في Meta بدون header (الصورة حُذفت). أي معاملات header تسبب 132018.
+            if ($templateName === 'feedback') {
+                $headerFormat = 'omit';
+                $headerParams = [];
+            }
+
             $components = [];
             if (! in_array($headerFormat, ['omit', 'none'], true)) {
                 if ($headerFormat === 'image') {
@@ -644,7 +841,7 @@ class WhatsAppMessageController extends Controller
                     }
                     if (! $hasAnyUrl) {
                         $fallback = trim((string) ($templateConfig['header_default_image_url'] ?? ''));
-                        if ($fallback === '' && in_array($templateName, ['client_review', 'feedback'], true)) {
+                        if ($fallback === '' && $templateName === 'client_review') {
                             $fallback = trim((string) config('whatsapp_meta_templates.review_feedback_header_image_url', ''));
                         }
                         if ($fallback === '') {
@@ -829,6 +1026,8 @@ class WhatsAppMessageController extends Controller
                     'message' => 'Template sent successfully',
                     'followup_sent' => $followupSent,
                     'followup_error' => $followupError,
+                    'message_status' => $result['message_status'] ?? null,
+                    'message_sid' => $result['message_sid'] ?? null,
                 ], 200);
             }
 
@@ -1028,7 +1227,7 @@ class WhatsAppMessageController extends Controller
         }
 
         try {
-            $customer = $this->findCustomerByPhoneDigits($phone);
+            $customer = Customer::findByWhatsappPhone($phone);
             if (!$customer) {
                 return response()->json(['success' => true, 'customer' => null], 200);
             }
@@ -1055,7 +1254,7 @@ class WhatsAppMessageController extends Controller
         }
 
         try {
-            $customer = $this->findCustomerByPhoneDigits($phone);
+            $customer = Customer::findByWhatsappPhone($phone);
             if (!$customer) {
                 return response()->json([
                     'success' => true,
@@ -1093,17 +1292,33 @@ class WhatsAppMessageController extends Controller
      */
     private function resolveMetaTemplateConfig(array $templates, string $templateName, string $languageCode): ?array
     {
-        $reqShort = explode('_', $languageCode)[0];
+        $normalize = static function (string $code): string {
+            $code = strtolower(str_replace('-', '_', trim($code)));
 
-        return collect($templates)->first(function ($t) use ($templateName, $languageCode, $reqShort) {
-            if (($t['name'] ?? '') !== $templateName) {
-                return false;
-            }
+            return explode('_', $code)[0];
+        };
+        $reqShort = $normalize($languageCode);
+        $named = collect($templates)->filter(fn ($t) => ($t['name'] ?? '') === $templateName);
+        if ($named->isEmpty()) {
+            return null;
+        }
+
+        $exact = $named->first(function ($t) use ($languageCode) {
+            $tl = (string) ($t['language'] ?? '');
+            $api = (string) ($t['api_language_code'] ?? '');
+
+            return $tl === $languageCode || ($api !== '' && $api === $languageCode);
+        });
+        if ($exact) {
+            return $exact;
+        }
+
+        return $named->first(function ($t) use ($reqShort, $normalize) {
             $tl = (string) ($t['language'] ?? 'ar');
-            $cfgShort = explode('_', $tl)[0];
+            $api = (string) ($t['api_language_code'] ?? '');
 
-            return $tl === $languageCode
-                || $cfgShort === $reqShort;
+            return $normalize($tl) === $reqShort
+                || ($api !== '' && $normalize($api) === $reqShort);
         });
     }
 
@@ -1165,35 +1380,5 @@ class WhatsAppMessageController extends Controller
         $fragment = isset($parsed['fragment']) ? '#' . $parsed['fragment'] : '';
 
         return $scheme . '://' . $host . $port . $newPath . $query . $fragment;
-    }
-
-    private function normalizePhoneDigits(string $phone): string
-    {
-        $d = preg_replace('/\D/', '', $phone);
-        if ($d === '') {
-            return '';
-        }
-        if (strlen($d) === 11 && str_starts_with($d, '0')) {
-            $d = '20' . substr($d, 1);
-        } elseif (strlen($d) === 10 && str_starts_with($d, '1')) {
-            $d = '20' . $d;
-        }
-
-        return $d;
-    }
-
-    private function findCustomerByPhoneDigits(string $phone): ?Customer
-    {
-        $digits = $this->normalizePhoneDigits($phone);
-        if ($digits === '') {
-            return null;
-        }
-
-        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
-
-        return Customer::whereRaw(
-            "REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE ?",
-            ['%' . $last10]
-        )->first();
     }
 }

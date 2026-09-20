@@ -14,6 +14,7 @@ class tracking extends Model
         'action',
         'date',
         'user_id',
+        'user_name',
         'orders_added_new_categories_id',
     ];
 

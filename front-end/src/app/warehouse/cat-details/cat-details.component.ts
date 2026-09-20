@@ -13,7 +13,7 @@ export class CatDetailsComponent {
   name:string='';
   type!:string;
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
 
@@ -36,7 +36,7 @@ constructor(private cat:CategoryService, private route:ActivatedRoute){}
 
       this.productsData = res.details.data;
       this.name = res.name
-      this.type = this.productsData[0].type;
+      this.type = this.productsData.length > 0 ? this.productsData[0].type : '';
 
     })
   }

@@ -273,7 +273,9 @@ class MetaWhatsAppService
                 $data = $response->json();
                 Log::info('Meta WhatsApp message sent', [
                     'to' => $to,
-                    'message_id' => $data['messages'][0]['id'] ?? null
+                    'from_phone_number_id' => $this->phoneNumberId,
+                    'message_id' => $data['messages'][0]['id'] ?? null,
+                    'message_status' => $data['messages'][0]['message_status'] ?? null,
                 ]);
 
                 return [
@@ -342,17 +344,24 @@ class MetaWhatsAppService
 
             if ($response->successful()) {
                 $data = $response->json();
+                $messageStatus = $data['messages'][0]['message_status'] ?? 'accepted';
                 Log::info('Meta WhatsApp template sent', [
                     'to' => $to,
+                    'from_phone_number_id' => $this->phoneNumberId,
                     'template' => $templateName,
+                    'language' => $languageCode,
+                    'components' => $payload['template']['components'] ?? [],
                     'message_id' => $data['messages'][0]['id'] ?? null,
+                    'message_status' => $messageStatus,
                     'contacts' => $data['contacts'] ?? null,
                 ]);
+                $this->logSenderAndTemplateHealth($templateName, $languageCode);
 
                 return [
                     'success' => true,
                     'message_sid' => $data['messages'][0]['id'] ?? null,
-                    'status' => 'sent'
+                    'status' => 'sent',
+                    'message_status' => $messageStatus,
                 ];
             } else {
                 Log::error('Meta WhatsApp template send failed', [
@@ -527,6 +536,58 @@ class MetaWhatsAppService
         } catch (\Throwable $e) {
             Log::error('Meta media download exception', ['error' => $e->getMessage()]);
             return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * يسجّل رقم الإرسال في ميتا + حالة القالب (إن توفر WABA) لتفسير القبول بدون وصول.
+     */
+    private function logSenderAndTemplateHealth(string $templateName, string $languageCode): void
+    {
+        try {
+            $phoneRes = Http::withToken($this->accessToken)
+                ->timeout(15)
+                ->get("https://graph.facebook.com/{$this->metaVersion}/{$this->phoneNumberId}", [
+                    'fields' => 'id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,status,throughput',
+                ]);
+            Log::info('Meta sender phone health', [
+                'phone_number_id' => $this->phoneNumberId,
+                'http_status' => $phoneRes->status(),
+                'body' => $phoneRes->json(),
+            ]);
+
+            $wabaId = trim((string) config('services.meta_whatsapp.waba_id', ''));
+            if ($wabaId === '') {
+                return;
+            }
+
+            $tplRes = Http::withToken($this->accessToken)
+                ->timeout(15)
+                ->get("https://graph.facebook.com/{$this->metaVersion}/{$wabaId}/message_templates", [
+                    'name' => $templateName,
+                    'fields' => 'name,status,language,category,rejected_reason,components',
+                ]);
+            $rows = $tplRes->json('data') ?? [];
+            $want = strtolower(explode('_', str_replace('-', '_', $languageCode))[0]);
+            $match = collect(is_array($rows) ? $rows : [])->first(function ($t) use ($want) {
+                $lang = strtolower((string) ($t['language'] ?? ''));
+                $short = explode('_', str_replace('-', '_', $lang))[0];
+
+                return $short === $want;
+            });
+            $header = collect($match['components'] ?? [])->first(fn ($c) => strtolower((string) ($c['type'] ?? '')) === 'header');
+            Log::info('Meta template inspect', [
+                'name' => $templateName,
+                'request_language' => $languageCode,
+                'status' => $match['status'] ?? null,
+                'category' => $match['category'] ?? null,
+                'language' => $match['language'] ?? null,
+                'rejected_reason' => $match['rejected_reason'] ?? null,
+                'header_type' => $header['format'] ?? $header['type'] ?? null,
+                'component_types' => array_map(static fn ($c) => $c['type'] ?? null, $match['components'] ?? []),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Meta sender/template inspect failed', ['error' => $e->getMessage()]);
         }
     }
 }

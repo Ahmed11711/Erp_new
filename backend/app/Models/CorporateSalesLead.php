@@ -80,6 +80,11 @@ class CorporateSalesLead extends Model
         return $this->hasMany(CorporateSalesLeadRecommender::class);
     }
 
+    public function offers()
+    {
+        return $this->hasMany(Offers::class, 'corporate_sales_lead_id');
+    }
+
     /**
      * Scope to get leads by status.
      */

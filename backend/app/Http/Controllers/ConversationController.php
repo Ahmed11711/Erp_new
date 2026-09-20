@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Message;
+use App\Models\Order;
 use App\Services\MetaWhatsAppService;
+use App\Services\Orders\OrderStatusVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -33,6 +35,11 @@ class ConversationController extends Controller
     private const MAX_LIMIT = 100;
     private const MEDIA_CACHE_DIR = 'whatsapp_media';
     private const MEDIA_CACHE_TTL = 60 * 60 * 24 * 7; // 7 days
+    private const ORDERS_LIMIT = 25;
+
+    public function __construct(
+        private OrderStatusVisibilityService $orderStatusVisibility
+    ) {}
 
     /**
      * GET /api/conversations/{conversation_id}/messages
@@ -53,6 +60,9 @@ class ConversationController extends Controller
                 'error' => 'Conversation not found',
             ], 404);
         }
+
+        $customer->restoreIfHasNewerInboundReply();
+        $customer->refresh();
 
         $limit = (int) $request->query('limit', self::DEFAULT_LIMIT);
         $limit = max(1, min(self::MAX_LIMIT, $limit));
@@ -113,15 +123,88 @@ class ConversationController extends Controller
 
         return response()->json([
             'success' => true,
-            'conversation' => [
-                'id' => $customer->id,
-                'name' => $customer->name,
-                'phone' => $customer->phone,
-            ],
+            'conversation' => $this->formatConversation($customer),
             'data' => $ordered->map(fn (Message $m) => $this->formatMessage($m))->all(),
             'next_cursor' => $nextCursor,
             'has_more' => $hasMore,
             'limit' => $limit,
+        ]);
+    }
+
+    /**
+     * GET /api/conversations/{conversation_id}/orders
+     *
+     * Orders linked to this WhatsApp contact (message.order_id and matching phone),
+     * including product lines so the chat can open a request without leaving the thread.
+     */
+    public function orders(Request $request, int $conversationId): JsonResponse
+    {
+        $customer = Customer::find($conversationId);
+        if (! $customer) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Conversation not found',
+            ], 404);
+        }
+
+        $user = $request->user();
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $messageOrderIds = Message::query()
+            ->where('customer_id', $conversationId)
+            ->whereNotNull('order_id')
+            ->distinct()
+            ->pluck('order_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        $includeId = (int) $request->query('include_id', 0);
+        if ($includeId > 0 && ! $messageOrderIds->contains($includeId)) {
+            $messageOrderIds->push($includeId);
+        }
+
+        $phoneVariants = $this->phoneDigitsVariants((string) $customer->phone);
+
+        $query = Order::query()->with(['order_products.category:id,category_name']);
+
+        $query->where(function ($q) use ($phoneVariants, $messageOrderIds) {
+            $hasClause = false;
+            if ($phoneVariants !== []) {
+                $hasClause = true;
+                $q->where(function ($phoneQ) use ($phoneVariants) {
+                    foreach ($phoneVariants as $variant) {
+                        $phoneQ->orWhere('customer_phone_1', 'like', '%'.$variant.'%')
+                            ->orWhere('customer_phone_2', 'like', '%'.$variant.'%');
+                    }
+                });
+            }
+            if ($messageOrderIds->isNotEmpty()) {
+                if ($hasClause) {
+                    $q->orWhereIn('id', $messageOrderIds->all());
+                } else {
+                    $q->whereIn('id', $messageOrderIds->all());
+                }
+            } elseif (! $hasClause) {
+                $q->whereRaw('0 = 1');
+            }
+        });
+
+        $this->orderStatusVisibility->applySearchScope($query, $user);
+
+        $orders = $query->orderByDesc('id')
+            ->limit(self::ORDERS_LIMIT)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'conversation' => $this->formatConversation($customer),
+            'data' => $orders->map(fn (Order $order) => $this->formatConversationOrder($order))->all(),
         ]);
     }
 
@@ -185,6 +268,21 @@ class ConversationController extends Controller
         return $this->streamBytes($result['body'], $mime, $download, $this->downloadFilename($message));
     }
 
+    /**
+     * @return array{id: int, name: string|null, phone: string|null, is_archived: bool, whatsapp_archived_at: string|null, awaiting_reply: bool}
+     */
+    private function formatConversation(Customer $customer): array
+    {
+        return [
+            'id' => $customer->id,
+            'name' => $customer->name,
+            'phone' => $customer->phone,
+            'is_archived' => $customer->isWhatsappArchived(),
+            'whatsapp_archived_at' => optional($customer->whatsapp_archived_at)->format('Y-m-d H:i:s'),
+            'awaiting_reply' => $customer->isAwaitingWhatsappReply(),
+        ];
+    }
+
     private function formatMessage(Message $m): array
     {
         $isMedia = $m->isMedia();
@@ -195,6 +293,7 @@ class ConversationController extends Controller
             'type' => $m->type ?: 'text',
             'direction' => $m->direction === 'outbound' ? 'sent' : 'received',
             'status' => $m->status,
+            'order_id' => $this->resolveMessageOrderId($m),
             'media_url' => $isMedia ? url('api/media/' . $m->id) : null,
             'media_mime_type' => $m->media_mime_type,
             'media_filename' => $m->media_filename,
@@ -204,6 +303,83 @@ class ConversationController extends Controller
                 'name' => $m->sender->name,
             ] : null,
             'created_at' => optional($m->created_at)->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function resolveMessageOrderId(Message $m): ?int
+    {
+        if ($m->order_id) {
+            return (int) $m->order_id;
+        }
+
+        $content = (string) $m->content;
+        if ($content !== '' && preg_match('/(?:Order|طلب)\s*#?\s*(\d{3,})/iu', $content, $match)) {
+            return (int) $match[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function phoneDigitsVariants(string $phone): array
+    {
+        $digits = preg_replace('/\D/', '', $phone) ?: '';
+        if ($digits === '') {
+            return [];
+        }
+
+        $variants = [$digits];
+        if (strlen($digits) === 11 && str_starts_with($digits, '0')) {
+            $variants[] = '20'.substr($digits, 1);
+            $variants[] = substr($digits, 1);
+        } elseif (strlen($digits) === 12 && str_starts_with($digits, '20')) {
+            $variants[] = '0'.substr($digits, 2);
+            $variants[] = substr($digits, 2);
+        } elseif (strlen($digits) === 10 && str_starts_with($digits, '1')) {
+            $variants[] = '0'.$digits;
+            $variants[] = '20'.$digits;
+        }
+
+        if (strlen($digits) >= 10) {
+            $variants[] = substr($digits, -10);
+        }
+
+        return array_values(array_unique(array_filter(
+            $variants,
+            static fn ($v) => $v !== '' && strlen($v) >= 8
+        )));
+    }
+
+    private function formatConversationOrder(Order $order): array
+    {
+        $products = $order->order_products->map(function ($product) {
+            $qty = (float) ($product->quantity ?? 0);
+            $price = (float) ($product->price ?? 0);
+            $total = $product->total_price !== null
+                ? (float) $product->total_price
+                : round($qty * $price, 2);
+
+            return [
+                'id' => $product->id,
+                'name' => $product->category?->category_name ?: 'صنف',
+                'quantity' => $qty,
+                'price' => $price,
+                'total' => $total,
+                'special_details' => $product->special_details,
+            ];
+        })->values()->all();
+
+        return [
+            'id' => $order->id,
+            'customer_name' => $order->customer_name,
+            'order_status' => $order->order_status,
+            'order_type' => $order->order_type,
+            'order_date' => $order->order_date,
+            'net_total' => (float) ($order->net_total ?? 0),
+            'prepaid_amount' => (float) ($order->prepaid_amount ?? 0),
+            'products' => $products,
         ];
     }
 

@@ -1,0 +1,261 @@
+<div class="report-page sales-movement-page">
+  <div class="report-topbar">
+    <div class="report-topbar-side">
+      <app-time></app-time>
+    </div>
+    <h1 class="report-title">حركة المبيعات</h1>
+    <div class="report-topbar-side"></div>
+  </div>
+
+  <div class="filter-chips">
+    <button type="button" class="chip chip-filter" (click)="showFilters = !showFilters">
+      <i class="fa-solid fa-sliders"></i>
+      <span>فلترة</span>
+    </button>
+    <div class="chip chip-date" *ngIf="showFilters">
+      <i class="fa-regular fa-calendar"></i>
+      <span class="date-chip-label">{{ activeDateLabel }}</span>
+      <span class="date-range">
+        <input type="date" [(ngModel)]="dateFrom" name="dateFrom" (change)="onSearch()" [attr.aria-label]="'من ' + activeDateLabel">
+        <span class="date-sep">—</span>
+        <input type="date" [(ngModel)]="dateTo" name="dateTo" (change)="onSearch()" [attr.aria-label]="'إلى ' + activeDateLabel">
+      </span>
+    </div>
+    <div class="chip chip-search" *ngIf="showFilters">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input
+        type="search"
+        placeholder="رقم الطلب أو العميل أو المندوب…"
+        [(ngModel)]="searchTerm"
+        name="searchTerm"
+        (keyup.enter)="onSearch()"
+      />
+    </div>
+    <div class="chip chip-apply" *ngIf="showFilters">
+      <button type="button" (click)="applyFilters()" [disabled]="loading">
+        {{ loading ? 'جاري التحميل…' : 'عرض' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="sales-movement-modes" *ngIf="showFilters">
+    <button
+      type="button"
+      class="mode-chip"
+      *ngFor="let m of modes"
+      [class.is-active]="mode === m.id"
+      (click)="setMode(m.id)"
+    >
+      {{ m.label }}
+    </button>
+    <button
+      type="button"
+      class="mode-chip mode-chip--missing"
+      [class.is-active]="missingOnly"
+      (click)="toggleMissingOnly()"
+    >
+      بدون قيد
+    </button>
+  </div>
+
+  <div class="summary-grid" *ngIf="!loadError && summary" [class.is-refreshing]="isRefreshing">
+    <div class="summary-card orders">
+      <div class="summary-icon"><i class="fa-solid fa-bag-shopping"></i></div>
+      <div class="summary-label">عدد الطلبات</div>
+      <div class="summary-value">{{ summary.orders_count | customNumber }}</div>
+    </div>
+    <div class="summary-card new-value">
+      <div class="summary-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+      <div class="summary-label">صافي الفواتير</div>
+      <div class="summary-value">{{ summary.invoice_net | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card new-qty">
+      <div class="summary-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
+      <div class="summary-label">مدين القيود</div>
+      <div class="summary-value">{{ summary.journal_debit | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+    <div class="summary-card returns">
+      <div class="summary-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+      <div class="summary-label">دائن القيود</div>
+      <div class="summary-value">{{ summary.journal_credit | customNumber }}</div>
+      <div class="summary-unit">EGP</div>
+    </div>
+  </div>
+
+  <div class="missing-invoice-banner" *ngIf="!loadError && canPostMissingInvoices">
+    <div>
+      <strong>يوجد {{ missingJournalCount | customNumber }} طلب مشحون بقيود ناقصة حسب {{ activeDateLabel }}.</strong>
+      <span>يُرحَّل الناقص حسب التقويم المعتمد: إثبات المبيعات، تكلفة خروج المخزن التام، التسليم، ورفض الاستلام — دون حذف قيود موجودة ودون إنقاص المخزن مرة أخرى.</span>
+    </div>
+    <button
+      type="button"
+      class="missing-invoice-btn"
+      (click)="postMissingInvoices()"
+      [disabled]="postingMissing"
+    >
+      {{ postingMissing ? 'جاري الترحيل…' : 'ترحيل القيود الناقصة' }}
+    </button>
+  </div>
+
+  <div *ngIf="loading && rows.length === 0" class="state-box">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+  <div *ngIf="!loading && loadError" class="state-box--danger" role="alert">
+    {{ loadErrorMessage }}
+  </div>
+  <div *ngIf="!loading && !loadError && rows.length === 0" class="state-box empty">
+    <i class="fa-regular fa-folder-open"></i>
+    <p>{{ missingOnly ? 'لا توجد طلبات مشحونة بدون قيد فاتورة أو تكلفة مخزن في هذا التاريخ.' : 'لا توجد حركة مبيعات في هذا التاريخ.' }}</p>
+  </div>
+
+  <div class="items-list" *ngIf="!loadError && rows.length" [class.is-refreshing]="isRefreshing">
+    <div class="item-card" *ngFor="let row of rows; trackBy: trackByOrderId" [class.expanded]="expanded.has(row.order_id)" [class.is-missing-invoice]="row.missing_invoice || row.missing_cogs || row.missing_lifecycle">
+      <div class="item-head">
+        <button class="item-chevron" type="button" (click)="toggleExpand(row.order_id)">
+          <i class="fa-solid" [ngClass]="expanded.has(row.order_id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div class="item-title" (click)="toggleExpand(row.order_id)">
+          طلب #{{ row.order_id }}
+          <small>{{ row.customer_name }}</small>
+        </div>
+        <span class="missing-invoice-chip" *ngIf="row.missing_invoice || row.missing_cogs || row.missing_lifecycle">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          {{ missingChipLabel(row) }}
+        </span>
+        <button
+          type="button"
+          class="btn btn-sm sales-movement-post"
+          *ngIf="canPostRow(row)"
+          (click)="postRowJournals(row, $event)"
+        >
+          مراجعة وترحيل
+        </button>
+        <a class="btn btn-sm btn-outline-secondary sales-movement-open" [routerLink]="['/dashboard/shipping/orderdetails', row.order_id]" target="_blank" rel="noopener">
+          التفاصيل
+        </a>
+      </div>
+
+      <div class="item-stats">
+        <div class="stat orders">
+          <div class="stat-head">التاريخ</div>
+          <div class="stat-value stat-value--date">{{ row.movement_date || row.order_date || '—' }}</div>
+        </div>
+        <div class="stat new-qty">
+          <div class="stat-head">الحالة</div>
+          <div class="stat-value stat-value--status">{{ row.order_status || '—' }}</div>
+        </div>
+        <div class="stat new-value">
+          <div class="stat-head">صافي الفاتورة</div>
+          <div class="stat-value">{{ row.net_total | customNumber }}</div>
+          <div class="stat-unit">EGP</div>
+        </div>
+        <div class="stat returns">
+          <div class="stat-head">مدين / دائن</div>
+          <div class="stat-value">{{ row.total_debit | customNumber }} / {{ row.total_credit | customNumber }}</div>
+        </div>
+      </div>
+
+      <div class="sales-movement-types" *ngIf="visibleStages(row).length">
+        <span
+          class="type-badge"
+          *ngFor="let stage of visibleStages(row)"
+          [attr.data-type]="stage.key"
+          [class.is-missing]="stage.missing"
+          [class.is-anomaly]="stage.anomaly"
+        >
+          {{ stage.anomaly ? 'تكرار محاسبي — ' + stage.title : stage.title }}
+          <small *ngIf="stage.approved_date" dir="ltr">{{ stage.approved_date }}</small>
+        </span>
+      </div>
+      <div class="text-muted small px-3 pb-2" *ngIf="row.shipping_company">
+        المندوب / الشحن: {{ row.shipping_company }}
+      </div>
+
+      <div class="item-details" *ngIf="expanded.has(row.order_id)">
+        <div class="state-box" *ngIf="journalLoading.has(row.order_id)">
+          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+        </div>
+        <div class="sales-movement-journals" *ngIf="!journalLoading.has(row.order_id) && (row.journals?.length || visibleStages(row).length); else noJournals">
+          <section class="stage-block" *ngFor="let stage of visibleStages(row)">
+            <header class="stage-block__head">
+              <div>
+                <strong>{{ stage.title }}</strong>
+                <p>{{ stage.rule }}</p>
+              </div>
+              <span dir="ltr">{{ stage.approved_date || '—' }}</span>
+            </header>
+            <p class="stage-block__missing" *ngIf="stage.missing">هذا القيد مطلوب حسب حالة الطلب ولم يُرحَّل بعد.</p>
+            <ul class="stage-block__notes" *ngIf="stage.notes?.length">
+              <li *ngFor="let note of stage.notes">{{ note.text }}</li>
+            </ul>
+            <article class="mini-journal" *ngFor="let journal of stage.journals">
+              <header>
+                <strong>{{ journal.title }}</strong>
+                <span dir="ltr">{{ journal.date }}</span>
+              </header>
+              <p class="mini-journal__note" *ngIf="journal.note">{{ journal.note }}</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>الحساب</th>
+                    <th>مدين</th>
+                    <th>دائن</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let line of journal.lines">
+                    <td>{{ line.account_name || '—' }}</td>
+                    <td dir="ltr">{{ line.debit | customNumber }}</td>
+                    <td dir="ltr">{{ line.credit | customNumber }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+          </section>
+          <article class="mini-journal" *ngFor="let journal of otherJournals(row)">
+            <header>
+              <strong>{{ journal.title }}</strong>
+              <span dir="ltr">{{ journal.date }}</span>
+            </header>
+            <table>
+              <thead>
+                <tr>
+                  <th>الحساب</th>
+                  <th>مدين</th>
+                  <th>دائن</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let line of journal.lines">
+                  <td>{{ line.account_name || '—' }}</td>
+                  <td dir="ltr">{{ line.debit | customNumber }}</td>
+                  <td dir="ltr">{{ line.credit | customNumber }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </article>
+        </div>
+        <ng-template #noJournals>
+          <div class="empty-journals" *ngIf="!journalLoading.has(row.order_id)">
+            <p>لا توجد قيود مسجّلة على هذا الطلب.</p>
+            <button type="button" class="btn btn-sm sales-movement-post" *ngIf="canPostRow(row)" (click)="postRowJournals(row, $event)">
+              {{ row.missing_invoice ? 'عرض القيد المقترح وتعديله' : 'ترحيل قيد تكلفة المخزن' }}
+            </button>
+          </div>
+        </ng-template>
+      </div>
+    </div>
+  </div>
+
+  <div class="paginator-wrap" *ngIf="!loadError && length > 0">
+    <mat-paginator
+      [length]="length"
+      [pageSize]="pageSize"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onPageChange($event)"
+      showFirstLastButtons>
+    </mat-paginator>
+  </div>
+</div>

@@ -17,14 +17,14 @@
     <div class="row">
       <div class="col-md-3">
         <div class="form-group">
-          <input class="form-control" id="name" placeholder="الإسم" (change)="search($event)"
-            type="text" class="form-control">
+          <input class="form-control" id="name" placeholder="الإسم" (input)="onSearchField($event)"
+            type="text" class="form-control" autocomplete="off">
         </div>
       </div>
       <div class="col-md-3">
         <div class="form-group">
-          <input class="form-control" id="code" placeholder="كود الموظف" (change)="search($event)"
-            type="text" class="form-control">
+          <input class="form-control" id="code" placeholder="كود الموظف" (input)="onSearchField($event)"
+            type="text" class="form-control" autocomplete="off">
         </div>
     </div>
 
@@ -36,17 +36,43 @@
         <th>المستوي الوظيفي</th>
         <th>عدد ساعات العمل</th>
         <th>البصمة</th>
+        <th>حساب الشجرة</th>
         <th>التاريخ</th>
         <th>-</th>
       </thead>
       <tbody>
-        <tr *ngFor="let elm of data">
+        <tr *ngIf="listLoading && !data?.length">
+          <td colspan="9" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 mb-0 font-weight-bold">جاري تحميل الموظفين…</p>
+          </td>
+        </tr>
+        <tr *ngIf="listError && !listLoading">
+          <td colspan="9" class="text-center py-4 text-danger">تعذر تحميل الموظفين. حدّث الصفحة أو أعد البحث.</td>
+        </tr>
+        <tr *ngIf="!listLoading && !listError && !data?.length">
+          <td colspan="9" class="text-center py-4 text-muted">لا يوجد موظفون مطابقون.</td>
+        </tr>
+        <tr *ngFor="let elm of data; trackBy: trackByEmployeeId">
           <td>{{elm?.code}}</td>
           <td>{{elm?.name}}</td>
           <td>{{elm?.department}}</td>
           <td>{{elm?.level}}</td>
           <td>{{elm?.working_hours}}</td>
           <td>{{elm?.acc_no}}</td>
+          <td class="account-cell">
+            <button
+              type="button"
+              class="account-link-btn"
+              (click)="openLinkAccountDialog(elm)"
+              [title]="elm?.payable_tree_account_id ? 'تعديل ربط الحساب' : 'ربط بحساب في الشجرة'">
+              <mat-icon *ngIf="!elm?.payable_tree_account_id" class="account-link-icon account-link-icon--empty">account_tree</mat-icon>
+              <span *ngIf="elm?.payable_tree_account_id" class="account-linked-label">
+                <mat-icon class="account-link-icon account-link-icon--linked">check_circle</mat-icon>
+                {{ accountLabel(elm) }}
+              </span>
+            </button>
+          </td>
           <td>{{elm?.created_at | date:'dd-MM-yyyy'}}</td>
           <td>
             <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
@@ -74,6 +100,8 @@
   <mat-paginator #paginator
     class="demo-paginator"
     [length]="length"
+    [pageIndex]="page"
+    [pageSize]="pageSize"
     showFirstLastButtons
     (page)="onPageChange($event)"
     [pageSizeOptions]="pageSizeOptions"

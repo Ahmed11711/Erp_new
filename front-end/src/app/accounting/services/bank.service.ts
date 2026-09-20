@@ -46,4 +46,32 @@ export class BankService {
     directTransaction(data: any): Observable<any> {
         return this.http.post<any>(`${this.apiUrl}/direct-transaction`, data);
     }
+
+    listDirectTransactions(params?: Record<string, string | number>): Observable<any> {
+        let httpParams = new HttpParams();
+        if (params) {
+            Object.keys(params).forEach(key => {
+                if (params[key] !== null && params[key] !== undefined && params[key] !== '') {
+                    httpParams = httpParams.set(key, String(params[key]));
+                }
+            });
+        }
+        return this.http.get<any>(`${this.apiUrl}/direct-transactions`, { params: httpParams });
+    }
+
+    getDirectTransaction(id: number): Observable<any> {
+        return this.http.get<any>(`${this.apiUrl}/direct-transactions/${id}`);
+    }
+
+    updateDirectTransaction(id: number, data: any): Observable<any> {
+        return this.http.put<any>(`${this.apiUrl}/direct-transactions/${id}`, data);
+    }
+
+    getAssignedUsers(bankId: number): Observable<any> {
+        return this.http.get<any>(`${this.apiUrl}/${bankId}/users`);
+    }
+
+    syncAssignedUsers(bankId: number, userIds: number[]): Observable<any> {
+        return this.http.put<any>(`${this.apiUrl}/${bankId}/users`, { user_ids: userIds });
+    }
 }

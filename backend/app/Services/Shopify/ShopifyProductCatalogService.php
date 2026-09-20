@@ -20,6 +20,8 @@ class ShopifyProductCatalogService
         }
 
         DB::transaction(function () use ($payload, $shopDomain, $productId, $variants) {
+            $imageService = app(ShopifyProductImageService::class);
+
             foreach ($variants as $v) {
                 $variantId = isset($v['id']) ? (int) $v['id'] : null;
                 if (! $variantId) {
@@ -31,6 +33,7 @@ class ShopifyProductCatalogService
                 $title = (string) ($payload['title'] ?? '');
                 $variantTitle = (string) ($v['title'] ?? '');
                 $name = trim($title.($variantTitle !== '' && $variantTitle !== 'Default Title' ? ' — '.$variantTitle : ''));
+                [$imageUrl1, $imageUrl2] = $imageService->extractImageUrls($payload, is_array($v) ? $v : null);
 
                 ShopifyProduct::query()->updateOrCreate(
                     [
@@ -44,6 +47,8 @@ class ShopifyProductCatalogService
                         'sku' => $sku !== '' ? $sku : null,
                         'price' => $price,
                         'quantity' => (int) ($v['inventory_quantity'] ?? 0),
+                        'image_url_1' => $imageUrl1,
+                        'image_url_2' => $imageUrl2,
                     ]
                 );
             }

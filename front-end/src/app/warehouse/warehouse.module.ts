@@ -11,8 +11,10 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatIconModule } from '@angular/material/icon';
 import { WarehouseDetailsComponent } from './warehouse-details/warehouse-details.component';
 import { MonthlyInventoryComponent } from './monthly-inventory/monthly-inventory.component';
+import { InventoryImportComponent } from './inventory-import/inventory-import.component';
 import { DialogComponent } from './dialog/dialog.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 
 
 @NgModule({
@@ -22,6 +24,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
     CatDetailsComponent,
     WarehouseDetailsComponent,
     MonthlyInventoryComponent,
+    InventoryImportComponent,
     DialogComponent
   ],
   imports: [
@@ -32,7 +35,8 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
      MatPaginatorModule,
      MatIconModule,
      FormsModule,
-     ReactiveFormsModule
+     ReactiveFormsModule,
+     AutocompleteLibModule
   ]
 })
 export class WarehouseModule { }

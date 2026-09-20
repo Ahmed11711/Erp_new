@@ -1,8 +1,9 @@
 <div class="supplier-pay-dialog">
   <div class="supplier-pay-dialog__hero">
     <div class="supplier-pay-dialog__hero-text">
-      <h2 mat-dialog-title class="supplier-pay-dialog__title">سداد حساب المورد</h2>
+      <h2 mat-dialog-title class="supplier-pay-dialog__title">{{ data.dialogTitle || 'سداد حساب المورد' }}</h2>
       <p class="supplier-pay-dialog__supplier-name">{{ data.supplier.supplier_name }}</p>
+      <p class="supplier-pay-dialog__subtitle" *ngIf="data.subtitle">{{ data.subtitle }}</p>
     </div>
     <div class="supplier-pay-dialog__balance-wrap" dir="ltr">
       <span class="supplier-pay-dialog__balance-label">الرصيد</span>
@@ -11,7 +12,10 @@
   </div>
 
   <div class="supplier-pay-dialog__hint">
-    اختر نوع المصدر أولاً، ثم الحساب، ثم أدخل المبلغ.
+    {{ data.hint || 'اختر نوع المصدر أولاً، ثم الحساب، ثم أدخل المبلغ.' }}
+    <span *ngIf="data.maxAmount != null && data.maxAmount > 0" class="supplier-pay-dialog__due">
+      — المتبقي للسداد: {{ data.maxAmount | number:'1.2-2' }} ج
+    </span>
   </div>
 
   <div mat-dialog-content class="supplier-pay-dialog__content">
@@ -51,6 +55,17 @@
               [(ngModel)]="paymentType"
               (ngModelChange)="paymentTypeChange()" />
             <span>حساب خدمي</span>
+          </label>
+          <label
+            class="supplier-pay-pill"
+            [class.supplier-pay-pill--active]="paymentType === 'tree_account'">
+            <input
+              type="radio"
+              name="supplier_payment_type"
+              value="tree_account"
+              [(ngModel)]="paymentType"
+              (ngModelChange)="paymentTypeChange()" />
+            <span>حساب من الشجرة</span>
           </label>
         </div>
       </div>
@@ -103,17 +118,92 @@
         <p class="supplier-pay-dialog__empty" *ngIf="serviceAccounts.length === 0">لا توجد حسابات خدمية مسجّلة.</p>
       </div>
 
+      <div class="supplier-pay-dialog__field" *ngIf="paymentType === 'tree_account'">
+        <label class="supplier-pay-dialog__label">الحساب من الشجرة</label>
+
+        <div class="tree-picker" dir="rtl" [class.tree-picker--open]="treePickerOpen">
+          <div
+            class="tree-picker__trigger"
+            role="button"
+            tabindex="0"
+            (click)="toggleTreePicker()"
+            (keydown.enter)="toggleTreePicker()"
+            (keydown.space)="$event.preventDefault(); toggleTreePicker()"
+            [attr.aria-expanded]="treePickerOpen">
+            <span
+              class="tree-picker__value"
+              [class.tree-picker__placeholder]="!treeAccountId">
+              {{ selectedTreeAccountLabel || 'اختر الحساب' }}
+            </span>
+            <span class="tree-picker__actions">
+              <span
+                class="tree-picker__clear-selection"
+                *ngIf="treeAccountId && !treePickerOpen"
+                role="button"
+                tabindex="0"
+                (click)="clearTreeAccountSelection($event)"
+                (keydown.enter)="clearTreeAccountSelection($event)"
+                aria-label="مسح الاختيار">
+                <i class="fas fa-times"></i>
+              </span>
+              <i class="fas fa-chevron-down tree-picker__arrow"></i>
+            </span>
+          </div>
+
+          <div class="tree-picker__panel" *ngIf="treePickerOpen">
+            <div class="tree-picker__search">
+              <i class="fas fa-search tree-picker__search-icon"></i>
+              <input
+                type="text"
+                class="tree-picker__search-input"
+                name="tree_account_search"
+                [(ngModel)]="treeAccountSearch"
+                placeholder="ابحث بالاسم أو الكود..."
+                autocomplete="off"
+                (click)="$event.stopPropagation()" />
+              <button
+                type="button"
+                class="tree-picker__clear"
+                *ngIf="treeAccountSearch"
+                (click)="treeAccountSearch = ''; $event.stopPropagation()"
+                aria-label="مسح البحث">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+
+            <ul class="tree-picker__list" role="listbox">
+              <li
+                *ngFor="let item of filteredTreeAccounts"
+                class="tree-picker__item"
+                [class.tree-picker__item--active]="treeAccountId === item.id"
+                role="option"
+                [attr.aria-selected]="treeAccountId === item.id"
+                (click)="selectTreeAccount(item)">
+                <span class="tree-picker__item-label">{{ item.label }}</span>
+                <i class="fas fa-check tree-picker__item-check" *ngIf="treeAccountId === item.id"></i>
+              </li>
+              <li class="tree-picker__no-result" *ngIf="filteredTreeAccounts.length === 0 && treeAccounts.length > 0">
+                لا توجد نتائج مطابقة للبحث
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <p class="supplier-pay-dialog__empty" *ngIf="treeAccounts.length === 0">لا توجد حسابات في الشجرة.</p>
+      </div>
+
       <div class="supplier-pay-dialog__field">
         <label class="supplier-pay-dialog__label" for="amount_supplier">مبلغ السداد</label>
         <input
           id="amount_supplier"
           dir="ltr"
           type="number"
-          min="0"
+          min="0.01"
+          [max]="data.maxAmount != null && data.maxAmount > 0 ? data.maxAmount : null"
           step="0.01"
           name="amount"
           placeholder="0"
-          ngModel
+          [(ngModel)]="payAmount"
           #amount="ngModel"
           class="form-control supplier-pay-dialog__input-amount"
           required />
@@ -126,8 +216,8 @@
         <button
           type="submit"
           class="btn supplier-pay-dialog__btn-submit"
-          [disabled]="!canSubmit || amount.invalid || amount.value < 1">
-          تأكيد السداد
+          [disabled]="submitting || !canSubmit || amount.invalid || !payAmount || payAmount <= 0">
+          {{ submitting ? 'جاري السداد...' : 'تأكيد السداد' }}
         </button>
       </div>
     </form>

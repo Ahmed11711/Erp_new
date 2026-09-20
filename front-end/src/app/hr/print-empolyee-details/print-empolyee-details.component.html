@@ -75,14 +75,16 @@
               <input id="input" class="text-center w-8" type="text" value="الاستقطاعات">
             </td>
           </tr>
-          <tr *ngFor="let elm of employee.subtraction">
-            <td>
-              <input id="input" class="text-center w-10" type="text" [value]="elm.amount | customNumber">
-            </td>
-            <td class="bg-navy">
-              <input id="input" class="text-center w-8" type="text" [value]="elm.type">
-            </td>
-          </tr>
+          <ng-container *ngFor="let elm of employee.subtraction">
+            <tr *ngIf="elm.type !== 'غياب'">
+              <td>
+                <input id="input" class="text-center w-10" type="text" [value]="elm.amount | customNumber">
+              </td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-8" type="text" [value]="elm.type">
+              </td>
+            </tr>
+          </ng-container>
           <tr *ngFor="let elm of employee.advance_payments">
             <td>
               <input id="input" class="text-center w-10" type="text" [value]="elm.amount | customNumber">
@@ -91,12 +93,21 @@
               <input id="input" class="text-center w-8" type="text" [value]="elm.type">
             </td>
           </tr>
-          <tr *ngIf="employee?.acc_no">
+          <tr *ngIf="employee?.acc_no && employee.deductionDaysCount">
+            <td>
+              <input id="input" class="text-center w-10" type="text" [value]="employee.deductionDaysAmount || 0 | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center w-10" type="text" [value]="'أيام خصم (' + employee.deductionDaysCount + ' يوم)'">
+            </td>
+          </tr>
+          <tr *ngIf="employee?.acc_no && employee.differnceSalary">
             <td>
               <input id="input" class="text-center w-10" type="text" [value]="employee.differnceSalary | customNumber">
             </td>
             <td class="bg-navy">
-              <input id="input" class="text-center w-8" type="text" value="خصم ساعات التأخير">
+              <input id="input" class="text-center w-10" type="text"
+                [value]="employee.lateHoursLabel ? ('ساعات تأخير (' + employee.lateHoursLabel + ')') : 'ساعات تأخير'">
             </td>
           </tr>
           <tr>
@@ -124,25 +135,39 @@
               <input id="input" class="text-center w-8" type="text" value=" الراتب الثابت">
             </td>
           </tr>
-          <tr *ngFor="let elm of employee.merits">
+          <ng-container *ngFor="let elm of employee.merits">
+            <tr *ngIf="!isOvertimeMerit(elm)">
+              <td>
+                <input id="input" class="text-center" type="text" [value]="elm.amount | customNumber">
+              </td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-8" type="text" [value]="elm.type">
+              </td>
+            </tr>
+          </ng-container>
+          <tr *ngIf="employee?.acc_no && employee.extraDaysCount">
             <td>
-              <input id="input" class="text-center" type="text" [value]="elm.amount | customNumber">
+              <input id="input" class="text-center" type="text" [value]="employee.extraDaysAmount || 0 | customNumber">
             </td>
             <td class="bg-navy">
-              <input id="input" class="text-center w-8" type="text" [value]="elm.type">
+              <input id="input" class="text-center w-10" type="text" [value]="'أيام إضافي (' + employee.extraDaysCount + ' يوم)'">
             </td>
           </tr>
-          <tr *ngIf="employee?.acc_no">
+          <tr *ngIf="employee?.acc_no && employee.extraHoursMeritsAmount">
             <td>
-              <span *ngIf="employee?.fixed_salary < employee.totalActualHoursSalary">
-                <input id="input" class="text-center" type="text" [value]="employee.totalActualHoursSalary -  employee?.fixed_salary || 0 | customNumber">
-              </span>
-              <span *ngIf="employee?.fixed_salary >= employee.totalActualHoursSalary">
-                <input id="input" class="text-center" type="text" [value]=" 0 ">
-              </span>
+              <input id="input" class="text-center" type="text" [value]="employee.extraHoursMeritsAmount | customNumber">
             </td>
             <td class="bg-navy">
-              <input id="input" class="text-center text-white w-10" type="text" value="حوافز( ساعات اضافية )">
+              <input id="input" class="text-center w-10" type="text" [value]="'ساعات إضافي مضافة (' + employee.extraHoursFromMerits + ' س)'">
+            </td>
+          </tr>
+          <tr *ngIf="employee?.acc_no && employee.overtimeFromHours">
+            <td>
+              <input id="input" class="text-center" type="text" [value]="employee.overtimeFromHours | customNumber">
+            </td>
+            <td class="bg-navy">
+              <input id="input" class="text-center text-white w-10" type="text"
+                [value]="employee.overtimeHoursLabel ? ('ساعات إضافي (' + employee.overtimeHoursLabel + ')') : 'ساعات إضافي'">
             </td>
           </tr>
           <tr>
@@ -219,12 +244,221 @@
             <td [attr.colspan]="!elm?.hours_permission ? 1 : 1" *ngIf="elm.holiday && elm.check_in == elm.check_out">00:00</td>
             <td [attr.colspan]="!elm?.hours_permission ? 3 : 3" *ngIf="elm.holiday && elm.check_in == elm.check_out" class="bg-main"><input id="input2" class="w-7" type="text" value=" أجازة اسبوعية"></td>
             <td colspan="3" *ngIf="elm.hours == '00:00' && !elm.holiday && elm.check_in == '08:00 AM'" class="bg-gray"><input id="input2" class="w-5" type="text" value=" متغيب "></td>
-            <td dir="ltr">
-              <input id="input2" class="w-3" type="text" [value]="elm.date | customDayName">
+            <td>
+              <input id="input2" class="w-3" type="text" dir="rtl" [value]="elm.date | customDayName">
             </td>
             <td dir="ltr">{{elm.date}}</td>
           </tr>
         </tbody>
+      </table>
+    </div>
+
+    <div class="row my-4">
+      <div class="col-md-6">
+        <p class="text-center">
+          <input id="input2" class="w-12" type="text" value="الاستحقاقات">
+        </p>
+        <table class="table m-auto text-center table-hover">
+          <thead>
+            <tr>
+              <th class="bg-navy"><input id="input2" class="w-5" type="text" value="النوع"></th>
+              <th class="bg-navy"><input id="input2" class="w-5" type="text" value="المبلغ"></th>
+              <th class="bg-navy"><input id="input2" class="w-7" type="text" value="السبب"></th>
+              <th class="bg-navy"><input id="input2" class="w-5" type="text" value="بواسطة"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let elm of employee.merits || []">
+              <td class="bg-navy">
+                <input id="input2" class="w-5" type="text" [value]="elm.type || ''">
+              </td>
+              <td>{{ elm.amount || 0 | customNumber }}</td>
+              <td class="print-reason">
+                <input id="input2" class="print-reason-ar" type="text" dir="rtl" [value]="printReasonArabic(elm.reason)">
+                <input id="input2" class="print-reason-date" type="text" dir="ltr" *ngIf="printReasonDate(elm.reason)" [value]="printReasonDate(elm.reason)">
+              </td>
+              <td>
+                <input id="input2" class="w-5" type="text" dir="rtl" [value]="elm.user?.name || ''">
+              </td>
+            </tr>
+            <tr *ngIf="!(employee.merits || []).length">
+              <td colspan="4">
+                <input id="input2" class="w-12" type="text" dir="rtl" value="لا توجد استحقاقات">
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <p class="text-center">
+          <input id="input2" class="w-12" type="text" value="الاستقطاعات">
+        </p>
+        <table class="table m-auto text-center table-hover">
+          <thead>
+            <tr>
+              <th class="bg-navy"><input id="input2" class="w-5" type="text" value="النوع"></th>
+              <th class="bg-navy"><input id="input2" class="w-5" type="text" value="المبلغ"></th>
+              <th class="bg-navy"><input id="input2" class="w-7" type="text" value="السبب"></th>
+              <th class="bg-navy"><input id="input2" class="w-5" type="text" value="بواسطة"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let elm of employee.subtraction || []">
+              <td class="bg-navy">
+                <input id="input2" class="w-5" type="text" [value]="elm.type || ''">
+              </td>
+              <td>{{ elm.amount || 0 | customNumber }}</td>
+              <td class="print-reason">
+                <input id="input2" class="print-reason-ar" type="text" dir="rtl" [value]="printReasonArabic(elm.reason)">
+                <input id="input2" class="print-reason-date" type="text" dir="ltr" *ngIf="printReasonDate(elm.reason)" [value]="printReasonDate(elm.reason)">
+              </td>
+              <td>
+                <input id="input2" class="w-5" type="text" dir="rtl" [value]="elm.user?.name || ''">
+              </td>
+            </tr>
+            <tr *ngFor="let elm of employee.advance_payments || []">
+              <td class="bg-navy">
+                <input id="input2" class="w-5" type="text" [value]="elm.type || ''">
+              </td>
+              <td>{{ elm.amount || 0 | customNumber }}</td>
+              <td class="print-reason">
+                <input id="input2" class="print-reason-ar" type="text" dir="rtl" [value]="printReasonArabic(elm.reason)">
+                <input id="input2" class="print-reason-date" type="text" dir="ltr" *ngIf="printReasonDate(elm.reason)" [value]="printReasonDate(elm.reason)">
+              </td>
+              <td>
+                <input id="input2" class="w-5" type="text" dir="rtl" [value]="elm.user?.name || ''">
+              </td>
+            </tr>
+            <tr *ngIf="!(employee.subtraction || []).length && !(employee.advance_payments || []).length">
+              <td colspan="4">
+                <input id="input2" class="w-12" type="text" dir="rtl" value="لا توجد استقطاعات">
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="print-month-sheet mt-4" *ngIf="employee?.monthAccount" dir="rtl">
+      <div class="text-center mb-2">
+        <input id="input2" class="w-12" type="text" value="كشف حساب الشهر">
+      </div>
+      <div class="row">
+        <div class="col-6">
+          <table class="table m-auto text-center table-hover">
+            <tr>
+              <td class="bg-navy" colspan="2">
+                <input id="input" class="text-center w-8" type="text" value="الاستحقاقات">
+              </td>
+            </tr>
+            <tr>
+              <td dir="ltr">{{ employee.monthAccount.fixedSalary | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="الراتب الثابت"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.changedSalary">
+              <td dir="ltr">{{ employee.monthAccount.changedSalary | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="الراتب المتغير"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.otherIncentives">
+              <td dir="ltr">{{ employee.monthAccount.otherIncentives | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="حوافز"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.extraDaysAmount">
+              <td dir="ltr">{{ employee.monthAccount.extraDaysAmount | customNumber }}</td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-10" type="text"
+                  [value]="'أيام إضافي (' + employee.monthAccount.extraDaysCount + ' يوم)'">
+              </td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.extraHoursMeritsAmount">
+              <td dir="ltr">{{ employee.monthAccount.extraHoursMeritsAmount | customNumber }}</td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-10" type="text"
+                  [value]="'ساعات إضافي مضافة (' + employee.monthAccount.extraHoursFromMerits + ' س)'">
+              </td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.suits">
+              <td dir="ltr">{{ employee.monthAccount.suits | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="بدلات"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.halfDayBonusAmount">
+              <td dir="ltr">{{ employee.monthAccount.halfDayBonusAmount | customNumber }}</td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-10" type="text"
+                  [value]="'مكافأة نصف يوم (' + employee.monthAccount.halfDayBonusCount + ')'">
+              </td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.otherRewards">
+              <td dir="ltr">{{ employee.monthAccount.otherRewards | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="مكافئات"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.overtimeFromHours">
+              <td dir="ltr">{{ employee.monthAccount.overtimeFromHours | customNumber }}</td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-10" type="text"
+                  [value]="employee.monthAccount.overtimeHoursLabel
+                    ? ('ساعات إضافي (' + employee.monthAccount.overtimeHoursLabel + ')')
+                    : 'ساعات إضافي'">
+              </td>
+            </tr>
+            <tr>
+              <td dir="ltr">{{ employee.monthAccount.totalMerit | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="إجمالي الاستحقاق"></td>
+            </tr>
+          </table>
+        </div>
+        <div class="col-6">
+          <table class="table m-auto text-center table-hover">
+            <tr>
+              <td class="bg-navy" colspan="2">
+                <input id="input" class="text-center w-8" type="text" value="الاستقطاعات">
+              </td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.rival">
+              <td dir="ltr">{{ employee.monthAccount.rival | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="خصومات"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.absenceSub">
+              <td dir="ltr">{{ employee.monthAccount.absenceSub | customNumber }}</td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-10" type="text"
+                  [value]="employee.monthAccount.deductionDaysCount
+                    ? ('أيام خصم / غياب (' + employee.monthAccount.deductionDaysCount + ' يوم)')
+                    : 'أيام خصم / غياب'">
+              </td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.advancePayment">
+              <td dir="ltr">{{ employee.monthAccount.advancePayment | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="سلف"></td>
+            </tr>
+            <tr *ngIf="employee.monthAccount.hoursDeduction">
+              <td dir="ltr">{{ employee.monthAccount.hoursDeduction | customNumber }}</td>
+              <td class="bg-navy">
+                <input id="input" class="text-center w-10" type="text"
+                  [value]="employee.monthAccount.lateHoursLabel
+                    ? ('ساعات تأخير (' + employee.monthAccount.lateHoursLabel + ')')
+                    : 'ساعات تأخير'">
+              </td>
+            </tr>
+            <tr *ngIf="!employee.monthAccount.rival && !employee.monthAccount.absenceSub && !employee.monthAccount.advancePayment && !employee.monthAccount.hoursDeduction">
+              <td colspan="2">
+                <input id="input" class="text-center w-10" type="text" dir="rtl" value="لا توجد استقطاعات">
+              </td>
+            </tr>
+            <tr>
+              <td dir="ltr">{{ employee.monthAccount.totalSub | customNumber }}</td>
+              <td class="bg-navy"><input id="input" class="text-center w-8" type="text" value="إجمالي الاستقطاع"></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <table class="table m-auto text-center table-hover mt-2">
+        <tr>
+          <td dir="ltr">{{ employee.monthAccount.netTotal | customNumber }} ج</td>
+          <td class="bg-navy">
+            <input id="input" class="text-center w-8" type="text" value="صافي الشهر">
+          </td>
+        </tr>
       </table>
     </div>
 

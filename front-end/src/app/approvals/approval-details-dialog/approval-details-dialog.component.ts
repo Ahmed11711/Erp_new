@@ -2,6 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { DialogPayMoneyForSupplierComponent } from 'src/app/suppliers/dialog-pay-money-for-supplier/dialog-pay-money-for-supplier.component';
 import { ApproveService } from '../services/approve.service';
+import { baseHourPrice, deductionMultiplier } from 'src/app/hr/utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-approval-details-dialog',
@@ -66,7 +67,7 @@ export class ApprovalDetailsDialogComponent {
     let dayHours = workingHourPerDay;
     let totalHours = workingHourPerDay * 60;
     let actualTotalMinutesPerMonth = 0;
-    let hourPrice = fixedSalary/30/dayHours
+    let hourPrice = baseHourPrice(fixedSalary, dayHours);
     
     // Check if there are any fingerprints
     const hasFingerPrints = this.tableData && this.tableData.length > 0;
@@ -110,13 +111,11 @@ export class ApprovalDetailsDialogComponent {
           elm['salary_type2']='حافز';
         } else {
           hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
-          let salary = hoursDifference/60*hourPrice;
-          if (elm.absence_deduction) {
-            salary = salary * Number(elm.absence_deduction);
-          }
+          const rateMultiplier = deductionMultiplier(elm.absence_deduction);
+          let salary = hoursDifference/60*hourPrice*rateMultiplier;
           if (elm.hours_permission) {
             let [hours, minutes] = elm.hours_permission.split(':').map(Number);
-            salary += ((hours * 60 + minutes)/60 * hourPrice);
+            salary += ((hours * 60 + minutes)/60 * hourPrice * rateMultiplier);
           }
           elm['salary_type']=salary * -1;
           if (salary == 0) {

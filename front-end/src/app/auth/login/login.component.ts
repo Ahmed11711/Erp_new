@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../auth.service';
+import { safeInternalReturnUrl } from '../../core/dashboard-url.serializer';
 
 @Component({
   selector: 'app-login',
@@ -11,12 +12,20 @@ export class LoginComponent {
 errorMessage :any =null;
 Display:boolean=false;
 show = false;
-public constructor(private login:AuthService,private router:Router) { }
+public constructor(
+  private login:AuthService,
+  private router:Router,
+  private route: ActivatedRoute,
+) { }
 
   ngOnInit(){
+    if (this.login.consumeSessionExpiredNotice()) {
+      this.errorMessage = 'انتهت الجلسة. سجّل الدخول من جديد.';
+      this.Display = true;
+    }
     const token = this.login.getToken();
     if (token) {
-      this.router.navigate(['/dashboard']);
+      this.router.navigateByUrl(this.returnUrl());
     }
   }
 
@@ -31,20 +40,25 @@ public constructor(private login:AuthService,private router:Router) { }
 
     this.login.login(loginForm).subscribe(
       (res:any)=>{
-        console.log(res);
-
         this.login.saveTolocalStorage(res);
-        this.router.navigate(['/dashboard']);
+        this.router.navigateByUrl(this.returnUrl());
       },
       err=>{
-        console.log(err);
-
       if(err.status==401){
         this.errorMessage= err.error.message.error[0];
         this.Display=true;
         setTimeout(() => {
           this.Display = false;
       }, 3000)
+      } else if (err.status === 422 && err.error?.message) {
+        const m = err.error.message;
+        this.errorMessage = typeof m === 'string' ? m : (Object.values(m).flat()[0] as string) || 'تحقق من البيانات المدخلة';
+        this.Display = true;
+        setTimeout(() => { this.Display = false; }, 4000);
+      } else if (err.status === 0) {
+        this.errorMessage = 'تعذر الاتصال بالخادم (شبكة أو عنوان API أو CORS).';
+        this.Display = true;
+        setTimeout(() => { this.Display = false; }, 4000);
       }
     }
 
@@ -53,4 +67,8 @@ public constructor(private login:AuthService,private router:Router) { }
   showPassword(e) {
     this.show = e.target.checked;
 }
+
+  private returnUrl(): string {
+    return safeInternalReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'));
+  }
 }

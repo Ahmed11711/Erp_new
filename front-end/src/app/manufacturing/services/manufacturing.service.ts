@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/env/env';
@@ -9,6 +9,7 @@ export interface RecipeImportIngredientPreview {
   quantity: number;
   unit: string | null;
   unit_cost: number | null;
+  color: string | null;
   item_exists: boolean;
   existing_item_id: number | null;
   existing_item_name: string | null;
@@ -37,6 +38,8 @@ export interface RecipeImportPreviewResponse {
     recipes_total: number;
     missing_items_total: number;
     existing_recipes_total: number;
+    sheets_parsed?: number;
+    parsed_sheet_names?: string[];
   };
   message: string;
 }
@@ -53,6 +56,7 @@ export interface RecipeImportConfirmResponse {
   message: string;
   result: {
     items_created: number;
+    items_updated: number;
     recipes_created: number;
     recipes_updated: number;
     recipes_skipped: number;
@@ -97,6 +101,51 @@ export interface RecipeDetail {
   breakdown: CostBreakdown;
 }
 
+export interface ManufactureConsumptionLine {
+  line_key: string;
+  bom_item_id: number;
+  resolved_category_id: number;
+  default_resolved_category_id?: number;
+  default_item_name?: string;
+  item_name: string;
+  warehouse: string;
+  bom_unit_qty: number;
+  default_quantity: number;
+  quantity: number;
+  unit_cost: number;
+  line_cost: number;
+  available_quantity: number;
+  sufficient: boolean;
+  is_customized: boolean;
+  is_substituted?: boolean;
+}
+
+export interface ManufactureConsumptionPreview {
+  applies: boolean;
+  lines: ManufactureConsumptionLine[];
+  total_cost: number;
+  all_sufficient: boolean;
+  message: string | null;
+}
+
+export interface ItemWithoutRecipeRow {
+  id: number;
+  category_name: string;
+  item_code: string | null;
+  warehouse: string;
+  product_type: string;
+  product_type_label: string;
+  color: string | null;
+  quantity: number | string;
+  category_price: number | string | null;
+  unit_price: number | string | null;
+}
+
+export interface ItemsWithoutRecipeReportResponse {
+  data: ItemWithoutRecipeRow[];
+  totals: { items_count: number };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -132,16 +181,100 @@ export class ManufacturingService {
     return this.http.post(`${environment.Url}/manufacture/confirm`,data);
   }
 
+  updateRecipeFromConsumption(payload: {
+    product_id: number;
+    quantity: number;
+    consumption_lines: Array<{
+      bom_item_id: number;
+      resolved_category_id: number;
+      quantity: number;
+    }>;
+  }) {
+    return this.http.post<{ message: string }>(
+      `${environment.Url}/manufacture/update-recipe-from-consumption`,
+      payload,
+    );
+  }
+
+  previewConsumption(payload: {
+    product_id: number;
+    quantity: number;
+    status?: string;
+    wip_keep_under_processing?: boolean;
+    consumption_lines?: Array<{
+      bom_item_id: number;
+      resolved_category_id: number;
+      quantity: number;
+    }>;
+  }) {
+    return this.http.post<ManufactureConsumptionPreview>(
+      `${environment.Url}/manufacture/confirm/preview`,
+      payload
+    );
+  }
+
   getAllRecipes() {
     return this.http.get<any[]>(`${environment.Url}/manufacture`);
   }
 
-  manfuctureByWarhouse(data:any){
-    return this.http.get(`${environment.Url}/manufacture/manfucture_by_warhouse?warehouse=${data}`)
+  getItemsWithoutRecipes(params?: {
+    warehouse?: string;
+    product_type?: string;
+    search?: string;
+  }) {
+    let httpParams = new HttpParams();
+    if (params?.warehouse) {
+      httpParams = httpParams.set('warehouse', params.warehouse);
+    }
+    if (params?.product_type) {
+      httpParams = httpParams.set('product_type', params.product_type);
+    }
+    if (params?.search) {
+      httpParams = httpParams.set('search', params.search);
+    }
+    return this.http.get<ItemsWithoutRecipeReportResponse>(
+      `${environment.Url}/manufacture/items-without-recipes`,
+      { params: httpParams },
+    );
+  }
+
+  getRecipeProduct(productId: number) {
+    return this.http.get<any>(`${environment.Url}/manufacture/recipe-product/${productId}`);
+  }
+
+  /**
+   * @param warehouse اسم المخزن
+   * @param scope manufacture_only = أصناف لها Manufacture في هذا المخزن؛ all_categories = كل الأصناف (لدمج WIP→تام)
+   */
+  manfuctureByWarhouse(
+    warehouse: string,
+    scope: 'manufacture_only' | 'all_categories' = 'manufacture_only'
+  ) {
+    let params = new HttpParams().set('warehouse', warehouse);
+    if (scope === 'all_categories') {
+      params = params.set('scope', 'all_categories');
+    }
+    return this.http.get<any[]>(`${environment.Url}/manufacture/manfucture_by_warhouse`, { params });
   }
 
   confirmed(){
     return this.http.get(`${environment.Url}/manufacture/confirmed`)
+  }
+
+  confirmedCount() {
+    return this.http.get<{ total: number }>(`${environment.Url}/manufacture/confirmed`, {
+      params: { count_only: '1' },
+    });
+  }
+
+  confirmedDeleted() {
+    return this.http.get<any[]>(`${environment.Url}/manufacture/confirmed/deleted`);
+  }
+
+  deleteConfirmedOrder(id: number) {
+    return this.http.delete<{ message: string; order_id: number; deleted_by: number }>(
+      `${environment.Url}/manufacture/confirmed/${id}`
+    );
   }
 
   done(id:any){
@@ -231,5 +364,23 @@ export class ManufacturingService {
 
   bulkDeleteRecipes(ids: number[]): Observable<any> {
     return this.http.post(`${environment.Url}/recipes/bulk-delete`, { ids });
+  }
+
+  listAdditions() {
+    return this.http.get<Array<{ id: number; name: string; cost: number; unit?: string | null }>>(
+      `${environment.Url}/manufacture/additions`,
+    );
+  }
+
+  createAddition(data: { name: string; cost: number; unit?: string | null }) {
+    return this.http.post(`${environment.Url}/manufacture/additions`, data);
+  }
+
+  updateAddition(id: number, data: { name: string; cost: number; unit?: string | null }) {
+    return this.http.put(`${environment.Url}/manufacture/additions/${id}`, data);
+  }
+
+  deleteAddition(id: number) {
+    return this.http.delete(`${environment.Url}/manufacture/additions/${id}`);
   }
 }

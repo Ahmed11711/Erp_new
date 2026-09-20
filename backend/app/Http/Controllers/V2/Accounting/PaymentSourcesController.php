@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Safe;
 use App\Models\Bank;
 use App\Models\ServiceAccount;
+use App\Services\Accounting\BankAccessService;
 use Illuminate\Http\Request;
 
 /**
@@ -14,13 +15,19 @@ use Illuminate\Http\Request;
  */
 class PaymentSourcesController extends Controller
 {
+    public function __construct(protected BankAccessService $bankAccess)
+    {
+    }
+
     /**
      * List all payment sources with linked tree account and balance for follow-up.
      * GET accounting/payment-sources
      */
     public function index(Request $request)
     {
+        $user = rbac_user();
         $safes = Safe::with('account:id,name,code,balance,debit_balance,credit_balance')
+            ->whereNotNull('account_id')
             ->orderBy('name')
             ->get()
             ->map(function ($safe) {
@@ -42,9 +49,12 @@ class PaymentSourcesController extends Controller
                 ];
             });
 
-        $banks = Bank::with('asset:id,name,code,balance,debit_balance,credit_balance')
-            ->orderBy('name')
-            ->get()
+        $banksQuery = Bank::with('asset:id,name,code,balance,debit_balance,credit_balance')
+            ->where('type', 'main')
+            ->whereNotNull('asset_id')
+            ->orderBy('name');
+        $banksQuery = $this->bankAccess->scopeAccessibleTo($banksQuery, $user);
+        $banks = $banksQuery->get()
             ->map(function ($bank) {
                 $account = $bank->asset;
                 return [
@@ -66,6 +76,7 @@ class PaymentSourcesController extends Controller
             });
 
         $serviceAccounts = ServiceAccount::with('account:id,name,code,balance,debit_balance,credit_balance')
+            ->whereNotNull('account_id')
             ->orderBy('name')
             ->get()
             ->map(function ($svc) {

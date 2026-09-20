@@ -1,50 +1,117 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { Subject, Subscription } from 'rxjs';
+import { debounceTime, takeUntil } from 'rxjs/operators';
 import { EmployeeService } from '../services/employee.service';
 import Swal from 'sweetalert2';
 import { AuthService } from 'src/app/auth/auth.service';
 import { BanksService } from 'src/app/financial/services/banks.service';
+import { environment } from 'src/env/env';
+import { buildPayrollRowFromAttendance, defaultFingerprintMonthValue, fingerprintPeriodForMonth, fridayDatesInRange, parseYearMonthValue } from '../utils/fingerprint-hours.utils';
 
 @Component({
   selector: 'app-payroll',
   templateUrl: './payroll.component.html',
   styleUrls: ['./payroll.component.css']
 })
-export class PayrollComponent implements OnInit{
+export class PayrollComponent implements OnInit, OnDestroy{
   user!:string;
   employees:any[]=[];
   data:any[]=[];
+  private sourceRows: any[] = [];
   catword:any="name"
   currentMonthValue!:any
+  dateFrom!: string;
+  dateTo!: string;
   month!:any
   year!:any
 
-  length = 50;
+  length = 0;
   pageSize = 25;
   page = 0;
   pageSizeOptions = [25,50,100];
   holidayDays:any[]=[];
   total_merit:number = 0;
   total_subtraction:number = 0;
+  total_net:number = 0;
   banks :any = [];
+  /** مصادر الصرف من وحدة الحسابات (خزائن، بنوك، حسابات خدمية) */
+  paymentSourcesBundle: { safes: any[]; banks: any[]; service_accounts: any[] } | null = null;
 
-  constructor(private empService:EmployeeService , private authService:AuthService , private bankService:BanksService){
+  showImportPanel = false;
+  importFile: File | null = null;
+  importLoading = false;
+  importApplying = false;
+  importError = '';
+  importSuccess = '';
+  matchedImportLines: any[] = [];
+  missingImportLines: any[] = [];
+  skippedImportLines: any[] = [];
+  importTotals: any = null;
+  listLoading = false;
+  listError = '';
+  private listRequest?: Subscription;
+  private readonly searchInput$ = new Subject<void>();
+  private readonly destroy$ = new Subject<void>();
+
+  get canApplyImport(): boolean {
+    return !this.importLoading
+      && !this.importApplying
+      && this.matchedImportLines.some((r) => r.can_apply);
+  }
+
+  matchByLabel(matchBy: string | null | undefined): string {
+    if (matchBy === 'name') {
+      return 'الاسم';
+    }
+    if (matchBy === 'acc_no') {
+      return 'البصمة';
+    }
+    if (matchBy === 'code') {
+      return 'الكود';
+    }
+    return matchBy || '—';
+  }
+
+  constructor(
+    private empService: EmployeeService,
+    private authService: AuthService,
+    private bankService: BanksService,
+    private http: HttpClient,
+  ){
     this.user = this.authService.getUser();
-    const today = new Date();
-    // Get previous month as default
-    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1);
-    this.year = previousMonth.getFullYear();
-    this.month = previousMonth.getMonth() + 1; // getMonth() returns 0-11, so add 1
-    this.currentMonthValue = `${this.year}-${this.month.toString().padStart(2, '0')}`;
+    this.applyMonthValue(defaultFingerprintMonthValue());
     this.form.patchValue({
       type:'نوع الراتب'
     });
-    this.holidayDaysFn(this.currentMonthValue);
+    this.holidayDaysFn();
 
   }
 
+  ngOnDestroy(): void {
+    this.listRequest?.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  get isFiltering(): boolean {
+    return !!this.payrollQueryParams().name
+      || !!this.payrollQueryParams().code
+      || !!this.payrollQueryParams().type;
+  }
+
+  trackByEmployeeId(_index: number, elm: any): number | string {
+    return elm?.id ?? _index;
+  }
+
   ngOnInit(): void {
+    this.searchInput$.pipe(debounceTime(300), takeUntil(this.destroy$)).subscribe(() => this.search(null));
     this.bankService.bankSelect().subscribe(res=>this.banks=res);
+    this.http.get<{ safes: any[]; banks: any[]; service_accounts: any[] }>(`${environment.Url}/accounting/payment-sources`).subscribe({
+      next: (res) => { this.paymentSourcesBundle = res; },
+      error: () => { this.paymentSourcesBundle = null; },
+    });
     this.search(arguments);
   }
 
@@ -56,24 +123,8 @@ export class PayrollComponent implements OnInit{
 
   submitform(){}
 
-  holidayDaysFn(month) {
-    this.holidayDays = [];
-    const [year, monthStr] = month.split('-');
-    const yearInt = parseInt(year, 10);
-    const monthInt = parseInt(monthStr, 10) - 1; // JavaScript months are 0-based
-    const daysInMonth = new Date(yearInt, monthInt + 1, 0).getDate();
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(yearInt, monthInt, day);
-
-      if (date.toDateString().startsWith('Fri')) {
-        const day = ('0' + date.getDate()).slice(-2);
-        const month = ('0' + (date.getMonth() + 1)).slice(-2);
-        const year = date.getFullYear();
-        const formattedDate = `${year}-${month}-${day}`;
-        this.holidayDays.push(formattedDate);
-      }
-    }
+  holidayDaysFn(_month?: string) {
+    this.holidayDays = fridayDatesInRange(this.dateFrom, this.dateTo);
   }
 
   onPageChange(event:any){
@@ -83,383 +134,606 @@ export class PayrollComponent implements OnInit{
   }
 
   param:any={};
+
+  onSearchField(e: Event) {
+    const target = e?.target as HTMLInputElement | HTMLSelectElement | null;
+    const id = target?.id;
+    const value = String(target?.value ?? '').trim();
+    if (id === 'name') {
+      if (value) {
+        this.param['name'] = value;
+      } else {
+        delete this.param['name'];
+      }
+    }
+    if (id === 'code') {
+      if (value) {
+        this.param['code'] = value;
+      } else {
+        delete this.param['code'];
+      }
+    }
+    if (id === 'type') {
+      if (value && value !== 'نوع الراتب') {
+        this.param['type'] = value;
+      } else {
+        delete this.param['type'];
+      }
+    }
+    this.page = 0;
+    this.applyLocalFilter();
+    if (id === 'type') {
+      this.search(null);
+      return;
+    }
+    this.searchInput$.next();
+  }
+
+  private applyLocalFilter() {
+    if (!this.sourceRows.length) {
+      return;
+    }
+    const name = String(this.param['name'] || '').trim();
+    const code = String(this.param['code'] || '').trim();
+    const type = String(this.param['type'] || '').trim();
+    this.data = this.sourceRows.filter((row) => {
+      if (name && !String(row?.name || '').includes(name)) {
+        return false;
+      }
+      if (code && !String(row?.code || '').startsWith(code)) {
+        return false;
+      }
+      if (type && type !== 'نوع الراتب' && String(row?.salary_type || '') && String(row?.salary_type) !== type) {
+        return false;
+      }
+      return true;
+    });
+    this.total_merit = this.data.reduce((acc, item) => acc + Number(item.total_merit || 0), 0);
+    this.total_subtraction = this.data.reduce((acc, item) => acc + Number(item.total_sub || 0), 0);
+    this.total_net = this.data.reduce((acc, item) => acc + Number(item.net_total || 0), 0);
+  }
+
+  private payrollQueryParams(): any {
+    const params: any = {
+      date_from: this.dateFrom,
+      date_to: this.dateTo,
+    };
+    const name = String(this.param['name'] || '').trim();
+    const code = String(this.param['code'] || '').trim();
+    const type = String(this.param['type'] || '').trim();
+    if (name) {
+      params.name = name;
+    }
+    if (code) {
+      params.code = code;
+    }
+    if (type && type !== 'نوع الراتب') {
+      params.type = type;
+    }
+    return params;
+  }
+
   search(e:any){
-    if(e?.target?.id === "name"){
-      this.param['name']=e?.target?.value;
-    }
-    if(e?.target?.id === "code"){
-      this.param['code']=e?.target?.value;
-    }
-    if(e?.target?.id === "type"){
-      this.param['type']=e?.target?.value;
+    if(e?.target?.id === "name" || e?.target?.id === "code" || e?.target?.id === "type"){
+      this.onSearchField(e);
+      return;
     }
 
-    this.empService.EmployeesPerMonth(this.pageSize,this.page+1,this.month ,this.year,this.param).subscribe((result:any)=>{
-      this.data = [];
-      result.data.forEach(elm=>{
-        let obj = {};
-        if (elm.salary_paid.length == 1) {
-          obj['salary_paid'] = true;
-        } else {
-          obj['salary_paid'] = false;
-        }
-        obj['name'] = elm.name;
-        obj['id'] = elm.id;
-        obj['code'] = elm.code;
-        obj['level'] = elm.level;
-        //استحقاقات
-        obj['fixed_salary'] = elm.fixed_salary;
-        obj['calc_salary'] = elm.fixed_salary;
-        obj['incentives'] = 0;
-        obj['suits'] = 0;
-        obj['rewards'] = 0;
-        obj['changed_salary'] = 0;
-        //استقطاعات
-        obj['rival'] = 0;
-        obj['absence'] = 0;
-        obj['absence_sub'] = 0;
-        obj['advance_payment'] = 0;
-        if (elm.merits.length > 0) {
-          let incentives = 0;
-          let suits = 0;
-          let rewards = 0;
-          let changed_salary = 0;
-          elm.merits.forEach(item=>{
-            if (item.type == "حوافز") {
-              incentives+=item.amount;
-            }
-            if (item.type == "بدلات") {
-              suits+=item.amount;
-            }
-            if (item.type == "مكافئات") {
-              rewards+=item.amount;
-            }
-            if (item.type == "الراتب المتغير") {
-              changed_salary+=item.amount;
-              obj['calc_salary'] = obj['calc_salary']+=item.amount;
-            }
+    this.listLoading = true;
+    this.listError = '';
+    this.listRequest?.unsubscribe();
 
-          })
-          obj['incentives'] = incentives;
-          obj['suits'] = suits;
-          obj['rewards'] = rewards;
-          obj['changed_salary'] = changed_salary;
-        }
-        if (elm.subtraction.length > 0) {
-          let rival = 0;
-          let absence = 0;
-          let absence_sub = 0;
-          elm.subtraction.forEach(item=>{
-            if (item.type == "خصومات") {
-              rival+=item.amount;
-            }
-            if (item.type == "غياب") {
-              absence+=item.amount;
-              absence_sub += Number( ((obj['fixed_salary']/30)*item.amount).toFixed(2));
-            }
-          })
-          obj['rival'] = rival;
-          obj['absence'] = absence;
-          obj['absence_sub'] = absence_sub;
-        }
-
-        obj['extraHours'] = 0;
-        obj['noFingerPrints'] = false; // Flag to indicate no fingerprints in month
-        if (elm.finger_print.length > 0) {
-          let fingerSheet = this.fingerSheet(elm);
-          if (fingerSheet.calcSalary.differnceSalary <= 0) {
-            obj['absence_sub'] = Math.abs(fingerSheet.calcSalary.differnceSalary);
-          } else {
-            obj['extraHours'] = fingerSheet.calcSalary.differnceSalary;
+    this.listRequest = this.empService.EmployeesPerMonth(this.pageSize,this.page+1,this.month ,this.year,this.payrollQueryParams()).subscribe({
+      next: (result:any) => {
+        const rows = this.asPayrollApiRows(result);
+        const mapped: any[] = [];
+        rows.forEach((elm: any) => {
+          try {
+            mapped.push(this.mapEmployeeMonthRow(elm));
+          } catch (err) {
+            console.error('تعذّر حساب صف المرتب', elm?.id, elm?.name, err);
+            mapped.push(this.fallbackPayrollRow(elm));
           }
-          obj['isReviewed'] = fingerSheet.reviewed;
-          obj['absenceDetails'] = fingerSheet.absenceDetails;
-          if (obj['absenceDetails'].absenceDaysCount) {
-            obj['absence'] = obj['absenceDetails'].absenceDaysCount;
-          }
-        } else {
-          obj['noFingerPrints'] = true; // No fingerprints for this month
-          obj['absenceDetails'] = {}; // Empty details
-        }
+        });
+        this.sourceRows = mapped;
+        this.data = mapped;
+        this.total_merit = this.data.reduce((acc, item) => acc + Number(item.total_merit || 0), 0);
+        this.total_subtraction = this.data.reduce((acc, item) => acc + Number(item.total_sub || 0), 0);
+        this.total_net = this.data.reduce((acc, item) => acc + Number(item.net_total || 0), 0);
+        this.length = Number(result?.total ?? mapped.length) || 0;
+        this.pageSize = Number(result?.per_page ?? this.pageSize) || this.pageSize;
+        this.listLoading = false;
+      },
+      error: (err) => {
+        console.error('تعذّر تحميل كشف المرتبات', err);
+        this.sourceRows = [];
+        this.data = [];
+        this.total_merit = 0;
+        this.total_subtraction = 0;
+        this.total_net = 0;
+        this.length = 0;
+        this.listLoading = false;
+        this.listError = err?.error?.message || 'تعذّر تحميل كشف المرتبات';
+      }
+    });
+  }
 
-        if (elm.advance_payment.length > 0) {
-          let advance_payment = 0;
-          elm.advance_payment.forEach(item=>{
-            if (item.type == "سلف") {
-              advance_payment+=item.amount;
-            }
-          })
-          obj['advance_payment'] = advance_payment;
-        }
-        obj['total_merit'] = obj['calc_salary']+ obj['incentives']+obj['suits'] +obj['rewards'] + obj['extraHours'];
-        obj['total_sub'] = Number((obj['rival']+ obj['absence_sub']+obj['advance_payment']).toFixed(2));
-        obj['net_total'] = Math.ceil((obj['total_merit'] - obj['total_sub']) / 5) * 5;
-        this.data.push(obj);
+  private asPayrollApiRows(result: any): any[] {
+    if (Array.isArray(result?.data)) {
+      return result.data;
+    }
+    if (Array.isArray(result)) {
+      return result;
+    }
+    return [];
+  }
 
-      })
-      this.total_merit = this.data.reduce((acc, item) => acc + item.total_merit, 0);
-      this.total_subtraction = this.data.reduce((acc, item) => acc + item.total_sub, 0);
-      this.length=result.total;
-      this.pageSize=result.per_page;
-    })
+  private fallbackPayrollRow(elm: any): any {
+    const salary = Number(elm?.fixed_salary) || 0;
+    return {
+      salary_paid: Array.isArray(elm?.salary_paid) && elm.salary_paid.length === 1,
+      name: elm?.name,
+      id: elm?.id,
+      code: elm?.code,
+      level: elm?.level,
+      salary_type: elm?.salary_type,
+      fixed_salary: salary,
+      calc_salary: salary,
+      changed_salary: 0,
+      incentives: 0,
+      suits: 0,
+      rewards: 0,
+      extraHours: 0,
+      rival: 0,
+      absence: 0,
+      absence_sub: 0,
+      advance_payment: 0,
+      total_merit: salary,
+      total_sub: 0,
+      net_total: salary,
+      noFingerPrints: true,
+      absenceDetails: {},
+      isReviewed: 0,
+      calculated_net_total: salary,
+      net_from_accrual: false,
+    };
+  }
+
+  toggleImportPanel(): void {
+    this.showImportPanel = !this.showImportPanel;
+    if (!this.showImportPanel) {
+      this.resetImportState();
+    }
+  }
+
+  onImportFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.importFile = input.files?.[0] || null;
+    this.importError = '';
+    this.importSuccess = '';
+    this.matchedImportLines = [];
+    this.missingImportLines = [];
+    this.skippedImportLines = [];
+    this.importTotals = null;
+  }
+
+  private resetImportState(): void {
+    this.importFile = null;
+    this.importLoading = false;
+    this.importApplying = false;
+    this.importError = '';
+    this.importSuccess = '';
+    this.matchedImportLines = [];
+    this.missingImportLines = [];
+    this.skippedImportLines = [];
+    this.importTotals = null;
+  }
+
+  previewAccrualImport(): void {
+    if (!this.importFile) {
+      this.importError = 'اختر ملف Excel أولاً';
+      return;
+    }
+    this.importLoading = true;
+    this.importError = '';
+    this.importSuccess = '';
+    this.empService.previewPayrollAccrualImport(
+      this.importFile,
+      Number(this.month),
+      Number(this.year)
+    ).subscribe({
+      next: (res: any) => {
+        const data = res?.data || res;
+        this.matchedImportLines = data.matched || [];
+        this.missingImportLines = data.missing || [];
+        this.skippedImportLines = data.skipped || [];
+        this.importTotals = data.totals || null;
+        this.importLoading = false;
+        const payable = this.importTotals?.payable_count ?? 0;
+        this.importSuccess = `تمت المعاينة: ${this.matchedImportLines.length} مطابق، ${payable} قابل للتحديث، ${this.missingImportLines.length} غير مطابق.`;
+      },
+      error: (err) => {
+        this.importLoading = false;
+        this.importError = err?.error?.message || 'فشل معاينة الملف';
+      },
+    });
+  }
+
+  applyAccrualImport(): void {
+    const lines = this.matchedImportLines
+      .filter((r) => r.can_apply)
+      .map((r) => ({
+        employee_id: Number(r.employee_id),
+        amount: Number(r.amount || 0),
+        extra_day_value: Number(r.extra_day_value || 0),
+        overtime_value: Number(r.overtime_value || 0),
+        rewards: Number(r.rewards || 0),
+        allowances: Number(r.allowances || 0),
+        deductions: Number(r.deductions || 0),
+        advance: Number(r.advance || 0),
+      }));
+    if (!lines.length) {
+      this.importError = 'لا توجد صفوف قابلة للتحديث';
+      return;
+    }
+
+    Swal.fire({
+      title: 'تأكيد تحديث المستحقات والتفاصيل',
+      html: `<div class="text-end" style="direction:rtl">سيتم تحديث <strong>${lines.length}</strong> موظفاً (مستحق + أيام/ساعات إضافية + خصومات) عن شهر <strong>${this.currentMonthValue}</strong>.</div>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'تحديث',
+      cancelButtonText: 'إلغاء',
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+      this.importApplying = true;
+      this.importError = '';
+      this.importSuccess = '';
+      this.empService.applyPayrollAccrualImport(Number(this.month), Number(this.year), lines).subscribe({
+        next: (res: any) => {
+          this.importApplying = false;
+          const data = res?.data || res;
+          const totals = data?.totals || {};
+          this.importSuccess = res?.message
+            || `تم تحديث ${totals.updated_count || 0}، تخطي ${totals.skipped_count || 0}، فشل ${totals.failed_count || 0}`;
+          this.search(arguments);
+          Swal.fire({
+            icon: (totals.failed_count || 0) > 0 ? 'warning' : 'success',
+            title: this.importSuccess,
+            timer: 2500,
+            showConfirmButton: false,
+          });
+        },
+        error: (err) => {
+          this.importApplying = false;
+          this.importError = err?.error?.message || 'فشل تحديث المرتبات المستحقة';
+        },
+      });
+    });
   }
 
   onMonthChange(event: Event) {
     const target = event.target as HTMLInputElement;
-    this.currentMonthValue = target.value;
-    const [year, month] = this.currentMonthValue.split('-');
-
-    this.month = month;
-    this.year = +year;
+    this.applyMonthValue(target.value);
+    this.matchedImportLines = [];
+    this.missingImportLines = [];
+    this.skippedImportLines = [];
+    this.importTotals = null;
+    this.importSuccess = '';
+    this.importError = '';
     this.search(arguments);
   }
 
-
-  fingerSheet(emp){
-    let tableData:any = [];
-    let param = {}
-    param['dayHours'] = '08:00';
-    if (emp.dayHours == 9) {
-      param['dayHours'] = '09:00';
+  onDateFromChange(event: Event) {
+    const val = (event.target as HTMLInputElement)?.value;
+    if (!val) {
+      return;
     }
+    this.dateFrom = val;
+    this.holidayDaysFn();
+    this.search(arguments);
+  }
 
-    let fixedSalary = emp.fixed_salary;
-    let workingHourPerDay = 8;
-    let hour = '08:00';
-    if (emp.working_hours) {
-      workingHourPerDay = emp.working_hours;
-      hour = '09:00';
+  onDateToChange(event: Event) {
+    const val = (event.target as HTMLInputElement)?.value;
+    if (!val) {
+      return;
     }
-    let salaryType = emp.salary_type;
-    let changedSalary = 0;
-    if (salaryType == "متباين") {
-      if (emp.merits) {
-        changedSalary = emp.merits.filter(elm => elm.type === "الراتب المتغير").reduce((acc, elm) => acc + elm.amount, 0);
-      }
+    this.dateTo = val;
+    this.holidayDaysFn();
+    this.search(arguments);
+  }
+
+  private applyMonthValue(value: string) {
+    if (!value) {
+      return;
     }
-    let dayHours = workingHourPerDay;
-    let totalHours:any = workingHourPerDay * 60;
-    let totalHoursPerMonth = workingHourPerDay * 26 * 60;
-    let actualTotalMinutesPerMonth = 0;
-    totalHours = this.convertMinutesToHours(totalHoursPerMonth);
-    let hourPrice = fixedSalary/30/dayHours
-    emp.finger_print.forEach(elm=>{
-      elm.times = JSON.parse(elm.times.replace(/\\/g, ''));
-      elm['working_hours'] = workingHourPerDay;
-      let holiday = this.holidayDays.find(elm2 => elm2 == elm.date);
-      if (holiday) {
-        elm['holiday'] = true;
-      }
-      let actualTotalMinutes = 0;
-      hour = this.convertMinutesToHours(totalHours);
-      let [hours, minutes] = elm.hours.split(':').map(Number);
-      actualTotalMinutes += hours * 60 + minutes;
-      actualTotalMinutesPerMonth += hours * 60 + minutes;
-      if (elm.is_overTime_removed) {
-        actualTotalMinutesPerMonth -= (hours * 60 + minutes )-(60 * dayHours);
-      }
+    this.currentMonthValue = value;
+    const parsed = parseYearMonthValue(value);
+    if (!parsed) {
+      return;
+    }
+    this.year = parsed.year;
+    this.month = parsed.month;
+    const period = fingerprintPeriodForMonth(parsed.year, parsed.month);
+    this.dateFrom = period.dateFrom;
+    this.dateTo = period.dateTo;
+    this.holidayDaysFn();
+  }
 
-      if (elm.hours_permission) {
-        let [hours2, minutes2] = elm.hours_permission.split(':').map(Number);
-        actualTotalMinutesPerMonth += hours2 * 60 + minutes2;
-      }
+  /** تحويل سجل موظف من الـ API إلى صف الجدول — نفس حساب كشف الحضور والانصراف */
+  mapEmployeeMonthRow(elm: any): any {
+    const obj: any = {};
+    obj['salary_paid'] = Array.isArray(elm.salary_paid) && elm.salary_paid.length === 1;
+    obj['name'] = elm.name;
+    obj['id'] = elm.id;
+    obj['code'] = elm.code;
+    obj['level'] = elm.level;
+    obj['salary_type'] = elm.salary_type;
+    obj['fixed_salary'] = elm.fixed_salary;
 
-      if (elm.absence_deduction) {
-        actualTotalMinutesPerMonth -= dayHours * 60 * Number(elm.absence_deduction - 1);
-      }
-
-      let hoursDifference = actualTotalMinutes - totalHours;
-
-      let hoursDifferenceStr: string;
-      if (hoursDifference >= 0) {
-        hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
-        let salary = hoursDifference/60*hourPrice*1.5;
-        elm['salary_type']=salary;
-        elm['salary_type2']='حافز';
-      } else {
-        hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
-        let salary = hoursDifference/60*hourPrice;
-        if (elm.absence_deduction) {
-          salary = salary * Number(elm.absence_deduction);
-        }
-        if (elm.hours_permission) {
-          let [hours, minutes] = elm.hours_permission.split(':').map(Number);
-          salary += ((hours * 60 + minutes)/60 * hourPrice);
-        }
-        elm['salary_type']=salary * -1;
-        if (salary == 0) {
-          elm['salary_type']=salary;
-        }
-
-        elm['salary_type2']='خصم';
-        if (holiday && elm.check_in !== elm.check_out) {
-          salary = actualTotalMinutes/60*hourPrice*1.5;
-          elm['salary_type']=salary;
-          elm['salary_type2']='حافز';
-        }
-      }
-      elm['hoursDifference'] = hoursDifferenceStr;
-      if (holiday && elm.check_in !== elm.check_out) {
-        elm['hoursDifference'] = elm.hours;
-      }
-      tableData.push(elm);
+    const row = buildPayrollRowFromAttendance({
+      ...elm,
+      finger_print: elm.finger_print || [],
+      merits: elm.merits || [],
+      subtraction: elm.subtraction || [],
+      advance_payment: elm.advance_payment || [],
+    }, {
+      dateFrom: this.dateFrom,
+      dateTo: this.dateTo,
+      holidayDays: this.holidayDays,
     });
 
-    // total for month
+    obj['calc_salary'] = row.calc_salary;
+    obj['changed_salary'] = row.changedSalary;
+    obj['incentives'] = row.incentives;
+    obj['suits'] = row.suits;
+    obj['rewards'] = row.rewards;
+    obj['extraHours'] = row.extraHours;
+    obj['rival'] = row.rival;
+    obj['absence'] = row.absence;
+    obj['absence_sub'] = row.absence_sub;
+    obj['advance_payment'] = row.advancePayment;
+    obj['total_merit'] = row.totalMerit;
+    obj['total_sub'] = row.totalSub;
+    obj['noFingerPrints'] = row.noFingerPrints;
+    obj['absenceDetails'] = row.absenceDetails;
+    obj['isReviewed'] = row.isReviewed;
+    obj['calculated_net_total'] = row.netTotal;
 
-    if (tableData.length > 0) {
-      actualTotalMinutesPerMonth = actualTotalMinutesPerMonth - ((tableData.length-this.holidayDays.length-26) * dayHours*60);
-    }
-    let hoursDifference = actualTotalMinutesPerMonth - totalHoursPerMonth;
-
-
-
-    let hoursDifferenceStr: string;
-    if (hoursDifference >= 0) {
-      hoursDifferenceStr = this.convertMinutesToHours(hoursDifference);
+    const accrual = (elm.month_accruals && elm.month_accruals[0])
+      || (elm.monthAccruals && elm.monthAccruals[0])
+      || null;
+    if (obj['salary_paid'] && accrual && accrual.amount != null && Number(accrual.amount) >= 0) {
+      obj['net_total'] = Number(accrual.amount);
+      obj['net_from_accrual'] = true;
     } else {
-      hoursDifferenceStr = "-" + this.convertMinutesToHours(-hoursDifference);
+      obj['net_total'] = row.netTotal;
+      obj['net_from_accrual'] = false;
     }
-    // this.hoursDifferenceStr = hoursDifferenceStr;
-    let actualHours:any = this.convertMinutesToHours(actualTotalMinutesPerMonth);
-    // end total for month
-    let calcSalary = this.calcSalary(actualHours , hourPrice , dayHours , totalHours , emp.fixed_salary );
-    let reviewed = tableData[0].reviewed;
-    let absenceDays = tableData.filter(elm => elm.vacation == 0 && elm.check_in == '08:00 AM' && elm.check_out == '08:00 AM' && elm.hours_permission !== `0${dayHours}:00`);
-    let absenceDaysCount = absenceDays.reduce((total, elm) => {
-      let day = 1;
-      if (elm.absence_deduction) {
-        day = Number(elm.absence_deduction);
-      }
-      return total + day;
-    }, 0);
-    absenceDaysCount = absenceDaysCount - this.holidayDays.length;
-    let absenceDaysPrice = absenceDaysCount * dayHours * hourPrice;
-    let absenceDetails:any = {};
-    if (absenceDaysPrice > 0) {
-      absenceDetails['absenceDaysCount'] = absenceDaysCount;
-    }
-
-
-    if (Math.abs(hoursDifference) > absenceDaysCount * dayHours * 60) {
-      let absenceHours = this.convertMinutesToHours(Math.abs(hoursDifference) - absenceDaysCount * dayHours * 60);
-      let [hours, minutes] = absenceHours.split(':').map(Number);
-      let  absenceHoursPrice = ((hours * 60 + minutes)/60 * hourPrice);
-      absenceDetails['absenceHours'] = absenceHours;
-      absenceDetails['absenceHoursPrice'] = absenceHoursPrice;
-    }
-    return {calcSalary , reviewed , absenceDetails};
-  }
-
-  convertMinutesToHours(minutes: number): string {
-    let h = Math.floor(minutes / 60);
-    let m = minutes % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  }
-
-  calcSalary(empActualHours , hourPrice , dayHours , totalHours , fixedSalary ){
-    // this.hourPrice = this.fixedSalary/30/this.dayHours;
-    let [hours, minutes] = empActualHours.split(':').map(Number);
-    let actualHours = hours * 60 + minutes;
-    let totalActualHoursSalary = hourPrice * actualHours/60;
-    if (actualHours !== 0) {
-      totalActualHoursSalary = totalActualHoursSalary  + (hourPrice * (dayHours * 4) );
-    }
-    let [hours2, minutes2] = totalHours.split(':').map(Number);
-    if (actualHours > hours2 * 60 + minutes2) {
-      totalActualHoursSalary = fixedSalary + ((actualHours - hours2 * 60 + minutes2)/60 * hourPrice * 1.5);
-    }
-    let differnceSalary = totalActualHoursSalary - fixedSalary;
-    return {totalActualHoursSalary , differnceSalary , empActualHours};
+    return obj;
   }
 
   reviewMonth(e){
     if (this.user == 'Admin' && e.isReviewed == 0) {
-      this.empService.reviewMonth(this.currentMonthValue , e.id).subscribe(res=>{
-        if (res) {
-          this.search(arguments);
+      this.empService.reviewMonth(this.currentMonthValue , e.id, this.dateFrom, this.dateTo).subscribe({
+        next: (res) => {
+          if (res) {
+            this.search(arguments);
+            Swal.fire({
+              icon:'success',
+              timer:1500,
+              showConfirmButton:false
+            });
+          }
+        },
+        error: (err) => {
           Swal.fire({
-            icon:'success',
-            timer:1500,
-            showConfirmButton:false
-          })
-        }
-      })
+            icon: 'error',
+            title: err?.error?.message || 'تعذر مراجعة الشهر',
+          });
+        },
+      });
     }
   }
 
-  salaryCashing(e){
-    if (e.isReviewed == 0) {
-      Swal.fire({
-        icon:'error',
-        title: 'يرجي مراجعة كشف الحضور والانصراف',
-      })
+  private fillPaySourceIdSelect(typeSelect: HTMLSelectElement, idSelect: HTMLSelectElement): void {
+    const t = typeSelect.value;
+    const bundle = this.paymentSourcesBundle;
+    idSelect.innerHTML = '';
+    if (!bundle) {
       return;
     }
-    this.search(arguments);
-    const banks = this.banks;
-    let selectedBank;
-    const bankSelectOptions = banks.reduce((options, bank) => {
-      options[bank.id] = bank.name;
-      if (bank.name == 'خزينة المصنع') {
-        selectedBank = bank.id;
-      }
-      return options;
-    }, {});
+    const list = t === 'safe' ? bundle.safes : t === 'bank' ? bundle.banks : bundle.service_accounts;
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = '— اختر —';
+    idSelect.appendChild(opt0);
+    (list || []).forEach((row: any) => {
+      const o = document.createElement('option');
+      o.value = String(row.id);
+      const bal = row.balance != null ? Number(row.balance).toFixed(2) : '';
+      o.textContent = bal ? `${row.name} (رصيد: ${bal})` : row.name;
+      idSelect.appendChild(o);
+    });
+  }
 
-    Swal.fire({
-      title: `صرف مرتب ${e.name} عن شهر ${this.currentMonthValue}`,
-      input: 'select',
-      inputOptions: bankSelectOptions,
-      inputPlaceholder: 'اختر الخزينة',
-      inputValue: selectedBank,
+  private async promptPayrollDisbursementSource(title: string): Promise<{ source_type: string; source_id: number } | null> {
+    if (!this.paymentSourcesBundle) {
+      await Swal.fire({ icon: 'error', title: 'تعذر تحميل مصادر الصرف', text: 'تحقق من الاتصال ووحدة الحسابات (خزائن/بنوك/حسابات خدمية).' });
+      return null;
+    }
+    const html = `
+      <div class="text-end" style="direction:rtl;max-width:420px;margin:0 auto;">
+        <label class="d-block mb-1 small text-muted">نوع المصدر</label>
+        <select id="pay-src-type" class="swal2-input form-control mb-2">
+          <option value="safe">خزينة</option>
+          <option value="bank">بنك</option>
+          <option value="service_account">حساب خدمي</option>
+        </select>
+        <label class="d-block mb-1 small text-muted">المصدر (من شجرة الحسابات)</label>
+        <select id="pay-src-id" class="swal2-input form-control"></select>
+      </div>`;
+
+    const result = await Swal.fire({
+      title,
+      html,
       showCancelButton: true,
       confirmButtonText: 'تأكيد',
       cancelButtonText: 'إلغاء',
-      customClass: {
-        input: 'text-center'
-      }
-    }).then((bankResult) => {
-      if (bankResult.isConfirmed) {
-        let emp = this.data.find(elm => elm.id == e.id);
-        const selectedBankId = bankResult.value;
-        if (selectedBankId) {
-          let data = {
-            employee_id: e.id,
-            month: this.month,
-            year: this.year,
-            amount: emp.net_total,
-            bank_id: selectedBankId,
-          }
-          this.empService.addSalaryPayment(data).subscribe(result=>{
-            console.log(result);
-            if (result) {
-              Swal.fire({
-                icon : 'success',
-                timer:1500,
-                showConfirmButton:false,
-              }).then(result=>{
-                this.search(arguments);
-              });
-            }
-          },
-          (error)=>{
-            Swal.fire({
-              icon : 'error',
-              title: error.error.message,
-              timer:1500,
-              showConfirmButton:false,
-            })
-          });
-        } else{
-          Swal.fire({
-            icon:'error',
-            title: 'اختر الخزينة',
-          }).then(res=>{
-            this.salaryCashing(e);
-          })
+      didOpen: () => {
+        const ts = document.getElementById('pay-src-type') as HTMLSelectElement;
+        const ids = document.getElementById('pay-src-id') as HTMLSelectElement;
+        this.fillPaySourceIdSelect(ts, ids);
+        ts.addEventListener('change', () => this.fillPaySourceIdSelect(ts, ids));
+      },
+      preConfirm: () => {
+        const ts = document.getElementById('pay-src-type') as HTMLSelectElement;
+        const ids = document.getElementById('pay-src-id') as HTMLSelectElement;
+        if (!ids.value) {
+          Swal.showValidationMessage('اختر المصدر');
+          return false;
         }
-      }
+        return { source_type: ts.value, source_id: parseInt(ids.value, 10) };
+      },
+    });
+
+    if (result.isConfirmed && result.value) {
+      return result.value as { source_type: string; source_id: number };
+    }
+    return null;
+  }
+
+  async salaryCashing(e: any) {
+    if (e.isReviewed == 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'يرجي مراجعة كشف الحضور والانصراف',
+      });
+      return;
+    }
+    const emp = this.data.find((elm: any) => elm.id == e.id);
+    if (!emp) {
+      await Swal.fire({ icon: 'error', title: 'لم يُعثر على بيانات الموظف في الصفحة الحالية' });
+      return;
+    }
+
+    const src = await this.promptPayrollDisbursementSource(`صرف مرتب ${e.name} عن شهر ${this.currentMonthValue}`);
+    if (!src) {
+      return;
+    }
+
+    const data = {
+      employee_id: e.id,
+      month: this.month,
+      year: this.year,
+      amount: emp.net_total,
+      source_type: src.source_type,
+      source_id: src.source_id,
+    };
+
+    this.empService.addSalaryPayment(data).subscribe({
+      next: () => {
+        Swal.fire({
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false,
+        }).then(() => {
+          this.search(arguments);
+        });
+      },
+      error: (error) => {
+        Swal.fire({
+          icon: 'error',
+          title: error.error?.message || 'خطأ',
+          timer: 2500,
+          showConfirmButton: false,
+        });
+      },
+    });
+  }
+
+  async bulkSalaryDisbursement() {
+    if (!this.paymentSourcesBundle) {
+      await Swal.fire({ icon: 'error', title: 'تعذر تحميل مصادر الصرف من الحسابات' });
+      return;
+    }
+
+    this.empService.EmployeesPerMonth(5000, 1, this.month, this.year, this.param).subscribe({
+      next: async (result: any) => {
+        const sourceRows = this.asPayrollApiRows(result);
+        const rows = sourceRows.map((elm: any) => {
+          try {
+            return this.mapEmployeeMonthRow(elm);
+          } catch (err) {
+            console.error('تعذّر حساب صف المرتب', elm?.id, err);
+            return this.fallbackPayrollRow(elm);
+          }
+        });
+        const eligible = rows.filter(
+          (r: any) => !r.salary_paid && r.isReviewed != 0 && r.net_total > 0,
+        );
+        if (eligible.length === 0) {
+          await Swal.fire({
+            icon: 'info',
+            title: 'لا يوجد موظفون للصرف',
+            text: 'تأكد من المراجعة وأن الراتب غير مسدد وأن المحصلة أكبر من صفر.',
+          });
+          return;
+        }
+
+        const sum = eligible.reduce((acc: number, r: any) => acc + r.net_total, 0);
+        const confirmBulk = await Swal.fire({
+          title: 'صرف جماعي',
+          html: `<div class="text-end" style="direction:rtl">سيتم صرف مرتبات <strong>${eligible.length}</strong> موظفاً بإجمالي <strong>${sum.toFixed(2)}</strong> عن شهر ${this.currentMonthValue}.</div>`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'متابعة اختيار المصدر',
+          cancelButtonText: 'إلغاء',
+        });
+        if (!confirmBulk.isConfirmed) {
+          return;
+        }
+
+        const src = await this.promptPayrollDisbursementSource(
+          `اختر مصدر الصرف — ${eligible.length} موظف — شهر ${this.currentMonthValue}`,
+        );
+        if (!src) {
+          return;
+        }
+
+        const payments = eligible.map((r: any) => ({ employee_id: r.id, amount: r.net_total }));
+        this.empService
+          .bulkSalaryPayment({
+            month: Number(this.month),
+            year: Number(this.year),
+            source_type: src.source_type,
+            source_id: src.source_id,
+            payments,
+          })
+          .subscribe({
+            next: (res: any) => {
+              Swal.fire({
+                icon: 'success',
+                title: `تم صرف ${res.count ?? eligible.length} مرتب`,
+                timer: 2000,
+                showConfirmButton: false,
+              }).then(() => this.search(arguments));
+            },
+            error: (error) => {
+              Swal.fire({
+                icon: 'error',
+                title: error.error?.message || 'فشل الصرف الجماعي',
+                showConfirmButton: true,
+              });
+            },
+          });
+      },
+      error: async () => {
+        await Swal.fire({ icon: 'error', title: 'تعذر تحميل قائمة الموظفين' });
+      },
     });
   }
 

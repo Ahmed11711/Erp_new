@@ -1,18 +1,28 @@
 import { CanActivateFn, Router } from '@angular/router';
-import { AuthService } from '../auth/auth.service';
+import { RbacService } from '../core/rbac/rbac.service';
 import { inject } from '@angular/core';
+import { SystemLockService } from '../system-lock/system-lock.service';
 
-export const departmentGuard: CanActivateFn = (route, state) => {
-  const authService = inject(AuthService);
+/**
+ * حارس موحد بالصلاحيات فقط: يتطلب `data.rbacPermissions` غير فارغ ويمتلك المستخدم أياً منها (canAny).
+ * لم يعد استخدام الأقسام في التوجيه — صِغ الأدوار والقوالب لتمنح الـ slug المناسب.
+ */
+export const departmentGuard: CanActivateFn = (route) => {
+  const rbac = inject(RbacService);
   const router = inject(Router);
-  const allowedDepartments: string[] = route.data['allowedDepartments'];
-  const user = authService.getUser();
-
-  console.log('DepartmentGuard Check:', { user, allowedDepartments });
-
-  if (allowedDepartments.includes(user) || allowedDepartments.some(d => d.trim() === user?.toString().trim())) {
+  if (inject(SystemLockService).isRestricted) {
     return true;
   }
+  const rbacPerms = route.data['rbacPermissions'] as string[] | undefined;
+
+  const slugs = Array.isArray(rbacPerms)
+    ? rbacPerms.map((p) => (typeof p === 'string' ? p.trim() : '')).filter((p) => p !== '')
+    : [];
+
+  if (slugs.length > 0 && rbac.canAny(slugs)) {
+    return true;
+  }
+
   router.navigate(['/dashboard']);
   return false;
 };

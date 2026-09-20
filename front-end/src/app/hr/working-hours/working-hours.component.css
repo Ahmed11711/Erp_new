@@ -1,9 +1,57 @@
-.header{
+.header {
   background-color: black;
   color: white;
   text-align: center;
   font-size: 2rem;
   border-radius: 7px;
+}
+
+.page-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0;
+}
+
+.page-head__time {
+  min-width: 0;
+}
+
+.page-title.title.header {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.45rem 1rem;
+  font-size: clamp(1.05rem, 2.4vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 767.98px) {
+  .page-head {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    text-align: center;
+    padding: 0.75rem 0 0.5rem;
+  }
+
+  .page-head__time {
+    justify-self: start;
+  }
+
+  .page-head__spacer {
+    display: none;
+  }
+
+  .page-title.title.header {
+    white-space: normal;
+    font-size: 1.15rem;
+    padding: 0.5rem 0.75rem;
+  }
 }
 
 button[type="submit"] {

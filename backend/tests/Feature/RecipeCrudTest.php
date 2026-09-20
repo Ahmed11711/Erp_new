@@ -11,6 +11,7 @@ use App\Models\RecipeIngredient;
 use App\Models\Stock;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Enums\InventoryMovementType;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -54,13 +55,11 @@ class RecipeCrudTest extends TestCase
 
     private function makeRawMaterial(string $name, float $price): Category
     {
-        return Category::create([
+        $cat = Category::create([
             'category_name'   => $name . '_' . uniqid(),
             'category_price'  => $price,
             'unit_price'      => $price,
             'initial_balance' => 100,
-            'quantity'        => 100,
-            'total_price'     => $price * 100,
             'minimum_quantity' => 0,
             'warehouse'       => 'مخزن مواد خام',
             'production_id'   => $this->production->id,
@@ -68,6 +67,11 @@ class RecipeCrudTest extends TestCase
             'stock_id'        => $this->rawStock->id,
             'category_image'  => '',
         ]);
+        $cat->quantity = 100;
+        $cat->total_price = $price * 100;
+        $cat->save();
+
+        return $cat;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -228,9 +232,13 @@ class RecipeCrudTest extends TestCase
 
         StockMovement::create([
             'category_id'    => $mat->id,
+            'warehouse_stock_id' => $mat->stock_id,
             'warehouse_name' => 'مخزن مواد خام',
             'direction'      => 'out',
+            'movement_type'  => InventoryMovementType::RecipeExecution->value,
             'quantity'       => 5,
+            'unit_cost'      => 10,
+            'total_cost'     => 50,
             'reference_type' => 'recipe',
             'reference_id'   => $recipe->id,
         ]);
@@ -324,5 +332,49 @@ class RecipeCrudTest extends TestCase
         $this->assertTrue($isIgnore->invoke($service, 'الإجمالي'));
         $this->assertTrue($isIgnore->invoke($service, 'اجمالي التكاليف المباشرة'));
         $this->assertFalse($isIgnore->invoke($service, 'سعر المكن'));
+    }
+
+    public function test_ingredient_color_stripped_when_not_in_excel_finish_colors(): void
+    {
+        $service = app(\App\Services\Items\RecipeSheetImportService::class);
+        $reflection = new \ReflectionClass($service);
+        $method = $reflection->getMethod('sanitizeIngredientColorsForRecipe');
+        $method->setAccessible(true);
+
+        $recipe = [
+            'finish_colors' => ['Black'],
+            'ingredients' => [
+                ['item_name' => 'قماش', 'color' => 'Black', 'supports_color' => false],
+                ['item_name' => 'سوسته', 'color' => 'Maroon', 'supports_color' => false],
+                ['item_name' => 'جلد', 'color' => 'Black', 'supports_color' => true],
+            ],
+        ];
+
+        $method->invokeArgs($service, [&$recipe, true]);
+
+        $this->assertSame('Black', $recipe['ingredients'][0]['color']);
+        $this->assertNull($recipe['ingredients'][1]['color']);
+        $this->assertNull($recipe['ingredients'][2]['color']);
+    }
+
+    public function test_ingredient_colors_cleared_when_sheet_has_no_color_column(): void
+    {
+        $service = app(\App\Services\Items\RecipeSheetImportService::class);
+        $reflection = new \ReflectionClass($service);
+        $method = $reflection->getMethod('sanitizeIngredientColorsForRecipe');
+        $method->setAccessible(true);
+
+        $recipe = [
+            'finish_colors' => [],
+            'ingredients' => [
+                ['item_name' => 'قماش', 'color' => 'Black', 'supports_color' => false],
+                ['item_name' => 'سوسته', 'color' => 'Orange', 'supports_color' => false],
+            ],
+        ];
+
+        $method->invokeArgs($service, [&$recipe, false]);
+
+        $this->assertNull($recipe['ingredients'][0]['color']);
+        $this->assertNull($recipe['ingredients'][1]['color']);
     }
 }

@@ -29,13 +29,11 @@ return new class extends Migration
             }
             // حساب المصروف/التكلفة (مدين عند إنشاء الالتزام)
             if (!Schema::hasColumn('cimmitments', 'expense_account_id')) {
-                $table->foreignId('expense_account_id')->nullable()->after('payee_name')
-                    ->constrained('tree_accounts')->nullOnDelete();
+                $table->unsignedBigInteger('expense_account_id')->nullable()->after('payee_name');
             }
             // حساب الالتزام (دائن عند إنشاء الالتزام)
             if (!Schema::hasColumn('cimmitments', 'liability_account_id')) {
-                $table->foreignId('liability_account_id')->nullable()->after('expense_account_id')
-                    ->constrained('tree_accounts')->nullOnDelete();
+                $table->unsignedBigInteger('liability_account_id')->nullable()->after('expense_account_id');
             }
             // الحالة: pending=معلق، partial=مدفوع جزئياً، paid=مدفوع بالكامل
             if (!Schema::hasColumn('cimmitments', 'status')) {
@@ -48,6 +46,23 @@ return new class extends Migration
                 $table->text('notes')->nullable()->after('paid_amount');
             }
         });
+
+        if (Schema::hasTable('tree_accounts')) {
+            try {
+                Schema::table('cimmitments', function (Blueprint $table) {
+                    $table->foreign('expense_account_id')->references('id')->on('tree_accounts')->nullOnDelete();
+                });
+            } catch (\Exception $e) {
+                if (strpos($e->getMessage(), 'Duplicate') === false) throw $e;
+            }
+            try {
+                Schema::table('cimmitments', function (Blueprint $table) {
+                    $table->foreign('liability_account_id')->references('id')->on('tree_accounts')->nullOnDelete();
+                });
+            } catch (\Exception $e) {
+                if (strpos($e->getMessage(), 'Duplicate') === false) throw $e;
+            }
+        }
     }
 
     public function down()

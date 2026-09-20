@@ -48,12 +48,27 @@ class MetaWebhookController extends Controller
     public function handle(Request $request)
     {
         $data = $request->all();
-        Log::debug('Meta Webhook payload', ['json' => json_encode($data, JSON_UNESCAPED_UNICODE)]);
+        Log::info('Meta Webhook received', [
+            'has_entry' => isset($data['entry']),
+            'object' => $data['object'] ?? null,
+        ]);
 
         if (isset($data['entry'])) {
             foreach ($data['entry'] as $entry) {
-                foreach ($entry['changes'] as $change) {
-                    $value = $change['value'];
+                foreach ($entry['changes'] ?? [] as $change) {
+                    $value = $change['value'] ?? [];
+                    $statuses = $value['statuses'] ?? [];
+                    Log::info('Meta Webhook change', [
+                        'field' => $change['field'] ?? null,
+                        'has_messages' => isset($value['messages']),
+                        'has_statuses' => $statuses !== [],
+                        'status_values' => array_map(static fn ($s) => [
+                            'id' => $s['id'] ?? null,
+                            'status' => $s['status'] ?? null,
+                            'recipient_id' => $s['recipient_id'] ?? null,
+                            'error_code' => $s['errors'][0]['code'] ?? null,
+                        ], $statuses),
+                    ]);
 
                     if (isset($value['messages'])) {
                         $contacts = $value['contacts'] ?? [];
@@ -284,13 +299,10 @@ private function sendStaticReply($to)
 
         $phone = '+' . ltrim($from, '+');
 
-        $customer = Customer::firstOrCreate(
-            ['phone' => $phone],
-            [
-                'name' => $customerName,
-                'assigned_agent_id' => $this->assignToAgent(),
-            ]
-        );
+        $customer = Customer::findOrCreateByWhatsappPhone($phone, [
+            'name' => $customerName,
+            'assigned_agent_id' => $this->assignToAgent(),
+        ]);
 
         $receiverId = $customer->assigned_agent_id ?? $this->assignToAgent();
         if (! $customer->assigned_agent_id && $receiverId) {
@@ -320,6 +332,11 @@ private function sendStaticReply($to)
             'created_at' => date('Y-m-d H:i:s', $timestamp),
         ]);
 
+        Customer::whereKey($customer->id)->update([
+            'whatsapp_archived_at' => null,
+            'updated_at' => now(),
+        ]);
+
         Log::info('Meta Message Stored', [
             'db_id' => $message->id,
             'meta_id' => $metaId,
@@ -335,23 +352,81 @@ private function sendStaticReply($to)
         $status = $statusData['status'] ?? '';
         $errors = $statusData['errors'] ?? null;
         $recipientId = $statusData['recipient_id'] ?? null;
+        $errorCode = is_array($errors) ? ($errors[0]['code'] ?? null) : null;
+        $errorDetails = is_array($errors)
+            ? (string) ($errors[0]['error_data']['details'] ?? $errors[0]['title'] ?? $errors[0]['message'] ?? '')
+            : '';
 
+        Log::info('Meta WhatsApp status update', [
+            'id' => $id,
+            'status' => $status,
+            'recipient_id' => $recipientId,
+            'error_code' => $errorCode,
+            'error_details' => $errorDetails,
+        ]);
         if (in_array($status, ['failed', 'undelivered'], true)) {
             Log::warning('Meta WhatsApp delivery not completed', [
                 'id' => $id,
                 'status' => $status,
                 'recipient_id' => $recipientId,
+                'error_code' => $errorCode,
+                'error_details' => $errorDetails,
                 'errors' => $errors,
             ]);
         }
 
         $message = $id ? Message::where('twilio_message_sid', $id)->first() : null;
-
-        if ($message && $message->status !== $status) {
-            $message->status = $status;
-            $message->save();
-            Log::info('Meta Message Status Updated', ['id' => $id, 'status' => $status]);
+        if (! $message) {
+            return;
         }
+
+        $dbStatus = $status === 'undelivered' ? 'failed' : $status;
+        if (! in_array($dbStatus, ['sent', 'delivered', 'read', 'failed', 'received'], true)) {
+            $dbStatus = in_array($status, ['failed', 'undelivered'], true) ? 'failed' : $message->status;
+        }
+
+        $dirty = false;
+        if ($message->status !== $dbStatus) {
+            $message->status = $dbStatus;
+            $dirty = true;
+        }
+        if ($dbStatus === 'failed' && $errorCode) {
+            $reason = $this->describeWhatsAppDeliveryError((int) $errorCode, $errorDetails);
+            if ($reason !== '' && ! str_contains((string) $message->content, $reason)) {
+                $message->content = rtrim((string) $message->content)."\n❌ لم تصل: {$reason}";
+                $dirty = true;
+            }
+        }
+        if ($dirty) {
+            $message->save();
+            Log::info('Meta Message Status Updated', [
+                'id' => $id,
+                'status' => $dbStatus,
+                'error_code' => $errorCode,
+            ]);
+        }
+    }
+
+    private function describeWhatsAppDeliveryError(int $code, string $details): string
+    {
+        $map = [
+            131026 => 'الرقم غير مسجّل على واتساب أو تعذّر تسليم الرسالة',
+            131047 => 'خارج نافذة 24 ساعة ويلزم قالب معتمد',
+            131049 => 'واتساب منع التسليم (حد الرسائل التسويقية للمستلم). لا تعيد الإرسال لنفس الرقم فوراً — انتظر 24 ساعة أو اطلب من العميل مراسلة Magalis أولاً',
+            131050 => 'العميل غير موافق على الرسائل التسويقية (Marketing opt-in)',
+            131051 => 'نوع الرسالة غير مدعوم',
+            132012 => 'القالب في ميتا ما زال يتوقع صورة/هيدر — احذف الهيدر بالكامل من القالب وانتظر الموافقة',
+            132015 => 'القالب متوقف أو مرفوض في ميتا',
+            132001 => 'القالب غير موجود بهذه اللغة',
+            130429 => 'تم تجاوز حد الإرسال',
+            131045 => 'الرسالة محظورة من واتساب',
+        ];
+        $text = $map[$code] ?? ('خطأ واتساب #'.$code);
+        if ($details !== '') {
+            $text .= ' — '.$details;
+        }
+
+        return $text;
     }
 
     private function assignToAgent(): ?int

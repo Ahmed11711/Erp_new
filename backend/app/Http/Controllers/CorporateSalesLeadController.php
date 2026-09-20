@@ -12,6 +12,7 @@ use App\Models\CorporateSalesNotes;
 use App\Models\CorporateSalesProgress;
 use App\Models\CorporateSalesTracking;
 use App\Models\User;
+use App\Support\VatCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -41,6 +42,11 @@ class CorporateSalesLeadController extends Controller
 
         if ($country = request('country')) {
             $query->where('country_name', $country);
+        }
+
+        $search = trim((string) request('q', request('company_name', '')));
+        if ($search !== '' && $search !== '0') {
+            $query->where('company_name', 'like', '%' . $search . '%');
         }
 
         if ($statusId = request('statusId')) {
@@ -109,7 +115,11 @@ class CorporateSalesLeadController extends Controller
             'tool',
             'user:id,name',
             'status',
-        ])->paginate($itemsPerPage);
+            'offers' => function ($q) {
+                $q->select('id', 'offer', 'quote', 'total', 'converted_order_id', 'corporate_sales_lead_id')
+                    ->orderByDesc('id');
+            },
+        ])->withCount('offers')->paginate($itemsPerPage);
 
         return response()->json($data);
     }
@@ -130,7 +140,17 @@ class CorporateSalesLeadController extends Controller
             'tool',
             'user:id,name',
             'status',
+            'offers' => function ($q) {
+                $q->with(['creator:id,name', 'customerCompany:id,name'])
+                    ->orderByDesc('id');
+            },
         ])->first();
+
+        if ($data) {
+            foreach ($data->offers ?? [] as $offer) {
+                VatCalculator::applyToOffer($offer);
+            }
+        }
 
         return response()->json($data, 200);
     }

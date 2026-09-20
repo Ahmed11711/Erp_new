@@ -1,6 +1,6 @@
 <!-- واجهة الربط المحاسبي (عملاء/موردين) محفوظة في settings-account-linking.fragment.html عند الحاجة -->
 
-<div class="container-fluid p-4">
+<div class="container-fluid shopify-page p-4">
     <mat-card class="shopify-settings-card mb-4">
         <mat-card-header class="shopify-settings-card__header">
             <div mat-card-avatar class="shopify-settings-card__avatar">
@@ -8,81 +8,288 @@
             </div>
             <div class="shopify-settings-card__titles">
                 <mat-card-title>Shopify</mat-card-title>
-                <mat-card-subtitle>إعداد الخادم — Webhooks والمزامنة التكميلية</mat-card-subtitle>
+                <mat-card-subtitle>مزامنة تكميلية للطلبات وربط متغيرات المنتجات</mat-card-subtitle>
             </div>
         </mat-card-header>
         <mat-card-content class="shopify-settings-card__body p-3 pt-0">
-            <div class="shopify-settings__hint" dir="rtl">
-                <span class="shopify-settings__hint-label">ما يُضبط على الخادم (.env)</span>
-                <p class="shopify-settings__hint-text mb-2">
-                    <strong>المتجر والويب هوك:</strong>
-                    <code>SHOPIFY_SHOP_DOMAIN</code>، <code>SHOPIFY_ADMIN_ACCESS_TOKEN</code>،
-                    <code>SHOPIFY_WEBHOOK_SECRET</code>، واختياريًا <code>SHOPIFY_ALLOWED_SHOP_DOMAINS</code>.
-                    سجّل في Shopify ويب هوك للمسار:
-                    <code>…/api/shopify/webhook</code> (بعد <code>APP_URL</code> العام للخادم).
-                    للمواضيع: <code>orders/create</code>، <code>orders/updated</code>، <code>products/create</code>،
-                    <code>products/update</code>، واختياريًا <code>inventory_levels/update</code>.
-                    شغّل طابور Laravel (<code>QUEUE_CONNECTION</code> ليس <code>sync</code> في الإنتاج) مع <code>php artisan queue:work</code>.
-                </p>
-                <p class="shopify-settings__hint-text mb-2">
-                    <strong>استيراد الطلبات إلى ERP:</strong>
-                    <code>SHOPIFY_DEFAULT_ORDER_SOURCE_ID</code>، <code>SHOPIFY_DEFAULT_SHIPPING_METHOD_ID</code>،
-                    <code>SHOPIFY_FALLBACK_CATEGORY_ID</code>، <code>SHOPIFY_TRACKING_USER_ID</code>.
-                </p>
-                <p class="shopify-settings__hint-text mb-2">
-                    <strong>شركة الشحن الخارجية:</strong>
-                    <code>SHIPPING_API_BASE_URL</code>، <code>SHIPPING_API_TOKEN</code>،
-                    <code>SHIPPING_WEBHOOK_SECRET</code> (لـ <code>POST …/api/webhooks/shipping/update</code>).
-                </p>
-                <p class="shopify-settings__hint-text mb-0">
-                    <strong>صلاحيات تطبيق Shopify:</strong> قراءة/كتابة منتجات حسب الحاجة (<code>read_products</code> / <code>write_products</code>)؛
-                    طلبات (<code>read_orders</code> و<code>read_all_orders</code> عند الحاجة)؛ وصلاحيات التنفيذ/الإلغاء على الطلبات حسب ما يظهر في لوحة التطبيق.
-                </p>
-                <p class="shopify-settings__hint-text mb-0 mt-2 shopify-settings__hint-emphasis">
-                    <strong>المسار الأساسي:</strong> الطلبات والتحديثات الفورية تصل عبر <strong>Webhooks</strong> تلقائياً بعد ضبط المتجر والطابور.
-                    <strong>لا تعتمد على أزرار المزامنة</strong> في التشغيل اليومي — مخصصة لحالات مثل: طلبات قديمة قبل تفعيل الويب هوك، توقف مؤقت للخادم، أو إصلاح سجل ناقص.
-                </p>
-            </div>
-
-            <div class="shopify-settings__nav-row mb-3">
-                <a mat-stroked-button color="accent" routerLink="/dashboard/shopify">
+            <div class="shopify-toolbar" dir="rtl">
+                <button mat-stroked-button color="primary" type="button" class="shopify-toolbar__btn"
+                    (click)="testShopifyConnection()"
+                    [disabled]="shopifyStatusLoading || shopifySyncing || shopifyOrderSyncing">
+                    <mat-icon>cloud_done</mat-icon>
+                    اختبار الاتصال
+                </button>
+                <a mat-stroked-button color="accent" routerLink="/dashboard/shopify" class="shopify-toolbar__btn"
+                    *ngIf="rbac.canAny(['nav.shopify.dashboard', 'nav.shopify', 'system.rbac'])">
                     <mat-icon>dashboard</mat-icon>
-                    لوحة مراقبة الطلبات والمنتجات
+                    لوحة الطلبات والمنتجات
                 </a>
             </div>
 
-            <mat-expansion-panel class="shopify-settings__manual-panel" [expanded]="false">
+         
+            <mat-divider class="shopify-divider"></mat-divider>
+
+            <mat-expansion-panel class="shopify-settings__manual-panel" [expanded]="true">
                 <mat-expansion-panel-header>
-                    <mat-panel-title>أدوات اختبار ومزامنة تاريخية (اختياري)</mat-panel-title>
-                    <mat-panel-description>للصيانة وليس بديلاً للويب هوك</mat-panel-description>
+                    <mat-panel-title>مزامنة يدوية (تاريخية)</mat-panel-title>
+                    <mat-panel-description *ngIf="shopifyAutoImportOrders">لاسترجاع طلبات قديمة أو إعادة المزامنة</mat-panel-description>
+                    <mat-panel-description *ngIf="!shopifyAutoImportOrders">المصدر الوحيد لPull Orders إلى ERP</mat-panel-description>
                 </mat-expansion-panel-header>
-                <div class="shopify-settings__actions">
-                    <button mat-stroked-button color="primary" type="button" class="shopify-settings__btn"
-                        (click)="testShopifyConnection()"
-                        [disabled]="shopifyStatusLoading || shopifySyncing || shopifyOrderSyncing">
-                        <mat-icon>cloud_done</mat-icon>
-                        اختبار الاتصال
-                    </button>
-                    <button mat-stroked-button color="primary" type="button" class="shopify-settings__btn"
+
+                <!-- <div class="shopify-section" dir="rtl">
+                    <div class="shopify-section__head">
+                        <div class="shopify-section__icon-wrap shopify-section__icon-wrap--products">
+                            <mat-icon>inventory_2</mat-icon>
+                        </div>
+                        <div>
+                            <h3 class="shopify-section__title">متغيرات المنتجات → جدول الربط</h3>
+                            <p class="shopify-section__desc">حسب تاريخ <strong>إنشاء المنتج</strong> في Shopify؛ الموجود يُحدَّث.</p>
+                        </div>
+                    </div>
+                    <div class="shopify-settings__date-row">
+                        <mat-form-field appearance="outline" class="shopify-settings__date-field">
+                            <mat-label>من تاريخ</mat-label>
+                            <input matInput [matDatepicker]="prodFrom" [(ngModel)]="shopifyProductDateFrom" name="shopifyProductDateFrom"
+                                [disabled]="shopifySyncing || shopifyOrderSyncing || shopifyStatusLoading">
+                            <mat-datepicker-toggle matIconSuffix [for]="prodFrom"></mat-datepicker-toggle>
+                            <mat-datepicker #prodFrom></mat-datepicker>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="shopify-settings__date-field">
+                            <mat-label>إلى تاريخ</mat-label>
+                            <input matInput [matDatepicker]="prodTo" [(ngModel)]="shopifyProductDateTo" name="shopifyProductDateTo"
+                                [disabled]="shopifySyncing || shopifyOrderSyncing || shopifyStatusLoading">
+                            <mat-datepicker-toggle matIconSuffix [for]="prodTo"></mat-datepicker-toggle>
+                            <mat-datepicker #prodTo></mat-datepicker>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="shopify-settings__days-field">
+                            <mat-label>أيام (بدون نطاق)</mat-label>
+                            <input matInput type="number" min="0" max="3650" [(ngModel)]="shopifyProductDays" name="shopifyProductDays"
+                                [disabled]="shopifySyncing || shopifyOrderSyncing || shopifyStatusLoading">
+                            <mat-hint>0 = كل المنتجات إن وُجد تاريخين فارغان</mat-hint>
+                        </mat-form-field>
+                    </div>
+                    <button mat-flat-button color="accent" type="button" class="shopify-settings__btn shopify-settings__btn--primary"
                         (click)="syncShopifyProductMappings()"
-                        [disabled]="shopifySyncing || shopifyStatusLoading || shopifyOrderSyncing">
+                        [disabled]="shopifySyncing || shopifyOrderSyncing || shopifyStatusLoading">
                         <mat-icon>sync</mat-icon>
-                        مزامنة ربط المتغيرات (خرج API)
+                        مزامنة المنتجات
                     </button>
-                </div>
-                <div class="shopify-settings__orders">
-                    <mat-form-field appearance="outline" class="shopify-settings__days-field">
-                        <mat-label>أيام (0 = كل الطلبات)</mat-label>
-                        <input matInput type="number" min="0" max="3650" [(ngModel)]="shopifyOrderDays" name="shopifyOrderDays"
-                            [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
-                    </mat-form-field>
+
+                    <div class="shopify-sync-detail" *ngIf="shopifyProductSyncStats && shopifyProductSyncDetailRows.length" dir="rtl">
+                        <h4 class="shopify-sync-detail__title">نتيجة آخر مزامنة (متغيرات Shopify)</h4>
+                        <p class="shopify-sync-detail__meta">
+                            إجمالي المعالجة: <strong>{{ shopifyProductSyncStats.total }}</strong>
+                            — جديد: <strong>{{ shopifyProductSyncStats.created }}</strong>
+                          — تحديث: <strong>{{ shopifyProductSyncStats.updated }}</strong>
+                            <span class="shopify-sync-detail__warn" *ngIf="shopifyProductSyncStats.truncated">
+                                — عرض أول {{ shopifyProductSyncDetailRows.length }} صفاً فقط؛ الباقي في النظام لكن غير معروض هنا.
+                            </span>
+                        </p>
+                        <div class="shopify-sync-detail__scroll">
+                            <table class="shopify-sync-detail__table">
+                                <thead>
+                                    <tr>
+                                        <th>النوع</th>
+                                        <th>المنتج (Shopify)</th>
+                                        <th>المتغير</th>
+                                        <th>SKU</th>
+                                        <th>معرف المتغير</th>
+                                        <th>معرف المنتج</th>
+                                        <th>تصنيف ERP</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let row of shopifyProductSyncDetailRows; trackBy: trackShopifyVariantRow">
+                                        <td>
+                                            <span class="shopify-sync-detail__badge" [class.is-new]="row.action === 'created'" [class.is-upd]="row.action === 'updated'">
+                                                {{ shopifyProductActionLabel(row.action) }}
+                                            </span>
+                                        </td>
+                                        <td>{{ row.product_title || '—' }}</td>
+                                        <td>{{ row.variant_label || '—' }}</td>
+                                        <td>{{ row.sku || '—' }}</td>
+                                        <td>{{ row.shopify_variant_id }}</td>
+                                        <td>{{ row.shopify_product_id ?? '—' }}</td>
+                                        <td>{{ row.category_id }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div> -->
+
+                <mat-divider class="shopify-divider shopify-divider--inset"></mat-divider>
+
+                <div class="shopify-section" dir="rtl">
+                    <div class="shopify-section__head">
+                        <div class="shopify-section__icon-wrap shopify-section__icon-wrap--orders">
+                            <mat-icon>shopping_cart</mat-icon>
+                        </div>
+                        <div>
+                            <h3 class="shopify-section__title">الطلبات → ERP</h3>
+                            <p class="shopify-section__desc">حسب تاريخ <strong>إنشاء الطلب</strong>؛ الموجود يُحدَّث دون تكرار.</p>
+                        </div>
+                    </div>
+                    <div class="shopify-settings__date-row">
+                        <mat-form-field appearance="outline" class="shopify-settings__date-field">
+                            <mat-label>من تاريخ</mat-label>
+                            <input matInput [matDatepicker]="shopifyPickerFrom" [(ngModel)]="shopifyOrderDateFrom" name="shopifyOrderDateFrom"
+                                [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
+                            <mat-datepicker-toggle matIconSuffix [for]="shopifyPickerFrom"></mat-datepicker-toggle>
+                            <mat-datepicker #shopifyPickerFrom></mat-datepicker>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="shopify-settings__date-field">
+                            <mat-label>إلى تاريخ</mat-label>
+                            <input matInput [matDatepicker]="shopifyPickerTo" [(ngModel)]="shopifyOrderDateTo" name="shopifyOrderDateTo"
+                                [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
+                            <mat-datepicker-toggle matIconSuffix [for]="shopifyPickerTo"></mat-datepicker-toggle>
+                            <mat-datepicker #shopifyPickerTo></mat-datepicker>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="shopify-settings__days-field">
+                            <mat-label>أيام (بدون نطاق)</mat-label>
+                            <input matInput type="number" min="0" max="3650" [(ngModel)]="shopifyOrderDays" name="shopifyOrderDays"
+                                [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
+                            <mat-hint>0 = كل الطلبات إن وُجد التاريخان فارغان</mat-hint>
+                        </mat-form-field>
+                    </div>
                     <button mat-flat-button color="primary" type="button" class="shopify-settings__btn shopify-settings__btn--primary"
                         (click)="syncShopifyOrders()"
-                        [disabled]="shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
+                        [disabled]="shopifyOrderSyncing || shopifyOrderPreviewLoading || shopifySyncing || shopifyStatusLoading">
                         <mat-icon>shopping_cart</mat-icon>
-                        جلب طلبات من التاريخ (يدوي)
+                        {{ shopifyOrderPreviewLoading ? 'جاري المعاينة...' : 'Pull Orders' }}
                     </button>
+
+                    <div class="shopify-unmatched-panel" *ngIf="shopifyUnmatchedProducts.length" dir="rtl">
+                        <h4 class="shopify-unmatched-panel__title">
+                            منتجات Shopify غير مربوطة بأصناف ERP
+                        </h4>
+                        <p class="shopify-unmatched-panel__meta" *ngIf="shopifyOrderPreviewStats">
+                            تم جلب <strong>{{ shopifyOrderPreviewStats.orders_fetched }}</strong> طلب —
+                            <strong>{{ shopifyOrderPreviewStats.unmatched_count }}</strong> منتج/متغير يحتاج مراجعة.
+                            عدّل البيانات ثم أنشئ الأصناف المحددة أو تخطَّ والمتابعة (سيُستخدم الصنف الاحتياطي).
+                        </p>
+
+                        <div class="shopify-unmatched-panel__toolbar">
+                            <mat-checkbox [checked]="selectedUnmatchedCount() === shopifyUnmatchedProducts.length"
+                                [indeterminate]="selectedUnmatchedCount() > 0 && selectedUnmatchedCount() < shopifyUnmatchedProducts.length"
+                                (change)="toggleAllUnmatchedInclude($event.checked)">
+                                تحديد الكل
+                            </mat-checkbox>
+                            <span class="shopify-unmatched-panel__count">محدّد: {{ selectedUnmatchedCount() }}</span>
+                        </div>
+
+                        <div class="shopify-unmatched-panel__scroll">
+                            <table class="shopify-unmatched-panel__table">
+                                <thead>
+                                    <tr>
+                                        <th>إضافة</th>
+                                        <th>Shopify</th>
+                                        <th>اسم الصنف في ERP</th>
+                                        <th>SKU</th>
+                                        <th>سعر البيع</th>
+                                        <th>تكلفة</th>
+                                        <th>المخزن</th>
+                                        <th>الوحدة</th>
+                                        <th>طلبات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let row of shopifyUnmatchedProducts; trackBy: trackUnmatchedRow"
+                                        [class.is-active]="row.include">
+                                        <td class="shopify-unmatched-panel__cell--center">
+                                            <mat-checkbox [(ngModel)]="row.include" [name]="'inc-' + row.shopify_variant_id"
+                                                [disabled]="!row.shopify_variant_id"></mat-checkbox>
+                                        </td>
+                                        <td>
+                                            <div class="shopify-unmatched-panel__shop-name">{{ row.shopify_name }}</div>
+                                            <div class="shopify-unmatched-panel__variant-id" *ngIf="row.shopify_variant_id">
+                                                #{{ row.shopify_variant_id }}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <input class="shopify-field" type="text" [(ngModel)]="row.name"
+                                                [name]="'name-' + row.shopify_variant_id" [disabled]="!row.include"
+                                                placeholder="اسم الصنف">
+                                        </td>
+                                        <td>
+                                            <input class="shopify-field" type="text" [(ngModel)]="row.sku"
+                                                [name]="'sku-' + row.shopify_variant_id" [disabled]="!row.include"
+                                                placeholder="SKU">
+                                        </td>
+                                        <td>
+                                            <input class="shopify-field shopify-field--num" type="number" min="0" step="0.01"
+                                                [(ngModel)]="row.sell_total_price" [name]="'sell-' + row.shopify_variant_id"
+                                                [disabled]="!row.include">
+                                        </td>
+                                        <td>
+                                            <input class="shopify-field shopify-field--num" type="number" min="0" step="0.01"
+                                                [(ngModel)]="row.category_price" [name]="'cost-' + row.shopify_variant_id"
+                                                [disabled]="!row.include">
+                                        </td>
+                                        <td>
+                                            <select class="shopify-field shopify-field--select" [(ngModel)]="row.stock_id"
+                                                [name]="'stock-' + row.shopify_variant_id" [disabled]="!row.include">
+                                                <option [ngValue]="null" disabled>اختر المخزن</option>
+                                                <option *ngFor="let s of stocks" [ngValue]="s.id">{{ s.name || s.stock_name }}</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <select class="shopify-field shopify-field--select" [(ngModel)]="row.measurement_id"
+                                                [name]="'unit-' + row.shopify_variant_id" [disabled]="!row.include">
+                                                <option [ngValue]="null" disabled>اختر الوحدة</option>
+                                                <option *ngFor="let m of measurements" [ngValue]="m.id">{{ m.unit }}</option>
+                                            </select>
+                                        </td>
+                                        <td class="shopify-unmatched-panel__cell--center">
+                                            <span class="shopify-unmatched-panel__orders-badge">{{ row.order_count }}</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="shopify-unmatched-panel__actions">
+                            <button mat-stroked-button type="button" (click)="skipUnmatchedAndImportOrders()"
+                                [disabled]="shopifyOrderSyncing || shopifyOrderPreviewLoading">
+                                تخطي والمتابعة بدون إنشاء
+                            </button>
+                            <button mat-flat-button color="accent" type="button"
+                                (click)="createSelectedUnmatchedAndImportOrders()"
+                                [disabled]="shopifyOrderSyncing || shopifyOrderPreviewLoading || selectedUnmatchedCount() === 0">
+                                <mat-icon>add_box</mat-icon>
+                                إنشاء المحدد ({{ selectedUnmatchedCount() }}) ومتابعة السحب
+                            </button>
+                        </div>
+                    </div>
                 </div>
+
+
+                <mat-divider class="shopify-divider"></mat-divider>
+
+                <!-- <div class="shopify-section shopify-section--toggle" dir="rtl">
+                    <div class="shopify-section__head">
+                        <div class="shopify-section__icon-wrap shopify-section__icon-wrap--orders">
+                            <mat-icon>sync</mat-icon>
+                        </div>
+                        <div>
+                            <h3 class="shopify-section__title">استيراد الطلبات</h3>
+                            <p class="shopify-section__desc" *ngIf="shopifyAutoImportOrders">
+                                الطلبات تُسحَب تلقائياً عند إنشائها أو تحديثها في Shopify عبر Webhooks.
+                            </p>
+                            <p class="shopify-section__desc shopify-section__desc--warn" *ngIf="!shopifyAutoImportOrders">
+                                الاستيراد التلقائي متوقف؛ استخدم «Pull Orders» أدناه للمزامنة اليدوية فقط.
+                            </p>
+                        </div>
+                    </div>
+                    <mat-slide-toggle
+                        color="primary"
+                        [checked]="shopifyAutoImportOrders"
+                        (change)="onShopifyAutoImportOrdersChange($event.checked)"
+                        [disabled]="shopifyIntegrationSettingsLoading || shopifyIntegrationSettingsSaving || shopifyOrderSyncing || shopifySyncing || shopifyStatusLoading">
+                        استيراد تلقائي عبر Webhooks
+                    </mat-slide-toggle>
+                </div> -->
+    
             </mat-expansion-panel>
         </mat-card-content>
     </mat-card>

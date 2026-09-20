@@ -6,6 +6,8 @@ use App\Models\Setting;
 use App\Models\TreeAccount;
 use App\Models\customerCompany;
 use App\Models\Supplier;
+use App\Models\Employee;
+use App\Services\Accounting\AccountLinkingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -48,13 +50,17 @@ class SettingController extends Controller
         try {
             if ($type === 'customer') {
                 if ($subType === 'corporate') {
+                    $linking = app(AccountLinkingService::class);
                     $companies = customerCompany::all();
                     foreach ($companies as $company) {
                         if ($company->tree_account_id) {
                             $this->moveAccount($company->tree_account_id, $parentAccount);
                         } else {
-                            // إنشاء حساب جديد للعميل تحت الحساب الأب المحدث
-                            $account = $this->createChildAccount($parentAccount, $company->name ?? 'عميل ' . $company->id, $parentAccount->type ?? 'asset');
+                            $account = $linking->createChildAccount(
+                                $parentAccount,
+                                $company->name ?? 'عميل ' . $company->id,
+                                $parentAccount->type ?? 'asset'
+                            );
                             $company->tree_account_id = $account->id;
                             $company->save();
                         }
@@ -70,6 +76,22 @@ class SettingController extends Controller
                         $account = $this->createChildAccount($parentAccount, $supplier->supplier_name ?? 'مورد ' . $supplier->id, $parentAccount->type ?? 'liability');
                         $supplier->tree_account_id = $account->id;
                         $supplier->save();
+                    }
+                }
+            } elseif ($type === 'employee') {
+                $linking = app(AccountLinkingService::class);
+                $employees = Employee::all();
+                foreach ($employees as $employee) {
+                    if ($employee->payable_tree_account_id) {
+                        $this->moveAccount($employee->payable_tree_account_id, $parentAccount);
+                    } else {
+                        $account = $linking->createChildAccount(
+                            $parentAccount,
+                            $employee->name ?? 'موظف ' . $employee->id,
+                            $parentAccount->type ?? 'liability'
+                        );
+                        $employee->payable_tree_account_id = $account->id;
+                        $employee->save();
                     }
                 }
             }

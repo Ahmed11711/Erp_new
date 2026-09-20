@@ -1,0 +1,130 @@
+/* Status multi-filter dropdown */
+.categories-status-report .filter-chips.menu-open {
+  overflow: visible;
+}
+
+.chip-status {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  z-index: 1;
+}
+
+.chip-status .status-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 8px;
+  direction: rtl;
+}
+
+.status-menu-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.status-menu-actions button {
+  flex: 1;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  color: #334155;
+  cursor: pointer;
+}
+
+.status-menu-actions button:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #1f2937;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.status-option:hover {
+  background: #f8fafc;
+}
+
+.status-option input {
+  accent-color: #2563eb;
+}
+
+/* Item identity attrs */
+.item-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.item-name {
+  font-weight: 700;
+}
+
+.item-meta {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.item-attrs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.attr {
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.attr-label {
+  display: block;
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.attr-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+@media (max-width: 720px) {
+  .item-attrs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

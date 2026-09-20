@@ -171,7 +171,7 @@ export class DialogWhatsAppMessageComponent implements OnInit {
     this.whatsappService.sendMetaTemplateFromOrder({
       order_id: order.id,
       template_name: this.selectedMetaTemplate.name,
-      language_code: this.selectedMetaTemplate.language || 'ar',
+      language_code: this.selectedMetaTemplate.api_language_code || this.selectedMetaTemplate.language || 'ar',
       body_parameters: bodyParameters,
       phone_number_id: this.selectedPhoneNumberId ?? undefined,
     }).subscribe({
@@ -180,14 +180,21 @@ export class DialogWhatsAppMessageComponent implements OnInit {
         if (res.success) {
           this.onCloseClick();
           const followupFailed = res.followup_error != null && res.followup_error !== '';
-          if (followupFailed) {
+          const held = String(res.message_status || '').toLowerCase() === 'held_for_quality_assessment';
+          if (held) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'واتساب أوقف الرسالة للمراجعة',
+              text: 'القالب تسويقي: واتساب قبلها ولم يسلّمها بعد (أو قد لا تصل). راجع حالة القالب في مدير أعمال ميتا.',
+            });
+          } else if (followupFailed) {
             Swal.fire({
               icon: 'warning',
               title: 'تم إرسال القالب',
               text: 'لم يُرسل نص المتابعة تلقائياً (غالباً يلزم أن يكون العميل ضمن نافذة المحادثة 24 ساعة).',
             });
           } else {
-            Swal.fire({ icon: 'success', title: 'تم إرسال القالب بنجاح', timer: 1500, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: 'تم قبول القالب من واتساب', timer: 2000, showConfirmButton: false });
           }
           if (this.data.refreshData) this.data.refreshData();
         } else {

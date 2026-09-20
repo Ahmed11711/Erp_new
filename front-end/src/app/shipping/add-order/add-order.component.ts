@@ -15,9 +15,13 @@ import { DialogAddCompanyComponent } from '../dialog-add-company/dialog-add-comp
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { AuthService } from 'src/app/auth/auth.service';
+import { catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
+import { calculateVat } from 'src/app/shared/utils/vat';
 
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
-import { SafeService } from 'src/app/accounting/services/safe.service'; // Import
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { dateToIsoString } from 'src/app/shared/date/date-utils';
 
 
 @Component({
@@ -38,6 +42,9 @@ export class AddOrderComponent implements OnInit {
   serviceAccountsData: any[] = []; // Service Accounts Data
   imgUrl!: string;
   specialStatus: boolean = false;
+  orderDateMin = '';
+  orderDateMax = '';
+  deliveryDateMin = '';
 
   constructor(private orderSource: OrderSourceService,
     private shippingWay: ShippingWayService,
@@ -60,17 +67,28 @@ export class AddOrderComponent implements OnInit {
   ngOnInit() {
     this.user = this.authService.getUser();
     this.orderSource.data().subscribe(reuslt => this.orderSources = reuslt);
-    this.orderService.getNumbers().subscribe((reuslt: any) => this.numbers = reuslt);
     this.shippingWay.data().subscribe(result => this.shippingWays = result);
-    this.orderService.getProducts().subscribe((result: any) => this.products = result);
-    this.bankService.bankSelect().subscribe((result: any) => this.banksData = result);
-    this.serviceAccountsService.index().subscribe((result: any) => this.serviceAccountsData = result); // Fetch Service Accounts
-
     this.http.get('assets/egypt/governorates.json').subscribe((data: any) => this.location = data);
     this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
       this.cities = data.filter((elem: any) => elem.governorate_id == 1);
     });
-    this.safeService.getAll().subscribe((result: any) => this.safesData = result.data || result);
+    setTimeout(() => {
+      this.orderService.getNumbers().subscribe((reuslt: any) => this.numbers = reuslt);
+      this.orderService.getProducts().pipe(catchError(() => of([]))).subscribe((result: any) => {
+        this.products = Array.isArray(result) ? result : [];
+      });
+      this.bankService.bankSelect().subscribe((result: any) => this.banksData = result);
+      this.serviceAccountsService.index().subscribe((result: any) => this.serviceAccountsData = result);
+      this.safeService.getAll().subscribe((result: any) => this.safesData = result.data || result);
+    }, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const fourDaysAgo = new Date(today);
+    fourDaysAgo.setDate(today.getDate() - 4);
+    this.orderDateMin = dateToIsoString(fourDaysAgo) || '';
+    this.orderDateMax = dateToIsoString(today) || '';
+    this.deliveryDateMin = this.orderDateMax;
 
     this.form.patchValue({
       customer_type: 'افراد',
@@ -78,15 +96,19 @@ export class AddOrderComponent implements OnInit {
       governorate: 'المحافظة',
       order_source_id: 'مصدر الطلب',
       shipping_method_id: 'طريقة الشحن',
-      city: 'المدينة'
+      city: 'المدينة',
+      order_date: this.orderDateMax,
     });
   }
 
   customerTypeVal: string = 'افراد';
+  applyVat: boolean = false;
   customerType(e: any) {
     this.customerTypeVal = e.target.value;
     if (this.customerTypeVal === 'شركة') {
+      this.applyVat = true;
       this.vatPercent = 14;
+      this.changedVat = false;
       this.form.get('customer_name')?.reset();
       this.form.get('customer_phone_1')?.reset();
       this.form.get('customer_phone_2')?.reset();
@@ -97,7 +119,9 @@ export class AddOrderComponent implements OnInit {
       });
       this.getCompanies();
     } else {
+      this.applyVat = false;
       this.vatPercent = 0;
+      this.vat = 0;
       this.changedVat = false;
       this.selectedCompany = false;
       this.form.get('customer_name')?.reset();
@@ -115,6 +139,19 @@ export class AddOrderComponent implements OnInit {
     this.calc(arguments);
   }
 
+  onApplyVatChange() {
+    if (this.applyVat) {
+      this.vatPercent = 14;
+      this.changedVat = false;
+    } else {
+      this.vatPercent = 0;
+      this.vat = 0;
+      this.changedVat = true;
+      this.form.patchValue({ vat: 0 });
+    }
+    this.calc(arguments);
+  }
+
   //govern and city
   location: any[] = [];
   cities: any[] = [];
@@ -128,35 +165,6 @@ export class AddOrderComponent implements OnInit {
     }
   }
   //end
-
-  dateSelected = false;
-  date: any;
-  deliveryDate: any;
-
-  myFilter = (d: Date | null): boolean => {
-    const today = new Date();
-    const selectedDate = d || today;
-    const timeDifference = Math.floor((today.getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24));
-    return timeDifference >= 0 && timeDifference <= 4;
-  };
-
-  deliveryDateFilter = (d: Date | null): boolean => {
-    const today = new Date();
-    const selectedDate = d || today;
-    const timeDifference = Math.floor((today.getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24));
-    return timeDifference <= 0;
-  };
-
-  OnDateChange(event) {
-    const inputDate = new Date(event);
-    this.date = this.datePipe.transform(inputDate, 'yyyy-M-d');
-    this.dateSelected = true;
-  }
-
-  OnDeliveryDateChange(event) {
-    const inputDate = new Date(event);
-    this.deliveryDate = this.datePipe.transform(inputDate, 'yyyy-M-d');
-  }
 
   imgtext: string = "صورة الايصال"
   fileopend: boolean = false;
@@ -204,7 +212,7 @@ export class AddOrderComponent implements OnInit {
     'vat': new FormControl(null),
     'maintenance_cost': new FormControl(null),
     'special_details': new FormControl(null),
-    'payment_type': new FormControl('bank'), // Default to bank
+    'payment_type': new FormControl('pending'),
     'safe_id': new FormControl(null),
     'service_account_id': new FormControl(null),
   })
@@ -218,8 +226,8 @@ export class AddOrderComponent implements OnInit {
       data.prepaid_amount = this.prepaid_amount || 0;
       data.discount = this.discount || 0;
       data.net_total = this.net_total;
-      data.order_date = this.date;
-      data.delivery_date = this.deliveryDate || null;
+      data.order_date = this.toBackendDate(data.order_date);
+      data.delivery_date = this.toBackendDate(data.delivery_date);
       data.vat = this.vat;
       data.companyID = this.companyID;
       const tax_authority = this.totalSum;
@@ -227,12 +235,13 @@ export class AddOrderComponent implements OnInit {
 
       const formData = new FormData();
       formData.append('customer_name', data.customer_name);
-      formData.append('payment_type', data.payment_type);
-      if (data.payment_type === 'bank') {
+      const paymentType = data.prepaid_amount > 0 ? (data.payment_type || 'pending') : 'none';
+      formData.append('payment_type', paymentType);
+      if (paymentType === 'bank' && data.bank) {
         formData.append('bank', data.bank);
-      } else if (data.payment_type === 'safe') {
+      } else if (paymentType === 'safe' && data.safe_id) {
         formData.append('safe_id', data.safe_id);
-      } else if (data.payment_type === 'service_account') {
+      } else if (paymentType === 'service_account' && data.service_account_id) {
         formData.append('service_account_id', data.service_account_id);
       }
       formData.append('customer_type', data.customer_type);
@@ -413,6 +422,7 @@ export class AddOrderComponent implements OnInit {
     this.discount = 0;
     this.maintenanceAmount = 0;
     this.shipping_cost = 0;
+    this.form.patchValue({ payment_type: 'pending' });
     this.calc(arguments);
   }
 
@@ -604,15 +614,24 @@ export class AddOrderComponent implements OnInit {
 
 
   calc(e: any) {
-    // this.totalInvoice = (this.productsPrice + this.shipping_cost) * (1+this.vatPercent/100);
-    this.totalInvoice = (this.productsPrice + this.shipping_cost + this.maintenanceAmount);
-    if (e?.target?.id == 'vat') {
-      this.changedVat = true;
+    this.productsPrice = 0;
+    this.order_details.forEach(elm => {
+      this.productsPrice += elm.total;
+    });
+    if (this.customerTypeVal === 'شركة' && this.applyVat) {
+      if (e?.target?.id == 'vat') {
+        this.changedVat = true;
+      }
+      if (!this.changedVat) {
+        this.vat = calculateVat(this.productsPrice, this.vatPercent > 0);
+      }
+    } else {
+      this.vat = 0;
     }
-    if (!this.changedVat) {
-      this.vat = this.totalInvoice * this.vatPercent / 100;
+    this.totalInvoice = this.productsPrice + this.shipping_cost + this.maintenanceAmount;
+    if (this.customerTypeVal === 'شركة' && this.applyVat) {
+      this.totalInvoice += this.vat;
     }
-    this.totalInvoice = this.totalInvoice + this.vat;
     this.net_total = this.totalInvoice - this.prepaid_amount - this.discount;
   }
 
@@ -642,6 +661,17 @@ export class AddOrderComponent implements OnInit {
 
   resetInp() {
     this.form.get('productprice')?.reset();
+  }
+
+  private toBackendDate(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) {
+      return value;
+    }
+    return `${Number(match[1])}-${Number(match[2])}-${Number(match[3])}`;
   }
 
 }

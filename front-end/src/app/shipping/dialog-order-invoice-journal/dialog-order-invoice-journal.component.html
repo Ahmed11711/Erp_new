@@ -1,0 +1,112 @@
+<h1 mat-dialog-title dir="rtl">مراجعة القيود قبل الترحيل — طلب #{{ data.orderId }}</h1>
+<div mat-dialog-content dir="rtl" class="invoice-journal-dialog">
+  <p class="invoice-journal-meta" *ngIf="data.customerName || data.netTotal != null">
+    <span *ngIf="data.customerName">{{ data.customerName }}</span>
+    <span *ngIf="data.netTotal != null" dir="ltr">صافي الفاتورة: {{ data.netTotal | number:'1.2-2' }} EGP</span>
+  </p>
+
+  <div *ngIf="loading" class="invoice-journal-state">جاري تجهيز مسودة القيود…</div>
+  <div *ngIf="!loading && loadError" class="invoice-journal-error">{{ loadError }}</div>
+  <div *ngIf="!loading && !canPost && reason" class="invoice-journal-error">{{ reason }}</div>
+
+  <form [formGroup]="form" *ngIf="!loading && !loadError">
+    <div formArrayName="journals">
+      <section class="journal-block" *ngFor="let journal of journals.controls; let j = index" [formGroupName]="j" [class.is-readonly]="!journal.get('can_post')?.value">
+        <header class="journal-block__head">
+          <div>
+            <strong>{{ journal.get('title')?.value }}</strong>
+            <small *ngIf="journal.get('can_post')?.value">يمكن تعديل الحسابات والمبالغ قبل الترحيل</small>
+          </div>
+          <span class="journal-block__badge" [class.is-ready]="journal.get('can_post')?.value">
+            {{ journalBadge(j) }}
+          </span>
+        </header>
+
+        <p class="cogs-preview__reason" *ngIf="showJournalReason(j)" [class.is-warning]="!drafts[j].posted">
+          {{ drafts[j].reason }}
+        </p>
+
+        <ng-container *ngIf="journal.get('can_post')?.value">
+          <div class="invoice-journal-head">
+            <label>
+              التاريخ
+              <input type="date" formControlName="date">
+            </label>
+            <label class="grow">
+              بيان القيد
+              <input type="text" formControlName="description">
+            </label>
+          </div>
+
+          <div class="invoice-journal-toolbar">
+            <strong>بنود القيد</strong>
+            <div>
+              <button type="button" class="ghost" (click)="resetJournal(j)" [disabled]="!drafts[j].lines.length">استعادة المقترح</button>
+              <button type="button" class="ghost" (click)="addLine(j)">إضافة بند</button>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>الحساب</th>
+                <th>مدين</th>
+                <th>دائن</th>
+                <th>البيان</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody formArrayName="lines">
+              <tr *ngFor="let line of journalLines(j).controls; let i = index" [formGroupName]="i">
+                <td>
+                  <input
+                    type="text"
+                    *ngIf="itemAccountCtrls[j]?.[i]"
+                    [formControl]="itemAccountCtrls[j][i]"
+                    [matAutocomplete]="accountAuto"
+                    (focus)="refreshRowFilter(j, i)"
+                    (blur)="onAccountBlur(j, i)"
+                    placeholder="ابحث بالكود أو الاسم…"
+                    autocomplete="off"
+                  />
+                  <mat-autocomplete #accountAuto="matAutocomplete" [displayWith]="displayAccountOption" (optionSelected)="onAccountSelected(j, i, $event)">
+                    <mat-option *ngFor="let acc of rowFilteredAccounts[j]?.[i] || []" [value]="acc">{{ acc.label }}</mat-option>
+                  </mat-autocomplete>
+                </td>
+                <td><input type="number" min="0" step="0.01" formControlName="debit"></td>
+                <td><input type="number" min="0" step="0.01" formControlName="credit"></td>
+                <td><input type="text" formControlName="description"></td>
+                <td>
+                  <button type="button" class="danger" (click)="removeLine(j, i)" [disabled]="journalLines(j).length <= 2">حذف</button>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>المجموع</th>
+                <th dir="ltr">{{ journalTotals(j).debit | number:'1.2-2' }}</th>
+                <th dir="ltr">{{ journalTotals(j).credit | number:'1.2-2' }}</th>
+                <th colspan="2" [class.unbalanced]="!isJournalBalanced(j)" [class.balanced]="isJournalBalanced(j)">
+                  الفرق: {{ journalTotals(j).balance | number:'1.2-2' }}
+                </th>
+              </tr>
+            </tfoot>
+          </table>
+        </ng-container>
+      </section>
+    </div>
+    <p class="hint">كل قيد يُرحَّل لوحده بعد التعديل. لن يُحذف أي قيد موجود مسبقاً.</p>
+  </form>
+</div>
+<div mat-dialog-actions align="end" dir="rtl">
+  <button type="button" mat-button (click)="close()">إلغاء</button>
+  <button
+    type="button"
+    mat-flat-button
+    color="primary"
+    (click)="submit()"
+    [disabled]="loading || submitting || !canPost || !allEditableBalanced || form.invalid"
+  >
+    {{ submitting ? 'جاري الترحيل…' : 'ترحيل القيود' }}
+  </button>
+</div>

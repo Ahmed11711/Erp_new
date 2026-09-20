@@ -1,0 +1,89 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.app-date-input-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.app-date-input-field {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0.5rem 2.75rem 0.5rem 0.75rem !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  background-color: #fff !important;
+  color: #0f172a !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  line-height: 1.5;
+  text-align: left !important;
+  direction: ltr !important;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: text;
+}
+
+.app-date-input-field:focus {
+  outline: none !important;
+  border-color: #82225e !important;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15) !important;
+}
+
+.app-date-input-field--invalid {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12) !important;
+}
+
+.app-date-input-field:disabled {
+  background-color: #f8fafc !important;
+  color: #64748b !important;
+  cursor: not-allowed;
+}
+
+.app-date-input-field::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.app-date-input-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  left: auto;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: calc(100% - 6px);
+  min-height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #82225e;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.app-date-input-toggle:hover:not(:disabled) {
+  background: #fdf2f8;
+  color: #6b1c4e;
+}
+
+.app-date-input-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-date-input-toggle mat-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  font-size: 1.1rem;
+}

@@ -12,6 +12,7 @@ class OffersCategory extends Model
     protected $fillable = [
         'offer_id',
         'category_name',
+        'matched_category_id',
         'description',
         'category_quantity',
         'old_category_price',
@@ -25,4 +26,8 @@ class OffersCategory extends Model
         return $this->belongsTo(Offers::class);
     }
 
+    public function matchedCategory()
+    {
+        return $this->belongsTo(Category::class, 'matched_category_id');
+    }
 }

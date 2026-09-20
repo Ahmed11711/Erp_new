@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
+import { safeInternalReturnUrl } from '../core/dashboard-url.serializer';
 
 @Injectable({
   providedIn: 'root'
@@ -13,9 +14,9 @@ export class AdminGuard implements CanActivate {
     const token = this.loginService.getToken();
     if (token) {
       return true;
-    }else {
-      this.router.navigate(['']);
-      return false
     }
+    const returnUrl = safeInternalReturnUrl(state.url);
+    this.router.navigate([''], { queryParams: { returnUrl } });
+    return false;
   }
 }

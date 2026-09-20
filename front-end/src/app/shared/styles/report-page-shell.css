@@ -614,13 +614,15 @@ table.report-data-table tfoot {
 }
 
 /* ---------- hidden print/export table ---------- */
+/* Off-screen but full layout size so html2canvas can capture it */
 .print-only-table {
   position: absolute;
   left: -10000px;
-  top: auto;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
+  top: 0;
+  width: 794px;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
 }
 
 /* ======================= Responsive ======================= */

@@ -42,3 +42,57 @@ i{
 ::ng-deep .mat-mdc-paginator-container{
   justify-content: center !important;
 }
+
+.account-cell {
+  max-width: 200px;
+}
+
+.account-link-btn {
+  border: none;
+  background: transparent;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-height: 32px;
+}
+
+.account-link-icon {
+  font-size: 22px;
+  width: 22px;
+  height: 22px;
+}
+
+.account-link-icon--empty {
+  color: #82225e;
+}
+
+.account-link-icon--linked {
+  color: #2e7d32;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.account-linked-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  color: #0e4057;
+  text-align: right;
+  line-height: 1.2;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-link-btn:hover .account-link-icon--empty {
+  color: #0e4057;
+}
+

@@ -1,14 +1,16 @@
 <div id="container" class="container-fluid">
-  <div class="row py-3">
-    <div class="col-4 d-flex align-items-center">
+  <div class="page-head">
+    <div class="page-head__time">
       <app-time></app-time>
     </div>
-    <div class="col-5">
-      <div><p class="title header w-50 m-auto">كشف حساب <br>{{employee?.name}}</p></div>
-    </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
-      <p class="bg-main m-auto print" (click)="print()">  <i class="fa-solid fa-print text-white"></i></p>
+    <h1 class="title header page-title">
+      كشف حساب
+      <span class="page-title__name" *ngIf="employee?.name">{{ employee.name }}</span>
+    </h1>
+    <div class="page-head__print">
+      <button type="button" class="print" (click)="print()" aria-label="طباعة">
+        <i class="fa-solid fa-print"></i>
+      </button>
     </div>
   </div>
 
@@ -17,17 +19,34 @@
 
 
     <form class="my-5" [formGroup]="form" (ngSubmit)="submitform()">
-      <div class="col-md-2">
-        <input class="form-control" type="month" (change)="onMonthChange($event)" [value]="currentMonthValue">
+      <div class="row align-items-end">
+        <div class="col-md-2">
+          <label class="small text-muted mb-1">شهر التقفيل</label>
+          <input class="form-control" type="month" (change)="onMonthChange($event)" [value]="currentMonthValue">
+        </div>
+        <div class="col-md-2">
+          <label class="small text-muted mb-1">من</label>
+          <input class="form-control" type="date" [value]="dateFrom" (change)="onDateFromChange($event)">
+        </div>
+        <div class="col-md-2">
+          <label class="small text-muted mb-1">إلى</label>
+          <input class="form-control" type="date" [value]="dateTo" (change)="onDateToChange($event)">
+        </div>
+        <div class="col-md-6 mt-1">
+          <small class="text-muted">افتراضيًا التقفيل يوم 25 (من 26 الشهر السابق). للشهور القديمة التي تبدأ يوم 1، عدّل من/إلى يدويًا.</small>
+        </div>
       </div>
     </form>
+
+    <p *ngIf="isLoading" class="text-muted text-center" dir="rtl">جاري تحميل بيانات الموظف...</p>
+    <p *ngIf="loadError" class="text-danger text-center" dir="rtl">{{ loadError }}</p>
 
     <table class="table m-auto text-center table-hover">
       <tr>
         <td class="bg-navy">اسم الموظف</td>
-        <td>{{employee?.name}}</td>
+        <td>{{employee?.name || (isLoading ? '...' : '')}}</td>
         <td class="bg-navy">كود الموظف</td>
-        <td>{{employee?.code}}</td>
+        <td>{{employee?.code || (isLoading ? '...' : '')}}</td>
       </tr>
       <tr>
         <td class="bg-navy">الوظيفة</td>
@@ -49,22 +68,24 @@
           </tr>
           <td class="bg-navy">الراتب الثابت</td>
           <td>{{employee?.fixed_salary || 0 | customNumber}}</td>
-          <tr *ngFor="let elm of merits">
+          <tr *ngFor="let elm of statementMerits">
             <td class="bg-navy">{{elm['type'] || ''}}</td>
             <td>{{elm['amount'] || ''}}</td>
           </tr>
-          <!-- <tr *ngIf="employee?.acc_no">
-            <td class="bg-navy">عدد ساعات الحضور</td>
-            <td>{{employee.actualHours}}</td>
-          </tr> -->
-          <tr *ngIf="employee?.acc_no">
-            <td class="bg-navy">حوافز( ساعات اضافية )</td>
-            <td>
-              <span *ngIf="employee?.fixed_salary >= employee.totalActualHoursSalary">0</span>
-              <span *ngIf="employee?.fixed_salary < employee.totalActualHoursSalary">
-                {{employee.totalActualHoursSalary -  employee?.fixed_salary || 0 | customNumber}}
-              </span>
+          <tr *ngIf="employee?.acc_no && employee.extraDaysCount">
+            <td class="bg-navy">أيام إضافي ({{ employee.extraDaysCount }} يوم)</td>
+            <td>{{ employee.extraDaysAmount || 0 | customNumber }}</td>
+          </tr>
+          <tr *ngIf="employee?.acc_no && employee.extraHoursMeritsAmount">
+            <td class="bg-navy">ساعات إضافي مضافة ({{ employee.extraHoursFromMerits }} س)</td>
+            <td>{{ employee.extraHoursMeritsAmount | customNumber }}</td>
+          </tr>
+          <tr *ngIf="employee?.acc_no && employee.overtimeFromHours">
+            <td class="bg-navy">
+              ساعات إضافي
+              <small *ngIf="employee.overtimeHoursLabel"> ({{ employee.overtimeHoursLabel }})</small>
             </td>
+            <td>{{ employee.overtimeFromHours | customNumber }}</td>
           </tr>
           <tr>
             <td class="bg-navy">الاجمالي</td>
@@ -77,16 +98,25 @@
           <tr>
             <td class="bg-navy" colspan="2">الاستقطاعات</td>
           </tr>
-          <tr *ngFor="let elm of subtraction">
-            <td class="bg-navy">{{elm['type'] || ''}}</td>
-            <td>{{elm['amount'] || ''}}</td>
-          </tr>
+          <ng-container *ngFor="let elm of subtraction">
+            <tr *ngIf="elm['type'] !== 'غياب'">
+              <td class="bg-navy">{{elm['type'] || ''}}</td>
+              <td>{{elm['amount'] || ''}}</td>
+            </tr>
+          </ng-container>
           <tr *ngFor="let elm of advance_payments">
             <td class="bg-navy">{{elm['type'] || ''}}</td>
             <td>{{elm['amount'] || ''}}</td>
           </tr>
-          <tr *ngIf="employee?.acc_no">
-            <td class="bg-navy">خصم ساعات التأخير</td>
+          <tr *ngIf="employee?.acc_no && employee.deductionDaysCount">
+            <td class="bg-navy">أيام خصم ({{ employee.deductionDaysCount }} يوم)</td>
+            <td>{{ employee.deductionDaysAmount || 0 | customNumber }}</td>
+          </tr>
+          <tr *ngIf="employee?.acc_no && employee.differnceSalary">
+            <td class="bg-navy">
+              ساعات تأخير
+              <small *ngIf="employee.lateHoursLabel"> ({{ employee.lateHoursLabel }})</small>
+            </td>
             <td>{{employee.differnceSalary || 0 | customNumber}}</td>
           </tr>
           <tr>
@@ -103,8 +133,8 @@
         <td dir="ltr">{{employee?.net_total || 0 | customNumber }}</td>
       </tr>
     </table> <br>
-    <div *ngIf="employee?.acc_no">
-      <app-working-hours-details [dateFromEmp]="currentMonthValue" (dataEvent)="handleDataEvent($event)"></app-working-hours-details>
+    <div *ngIf="id && (isLoading || employee?.acc_no)">
+      <app-working-hours-details [dateFromEmp]="currentMonthValue" [periodFrom]="dateFrom" [periodTo]="dateTo" (dataEvent)="handleDataEvent($event)"></app-working-hours-details>
     </div>
 
     <div class="row my-4">
@@ -122,7 +152,10 @@
               <td class="bg-navy">{{elm['type'] || ''}}</td>
               <td>{{elm['amount'] || ''}}</td>
               <td>{{elm['reason'] || ''}}</td>
-              <td>{{elm['user'].name || ''}}</td>
+              <td>{{elm['user']?.name || ''}}</td>
+            </tr>
+            <tr *ngIf="!(merits || []).length">
+              <td colspan="4" class="text-muted" dir="rtl">لا توجد استحقاقات</td>
             </tr>
           </tbody>
         </table>
@@ -141,13 +174,16 @@
               <td class="bg-navy">{{elm['type'] || ''}}</td>
               <td>{{elm['amount'] || ''}}</td>
               <td>{{elm['reason'] || ''}}</td>
-              <td>{{elm['user'].name || ''}}</td>
+              <td>{{elm['user']?.name || ''}}</td>
             </tr>
             <tr *ngFor="let elm of advance_payments">
               <td class="bg-navy">{{elm['type'] || ''}}</td>
               <td>{{elm['amount'] || ''}}</td>
               <td>{{elm['reason'] || ''}}</td>
-              <td>{{elm['user'].name || ''}}</td>
+              <td>{{elm['user']?.name || ''}}</td>
+            </tr>
+            <tr *ngIf="!(subtraction || []).length && !(advance_payments || []).length">
+              <td colspan="4" class="text-muted" dir="rtl">لا توجد استقطاعات</td>
             </tr>
           </tbody>
         </table>

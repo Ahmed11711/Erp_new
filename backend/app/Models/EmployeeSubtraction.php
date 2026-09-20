@@ -16,13 +16,21 @@ class EmployeeSubtraction extends Model
         'month',
         'year',
         'employee_id',
+        'employee_name',
         'user_id',
         'reviewed',
         'absence_status',
         'absence_count',
-        'reviewed',
-
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $model) {
+            if ($model->employee_id && blank($model->employee_name)) {
+                $model->employee_name = optional(Employee::find($model->employee_id))->name;
+            }
+        });
+    }
 
     public function employee()
     {

@@ -1,0 +1,190 @@
+<div class="rbac-enterprise">
+  <nav class="rbac-crumb text-muted small mb-2" aria-label="مسار التنقل">
+    <span>لوحة التحكم</span>
+    <span class="mx-1">›</span>
+    <span>إدارة النظام</span>
+    <span class="mx-1">›</span>
+    <span class="text-dark fw-semibold">الأدوار والصلاحيات</span>
+  </nav>
+
+  <div *ngIf="message" class="alert alert-success py-2 rbac-alert">{{ message }}</div>
+  <div *ngIf="error" class="alert alert-danger py-2 rbac-alert">{{ error }}</div>
+
+  <div class="rbac-layout">
+    <!-- عمود الأدوار -->
+    <aside class="rbac-sidebar">
+      <div class="rbac-sidebar__head">
+        <div>
+          <h3 class="rbac-sidebar__title">الأدوار</h3>
+          <p class="rbac-sidebar__subtitle">اختر دوراً لتعديل صلاحياته</p>
+        </div>
+        <button mat-icon-button type="button" (click)="reloadRoles()" matTooltip="تحديث القائمة" class="rbac-icon-inv">
+          <mat-icon>refresh</mat-icon>
+        </button>
+      </div>
+
+      <mat-form-field appearance="outline" class="rbac-field rbac-sidebar-search">
+        <mat-label>بحث عن دور</mat-label>
+        <input matInput [(ngModel)]="roleSearch" placeholder="اسم، معرف، وصف..." />
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+
+      <button mat-flat-button type="button" class="w-100 mb-3 rbac-btn-create" (click)="createRole()">
+        <mat-icon>add</mat-icon>
+        دور جديد
+      </button>
+
+      <div class="rbac-role-list hide-scrollbar">
+        <button
+          type="button"
+          class="rbac-role-tile"
+          *ngFor="let r of filteredRoles()"
+          (click)="selectRole(r.id)"
+          [class.rbac-role-tile--active]="r.id === selectedRoleId">
+          <mat-icon class="rbac-role-tile__ic">badge</mat-icon>
+          <div class="rbac-role-tile__body">
+            <div class="rbac-role-tile__name">{{ r.name }}</div>
+            <div class="rbac-role-tile__desc">{{ r.description || 'بدون وصف' }}</div>
+          </div>
+          <span class="rbac-role-tile__count">{{ r.permissions_count ?? 0 }}</span>
+        </button>
+      </div>
+
+      <p class="rbac-sidebar__hint small mb-0" *ngIf="!filteredRoles().length && !loading">
+        لا توجد أدوار مطابقة.
+      </p>
+      <div class="rbac-loading" *ngIf="loading">
+        <mat-spinner diameter="28"></mat-spinner>
+      </div>
+    </aside>
+
+    <!-- المحتوى الرئيسي -->
+    <main class="rbac-main">
+      <mat-card class="rbac-main-card" *ngIf="roleDetail">
+        <div class="rbac-main-head">
+          <div>
+            <h4 class="mb-1">{{ roleDetail.name }}</h4>
+            <code class="rbac-slug">{{ roleDetail.slug }}</code>
+          </div>
+          <div class="rbac-main-actions">
+            <a mat-stroked-button class="rbac-btn-muted" routerLink="/dashboard/system/users" title="إدارة المستخدمين">
+              <mat-icon>group</mat-icon>
+              المستخدمون
+            </a>
+            <button mat-stroked-button type="button" (click)="exportRoleJson()">
+              <mat-icon>download</mat-icon>
+              تصدير JSON
+            </button>
+            <button mat-stroked-button type="button" (click)="cloneRole()">
+              <mat-icon>content_copy</mat-icon>
+              استنساخ
+            </button>
+            <button mat-stroked-button color="warn" type="button" (click)="deleteRole()">
+              <mat-icon>delete</mat-icon>
+              حذف
+            </button>
+          </div>
+        </div>
+
+        <mat-chip-set class="rbac-stats mb-3">
+          <mat-chip highlighted class="rbac-chip rbac-chip--total">
+            الإجمالي في النظام: <strong class="ms-1">{{ totalCatalogPermissions() }}</strong>
+          </mat-chip>
+          <mat-chip class="rbac-chip rbac-chip--ok">
+            مفعّلة للدور: <strong class="ms-1">{{ grantedInCatalog() }}</strong>
+          </mat-chip>
+          <mat-chip class="rbac-chip rbac-chip--off">
+            غير مفعّلة: <strong class="ms-1">{{ notGrantedInCatalog() }}</strong>
+          </mat-chip>
+          <mat-chip class="rbac-chip">
+            ضمن البحث الحالي: <strong class="ms-1">{{ assignedVisibleCount() }}</strong>
+          </mat-chip>
+        </mat-chip-set>
+
+        <mat-tab-group animationDuration="0ms" mat-stretch-tabs="false" class="rbac-tabs">
+          <mat-tab label="الصلاحيات">
+            <div class="rbac-tab-panel">
+              <div class="rbac-toolbar flex-wrap">
+                <mat-form-field appearance="outline" class="rbac-field rbac-search-wide">
+                  <mat-label>بحث في الصلاحيات</mat-label>
+                  <input matInput [(ngModel)]="search" placeholder="اسم، وحدة، slug..." />
+                  <mat-icon matSuffix>filter_list</mat-icon>
+                </mat-form-field>
+                <div class="rbac-toolbar-btns">
+                  <button mat-stroked-button type="button" (click)="expandAll()">توسيع الكل</button>
+                  <button mat-stroked-button type="button" (click)="collapseAll()">طي الكل</button>
+                  <button mat-stroked-button type="button" class="rbac-btn-muted" (click)="globalToggle(true)" [disabled]="loading">
+                    تحديد المعروض كله
+                  </button>
+                  <button mat-stroked-button type="button" class="rbac-btn-muted" (click)="globalToggle(false)" [disabled]="loading">
+                    إلغاء المعروض كله
+                  </button>
+                  <button mat-flat-button type="button" class="rbac-btn-save" (click)="saveRolePermissions()" [disabled]="saving">
+                    <mat-icon>save</mat-icon>
+                    حفظ الصلاحيات
+                  </button>
+                </div>
+              </div>
+
+              <p class="small text-muted mb-2">
+                الوحدات المعروضة: <strong>{{ modulesCount() }}</strong>
+              </p>
+
+              <mat-accordion multi class="rbac-accordion">
+                <mat-expansion-panel *ngFor="let module of filteredGroups() | keyvalue" [expanded]="panelsExpanded">
+                  <mat-expansion-panel-header>
+                    <mat-panel-title class="rbac-panel-title">
+                      <mat-checkbox
+                        [checked]="moduleAllChecked(module.key)"
+                        [indeterminate]="modulePartial(module.key)"
+                        (click)="$event.stopPropagation()"
+                        (change)="toggleModule(module.key, $event.checked)">
+                      </mat-checkbox>
+                      <span>{{ moduleDisplayLabel(module.key) }}</span>
+                      <span class="rbac-module-badge">{{ module.value.length }}</span>
+                    </mat-panel-title>
+                  </mat-expansion-panel-header>
+
+                  <div class="rbac-perm-grid">
+                    <label class="rbac-perm-cell" *ngFor="let p of module.value">
+                      <mat-checkbox
+                        [checked]="isAssigned(p.id)"
+                        (change)="togglePermission(p.id, $event.checked)">
+                      </mat-checkbox>
+                      <span class="rbac-perm-cell__text">
+                        <span class="rbac-perm-cell__name">{{ permissionDisplayLabel(p.slug, p.name) }}</span>
+                        <small class="rbac-perm-cell__slug">{{ p.slug }}</small>
+                      </span>
+                    </label>
+                  </div>
+                </mat-expansion-panel>
+              </mat-accordion>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="معلومات الدور">
+            <div class="rbac-tab-panel rbac-meta-form">
+              <mat-form-field appearance="outline" class="w-100 rbac-field">
+                <mat-label>اسم الدور</mat-label>
+                <input matInput [(ngModel)]="roleNameDraft" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="w-100 rbac-field">
+                <mat-label>الوصف</mat-label>
+                <textarea matInput rows="4" [(ngModel)]="roleDescriptionDraft" placeholder="مثال: مسؤول عن الطلبات والشحن"></textarea>
+              </mat-form-field>
+              <p class="small text-muted">المعرّف الفني (slug) يُعدَّل من الخادم عند الحاجة لتفادي التعارض.</p>
+              <button mat-flat-button type="button" class="rbac-btn-save" (click)="saveRoleInfo()" [disabled]="savingMeta">
+                حفظ معلومات الدور
+              </button>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+      </mat-card>
+
+      <mat-card class="rbac-empty-card text-center p-5 text-muted" *ngIf="!roleDetail && !loading">
+        <mat-icon class="rbac-empty-icon">touch_app</mat-icon>
+        <p class="mb-0 mt-2">اختر دوراً من القائمة اليسرى للبدء في التعديل.</p>
+      </mat-card>
+    </main>
+  </div>
+</div>

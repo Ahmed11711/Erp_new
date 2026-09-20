@@ -1,0 +1,92 @@
+<div class="supplier-edit-dialog">
+  <h2 mat-dialog-title class="supplier-edit-dialog__title">تعديل بيانات المورد</h2>
+
+  <div mat-dialog-content class="supplier-edit-dialog__content">
+    <div class="text-center py-4" *ngIf="loading">
+      <span class="text-muted">جاري التحميل...</span>
+    </div>
+
+    <div class="alert alert-danger" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+    <form #editForm="ngForm" (ngSubmit)="submit(editForm)" *ngIf="!loading">
+      <div class="form-group">
+        <label for="edit_supplier_name">اسم المورد</label>
+        <input
+          id="edit_supplier_name"
+          type="text"
+          class="form-control"
+          name="supplier_name"
+          [(ngModel)]="formModel.supplier_name"
+          required />
+      </div>
+
+      <div class="form-group">
+        <label for="edit_supplier_address">العنوان</label>
+        <input
+          id="edit_supplier_address"
+          type="text"
+          class="form-control"
+          name="supplier_address"
+          [(ngModel)]="formModel.supplier_address" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group col-md-6">
+          <label for="edit_supplier_phone">رقم التليفون</label>
+          <input
+            id="edit_supplier_phone"
+            type="text"
+            class="form-control"
+            name="supplier_phone"
+            dir="ltr"
+            [(ngModel)]="formModel.supplier_phone" />
+        </div>
+        <div class="form-group col-md-6">
+          <label for="edit_supplier_type">فئة المورد</label>
+          <select
+            id="edit_supplier_type"
+            class="form-control"
+            name="supplier_type"
+            [(ngModel)]="formModel.supplier_type">
+            <option value="">— بدون فئة —</option>
+            <option *ngFor="let type of types" [ngValue]="type.id">
+              {{ type.supplier_type }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group col-md-6">
+          <label for="edit_supplier_rate">تقييم المورد</label>
+          <input
+            id="edit_supplier_rate"
+            type="number"
+            class="form-control"
+            name="supplier_rate"
+            min="0"
+            max="10"
+            [(ngModel)]="formModel.supplier_rate" />
+        </div>
+        <div class="form-group col-md-6">
+          <label for="edit_price_rate">تقييم السعر</label>
+          <input
+            id="edit_price_rate"
+            type="number"
+            class="form-control"
+            name="price_rate"
+            min="0"
+            max="10"
+            [(ngModel)]="formModel.price_rate" />
+        </div>
+      </div>
+
+      <div class="supplier-edit-dialog__actions">
+        <button type="button" class="btn btn-outline-secondary" (click)="onClose()">إلغاء</button>
+        <button type="submit" class="btn clr text-white" [disabled]="editForm.invalid || submitting">
+          {{ submitting ? 'جاري الحفظ...' : 'حفظ التعديلات' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Category extends Model
 {
@@ -12,7 +15,14 @@ class Category extends Model
   'category_name',
   'item_code',
   'color',
+  'item_classification_id',
+  'parent_item_id',
+  'supports_color',
+  'color_id',
   'recipe_id',
+  'product_type',
+  'shipping_size_tier',
+  'allow_wip_sale',
   'item_revision',
   'lineage_root_id',
   'replaces_item_id',
@@ -22,7 +32,6 @@ class Category extends Model
   'total_price',
   'sell_total_price',
   'initial_balance',
-  'quantity',
   'minimum_quantity',
   'warehouse',
   'production_id',
@@ -32,6 +41,12 @@ class Category extends Model
   'status',
   'stock_id',
  ];
+
+ protected $casts = [
+     'allow_wip_sale' => 'boolean',
+     'supports_color' => 'boolean',
+ ];
+
  public function production()
  {
   return $this->belongsTo(Production::class);
@@ -39,6 +54,11 @@ class Category extends Model
  public function measurement()
  {
   return $this->belongsTo(Measurement::class);
+ }
+
+ public function itemClassification()
+ {
+  return $this->belongsTo(ItemClassification::class);
  }
  public function stock()
  {
@@ -48,5 +68,33 @@ class Category extends Model
  public function recipe()
  {
   return $this->belongsTo(Recipe::class);
+ }
+
+ public function parentItem(): BelongsTo
+ {
+  return $this->belongsTo(Category::class, 'parent_item_id');
+ }
+
+ public function variants(): HasMany
+ {
+  return $this->hasMany(Category::class, 'parent_item_id');
+ }
+
+ public function tintColor(): BelongsTo
+ {
+  return $this->belongsTo(Color::class, 'color_id');
+ }
+
+ /**
+  * Available production / sales colors for a base finished-good (pivot).
+  */
+ public function manufacturingColors(): BelongsToMany
+ {
+  return $this->belongsToMany(Color::class, 'category_color', 'category_id', 'color_id')->withTimestamps();
+ }
+
+ public function costHistories(): HasMany
+ {
+  return $this->hasMany(CategoryCostHistory::class, 'category_id')->orderByDesc('id');
  }
 }

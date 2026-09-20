@@ -4,10 +4,204 @@
   border-radius: 12px 12px 0 0;
 }
 
+/* ---------- فلتر التقرير (تخطيط شبكي متجاوب) ---------- */
+.report-filter__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 14px;
+  align-items: end;
+}
+
+.report-filter__field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.report-filter__field--wide {
+  grid-column: span 2;
+}
+
+.report-filter__field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+/* توحيد ارتفاع كل عناصر الفلتر لتناسق بصري مع حقل التاريخ */
+.report-filter__field .form-control {
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.report-filter__field .form-control:focus {
+  border-color: #82225e;
+  box-shadow: 0 0 0 3px rgba(130, 34, 94, 0.15);
+}
+
+/* حقلا التاريخ جنباً إلى جنب داخل خلية واحدة */
+.report-filter__dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.report-filter__dates .report-filter__field {
+  margin: 0;
+}
+
+.report-filter__field--action {
+  justify-content: flex-end;
+}
+
+.report-filter__field--action .btn {
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.report-filter__field app-date-input {
+  display: block;
+}
+
+/* قائمة بحث المستخدمين — ارتفاع أكبر لعرض المزيد */
+::ng-deep .user-filter-autocomplete-panel {
+  max-height: 320px !important;
+}
+
+@media (max-width: 720px) {
+  .report-filter__field--wide {
+    grid-column: span 1;
+  }
+}
+
 table.report-data-table tfoot .text-success {
   color: #15803d !important;
 }
 
 table.report-data-table tfoot .text-danger {
   color: #b91c1c !important;
+}
+
+.report-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.report-export-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.financial-statement-pdf {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+  background: #ffffff;
+  color: #1f2937;
+  padding: 12px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting', sans-serif;
+}
+
+.financial-statement-pdf .pdf-report-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.financial-statement-pdf .pdf-report-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
+.financial-statement-pdf .pdf-arabic-fix,
+.financial-statement-pdf .arabic-cell {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.financial-statement-pdf .numeric-cell {
+  direction: ltr;
+  text-align: center;
+  unicode-bidi: isolate;
+}
+
+.financial-statement-pdf .posted-at-cell {
+  white-space: nowrap;
+  font-size: 0.92em;
+  color: #475569;
+}
+
+.financial-statement-pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.financial-statement-pdf-table th,
+.financial-statement-pdf-table td {
+  border: 1px solid #dbeafe;
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.financial-statement-pdf-table thead th {
+  background: #1e293b;
+  color: #ffffff;
+}
+
+.financial-statement-pdf-table .description-cell {
+  min-width: 220px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.financial-statement-pdf .pdf-summary-row h6 {
+  font-size: 0.95rem;
+}
+
+.statement-row--clickable {
+  cursor: pointer;
+}
+
+.statement-row--editable:hover {
+  background-color: rgba(79, 70, 229, 0.06);
+}
+
+.statement-edit-hint {
+  margin-inline-start: 6px;
+  font-size: 0.75rem;
+  color: #4f46e5;
+  opacity: 0.85;
+}
+
+.statement-row--opening-import {
+  background: #fffbeb;
+}
+
+.statement-row--opening-import td {
+  color: #92400e;
+}
+
+.opening-import-badge {
+  display: inline-block;
+  margin-inline-end: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
 }

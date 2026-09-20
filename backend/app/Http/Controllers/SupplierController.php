@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProcessingInvoice;
 use App\Models\Purchase;
 use App\Models\SupplierPay;
 use App\Models\Bank;
@@ -14,8 +15,12 @@ use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Models\AccountEntry;
 use App\Services\Accounting\AccountLinkingService;
+use App\Services\Processing\ProcessingInvoiceService;
+use App\Services\Suppliers\SupplierDeletionService;
+use App\Services\Suppliers\SupplierPurgeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Validator;
 use Illuminate\Support\Facades\Cache;
 
@@ -30,9 +35,30 @@ class SupplierController extends Controller
         return response()->json($suppliers, 200);
     }
     public function supplier_names(){
-        $data = Supplier::select('id', 'supplier_name')->get();
+        $data = Supplier::query()
+            ->select('id', 'supplier_name')
+            ->whereNotNull('supplier_name')
+            ->where('supplier_name', '!=', '')
+            ->orderBy('supplier_name')
+            ->get();
+
         return response()->json($data, 200);
     }
+
+    /**
+     * معالجو التشغيل الخارجي (مطابع / جهات تجهيز) — للاستخدام من وحدة التشغيل الخارجي.
+     */
+    public function processingVendors()
+    {
+        $rows = Supplier::query()
+            ->select('id', 'supplier_name', 'supplier_phone', 'supplier_address', 'balance', 'supplier_type')
+            ->with('supplierType:id,supplier_type')
+            ->orderBy('supplier_name')
+            ->get();
+
+        return response()->json($rows, 200);
+    }
+
     public function store(Request $request){
         Validator::make($request->all(),[
             'supplier_name' => 'required|string|max:255',
@@ -60,6 +86,50 @@ class SupplierController extends Controller
         return response()->json(["success"=>true], 201);
     }
 
+    public function show($id)
+    {
+        $supplier = Supplier::with('supplierType')->find($id);
+        if (! $supplier) {
+            return response()->json(['message' => 'المورد غير موجود'], 404);
+        }
+
+        return response()->json($supplier, 200);
+    }
+
+    public function update(Request $request, $id, AccountLinkingService $accountLinkingService)
+    {
+        $supplier = Supplier::find($id);
+        if (! $supplier) {
+            return response()->json(['message' => 'المورد غير موجود'], 404);
+        }
+
+        Validator::make($request->all(), [
+            'supplier_name' => 'required|string|max:255',
+            'supplier_address' => 'nullable|string|max:255',
+            'supplier_phone' => 'nullable|string|max:255',
+            'supplier_type' => 'nullable|numeric|exists:supplier_types,id',
+            'supplier_rate' => 'nullable|numeric|min:0|max:10',
+            'price_rate' => 'nullable|numeric|min:0|max:10',
+        ])->validate();
+
+        $supplier->update([
+            'supplier_name' => $request->input('supplier_name'),
+            'supplier_phone' => $request->input('supplier_phone'),
+            'supplier_address' => $request->input('supplier_address'),
+            'supplier_type' => $request->input('supplier_type'),
+            'supplier_rate' => $request->input('supplier_rate'),
+            'price_rate' => $request->input('price_rate'),
+        ]);
+
+        $accountLinkingService->ensureSupplierAccount($supplier);
+        $accountLinkingService->syncSupplierTreeAccountName($supplier);
+
+        return response()->json([
+            'success' => true,
+            'supplier' => $supplier->fresh('supplierType'),
+        ], 200);
+    }
+
 
 
     public function search(Request $request){
@@ -82,10 +152,12 @@ class SupplierController extends Controller
                 $search->where('balance', '>', 0);
             }
         }
-        $search->with('supplierType');
-        $suppliers = $search->paginate($itemsPerPage);
+        // الإجمالي يُحسب قبل الترقيم، وإلا فإن paginate() يترك LIMIT على الـ builder
+        // فيصبح المجموع محصوراً في صفوف الصفحة الحالية فقط.
+        $sumOfBalance = (clone $search)->sum('balance');
 
-        $sumOfBalance = $search->sum('balance');
+        $search->with('supplierType:id,supplier_type');
+        $suppliers = $search->paginate($itemsPerPage);
         $response = [
             'suppliers' => $suppliers,
             'sum_of_balance' => $sumOfBalance,
@@ -157,6 +229,18 @@ class SupplierController extends Controller
         ->whereNotNull('supplierpay_id')
         ->groupBy('supplierpay_id');
 
+    $latestProcessingSb = DB::table('supplier_balance')
+        ->select('processing_invoice_id', DB::raw('MAX(id) as latest_sb_id'))
+        ->whereNotNull('processing_invoice_id')
+        ->groupBy('processing_invoice_id');
+
+    $purchaseNotes = Schema::hasColumn('purchases', 'notes')
+        ? 'p.notes as notes'
+        : DB::raw('NULL as notes');
+    $purchaseExternal = Schema::hasColumn('purchases', 'external_invoice_no')
+        ? 'p.external_invoice_no as external_ref'
+        : DB::raw('NULL as external_ref');
+
     $purchases = DB::table('purchases as p')
         ->select(
             'p.id as invoice_id',
@@ -169,7 +253,16 @@ class SupplierController extends Controller
             'p.paid_amount as paid_amount',
             'p.due_amount as due_amount',
             'p.invoice_type',
-            'p.created_at as created_at'
+            'p.created_at as created_at',
+            DB::raw("'purchase' as entry_kind"),
+            $purchaseNotes,
+            $purchaseExternal,
+            DB::raw('NULL as related_order_id'),
+            DB::raw('NULL as related_order_number'),
+            DB::raw('NULL as dispatch_refs'),
+            DB::raw('NULL as receipt_refs'),
+            DB::raw('NULL as payment_source'),
+            DB::raw('NULL as linked_processing_invoice')
         )
         ->leftJoinSub($latestPurchaseSb, 'sbm', function ($join) {
             $join->on('p.id', '=', 'sbm.invoice_id');
@@ -177,6 +270,24 @@ class SupplierController extends Controller
         ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbm.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
         ->where('p.supplier_id', $supplierId);
+
+    $hasPaySafe = Schema::hasColumn('supplier_pays', 'safe_id');
+    $hasPayService = Schema::hasColumn('supplier_pays', 'service_account_id');
+    $hasPayProcessingInvoice = Schema::hasColumn('supplier_pays', 'processing_invoice_id');
+
+    $paySourceCases = [];
+    if ($hasPaySafe) {
+        $paySourceCases[] = "WHEN sp.safe_id IS NOT NULL THEN CONCAT('خزينة: ', COALESCE(sf.name, '—'))";
+    }
+    if ($hasPayService) {
+        $paySourceCases[] = "WHEN sp.service_account_id IS NOT NULL THEN CONCAT('حساب خدمي: ', COALESCE(sa.name, '—'))";
+    }
+    $paySourceCases[] = "WHEN sp.bank_id IS NOT NULL THEN CONCAT('بنك: ', COALESCE(b.name, '—'))";
+    $paySourceSql = 'CASE '.implode(' ', $paySourceCases)." ELSE 'سداد نقدي' END";
+
+    $linkedProcessingSelect = $hasPayProcessingInvoice
+        ? 'pvi.invoice_number as linked_processing_invoice'
+        : DB::raw('NULL as linked_processing_invoice');
 
     $pays = DB::table('supplier_pays as sp')
         ->select(
@@ -190,16 +301,79 @@ class SupplierController extends Controller
             'sp.amount as paid_amount',
             'sp.amount as due_amount',
             DB::raw("'سداد' as invoice_type"),
-            'sp.created_at as created_at'
+            'sp.created_at as created_at',
+            DB::raw("'payment' as entry_kind"),
+            DB::raw('NULL as notes'),
+            DB::raw('NULL as external_ref'),
+            DB::raw('NULL as related_order_id'),
+            DB::raw('NULL as related_order_number'),
+            DB::raw('NULL as dispatch_refs'),
+            DB::raw('NULL as receipt_refs'),
+            DB::raw("{$paySourceSql} as payment_source"),
+            $linkedProcessingSelect
         )
         ->leftJoinSub($latestPaySb, 'sbsp', function ($join) {
             $join->on('sp.id', '=', 'sbsp.supplierpay_id');
         })
         ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbsp.latest_sb_id')
         ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
+        ->leftJoin('banks as b', 'sp.bank_id', '=', 'b.id')
+        ->when($hasPaySafe, fn ($q) => $q->leftJoin('safes as sf', 'sp.safe_id', '=', 'sf.id'))
+        ->when($hasPayService, fn ($q) => $q->leftJoin('service_accounts as sa', 'sp.service_account_id', '=', 'sa.id'))
+        ->when($hasPayProcessingInvoice, fn ($q) => $q->leftJoin('processing_invoices as pvi', 'sp.processing_invoice_id', '=', 'pvi.id'))
         ->where('sp.supplier_id', $supplierId);
 
-    $invoicesAndPays = $purchases->union($pays)->orderBy('created_at', 'desc')->paginate($itemsPerPage);
+    $dispatchRefsSql = '(SELECT GROUP_CONCAT(DISTINCT dn.dispatch_number ORDER BY dn.dispatch_number SEPARATOR ", ")
+            FROM processing_dispatch_notes dn
+            WHERE dn.processing_order_id = pi.processing_order_id
+              AND dn.deleted_at IS NULL)';
+    $receiptRefsSql = '(SELECT GROUP_CONCAT(DISTINCT pr.receipt_number ORDER BY pr.receipt_number SEPARATOR ", ")
+            FROM processing_receipts pr
+            WHERE pr.processing_order_id = pi.processing_order_id
+              AND pr.deleted_at IS NULL)';
+
+    $processingInvoices = DB::table('processing_invoices as pi')
+        ->select(
+            'pi.id as invoice_id',
+            'sb.balance_before as balance_before',
+            'sb.balance_after as balance_after',
+            'u.name as user_name',
+            'pi.invoice_number as invoice_number',
+            'pi.invoice_date as receipt_date',
+            'pi.grand_total as total_price',
+            'pi.paid_amount as paid_amount',
+            'pi.due_amount as due_amount',
+            DB::raw("'تشغيل خارجي' as invoice_type"),
+            'pi.created_at as created_at',
+            DB::raw("'processing' as entry_kind"),
+            'pi.notes as notes',
+            'pi.external_invoice_no as external_ref',
+            'pi.processing_order_id as related_order_id',
+            'po.order_number as related_order_number',
+            DB::raw("{$dispatchRefsSql} as dispatch_refs"),
+            DB::raw("{$receiptRefsSql} as receipt_refs"),
+            DB::raw('NULL as payment_source'),
+            DB::raw('NULL as linked_processing_invoice')
+        )
+        ->leftJoinSub($latestProcessingSb, 'sbpi', function ($join) {
+            $join->on('pi.id', '=', 'sbpi.processing_invoice_id');
+        })
+        ->leftJoin('supplier_balance as sb', 'sb.id', '=', 'sbpi.latest_sb_id')
+        ->leftJoin('users as u', 'sb.user_id', '=', 'u.id')
+        ->leftJoin('processing_orders as po', 'pi.processing_order_id', '=', 'po.id')
+        ->where('pi.supplier_id', $supplierId)
+        ->whereNull('pi.deleted_at')
+        ->whereIn('pi.status', ['posted', 'partially_paid', 'paid']);
+
+    $invoicesAndPays = $purchases
+        ->union($pays)
+        ->union($processingInvoices)
+        ->orderBy('created_at', 'desc')
+        ->paginate($itemsPerPage);
+
+    $invoicesAndPays->getCollection()->transform(function ($row) {
+        return $this->enrichSupplierLedgerRow($row);
+    });
 
     $result = [
         'data' => $invoicesAndPays,
@@ -213,6 +387,79 @@ class SupplierController extends Controller
 
     return response()->json($result, 200);
 }
+
+    /**
+     * يضيف تسمية النوع ووصف توضيحي لكل حركة في كشف حساب المورد.
+     */
+    private function enrichSupplierLedgerRow(object $row): object
+    {
+        $kind = (string) ($row->entry_kind ?? '');
+        $invoiceType = trim((string) ($row->invoice_type ?? ''));
+
+        $documentType = match ($kind) {
+            'payment' => 'سند سداد',
+            'processing' => 'فاتورة تشغيل خارجي',
+            default => match ($invoiceType) {
+                'مرتجع' => 'مرتجع مشتريات',
+                'مرتجع مبيعات' => 'مرتجع مبيعات',
+                'امانات' => 'أمانات',
+                'اضافة وارد تشغيل' => 'فاتورة مشتريات (وارد تشغيل)',
+                'تم الاستلام' => 'فاتورة مشتريات (تم الاستلام)',
+                'اضافة وارد جديد' => 'فاتورة مشتريات (وارد جديد)',
+                default => $invoiceType !== '' ? 'فاتورة مشتريات ('.$invoiceType.')' : 'فاتورة مشتريات',
+            },
+        };
+
+        $parts = [];
+
+        if ($kind === 'purchase') {
+            $parts[] = 'مستند مشتريات';
+            if ($invoiceType !== '') {
+                $parts[] = 'الحالة: '.$invoiceType;
+            }
+            if (! empty($row->external_ref)) {
+                $parts[] = 'رقم خارجي: '.$row->external_ref;
+            }
+            if (! empty($row->notes)) {
+                $parts[] = (string) $row->notes;
+            }
+        } elseif ($kind === 'payment') {
+            $parts[] = 'سداد لحساب المورد';
+            if (! empty($row->payment_source)) {
+                $parts[] = (string) $row->payment_source;
+            }
+            if (! empty($row->linked_processing_invoice)) {
+                $parts[] = 'على فاتورة تشغيل: '.$row->linked_processing_invoice;
+            }
+        } elseif ($kind === 'processing') {
+            $parts[] = 'فاتورة خدمة تشغيل خارجي (ليست فاتورة مشتريات)';
+            if (! empty($row->related_order_number)) {
+                $parts[] = 'أمر التشغيل: '.$row->related_order_number;
+            }
+            if (! empty($row->dispatch_refs)) {
+                $parts[] = 'إذن الصرف: '.$row->dispatch_refs;
+            } else {
+                $parts[] = 'لا يوجد إذن صرف مرتبط';
+            }
+            if (! empty($row->receipt_refs)) {
+                $parts[] = 'إذن الاستلام: '.$row->receipt_refs;
+            } else {
+                $parts[] = 'لا يوجد إذن استلام مرتبط';
+            }
+            if (! empty($row->external_ref)) {
+                $parts[] = 'رقم فاتورة المورد: '.$row->external_ref;
+            }
+            if (! empty($row->notes)) {
+                $parts[] = (string) $row->notes;
+            }
+        }
+
+        $row->document_type = $documentType;
+        $row->details = implode(' — ', array_filter($parts));
+        $row->is_payment = $kind === 'payment';
+
+        return $row;
+    }
 
 
 
@@ -241,21 +488,111 @@ class SupplierController extends Controller
     public function deleteType($id){
         $supplierType = SupplierType::find($id);
         if(!$supplierType){
-            return response()->json(['error' => 'Not Found'], 404);
+            return response()->json(['message' => 'الفئة غير موجودة'], 404);
+        }
+        if (Supplier::where('supplier_type', $id)->exists()) {
+            return response()->json(['message' => 'لا يمكن حذف الفئة لوجود موردين مرتبطين بها'], 422);
         }
         $supplierType->delete();
-        return response()->json(['message' => 'Deleted Successfully'], 200);
+        return response()->json(['message' => 'تم الحذف بنجاح'], 200);
+    }
+
+    public function destroy($id, SupplierDeletionService $deletionService)
+    {
+        if (! has_permission('suppliers.delete') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'ليس لديك صلاحية حذف الموردين'], 403);
+        }
+
+        $supplier = Supplier::find($id);
+        if (! $supplier) {
+            return response()->json(['message' => 'المورد غير موجود'], 404);
+        }
+
+        try {
+            $deletionService->delete($supplier);
+
+            return response()->json(['message' => 'تم حذف المورد بنجاح'], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'حدث خطأ: '.$e->getMessage()], 500);
+        }
+    }
+
+    public function destroyMany(Request $request, SupplierDeletionService $deletionService)
+    {
+        if (! has_permission('suppliers.delete') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'ليس لديك صلاحية حذف الموردين'], 403);
+        }
+
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:suppliers,id',
+        ]);
+
+        $results = $deletionService->deleteMany($request->input('ids'));
+        $hasSuccess = $results['deleted'] !== [];
+        $status = $hasSuccess ? 200 : 422;
+
+        return response()->json([
+            'success' => $hasSuccess,
+            'message' => $hasSuccess
+                ? 'تم حذف الموردين المحددين'
+                : 'تعذر حذف أي مورد من المحددين',
+            'results' => $results,
+        ], $status);
+    }
+
+    public function purgePreview(SupplierPurgeService $purgeService)
+    {
+        if (! has_permission('suppliers.purge_all') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'ليس لديك صلاحية حذف جميع الموردين'], 403);
+        }
+
+        return response()->json($purgeService->preview(), 200);
+    }
+
+    public function purgeAll(Request $request, SupplierPurgeService $purgeService)
+    {
+        if (! has_permission('suppliers.purge_all') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'ليس لديك صلاحية حذف جميع الموردين'], 403);
+        }
+
+        $request->validate([
+            'confirm' => 'required|accepted',
+            'include_processing' => 'sometimes|boolean',
+        ]);
+
+        $preview = $purgeService->preview();
+        if ($preview['supplier_count'] === 0) {
+            return response()->json(['message' => 'لا يوجد موردين للحذف'], 422);
+        }
+
+        try {
+            $counts = $purgeService->purge($request->boolean('include_processing', true));
+
+            return response()->json([
+                'message' => 'تم حذف جميع الموردين وحساباتهم بنجاح',
+                'preview' => $preview,
+                'counts' => $counts,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'حدث خطأ: '.$e->getMessage()], 500);
+        }
     }
 
     public function supplierPay($id, Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:0',
+            'amount' => 'required|numeric|min:0.01',
             'bank' => 'nullable|numeric|exists:banks,id',
-            'payment_type' => 'nullable|in:safe,bank,service_account',
+            'payment_type' => 'nullable|in:safe,bank,service_account,tree_account',
             'safe_id' => 'nullable|exists:safes,id',
             'bank_id' => 'nullable|exists:banks,id',
             'service_account_id' => 'nullable|exists:service_accounts,id',
+            'tree_account_id' => 'nullable|exists:tree_accounts,id',
+            'processing_invoice_id' => 'nullable|exists:processing_invoices,id',
+            'processing_order_id' => 'nullable|exists:processing_orders,id',
         ]);
 
         $amount = (float) $request->amount;
@@ -263,11 +600,16 @@ class SupplierController extends Controller
         $bankId = $request->bank_id ?? $request->bank;
         $safeId = $request->safe_id;
         $serviceAccountId = $request->service_account_id;
+        $treeAccountId = $request->tree_account_id;
         if ($paymentType === 'bank' && !$bankId) {
             $bankId = $request->bank;
         }
-        if (!$bankId && !$safeId && !$serviceAccountId) {
-            return response()->json(['message' => 'يجب تحديد مصدر الدفع (خزينة أو بنك أو حساب خدمي)'], 422);
+        // مصدر الدفع من شجرة الحسابات مباشرة (ليس خزنة/بنك/حساب خدمي)
+        if ($paymentType !== 'tree_account') {
+            $treeAccountId = null;
+        }
+        if (!$bankId && !$safeId && !$serviceAccountId && !$treeAccountId) {
+            return response()->json(['message' => 'يجب تحديد مصدر الدفع (خزينة أو بنك أو حساب خدمي أو حساب من الشجرة)'], 422);
         }
 
         // Legacy: supplier_pays.bank_id is required; use first bank when paying from safe/service
@@ -289,6 +631,14 @@ class SupplierController extends Controller
                 DB::rollBack();
                 return response()->json(['message' => 'المورد غير موجود'], 404);
             }
+
+            if ($amount > (float) $supplier->balance + 0.000001) {
+                DB::rollBack();
+                return response()->json([
+                    'message' => 'المبلغ أكبر من ذمة المورد. الرصيد: ' . number_format((float) $supplier->balance, 2),
+                ], 422);
+            }
+
             $supplier->last_balance = $supplier->balance;
             $supplier->balance -= $amount;
 
@@ -305,7 +655,15 @@ class SupplierController extends Controller
             $creditTreeId = null;
             $sourceName = '';
 
-            if ($safeId) {
+            if ($treeAccountId) {
+                $treeAccount = TreeAccount::find($treeAccountId);
+                if (!$treeAccount) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'الحساب المختار من الشجرة غير موجود'], 422);
+                }
+                $creditTreeId = $treeAccount->id;
+                $sourceName = $treeAccount->name;
+            } elseif ($safeId) {
                 $safe = Safe::find($safeId);
                 if (!$safe || !$safe->account_id) {
                     DB::rollBack();
@@ -390,11 +748,94 @@ class SupplierController extends Controller
                 $accService->updateAccountHierarchyBalances($creditTreeId);
             }
 
+            $this->applyProcessingInvoicePayment(
+                $pay,
+                $amount,
+                (int) $id,
+                $request->processing_invoice_id ? (int) $request->processing_invoice_id : null,
+                $request->processing_order_id ? (int) $request->processing_order_id : null,
+            );
+
             DB::commit();
             return response()->json(['message' => 'success'], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    private function applyProcessingInvoicePayment(
+        SupplierPay $pay,
+        float $amount,
+        int $supplierId,
+        ?int $processingInvoiceId,
+        ?int $processingOrderId,
+    ): void {
+        if (! $processingInvoiceId && ! $processingOrderId) {
+            return;
+        }
+
+        if (! Schema::hasColumn('supplier_pays', 'processing_invoice_id')) {
+            return;
+        }
+
+        /** @var ProcessingInvoiceService $invoiceService */
+        $invoiceService = app(ProcessingInvoiceService::class);
+
+        if ($processingInvoiceId) {
+            $invoice = ProcessingInvoice::query()->lockForUpdate()->findOrFail($processingInvoiceId);
+            if ((int) $invoice->supplier_id !== $supplierId) {
+                throw new \InvalidArgumentException('فاتورة التشغيل لا تخص هذا المورد.');
+            }
+            if (! in_array($invoice->status, ['posted', 'partially_paid'], true)) {
+                throw new \InvalidArgumentException('فاتورة التشغيل غير مرحّلة أو مسددة بالكامل.');
+            }
+            if ($amount > (float) $invoice->due_amount + 0.000001) {
+                throw new \InvalidArgumentException('المبلغ أكبر من المتبقي على فاتورة التشغيل.');
+            }
+
+            $pay->update(['processing_invoice_id' => $invoice->id]);
+            $invoiceService->recordPayment($invoice, $amount);
+
+            return;
+        }
+
+        $invoices = ProcessingInvoice::query()
+            ->where('processing_order_id', $processingOrderId)
+            ->where('supplier_id', $supplierId)
+            ->whereIn('status', ['posted', 'partially_paid'])
+            ->where('due_amount', '>', 0)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($invoices->isEmpty()) {
+            return;
+        }
+
+        $orderDue = (float) $invoices->sum('due_amount');
+        if ($amount > $orderDue + 0.000001) {
+            throw new \InvalidArgumentException('المبلغ أكبر من إجمالي المتبقي على فواتير أمر التشغيل.');
+        }
+
+        $remaining = $amount;
+        $firstInvoiceId = null;
+
+        foreach ($invoices as $invoice) {
+            if ($remaining <= 0.000001) {
+                break;
+            }
+            $apply = min($remaining, (float) $invoice->due_amount);
+            if ($apply <= 0.000001) {
+                continue;
+            }
+            $invoiceService->recordPayment($invoice, $apply);
+            $firstInvoiceId ??= (int) $invoice->id;
+            $remaining -= $apply;
+        }
+
+        if ($firstInvoiceId) {
+            $pay->update(['processing_invoice_id' => $firstInvoiceId]);
         }
     }
 

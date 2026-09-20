@@ -41,11 +41,13 @@ class TreeAccountResource extends JsonResource
                     'code' => $this->mainAccount->code,
                 ];
             }),
-            // Always return children as full nested resources when available,
-            // whether they were loaded via relation or built manually (repository tree).
-            'children' => $this->children && $this->children->count() > 0
-                ? self::collection($this->children)
-                : [],
+            // Only serialize children when already loaded (eager or setRelation).
+            // Accessing $this->children here used to lazy-load every node (N+1).
+            'children' => $this->whenLoaded('children', function () {
+                return $this->children->count() > 0
+                    ? self::collection($this->children)
+                    : [];
+            }, []),
             'safes' => $this->whenLoaded('safes', function () {
                 return $this->safes->map(function ($safe) {
                     return [
@@ -59,16 +61,25 @@ class TreeAccountResource extends JsonResource
                 });
             }),
             'detail_type' => $this->detail_type,
-            'created_at' => $this->created_at->format('Y-m-d H:i') ?? null,
-            'updated_at' => $this->updated_at->format('Y-m-d H:i') ?? null,
+            'created_by' => $this->created_by,
+            'updated_by' => $this->updated_by,
+            'created_by_user' => $this->whenLoaded('createdByUser', function () {
+                return $this->createdByUser ? [
+                    'id' => $this->createdByUser->id,
+                    'name' => $this->createdByUser->name,
+                ] : null;
+            }),
+            'updated_by_user' => $this->whenLoaded('updatedByUser', function () {
+                return $this->updatedByUser ? [
+                    'id' => $this->updatedByUser->id,
+                    'name' => $this->updatedByUser->name,
+                ] : null;
+            }),
+            'created_at' => $this->created_at?->format('Y-m-d H:i'),
+            'updated_at' => $this->updated_at?->format('Y-m-d H:i'),
+            'deleted_at' => $this->deleted_at?->format('Y-m-d H:i'),
         ];
     }
 }
-
-
-
-
-
-//  cach
 
  

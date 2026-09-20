@@ -49,3 +49,15 @@ i{
 .cursor-pointer{
   cursor: pointer;
 }
+
+.modifications-cell {
+  max-width: 14rem;
+  vertical-align: top;
+}
+
+.tracking-list {
+  max-height: 6.5rem;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}

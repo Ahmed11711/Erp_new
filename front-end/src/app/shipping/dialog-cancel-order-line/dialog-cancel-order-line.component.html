@@ -1,0 +1,31 @@
+<h1 mat-dialog-title dir="rtl">إلغاء صنف — طلب #{{ data.orderId }}</h1>
+<div mat-dialog-content dir="rtl">
+  <p class="mb-2"><strong>{{ productName }}</strong></p>
+  <p class="text-muted small mb-3">الحد الأقصى للإلغاء: {{ maxQty }}</p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <div class="form-group mb-3">
+      <label class="form-label">الكمية المراد إلغاؤها</label>
+      <input type="number" class="form-control" formControlName="quantity" [max]="maxQty" min="0.001" step="any">
+      <p class="text-danger small mb-0" *ngIf="form.get('quantity')?.invalid && form.get('quantity')?.touched">مطلوب</p>
+    </div>
+
+    <div class="form-group mb-3">
+      <label class="form-label">سبب الإلغاء</label>
+      <textarea class="form-control" rows="3" formControlName="reason" placeholder="مثال: نفاد المخز — طلب العميل"></textarea>
+      <p class="text-danger small mb-0" *ngIf="form.get('reason')?.invalid && form.get('reason')?.touched">مطلوب (حرفان على الأقل)</p>
+    </div>
+
+    <div class="form-group mb-3">
+      <label class="form-label">ملاحظة عامة (اختياري)</label>
+      <textarea class="form-control" rows="2" formControlName="note"></textarea>
+    </div>
+
+    <div class="d-flex justify-content-center gap-2">
+      <button type="submit" class="btn btn-danger" [disabled]="form.invalid || submitting || maxQty <= 0">
+        {{ submitting ? 'جاري الإلغاء...' : 'تأكيد الإلغاء' }}
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="onCloseClick()">رجوع</button>
+    </div>
+  </form>
+</div>
