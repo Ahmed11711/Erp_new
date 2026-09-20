@@ -10,8 +10,10 @@ import { OrderSourceService } from '../services/order-source.service';
 import { OrderService } from '../services/order.service';
 import { ShippingWayService } from '../services/shipping-way.service';
 import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
+import { calculateVat } from 'src/app/shared/utils/vat';
 
 @Component({
   selector: 'app-edit-order',
@@ -29,8 +31,14 @@ export class EditOrderComponent {
   shippingWays:any[]=[];
   orderSources:any[]=[];
   errormessage:boolean=false;
+  errorMessageText = '';
   products:any[]=[];
   banksData:any[]=[];
+  location:any[]=[];
+  cities:any[]=[];
+  governName = false;
+  useArabicLocation = true;
+  orderLoading = true;
 
   openbtn:boolean=true;
   formdiv:boolean=false;
@@ -48,7 +56,8 @@ export class EditOrderComponent {
     private _snackBar:MatSnackBar,
     private router:Router,
     private route:ActivatedRoute,
-    private authService:AuthService
+    private authService:AuthService,
+    public rbac: RbacService,
     ){
       this.imgUrl = environment.imgUrl;
 
@@ -61,24 +70,98 @@ export class EditOrderComponent {
       this.id = result?.id;
     });
     this.bankService.bankSelect().subscribe((result:any)=>this.banksData=result);
+    this.shippingWay.data().subscribe(result => this.shippingWays = result);
+    this.http.get('assets/egypt/governorates.json').subscribe((data: any) => {
+      this.location = data;
+      if (this.order?.governorate) {
+        this.syncLocationMode(this.order.governorate);
+      }
+    });
+    this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
+      this.cities = data;
+    });
     this.getOrder();
-
-    this.orderService.getProducts().subscribe((result:any)=>this.products = result);
+    setTimeout(() => {
+      this.orderService.getProducts().subscribe((result:any)=>this.products = result);
+    }, 0);
 
   }
 
+  get canEditOrder(): boolean {
+    return this.rbac.can('orders.edit');
+  }
+
+  filterCitiesForGovernorate(governorate: string): void {
+    const gov = this.location.find(
+      (elem: any) => elem.governorate_name_ar === governorate || elem.governorate_name_en === governorate
+    );
+    if (!gov) {
+      return;
+    }
+    this.http.get('assets/egypt/cities.json').subscribe((data: any) => {
+      this.cities = data.filter((elem: any) => elem.governorate_id == gov.id);
+    });
+  }
+
+  private syncLocationMode(governorate: string | null | undefined): void {
+    const value = String(governorate ?? '').trim();
+    if (value === '') {
+      this.useArabicLocation = true;
+      this.governName = false;
+      return;
+    }
+    const matched = this.location.find(
+      (elem: any) => elem.governorate_name_ar === value || elem.governorate_name_en === value
+    );
+    this.useArabicLocation = !!matched;
+    this.governName = value === 'القاهرة' || matched?.governorate_name_ar === 'القاهرة';
+    if (matched) {
+      this.filterCitiesForGovernorate(matched.governorate_name_ar);
+    }
+  }
+
+  onGovernorateChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.syncLocationMode(value);
+    this.form.patchValue({ city: '' });
+  }
+
+  displayText(value: unknown): string {
+    if (value === null || value === undefined) {
+      return '—';
+    }
+    const text = String(value).trim();
+    return text === '' || text.toLowerCase() === 'null' ? '—' : text;
+  }
+
+  productImageSrc(imgsrc: string | null | undefined): string | null {
+    if (!imgsrc || String(imgsrc).trim() === '' || String(imgsrc).toLowerCase() === 'null') {
+      return null;
+    }
+    return this.imgUrl + imgsrc;
+  }
+
   getOrder(){
+    this.orderLoading = true;
     this.orderService.getOrderById(this.id).subscribe((result:any)=>{
       this.order = result;
+      this.orderLoading = false;
 
       this.customer_companyID = result?.company_id;
 
       this.vat = result?.vat;
       this.discount = result?.discount;
       this.shipping_cost = result?.shipping_cost;
-      this.prepaid_amount = result?.prepaid_amount;
+      this.prepaid_amount = Number(result?.prepaid_amount ?? 0);
 
       this.customerTypeVal = result?.customer_type;
+      this.applyVat = this.customerTypeVal === 'شركة' && Number(result?.vat) > 0;
+      this.vatPercent = this.applyVat ? 14 : 0;
+      this.changedVat = !this.applyVat;
+      this.orderStatus = result?.order_status;
+      this.orderType = result?.order_type;
+      this.maintenanceAmount = Number(result?.order_details?.maintenance_cost ?? 0);
+      this.syncLocationMode(result?.governorate);
 
       this.order_details = result?.order_products.map(elm=>{
         return {
@@ -98,14 +181,24 @@ export class EditOrderComponent {
       this.net_total = result?.net_total;
 
       this.form.patchValue({
-        'shipping_cost' :result.shipping_cost,
-        'prepaid_amount' :result.prepaid_amount,
-        'discount' :result.discount,
-        'order_notes' :result.order_notes,
-        'bank':result?.bank_id
-      })
-
-
+        shipping_cost: result.shipping_cost,
+        prepaid_amount: result.prepaid_amount,
+        discount: result.discount,
+        order_notes: result.order_notes,
+        bank: result?.bank_id,
+        customer_name: result.customer_name,
+        customer_phone_1: result.customer_phone_1,
+        customer_phone_2: result.customer_phone_2,
+        tel: result.tel,
+        governorate: result.governorate,
+        city: result.city,
+        address: result.address,
+        shipping_method_id: result.shipping_method_id,
+        maintenance_cost: result?.order_details?.maintenance_cost ?? 0,
+      });
+      this.calc(null);
+    }, () => {
+      this.orderLoading = false;
     })
   }
 
@@ -121,7 +214,7 @@ export class EditOrderComponent {
 
 
   editQuantity(e,index:number){
-    if ((this.user == 'Shipping Management' || this.user == 'Operation Management' || this.user == 'Finance and operations management') && e.target.value < this.order_details[index].minQuantity) {
+    if (!this.canEditOrder && e.target.value < this.order_details[index].minQuantity) {
       Swal.fire({
         icon:'error',
         title:'لا يمكنك تقليل الكمية'
@@ -156,17 +249,26 @@ export class EditOrderComponent {
 
 
   form:FormGroup = new FormGroup({
-    'bank' :new FormControl(null),
-    'productprice' :new FormControl(null ),
-    'productquantity' :new FormControl(null ),
-    'order_notes' :new FormControl(null ),
-    'order_image' :new FormControl(null),
-    'total_invoice' :new FormControl(null ),
-    'shipping_cost' :new FormControl(null ),
-    'prepaid_amount' :new FormControl(null ),
-    'discount' :new FormControl(null),
-    'net_total' :new FormControl(null),
-    'vat' :new FormControl(null),
+    bank: new FormControl(null),
+    productprice: new FormControl(null),
+    productquantity: new FormControl(null),
+    order_notes: new FormControl(null),
+    order_image: new FormControl(null),
+    total_invoice: new FormControl(null),
+    shipping_cost: new FormControl(null),
+    prepaid_amount: new FormControl(null),
+    discount: new FormControl(null),
+    net_total: new FormControl(null),
+    vat: new FormControl(null),
+    customer_name: new FormControl(null),
+    customer_phone_1: new FormControl(null),
+    customer_phone_2: new FormControl(null),
+    tel: new FormControl(null),
+    governorate: new FormControl(null),
+    city: new FormControl(null),
+    address: new FormControl(null),
+    shipping_method_id: new FormControl(null),
+    maintenance_cost: new FormControl(null),
   })
 
   changeProductPrice(e:any){
@@ -179,7 +281,8 @@ export class EditOrderComponent {
   }
   changedCollectNote!:string;
   submitform(){
-    if (this.order.order_status == 'تم شحن') {
+    const needsCollectNote = this.order?.order_status === 'تم شحن' || this.order?.order_status === 'تم التسليم';
+    if (needsCollectNote) {
       Swal.fire({
         title: 'ملحوظة التحصيل المتغير',
         input: 'text',
@@ -225,8 +328,20 @@ export class EditOrderComponent {
     formData.append('discount', data.discount);
     formData.append('net_total', data.net_total);
     formData.append('order_id', data.order_id);
-    formData.append('bank_id', data.bank);
+    formData.append('bank_id', data.bank ?? '');
     formData.append('vat', data.vat);
+    formData.append('customer_name', data.customer_name ?? '');
+    formData.append('customer_phone_1', data.customer_phone_1 ?? '');
+    formData.append('customer_phone_2', data.customer_phone_2 ?? '');
+    formData.append('tel', data.tel ?? '');
+    formData.append('governorate', data.governorate ?? '');
+    formData.append('city', data.city ?? '');
+    formData.append('address', data.address ?? '');
+    formData.append('customer_type', this.customerTypeVal ?? '');
+    formData.append('shipping_method_id', data.shipping_method_id ?? '');
+    if (this.orderType === 'طلب صيانة') {
+      formData.append('maintenance_cost', String(this.maintenanceAmount ?? 0));
+    }
     if(this.customerTypeVal == 'شركة'){
       formData.append('company_id', data.customer_company);
     }
@@ -241,6 +356,7 @@ export class EditOrderComponent {
 
     this.orderService.editOrder(this.id,formData).subscribe(result=>{
       this.errormessage=false;
+      this.errorMessageText = '';
       this.getOrder();
       Swal.fire({
         icon:'success',
@@ -249,19 +365,20 @@ export class EditOrderComponent {
         timerProgressBar:true,
         timer:1000
       })
-      if (this.order.order_status == 'تم شحن') {
+      if (this.order.order_status == 'تم شحن' || this.order.order_status == 'تم التسليم') {
         this.router.navigateByUrl(`/dashboard/shipping/collectorder/${this.id}`)
       }
     },
     (error)=>{
       console.log(error);
-
-      this.errormessage=true
+      this.errormessage=true;
+      this.errorMessageText = error?.error?.message || 'تعذّر حفظ التعديل — راجع البيانات وحاول مرة أخرى';
     });
 
   }
 
   orderStatus!:string ;
+  orderType!:string;
   status(event:any){
     this.orderStatus = event.target.value;
   }
@@ -286,6 +403,9 @@ export class EditOrderComponent {
   addproduct(){
     if (this.category_name &&typeof(this.category_quantity) =='number'   && this.category_price) {
       let oldPrice = this.products.find(elm => elm.id === this.category_id).category_price;
+      const productTotal = this.orderType === 'طلب صيانة'
+        ? 0
+        : Number(this.category_price) * this.category_quantity;
       const product = {
         category_id: this.category_id,
         category_name: this.category_name,
@@ -294,7 +414,7 @@ export class EditOrderComponent {
         price : Number(this.category_price) ,
         oldPrice : oldPrice ,
         imgsrc:this.category_image,
-        total : this.category_price*this.category_quantity
+        total : productTotal
       }
 
       this.order_details.push(product);
@@ -321,33 +441,67 @@ export class EditOrderComponent {
   net_total:number=0;
   vat:number=0;
   changedVat:boolean=false;
+  applyVat:boolean=false;
   customerTypeVal :string = 'افراد';
 
   shipping_cost:number=0;
+  maintenanceAmount:number=0;
   productsPrice:number=0;
   prepaid_amount:number=0;
   discount:number=0;
   vatPercent:number=14;
+
+  onApplyVatChange() {
+    if (this.applyVat) {
+      this.vatPercent = 14;
+      this.changedVat = false;
+    } else {
+      this.vatPercent = 0;
+      this.vat = 0;
+      this.changedVat = true;
+      this.form.patchValue({ vat: 0 });
+    }
+    this.calc(arguments);
+  }
+
   calc(e:any){
     this.productsPrice = 0;
     this.order_details.forEach(elm=>{
       this.productsPrice += elm.total
     });
-    if (e?.target?.id == 'vat') {
-      this.changedVat = true;
+    if (this.customerTypeVal == 'شركة' && this.applyVat) {
+      if (e?.target?.id == 'vat') {
+        this.changedVat = true;
+      }
+      if (!this.changedVat) {
+        this.vat = calculateVat(this.productsPrice, this.vatPercent > 0);
+      }
+    } else {
+      this.vat = 0;
     }
-    if (!this.changedVat) {
-      this.vat = this.productsPrice * this.vatPercent/100;
+    this.totalInvoice = this.productsPrice + this.shipping_cost;
+    if (this.orderType === 'طلب صيانة') {
+      this.totalInvoice += this.maintenanceAmount || 0;
     }
-    this.totalInvoice = (this.productsPrice + this.shipping_cost);
-    if(this.customerTypeVal == 'شركة'){
+    if(this.customerTypeVal == 'شركة' && this.applyVat){
       this.totalInvoice = this.totalInvoice + this.vat;
-
     }
-    this.net_total = this.totalInvoice - this.prepaid_amount - this.discount;
+    this.net_total = this.totalInvoice - (Number(this.prepaid_amount) || 0) - this.discount;
   }
 
+  get originalInvoiceTotal(): number {
+    return Number(this.order?.total_invoice ?? 0);
+  }
 
+  /** إضافة أصناف على أوردر كان صافيه بالكامل، من غير تسجيل المدفوع الأونلاين */
+  get needsOriginalPrepaidFill(): boolean {
+    return this.originalInvoiceTotal > 0.009
+      && this.totalInvoice > this.originalInvoiceTotal + 0.009
+      && !(Number(this.prepaid_amount) > 0.009);
+  }
 
-
+  fillOriginalAsPrepaid(): void {
+    this.prepaid_amount = this.originalInvoiceTotal;
+    this.calc(null);
+  }
 }

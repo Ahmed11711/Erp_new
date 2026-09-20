@@ -1,9 +1,25 @@
 import { Component, OnInit } from '@angular/core';
+import { FormControl } from '@angular/forms';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { BankService } from '../services/bank.service';
 import { TreeAccountService } from '../services/tree-account.service';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
+import { UserService } from '../../manage-system/services/user.service';
+import { RbacService } from '../../core/rbac/rbac.service';
+
+interface AccountOption {
+  id: number;
+  label: string;
+}
+
+interface BankUserRow {
+  id: number;
+  name: string;
+  email?: string;
+  department?: string;
+}
 
 @Component({
   selector: 'app-banks',
@@ -13,7 +29,12 @@ import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dial
 export class BanksComponent implements OnInit {
   banks: any[] = [];
   filteredBanks: any[] = [];
-  treeAccounts: any[] = [];
+  accountOptions: AccountOption[] = [];
+  filteredParentAccounts: AccountOption[] = [];
+  filteredCounterAccounts: AccountOption[] = [];
+  parentAccountCtrl = new FormControl<string | AccountOption>('', { nonNullable: true });
+  counterAccountCtrl = new FormControl<string | AccountOption>('', { nonNullable: true });
+  readonly accountAutocompleteCap = 400;
   loading = false;
   saving = false;
   searchTerm = '';
@@ -21,6 +42,13 @@ export class BanksComponent implements OnInit {
   showAddDialog = false;
   showEditDialog = false;
   showTransferDialog = false;
+  showUsersDialog = false;
+
+  directoryUsers: BankUserRow[] = [];
+  usersDialogBank: any = null;
+  selectedUserIds: number[] = [];
+  loadingUsers = false;
+  savingUsers = false;
 
   newBank: any = this.getEmptyBank();
   selectedBank: any = null;
@@ -34,16 +62,40 @@ export class BanksComponent implements OnInit {
     private bankService: BankService,
     private treeAccountService: TreeAccountService,
     private dialog: MatDialog,
-    private toast: ToastService
+    private toast: ToastService,
+    private userService: UserService,
+    private rbac: RbacService
   ) {}
+
+  get canManageBankAccess(): boolean {
+    return this.rbac.canAny(['system.rbac', 'finance.edit']);
+  }
 
   ngOnInit(): void {
     this.getAllBanks();
     this.getTreeAccounts();
+    this.parentAccountCtrl.valueChanges.subscribe(v => {
+      this.applyParentAccountFilter(typeof v === 'string' ? v : '');
+    });
+    this.counterAccountCtrl.valueChanges.subscribe(v => {
+      this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+    });
   }
 
+  displayAccountOption = (value: string | AccountOption | null): string => {
+    if (!value) return '';
+    return typeof value === 'string' ? value : value.label;
+  };
+
   private getEmptyBank() {
-    return { name: '', type: 'main', balance: 0, usage: '', asset_id: null };
+    return {
+      name: '',
+      type: 'main',
+      balance: 0,
+      usage: '',
+      parent_account_id: null,
+      counter_account_id: null
+    };
   }
 
   private getEmptyTransfer() {
@@ -79,7 +131,9 @@ export class BanksComponent implements OnInit {
     this.loading = true;
     this.bankService.getAll().subscribe({
       next: (res) => {
-        this.banks = res.data || (Array.isArray(res) ? res : []);
+        const raw = res.data ?? res;
+        const rows = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        this.banks = rows.map((b: any) => this.normalizeBankRow(b));
         this.filteredBanks = [...this.banks];
         this.loading = false;
       },
@@ -90,26 +144,217 @@ export class BanksComponent implements OnInit {
     });
   }
 
+  private normalizeBankRow(bank: any): any {
+    const assigned = bank.assigned_users ?? bank.assignedUsers ?? [];
+    return {
+      ...bank,
+      assigned_users: Array.isArray(assigned) ? assigned : [],
+      is_restricted: !!(bank.is_restricted ?? (Array.isArray(assigned) && assigned.length > 0)),
+    };
+  }
+
+  assignedUsersLabel(bank: any): string {
+    const users: BankUserRow[] = bank?.assigned_users ?? [];
+    if (!users.length) {
+      return 'الجميع';
+    }
+    return users.map(u => u.name).join('، ');
+  }
+
+  openUsersDialog(bank: any): void {
+    if (!this.canManageBankAccess) {
+      return;
+    }
+    this.usersDialogBank = { ...bank };
+    this.selectedUserIds = (bank.assigned_users ?? []).map((u: BankUserRow) => u.id);
+    this.showUsersDialog = true;
+    if (!this.directoryUsers.length) {
+      this.loadDirectoryUsers();
+    }
+  }
+
+  private loadDirectoryUsers(): void {
+    this.loadingUsers = true;
+    this.userService.compactDirectory().subscribe({
+      next: (res) => {
+        this.directoryUsers = res?.data ?? res ?? [];
+        this.loadingUsers = false;
+      },
+      error: () => {
+        this.toast.error('تعذر تحميل قائمة المستخدمين');
+        this.loadingUsers = false;
+      }
+    });
+  }
+
+  closeUsersDialog(): void {
+    this.showUsersDialog = false;
+    this.usersDialogBank = null;
+    this.selectedUserIds = [];
+    this.savingUsers = false;
+  }
+
+  saveBankUsers(): void {
+    if (!this.usersDialogBank?.id) {
+      return;
+    }
+    this.savingUsers = true;
+    this.bankService.syncAssignedUsers(this.usersDialogBank.id, this.selectedUserIds).subscribe({
+      next: (res) => {
+        this.toast.success('تم حفظ صلاحيات البنك');
+        this.closeUsersDialog();
+        this.getAllBanks();
+      },
+      error: (err) => {
+        this.toast.error(err.error?.message || 'فشل حفظ الصلاحيات');
+        this.savingUsers = false;
+      }
+    });
+  }
+
   getTreeAccounts(): void {
     this.treeAccountService.getAll().subscribe({
       next: (res) => {
-        if (res.data) {
-          this.treeAccounts = Array.isArray(res.data) ? res.data : [res.data];
-        } else if (Array.isArray(res)) {
-          this.treeAccounts = res;
+        const raw = (res as any)?.data;
+        const arr = Array.isArray(raw) ? raw : raw ? [raw] : Array.isArray(res) ? res : [];
+        const flat = this.flattenAccounts(arr);
+        if (flat.length > 0) {
+          this.setAccountOptions(flat);
+          return;
         }
+        this.treeAccountService.getTree().subscribe({
+          next: (treeRes: any) => {
+            const t = treeRes?.data ?? treeRes;
+            const tArr = Array.isArray(t) ? t : t ? [t] : [];
+            this.setAccountOptions(this.flattenAccounts(tArr));
+          },
+          error: () => this.toast.error('تعذر تحميل شجرة الحسابات')
+        });
       },
       error: () => this.toast.error('تعذر تحميل شجرة الحسابات')
     });
   }
 
+  private setAccountOptions(options: AccountOption[]): void {
+    this.accountOptions = options;
+    this.applyParentAccountFilter('');
+    this.applyCounterAccountFilter('');
+  }
+
+  private flattenAccounts(nodes: any[]): AccountOption[] {
+    const out: AccountOption[] = [];
+    const walk = (list: any[]) => {
+      for (const n of list || []) {
+        if (n?.id != null && n?.name) {
+          const code = n.code != null && n.code !== '' ? String(n.code) : '';
+          out.push({
+            id: Number(n.id),
+            label: code ? `${n.name} — ${code}` : String(n.name)
+          });
+        }
+        if (Array.isArray(n?.children) && n.children.length) {
+          walk(n.children);
+        }
+      }
+    };
+    walk(nodes);
+    return out.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }
+
+  private applyParentAccountFilter(term: string): void {
+    this.filteredParentAccounts = this.filterAccountOptions(term);
+  }
+
+  private applyCounterAccountFilter(term: string): void {
+    this.filteredCounterAccounts = this.filterAccountOptions(term);
+  }
+
+  private filterAccountOptions(term: string): AccountOption[] {
+    const raw = String(term ?? '').trim();
+    const q = raw.toLowerCase();
+    let list = this.accountOptions;
+    if (q) {
+      list = list.filter(a => {
+        if (String(a.id).includes(raw)) return true;
+        return a.label.toLowerCase().includes(q) || a.label.includes(raw);
+      });
+    }
+    return list.slice(0, this.accountAutocompleteCap);
+  }
+
+  onParentAccountFocus(): void {
+    const v = this.parentAccountCtrl.value;
+    this.applyParentAccountFilter(typeof v === 'string' ? v : '');
+  }
+
+  onCounterAccountFocus(): void {
+    const v = this.counterAccountCtrl.value;
+    this.applyCounterAccountFilter(typeof v === 'string' ? v : '');
+  }
+
+  onParentAccountSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value as AccountOption;
+    if (!acc?.id) return;
+    this.newBank.parent_account_id = acc.id;
+    this.parentAccountCtrl.setValue(acc, { emitEvent: false });
+    this.applyParentAccountFilter('');
+  }
+
+  onCounterAccountSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value as AccountOption;
+    if (!acc?.id) return;
+    this.newBank.counter_account_id = acc.id;
+    this.counterAccountCtrl.setValue(acc, { emitEvent: false });
+    this.applyCounterAccountFilter('');
+  }
+
+  onParentAccountBlur(): void {
+    setTimeout(() => this.syncAccountCtrlOnBlur(this.parentAccountCtrl, 'parent_account_id'), 150);
+  }
+
+  onCounterAccountBlur(): void {
+    setTimeout(() => this.syncAccountCtrlOnBlur(this.counterAccountCtrl, 'counter_account_id'), 150);
+  }
+
+  private syncAccountCtrlOnBlur(
+    ctrl: FormControl<string | AccountOption | null>,
+    field: 'parent_account_id' | 'counter_account_id'
+  ): void {
+    const v = ctrl.value;
+    if (v && typeof v === 'object') return;
+
+    const str = typeof v === 'string' ? v.trim() : '';
+    if (!str) {
+      this.newBank[field] = null;
+      return;
+    }
+
+    const exact = this.accountOptions.find(a => a.label === str);
+    if (exact) {
+      this.newBank[field] = exact.id;
+      ctrl.setValue(exact, { emitEvent: false });
+      return;
+    }
+
+    this.newBank[field] = null;
+    ctrl.setValue(str, { emitEvent: false });
+  }
+
+  private resetAccountAutocomplete(): void {
+    this.parentAccountCtrl.setValue('', { emitEvent: false });
+    this.counterAccountCtrl.setValue('', { emitEvent: false });
+    this.applyParentAccountFilter('');
+    this.applyCounterAccountFilter('');
+  }
+
   openAddDialog(): void {
     this.newBank = this.getEmptyBank();
+    this.resetAccountAutocomplete();
     this.showAddDialog = true;
   }
 
   openEditDialog(bank: any): void {
-    this.selectedBank = { ...bank, asset_id: bank.asset_id || bank.asset?.id };
+    this.selectedBank = { ...bank };
     this.showEditDialog = true;
   }
 
@@ -129,7 +374,11 @@ export class BanksComponent implements OnInit {
   }
 
   canSaveNew(): boolean {
-    return !!this.newBank.name?.trim() && !!this.newBank.asset_id;
+    if (!this.newBank.name?.trim()) return false;
+    if (!this.newBank.parent_account_id) return false;
+    const bal = Number(this.newBank.balance) || 0;
+    if (bal > 0 && !this.newBank.counter_account_id) return false;
+    return true;
   }
 
   saveBank(): void {
@@ -154,7 +403,7 @@ export class BanksComponent implements OnInit {
   }
 
   canSaveEdit(): boolean {
-    return !!this.selectedBank?.name?.trim() && !!this.selectedBank?.asset_id;
+    return !!this.selectedBank?.name?.trim();
   }
 
   updateBank(): void {
@@ -164,7 +413,11 @@ export class BanksComponent implements OnInit {
     }
 
     this.saving = true;
-    this.bankService.update(this.selectedBank.id, this.selectedBank).subscribe({
+    this.bankService.update(this.selectedBank.id, {
+      name: this.selectedBank.name,
+      usage: this.selectedBank.usage,
+      type: this.selectedBank.type
+    }).subscribe({
       next: () => {
         this.toast.success('تم تحديث بيانات البنك بنجاح');
         this.getAllBanks();

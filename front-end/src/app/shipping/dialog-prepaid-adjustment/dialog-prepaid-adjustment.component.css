@@ -1,0 +1,8 @@
+:host {
+  display: block;
+  min-width: min(520px, 95vw);
+}
+
+.form-check {
+  margin-bottom: 0.35rem;
+}

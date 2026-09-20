@@ -14,7 +14,6 @@ import { DescriptionsComponent } from './descriptions/descriptions.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { OrderCodingComponent } from './order-coding/order-coding.component';
 import { OrderDocumentComponent } from './order-document/order-document.component';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
@@ -26,6 +25,7 @@ import { NgxPaginationModule } from 'ngx-pagination';
 import { MatMenuModule } from '@angular/material/menu';
 import { Offer1DetailsComponent } from './offer1-details/offer1-details.component';
 import { Offer2DetailsComponent } from './offer2-details/offer2-details.component';
+import { PriceListComponent } from './price-list/price-list.component';
 
 
 @NgModule({
@@ -43,7 +43,8 @@ import { Offer2DetailsComponent } from './offer2-details/offer2-details.componen
     PriceOffer1Component,
     PriceOffer2Component,
     Offer1DetailsComponent,
-    Offer2DetailsComponent
+    Offer2DetailsComponent,
+    PriceListComponent,
   ],
   imports: [
     CommonModule,
@@ -53,7 +54,6 @@ import { Offer2DetailsComponent } from './offer2-details/offer2-details.componen
     FormsModule,
     ReactiveFormsModule,
     AutocompleteLibModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
     NgxPaginationModule,

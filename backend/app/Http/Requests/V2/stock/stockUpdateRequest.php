@@ -13,7 +13,8 @@ class stockUpdateRequest extends BaseRequest
     {
         return [
             'name' => 'sometimes|required|string|max:191',
-            'balance' => 'sometimes|required|numeric',
+            // يقبل 0 صراحةً (لا يُعتبر فارغاً مثل بعض قواعد required مع JSON)
+            'balance' => 'sometimes|nullable|numeric|min:0',
             'asset_id' => 'sometimes|required|integer|exists:tree_accounts,id',
             'active' => 'sometimes|required|integer',
         ];

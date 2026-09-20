@@ -1,3 +1,18 @@
 p{
     font-size: 25px;
+    margin: 0;
+    font-weight: 600;
+    color: #5e1745;
+}
+
+@media (max-width: 768px) {
+    p{
+        font-size: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    p{
+        font-size: 15px;
+    }
 }

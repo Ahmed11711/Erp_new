@@ -3,9 +3,10 @@ import { CommonModule, DatePipe } from '@angular/common';
 
 import { ShippingRoutingModule } from './shipping-routing.module';
 import { AddOrderComponent } from './add-order/add-order.component';
+import { ConvertOfferToOrderComponent } from './convert-offer-to-order/convert-offer-to-order.component';
+import { OfferOrdersComponent } from './offer-orders/offer-orders.component';
 import { SharedModule } from '../shared/shared.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -20,14 +21,15 @@ import { ShippingCompanyComponent } from './shipping-company/shipping-company.co
 import {MatDialogModule} from '@angular/material/dialog';
 import { ConfirmOrderComponent } from './confirm-order/confirm-order.component';
 import { OrderDetailsComponent } from './order-details/order-details.component';
-import { TrackingComponent } from './tracking/tracking.component';
 import { ShipOrderComponent } from './ship-order/ship-order.component';
 import { AutocompleteLibModule } from 'angular-ng-autocomplete';
 import { EditOrderComponent } from './edit-order/edit-order.component';
 
 import {MatButtonModule} from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormField } from '@angular/material/form-field';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { CollectOrderComponent } from './collect-order/collect-order.component';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
@@ -39,19 +41,29 @@ import { CustomerCompanyDetailsComponent } from './customer-company-details/cust
 import { DialogNotificationNoteComponent } from './dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from './dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from './dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { DialogCancelOrderLineComponent } from './dialog-cancel-order-line/dialog-cancel-order-line.component';
+import { DialogPrepaidAdjustmentComponent } from './dialog-prepaid-adjustment/dialog-prepaid-adjustment.component';
+import { DialogOrderRollbackComponent } from './dialog-order-rollback/dialog-order-rollback.component';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CustomerCompanyBalanceComponent } from './customer-company-balance/customer-company-balance.component';
 import { DialogCollectFromCustomerCompanyComponent } from './dialog-collect-from-customer-company/dialog-collect-from-customer-company.component';
 import { PrintInvoiceComponent } from './print-invoice/print-invoice.component';
 import { StickerComponent } from './sticker/sticker.component';
 import { CustomDatePipe } from '../pipes/custom-date.pipe';
-import { ShippingCompanyLinesComponent } from './shipping-company-lines/shipping-company-lines.component';
-import { FullCalendarModule } from '@fullcalendar/angular';
 import { ShippingLineStatementComponent } from './shipping-line-statement/shipping-line-statement.component';
-// import { FormsModule } from '@angular/forms';
+import { ShippingAccountsReportComponent } from './shipping-accounts-report/shipping-accounts-report.component';
+import { OrderFulfillmentPanelComponent } from './order-fulfillment-panel/order-fulfillment-panel.component';
+import { CollectionCompaniesComponent } from './collection-companies/collection-companies.component';
+import { CollectionAccountsReportComponent } from './collection-accounts-report/collection-accounts-report.component';
+import { DialogShopifyOrderReviewComponent } from './dialog-shopify-order-review/dialog-shopify-order-review.component';
+import { SalesMovementComponent } from './sales-movement/sales-movement.component';
+import { DialogOrderInvoiceJournalComponent } from './dialog-order-invoice-journal/dialog-order-invoice-journal.component';
+
 @NgModule({
   declarations: [
     AddOrderComponent,
+    ConvertOfferToOrderComponent,
+    OfferOrdersComponent,
     ListOrdersComponent,
     OrderSourceComponent,
     ShippingWayComponent,
@@ -59,7 +71,6 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     ShippingCompanyComponent,
     ConfirmOrderComponent,
     OrderDetailsComponent,
-    TrackingComponent,
     ShipOrderComponent,
     EditOrderComponent,
     DialogOverviewExampleDialog,
@@ -72,12 +83,21 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     DialogNotificationNoteComponent,
     DialogOrderNotificationComponent,
     DialogCancelRefuseOrderComponent,
+    DialogCancelOrderLineComponent,
+    DialogPrepaidAdjustmentComponent,
+    DialogOrderRollbackComponent,
     CustomerCompanyBalanceComponent,
     DialogCollectFromCustomerCompanyComponent,
     PrintInvoiceComponent,
     StickerComponent,
-    ShippingCompanyLinesComponent,
-    ShippingLineStatementComponent
+    ShippingLineStatementComponent,
+    ShippingAccountsReportComponent,
+    OrderFulfillmentPanelComponent,
+    CollectionCompaniesComponent,
+    CollectionAccountsReportComponent,
+    DialogShopifyOrderReviewComponent,
+    SalesMovementComponent,
+    DialogOrderInvoiceJournalComponent,
   ],
   imports: [
     MatButtonModule,
@@ -88,9 +108,9 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     ShippingRoutingModule,
     SharedModule,
     ReactiveFormsModule,
-    MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
+    MatAutocompleteModule,
     MatDatepickerModule,
     MatSelectModule,
     FormsModule,
@@ -99,7 +119,7 @@ import { ShippingLineStatementComponent } from './shipping-line-statement/shippi
     NgxPaginationModule,
     MatPaginatorModule,
     MatTooltipModule,
-    FullCalendarModule,
+    MatCheckboxModule,
     WhatsAppModule
   ],
   providers: [

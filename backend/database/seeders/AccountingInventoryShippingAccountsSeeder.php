@@ -80,5 +80,40 @@ class AccountingInventoryShippingAccountsSeeder extends Seeder
                 'detail_type' => 'shipping_revenue',
             ]);
         }
+
+        $this->ensureMaintenanceRevenueAccount($salesGrp);
+    }
+
+    private function ensureMaintenanceRevenueAccount(?TreeAccount $salesGrp): void
+    {
+        $existing = TreeAccount::resolveMaintenanceRevenueAccount();
+        if ($existing) {
+            if ($existing->detail_type !== 'maintenance_revenue') {
+                $existing->detail_type = 'maintenance_revenue';
+                $existing->save();
+            }
+
+            return;
+        }
+
+        $revRoot = TreeAccount::where('code', '4000')->first()
+            ?? TreeAccount::where('type', 'revenue')->where('level', 1)->first();
+        $parent = $revRoot ?? $salesGrp;
+        if (! $parent) {
+            return;
+        }
+
+        TreeAccount::create([
+            'name' => 'إيرادات الصيانة',
+            'name_en' => 'Maintenance revenue',
+            'code' => '40004',
+            'parent_id' => $parent->id,
+            'type' => 'revenue',
+            'level' => ((int) $parent->level) + 1,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'maintenance_revenue',
+        ]);
     }
 }

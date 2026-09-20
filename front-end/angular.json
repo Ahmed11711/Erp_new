@@ -22,13 +22,20 @@
             "tsConfig": "tsconfig.app.json",
             "assets": [
               "src/favicon.ico",
-              "src/assets"
+              "src/assets",
+              {
+                "glob": ".htaccess",
+                "input": "src",
+                "output": "/"
+              }
             ],
             "styles": [
+              "src/icon-fonts.css",
               "src/custom-theme.scss",
               "src/assets/css/cdn.rtlcss.com_bootstrap_v4.5.3_css_bootstrap.min.css",
               "node_modules/@fortawesome/fontawesome-free/css/all.min.css",
-              "src/styles.css"
+              "src/styles.css",
+              "src/app/whatsapp/styles/wa-chat-overlays.css"
             ],
             "scripts": [
               "src/jquery-3.6.4.js",
@@ -48,6 +55,14 @@
           },
           "configurations": {
             "production": {
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": true
+                },
+                "fonts": false
+              },
               "budgets": [
                 {
                   "type": "initial",
@@ -60,7 +75,8 @@
                   "maximumError": "20kb"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "deployUrl": "/"
             },
             "development": {
               "buildOptimizer": false,

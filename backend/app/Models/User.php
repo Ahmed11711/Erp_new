@@ -11,7 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject{
-    use HasApiTokens, HasFactory, Notifiable,HasRoles;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
      * The attributes that are mass assignable.
@@ -62,5 +62,23 @@ class User extends Authenticatable implements JWTSubject{
     public function customers()
     {
         return $this->hasMany(Customer::class, 'assigned_agent_id');
+    }
+
+    public function offers()
+    {
+        return $this->hasMany(Offers::class, 'user_id');
+    }
+
+    public function permissionOverrides()
+    {
+        return $this->hasMany(UserPermissionOverride::class);
+    }
+
+    /**
+     * Effective permission keys (slug + legacy display name) for API / frontend.
+     */
+    public function resolvedPermissionKeys(): array
+    {
+        return app(\App\Services\Rbac\PermissionResolutionService::class)->effectiveKeys($this);
     }
 }

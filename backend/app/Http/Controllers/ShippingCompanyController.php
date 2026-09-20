@@ -5,7 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\OrderDetails;
 use App\Models\ShippingCompany;
+use App\Models\TreeAccount;
 use App\Models\shippingCompanyDetails;
+use App\Services\Accounting\AccountLinkingService;
+use App\Services\Accounting\ReceivableReconciliationService;
+use App\Services\Accounting\ReceivableTreeAccountGuard;
+use App\Services\Orders\OrderStatusVisibilityService;
+use App\Services\Shipping\ShippingCompanyDeletionService;
+use App\Services\Shipping\UnlinkedReceivableAccountException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -13,6 +20,14 @@ use Illuminate\Support\Facades\Cache;
 
 class ShippingCompanyController extends Controller
 {
+    public function __construct(
+        public AccountLinkingService $accountLinkingService,
+        public ReceivableTreeAccountGuard $receivableGuard,
+        public ReceivableReconciliationService $reconciliationService,
+        protected OrderStatusVisibilityService $orderStatusVisibility,
+    ) {
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -20,14 +35,124 @@ class ShippingCompanyController extends Controller
      */
     public function index()
     {
-        $shippingCompanies = ShippingCompany::all();
-        return response()->json($shippingCompanies, 200);
+        $shippingCompanies = ShippingCompany::with([
+            'receivableTreeAccount:id,code,name,balance',
+            'treeAccount:id,code,name,balance',
+        ])->get();
+
+        // عمود shipping_companies.orders_count في الجدول قيمة قديمة (افتراضي 0) ولا يُحدَّث مع الشحن.
+        // العدد الحقيقي «تحت التحصيل» = صفوف shipping_company_details بحالة تم شحن ولم تُغلق بعد.
+        $pendingByCompany = DB::table('shipping_company_details')
+            ->select('shipping_company_id', DB::raw('COUNT(DISTINCT order_id) as cnt'))
+            ->where('status', 'تم شحن')
+            ->where('is_done', 0)
+            ->groupBy('shipping_company_id')
+            ->pluck('cnt', 'shipping_company_id');
+
+        $payload = $shippingCompanies->map(function (ShippingCompany $sc) use ($pendingByCompany) {
+            $row = $sc->toArray();
+            $row['orders_count'] = (int) ($pendingByCompany[$sc->id] ?? 0);
+            $row['balance'] = $sc->displayBalance();
+
+            return $row;
+        });
+
+        return response()->json($payload->values(), 200);
     }
 
     public function shippingcompanySelect()
     {
-        $data = ShippingCompany::select('id', 'name')->get();
+        $data = ShippingCompany::with('treeAccount:id,balance')->get()
+            ->map(fn (ShippingCompany $sc) => [
+                'id' => $sc->id,
+                'name' => $sc->name,
+                'type' => $sc->type,
+                'balance' => $sc->displayBalance(),
+            ]);
+
         return response()->json($data, 200);
+    }
+
+    /**
+     * عدد شركات الشحن والمناديب غير المربوطين بحسابات الشجرة.
+     */
+    public function unlinkedSummary()
+    {
+        $unlinkedCount = ShippingCompany::query()->whereNull('receivable_tree_account_id')->count();
+        $parent = $this->accountLinkingService->getShippingReceivableParent();
+
+        return response()->json([
+            'unlinked_count' => $unlinkedCount,
+            'parent_account' => $parent ? [
+                'id' => $parent->id,
+                'name' => $parent->name,
+                'code' => (string) $parent->code,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * ربط جميع شركات الشحن والمناديب غير المربوطين دفعة واحدة.
+     */
+    public function linkUnlinked()
+    {
+        $result = $this->accountLinkingService->linkAllUnlinkedShippingCompanies();
+
+        if (!$result['parent']) {
+            return response()->json([
+                'message' => $result['message'],
+            ], 422);
+        }
+
+        $status = $result['failed'] > 0 ? 207 : 200;
+
+        return response()->json($result, $status);
+    }
+
+    /**
+     * ربط شركة شحن/مندوب واحد بحساب في شجرة الحسابات.
+     */
+    public function linkAccount($id)
+    {
+        $company = ShippingCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
+
+        if ($company->receivable_tree_account_id) {
+            $account = TreeAccount::find($company->receivable_tree_account_id);
+            if ($account && ! $this->receivableGuard->isPaymentSourceTreeAccount((int) $account->id)) {
+                return response()->json([
+                    'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
+                    'receivable_tree_account_id' => $company->receivable_tree_account_id,
+                    'receivable_tree_account' => [
+                        'id' => $account->id,
+                        'name' => $account->name,
+                        'code' => (string) $account->code,
+                    ],
+                ]);
+            }
+
+            $company->receivable_tree_account_id = null;
+            $company->save();
+        }
+
+        $account = $this->accountLinkingService->ensureShippingCompanyAccount($company);
+        if (!$account) {
+            return response()->json([
+                'message' => 'تعذر إنشاء حساب للشركة. راجع حساب «شركات الشحن والمناديب» في شجرة الحسابات.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'success',
+            'receivable_tree_account_id' => $account->id,
+            'receivable_tree_account' => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ],
+        ]);
     }
 
     /**
@@ -41,13 +166,48 @@ class ShippingCompanyController extends Controller
         $request->validate([
             'name' => 'required',
             'type' => 'required|in:مندوب,شركة',
-        ]);
-        ShippingCompany::create([
-            'name' => $request->name,
-            'type' => $request->type,
+            'receivable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
 
-        return response()->json("created", 201);
+        if ($request->filled('receivable_tree_account_id')) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $request->receivable_tree_account_id,
+                    'شركة الشحن/المندوب'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
+        $company = ShippingCompany::create([
+            'name' => $request->name,
+            'type' => $request->type,
+            'receivable_tree_account_id' => $request->filled('receivable_tree_account_id')
+                ? (int) $request->receivable_tree_account_id
+                : null,
+        ]);
+
+        if (!$company->receivable_tree_account_id) {
+            $account = $this->accountLinkingService->ensureShippingCompanyAccount($company);
+            if (!$account) {
+                return response()->json([
+                    'message' => 'تم إنشاء الشركة لكن تعذر إنشاء حسابها في شجرة الحسابات. راجع حساب «شركات الشحن والمناديب» أو إعدادات الربط المحاسبي.',
+                ], 422);
+            }
+        } else {
+            $account = TreeAccount::find($company->receivable_tree_account_id);
+        }
+
+        return response()->json([
+            'message' => 'created',
+            'receivable_tree_account_id' => $company->receivable_tree_account_id,
+            'receivable_tree_account' => $account ? [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ] : null,
+        ], 201);
     }
 
     /**
@@ -98,12 +258,9 @@ class ShippingCompanyController extends Controller
         }
 
         if ($request->has('order_status')) {
-            $search->where(function ($query) use ($request) {
-                $query->where('status', $request->order_status)
-                    ->where(function ($subquery) {
-                        $subquery->where('is_done', '=', 0);
-                    });
-            });
+            // Do not filter by is_done: rows are marked is_done=1 after collection/refusal/etc.
+            // while status may still be "تم شحن"; excluding them emptied كشف حساب شركة الشحن.
+            $search->where('status', $request->order_status);
         }
 
 
@@ -119,16 +276,30 @@ class ShippingCompanyController extends Controller
             });
         }
 
-        $search->with('order')->with([
-            'order.order_details',
+        $user = auth()->user();
+        if ($user) {
+            $search->whereHas('order', function ($query) use ($user) {
+                $this->orderStatusVisibility->applySearchScope($query, $user);
+            });
+        }
+
+        $search->with([
             'order' => function ($query) {
-                $query->withCount([
+                $query->with([
+                    'order_details',
+                    'traking' => function ($q) {
+                        $q->orderByDesc('id')
+                            ->limit(8)
+                            ->select(['id', 'order_id', 'action', 'date', 'user_id', 'created_at'])
+                            ->with('user:id,name');
+                    },
+                ])->withCount([
                     'notifications as review_notifications_count' => function ($query) {
                         $query->where('type', 'مراجعة')
                             ->where('send_from', auth()->id());
                     }
                 ]);
-            }
+            },
         ]);
         $search->orderBy('id', 'desc');
 
@@ -140,6 +311,15 @@ class ShippingCompanyController extends Controller
 
         $search = $search->paginate($itemsPerPage);
 
+        $pageOrderIds = $search->getCollection()->pluck('order_id')->unique()->filter()->values();
+        foreach ($pageOrderIds as $oid) {
+            Order::reconcileCollectionStatusIfAllShippingLinesClosed((int) $oid);
+        }
+        $search->getCollection()->each(function ($row) {
+            if ($row->relationLoaded('order') && $row->order) {
+                $row->order->refresh();
+            }
+        });
 
         $name = ShippingCompany::find($id);
 
@@ -172,13 +352,49 @@ class ShippingCompanyController extends Controller
         $request->validate([
             'name' => 'required',
             'type' => 'required|in:مندوب,شركة',
+            'receivable_tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
+
+        if ($request->filled('receivable_tree_account_id')) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $request->receivable_tree_account_id,
+                    'شركة الشحن/المندوب'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
 
         $companyToUpdate->update([
             'name' => $request->name,
             'type' => $request->type,
+            'receivable_tree_account_id' => $request->filled('receivable_tree_account_id')
+                ? (int) $request->receivable_tree_account_id
+                : null,
         ]);
-        return response()->json("updated", 200);
+
+        if (!$companyToUpdate->receivable_tree_account_id) {
+            $account = $this->accountLinkingService->ensureShippingCompanyAccount($companyToUpdate);
+            if (!$account) {
+                return response()->json([
+                    'message' => 'تم حفظ بيانات الشركة لكن تعذر ربطها بحساب في شجرة الحسابات.',
+                ], 422);
+            }
+        } else {
+            $account = TreeAccount::find($companyToUpdate->receivable_tree_account_id);
+            $this->accountLinkingService->syncShippingCompanyTreeAccountName($companyToUpdate);
+        }
+
+        return response()->json([
+            'message' => 'updated',
+            'receivable_tree_account_id' => $companyToUpdate->receivable_tree_account_id,
+            'receivable_tree_account' => $account ? [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ] : null,
+        ], 200);
     }
 
     /**
@@ -187,15 +403,22 @@ class ShippingCompanyController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy($id, ShippingCompanyDeletionService $deletionService)
     {
         $companyToDelete = ShippingCompany::find($id);
-        if(!$companyToDelete){
-            return response()->json("not found", 404);
+        if (! $companyToDelete) {
+            return response()->json(['message' => 'غير موجود'], 404);
         }
-        $companyToDelete->delete();
 
-        return response()->json("deleted", 200);
+        try {
+            $deletionService->delete($companyToDelete);
+
+            return response()->json('deleted', 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'حدث خطأ أثناء الحذف: '.$e->getMessage()], 500);
+        }
     }
 
     /**
@@ -299,5 +522,67 @@ class ShippingCompanyController extends Controller
             'date_from' => $from,
             'date_to' => $to,
         ], 200);
+    }
+
+    /**
+     * عدّ الطلبات المرتبطة بشركة شحن/مندوب في فترة محددة.
+     */
+    public function reconcileCount(Request $request, $id)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $counts = $this->reconciliationService->countShippingOrders(
+            (int) $id,
+            $request->date_from,
+            $request->date_to
+        );
+
+        return response()->json($counts);
+    }
+
+    /**
+     * جلب الطلبات المرتبطة بشركة شحن/مندوب في فترة محددة (للاختيار).
+     */
+    public function reconcileOrders(Request $request, $id)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+        ]);
+
+        $orders = $this->reconciliationService->listShippingOrders(
+            (int) $id,
+            $request->date_from,
+            $request->date_to
+        );
+
+        return response()->json(['orders' => $orders]);
+    }
+
+    /**
+     * إعادة حساب مديونيات شركة شحن/مندوب.
+     */
+    public function reconcileReceivables(Request $request, $id)
+    {
+        $request->validate([
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+            'order_ids' => 'nullable|array',
+            'order_ids.*' => 'integer',
+        ]);
+
+        $result = $this->reconciliationService->reconcileShippingCompany(
+            (int) $id,
+            $request->date_from,
+            $request->date_to,
+            $request->order_ids
+        );
+
+        $status = $result['success'] ? 200 : 422;
+
+        return response()->json($result, $status);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class DepartmentAccess
 {
@@ -11,11 +12,19 @@ class DepartmentAccess
     {
         $user = Auth::user();
 
-        if (!in_array($user->department, $departments)) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        return $next($request);
+        $userDept = Str::lower(trim((string) ($user->department ?? '')));
+
+        foreach ($departments as $allowed) {
+            if (Str::lower(trim((string) $allowed)) === $userDept) {
+                return $next($request);
+            }
+        }
+
+        return response()->json(['message' => 'Forbidden'], 403);
     }
 }
 

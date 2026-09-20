@@ -14,6 +14,8 @@ class Shipment extends Model
         'cost',
         'payment_status',
         'paid_at',
+        'reopened_at',
+        'reopen_reason',
         'daily_entry_id',
         'payment_daily_entry_id',
         'notes',
@@ -22,6 +24,7 @@ class Shipment extends Model
     protected $casts = [
         'cost' => 'decimal:2',
         'paid_at' => 'datetime',
+        'reopened_at' => 'datetime',
     ];
 
     public function order(): BelongsTo

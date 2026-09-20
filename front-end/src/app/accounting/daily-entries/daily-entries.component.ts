@@ -1,10 +1,19 @@
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, FormArray, Validators, AbstractControl } from '@angular/forms';
+import { FormBuilder, FormGroup, FormArray, FormControl, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import { catchError, of } from 'rxjs';
 import { DailyEntryService } from '../services/daily-entry.service';
 import { TreeAccountService } from '../services/tree-account.service';
-import { DailyEntry, DailyEntryItem } from '../interfaces/daily-entry.interface';
+import { AuthService } from 'src/app/auth/auth.service';
+import { DailyEntry } from '../interfaces/daily-entry.interface';
 import { TreeAccount } from '../interfaces/tree-account.interface';
 import Swal from 'sweetalert2';
+
+interface AccountOption {
+  id: number;
+  label: string;
+}
 
 @Component({
   selector: 'app-daily-entries',
@@ -14,6 +23,11 @@ import Swal from 'sweetalert2';
 export class DailyEntriesComponent implements OnInit {
   entries: DailyEntry[] = [];
   accounts: TreeAccount[] = [];
+  accountOptions: AccountOption[] = [];
+  itemAccountCtrls: FormControl<string | AccountOption>[] = [];
+  rowFilteredAccounts: AccountOption[][] = [];
+  readonly accountAutocompleteCap = 400;
+
   loading = false;
   showForm = false;
   isEditMode = false;
@@ -22,21 +36,22 @@ export class DailyEntriesComponent implements OnInit {
   perPage = 25;
   totalPages = 1;
   totalItems = 0;
-  
-  // Filters
+
   dateFrom: string = '';
   dateTo: string = '';
   searchTerm: string = '';
+  selectedUserId: number | null = null;
+  users: { id: number; name: string }[] = [];
 
   entryForm: FormGroup;
-  filteredAccounts: TreeAccount[] = [];
-  accountSearchTerm: string = '';
-  Math = Math; // Make Math available in template
+  Math = Math;
 
   constructor(
     private dailyEntryService: DailyEntryService,
     private treeAccountService: TreeAccountService,
-    private fb: FormBuilder
+    private authService: AuthService,
+    private fb: FormBuilder,
+    private route: ActivatedRoute
   ) {
     this.entryForm = this.fb.group({
       date: [new Date().toISOString().split('T')[0], Validators.required],
@@ -47,25 +62,186 @@ export class DailyEntriesComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadAccounts();
-    this.loadEntries();
+    this.initFilters();
+    this.route.queryParamMap.subscribe((params) => {
+      const editId = Number(params.get('edit') ?? 0);
+      if (editId > 0) {
+        this.pendingEditEntryId = editId;
+        this.tryOpenPendingEdit();
+      }
+    });
+  }
+
+  private pendingEditEntryId: number | null = null;
+
+  private tryOpenPendingEdit(): void {
+    if (!this.pendingEditEntryId || !this.accountOptions.length) {
+      return;
+    }
+    const editId = this.pendingEditEntryId;
+    this.pendingEditEntryId = null;
+    this.dailyEntryService.getById(editId).subscribe({
+      next: (entry) => {
+        if (entry?.id) {
+          this.openEditForm(entry);
+        }
+      },
+      error: () => {
+        Swal.fire('تنبيه', 'تعذر فتح القيد اليومي للتعديل', 'warning');
+      }
+    });
+  }
+
+  private initFilters(): void {
+    let myId = 0;
+    let myName = '';
+
+    this.authService.fetchMe().pipe(
+      catchError(() => of(null))
+    ).subscribe((me) => {
+      myId = Number(me?.id ?? 0);
+      myName = String(me?.name ?? '').trim();
+      if (myId > 0) {
+        this.selectedUserId = myId;
+      }
+      this.loadEntryUsers(myId, myName);
+    });
+  }
+
+  private loadEntryUsers(currentUserId = 0, currentUserName = ''): void {
+    this.dailyEntryService.getUsers().pipe(
+      catchError(() => of({ data: [] as { id: number; name: string }[] }))
+    ).subscribe((res) => {
+      this.users = Array.isArray(res?.data) ? res.data : [];
+      if (currentUserId > 0 && !this.users.some((u) => u.id === currentUserId)) {
+        this.users.unshift({
+          id: currentUserId,
+          name: currentUserName || 'أنا',
+        });
+      }
+      this.loadEntries();
+    });
   }
 
   get itemsFormArray(): FormArray {
     return this.entryForm.get('items') as FormArray;
   }
 
+  displayAccountOption = (value: string | AccountOption | null): string => {
+    if (!value) return '';
+    return typeof value === 'string' ? value : value.label;
+  };
+
   loadAccounts(): void {
     this.treeAccountService.getAll().subscribe({
       next: (response) => {
         if (response.success && response.data) {
           this.accounts = Array.isArray(response.data) ? response.data : [];
-          this.filteredAccounts = this.accounts;
+          this.buildAccountOptions();
+          if (this.showForm) {
+            this.rebuildAccountCtrlsFromForm();
+          }
+          this.tryOpenPendingEdit();
         }
       },
       error: (error) => {
         console.error('Error loading accounts:', error);
       }
     });
+  }
+
+  private buildAccountOptions(): void {
+    this.accountOptions = this.accounts
+      .filter((a) => a.id != null && a.name)
+      .map((a) => {
+        const code = a.code != null ? String(a.code) : '';
+        return {
+          id: Number(a.id),
+          label: code ? `${code} - ${a.name}` : String(a.name)
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }
+
+  private filterAccountOptions(term: string): AccountOption[] {
+    const raw = String(term ?? '').trim();
+    const q = raw.toLowerCase();
+    let list = this.accountOptions;
+    if (q) {
+      list = list.filter((a) => {
+        if (String(a.id).includes(raw)) return true;
+        return a.label.toLowerCase().includes(q) || a.label.includes(raw);
+      });
+    }
+    return list.slice(0, this.accountAutocompleteCap);
+  }
+
+  getRowFilteredAccounts(index: number): AccountOption[] {
+    return this.rowFilteredAccounts[index] ?? this.filterAccountOptions('');
+  }
+
+  refreshRowFilter(index: number): void {
+    const ctrl = this.itemAccountCtrls[index];
+    if (!ctrl) return;
+    const v = ctrl.value;
+    const term = typeof v === 'string' ? v : (v?.label ?? '');
+    this.rowFilteredAccounts[index] = this.filterAccountOptions(term);
+  }
+
+  private rebuildAccountCtrlsFromForm(): void {
+    this.itemAccountCtrls = [];
+    this.rowFilteredAccounts = [];
+    this.itemsFormArray.controls.forEach((group, idx) => {
+      const rawId = group.get('account_id')?.value;
+      const accountId = rawId ? Number(rawId) : null;
+      const opt = accountId ? this.accountOptions.find((a) => a.id === accountId) ?? null : null;
+      const ctrl = new FormControl<string | AccountOption>(opt ?? '', { nonNullable: true });
+      const rowIndex = idx;
+      ctrl.valueChanges.subscribe(() => this.refreshRowFilter(rowIndex));
+      this.itemAccountCtrls.push(ctrl);
+      this.refreshRowFilter(idx);
+    });
+  }
+
+  onAccountSelected(index: number, event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value as AccountOption;
+    if (!acc?.id) return;
+    this.itemsFormArray.at(index).patchValue({ account_id: acc.id });
+    this.itemAccountCtrls[index].setValue(acc, { emitEvent: false });
+    this.refreshRowFilter(index);
+  }
+
+  onAccountBlur(index: number): void {
+    setTimeout(() => this.syncAccountOnBlur(index), 150);
+  }
+
+  private syncAccountOnBlur(index: number): void {
+    const ctrl = this.itemAccountCtrls[index];
+    if (!ctrl) return;
+    const v = ctrl.value;
+    if (v && typeof v === 'object') {
+      this.itemsFormArray.at(index).patchValue({ account_id: v.id });
+      return;
+    }
+
+    const str = typeof v === 'string' ? v.trim() : '';
+    if (!str) {
+      this.itemsFormArray.at(index).patchValue({ account_id: '' });
+      return;
+    }
+
+    const exact = this.accountOptions.find((a) => a.label === str);
+    if (exact) {
+      this.itemsFormArray.at(index).patchValue({ account_id: exact.id });
+      ctrl.setValue(exact, { emitEvent: false });
+      return;
+    }
+
+    const partial = this.filterAccountOptions(str);
+    if (partial.length === 1) {
+      this.itemsFormArray.at(index).patchValue({ account_id: partial[0].id });
+      ctrl.setValue(partial[0], { emitEvent: false });
+    }
   }
 
   loadEntries(): void {
@@ -78,6 +254,9 @@ export class DailyEntriesComponent implements OnInit {
     if (this.dateFrom) params.date_from = this.dateFrom;
     if (this.dateTo) params.date_to = this.dateTo;
     if (this.searchTerm) params.search = this.searchTerm;
+    if (this.selectedUserId != null && this.selectedUserId > 0) {
+      params.user_id = this.selectedUserId;
+    }
 
     this.dailyEntryService.getAll(params).subscribe({
       next: (response) => {
@@ -108,7 +287,6 @@ export class DailyEntriesComponent implements OnInit {
       notes: ['']
     });
 
-    // Add validation: at least one of debit or credit must be > 0
     itemForm.addValidators((control) => {
       const formGroup = control as FormGroup;
       const debit = formGroup.get('debit')?.value || 0;
@@ -120,16 +298,13 @@ export class DailyEntriesComponent implements OnInit {
     });
 
     this.itemsFormArray.push(itemForm);
+    this.rebuildAccountCtrlsFromForm();
   }
 
   removeItem(index: number): void {
     this.itemsFormArray.removeAt(index);
+    this.rebuildAccountCtrlsFromForm();
     this.calculateTotals();
-  }
-
-  getAccountName(accountId: number): string {
-    const account = this.accounts.find(acc => acc.id === accountId);
-    return account ? account.name : '';
   }
 
   calculateTotals(): { totalDebit: number, totalCredit: number, balance: number } {
@@ -163,7 +338,7 @@ export class DailyEntriesComponent implements OnInit {
     this.isEditMode = true;
     this.currentEntryId = entry.id || null;
     this.entryForm.patchValue({
-      date: entry.date,
+      date: this.toDateInputValue(entry.date),
       description: entry.description || ''
     });
 
@@ -182,6 +357,7 @@ export class DailyEntriesComponent implements OnInit {
       this.addItem();
       this.addItem();
     }
+    this.rebuildAccountCtrlsFromForm();
     this.showForm = true;
   }
 
@@ -191,6 +367,30 @@ export class DailyEntriesComponent implements OnInit {
     this.currentEntryId = null;
     this.entryForm.reset();
     this.itemsFormArray.clear();
+    this.itemAccountCtrls = [];
+    this.rowFilteredAccounts = [];
+  }
+
+  /** input[type=date] يقبل YYYY-MM-DD فقط — Laravel قد يُرجع ISO أو datetime */
+  private toDateInputValue(value: string | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return raw;
+    }
+    if (raw.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+      return raw.slice(0, 10);
+    }
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) {
+      return '';
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   onSubmit(): void {
@@ -308,7 +508,6 @@ export class DailyEntriesComponent implements OnInit {
   }
 
   viewEntry(entry: DailyEntry): void {
-    // Open view modal or navigate to detail page
     let itemsHtml = '<table class="table table-bordered"><thead><tr><th>الحساب</th><th>مدين</th><th>دائن</th><th>ملاحظات</th></tr></thead><tbody>';
     if (entry.items) {
       entry.items.forEach(item => {
@@ -348,6 +547,7 @@ export class DailyEntriesComponent implements OnInit {
     this.dateFrom = '';
     this.dateTo = '';
     this.searchTerm = '';
+    this.selectedUserId = null;
     this.currentPage = 1;
     this.loadEntries();
   }
@@ -357,18 +557,5 @@ export class DailyEntriesComponent implements OnInit {
       this.currentPage = page;
       this.loadEntries();
     }
-  }
-
-  filterAccounts(): void {
-    if (!this.accountSearchTerm) {
-      this.filteredAccounts = this.accounts;
-      return;
-    }
-    const term = this.accountSearchTerm.toLowerCase();
-    this.filteredAccounts = this.accounts.filter(account =>
-      account.name?.toLowerCase().includes(term) ||
-      account.code?.toString().includes(term) ||
-      account.name_en?.toLowerCase().includes(term)
-    );
   }
 }

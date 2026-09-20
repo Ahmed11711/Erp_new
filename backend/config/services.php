@@ -38,11 +38,14 @@ return [
         'phone_number_id_2' => env('META_PHONE_NUMBER_ID_2'),
         'access_token_2' => env('META_ACCESS_TOKEN_2'),
         'verify_token_2' => env('META_VERIFY_TOKEN_2'),
+        'waba_id' => env('META_WABA_ID'),
     ],
 
     /*
     | Shopify: Webhook secret من تطبيق Shopify (Admin → Apps → your app → API credentials).
     | سجّل Webhook: Topic = orders/create → URL = {APP_URL}/api/shopify/webhook
+    | مثال: APP_URL=http://test.mag-opt.com/backend/public → POST …/api/shopify/webhook
+    | GET …/api/shopify/webhook يعيد JSON للتحقق من أن الرابط شغال.
     | Admin API: نطاق المتجر my-store.myshopify.com + Admin API access token (صلاحيات read_products على الأقل للمزامنة).
     */
     'shopify' => [
@@ -50,6 +53,7 @@ return [
         'admin_access_token' => env('SHOPIFY_ADMIN_ACCESS_TOKEN'),
         'api_version' => env('SHOPIFY_API_VERSION', '2024-10'),
         'http_timeout' => (int) env('SHOPIFY_HTTP_TIMEOUT', 120),
+        'connect_timeout' => (int) env('SHOPIFY_CONNECT_TIMEOUT', 30),
         'webhook_secret' => env('SHOPIFY_WEBHOOK_SECRET'),
         'allowed_shop_domains' => array_values(array_filter(array_map('trim', explode(',', (string) env('SHOPIFY_ALLOWED_SHOP_DOMAINS', ''))))),
         'accepted_topics' => [
@@ -71,6 +75,8 @@ return [
         'tracking_user_id' => ($uid = env('SHOPIFY_TRACKING_USER_ID')) !== null && $uid !== ''
             ? (int) $uid
             : null,
+        /** عند false: webhooks orders/create و orders/updated لا تستورد؛ المزامنة اليدوية فقط. */
+        'auto_import_orders' => filter_var(env('SHOPIFY_AUTO_IMPORT_ORDERS', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
     'shipping_partner' => [

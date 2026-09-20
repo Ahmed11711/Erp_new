@@ -26,6 +26,10 @@ export class InvoiceService {
     return this.http.delete(`${environment.Url}/purchases/${id}`);
   }
 
+  deleteInvoices(ids: number[]) {
+    return this.http.post(`${environment.Url}/purchases/bulk-delete`, { ids });
+  }
+
   search(items:number,page:number,search:any){
     return this.http.get(`${environment.Url}/purchases/search?itemsPerPage=${items}&page=${page}`,{params:search});
   }

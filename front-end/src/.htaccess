@@ -1,0 +1,27 @@
+DirectoryIndex index.html
+
+<IfModule mod_mime.c>
+  AddType text/javascript .js
+  AddType text/javascript .mjs
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.js$">
+    Header set Content-Type "text/javascript"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Laravel API and images live under /backend - do not send those to Angular
+  RewriteRule ^backend/ - [L]
+
+  RewriteRule \.(js|mjs|css|map|woff2?|ttf|png|jpe?g|gif|svg|ico|webp)$ - [L,NC]
+
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>

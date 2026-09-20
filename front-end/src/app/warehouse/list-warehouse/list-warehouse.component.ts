@@ -6,7 +6,7 @@ import { StockService } from '../services/stock.service';
 import { CategoryService } from 'src/app/categories/services/category.service';
 import { MatDialog } from '@angular/material/dialog';
 import { DialogComponent } from '../dialog/dialog.component';
-import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-rows';
+import { buildWarehouseListRows } from 'src/app/shared/constants/warehouse-stock-rows';
 
 @Component({
   selector: 'app-list-warehouse',
@@ -15,7 +15,10 @@ import { WAREHOUSE_STOCK_ROWS } from 'src/app/shared/constants/warehouse-stock-r
 })
 export class ListWarehouseComponent implements OnInit {
 
-  /** صفوف العرض: الرصيد من warehouse_balance؛ id / الأصل من stocks عند التطابق */
+  /**
+   * الرصيد القيمي: مجموع total_price أو sell_total_price حسب المخزن (من warehouse_balance).
+   * إجمالي الكمية: مجموع categories.quantity لكل مخزن (quantity_totals) — يعكس الجرد حتى عند تكلفة 0.
+   */
   data: any[] = [];
   url = '';
   loading = false;
@@ -46,19 +49,7 @@ export class ListWarehouseComponent implements OnInit {
     }).subscribe({
       next: ({ balances, stocks }) => {
         const stockList = this.stockService.parseListResponse(stocks);
-        const byName = new Map<string, any>(stockList.map((s: any) => [s.name, s]));
-        this.data = WAREHOUSE_STOCK_ROWS.map(({ nameAr, keyEn }) => {
-          const s = byName.get(nameAr);
-          const raw = balances != null ? (balances as any)[keyEn] : undefined;
-          const balance = raw !== undefined && raw !== null ? Number(raw) : 0;
-          return {
-            name: nameAr,
-            balance,
-            id: s?.id,
-            asset_id: s?.asset_id,
-            asset_name: s?.asset_name ?? null
-          };
-        });
+        this.data = buildWarehouseListRows(stockList, balances as Record<string, unknown>);
         this.loading = false;
       },
       error: (err) => {
@@ -69,9 +60,12 @@ export class ListWarehouseComponent implements OnInit {
     });
   }
 
-openDialog(data = {}) {
+openDialog(data: Record<string, unknown> = {}) {
     const dialogRef = this.matDialog.open(DialogComponent, {
-      data
+      data: {
+        ...data,
+        lockWarehouseName: !!(data as { name?: string; id?: number }).name && !(data as { id?: number }).id,
+      },
     });
 
     dialogRef.afterClosed().subscribe(result => {

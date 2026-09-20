@@ -104,13 +104,40 @@
             </span>
             <span *ngIf="!elm?.status">-</span>
           </td>
-          <td>
+          <td class="lead-actions">
+            <a
+              class="lead-quote-icon"
+              [class.has-quotation]="latestQuotation(elm)"
+              [routerLink]="quotationActionLink(elm)"
+              [queryParams]="quotationActionQuery(elm)"
+              [title]="quotationActionTitle(elm)">
+              <i class="fa-solid fa-file-invoice"></i>
+            </a>
+            <a
+              *ngIf="leadQuotations(elm).length"
+              class="lead-quote-count"
+              [routerLink]="quotationActionLink(elm)"
+              [title]="quotationActionTitle(elm)">
+              {{ leadQuotations(elm).length }}
+            </a>
             <span [matMenuTriggerFor]="menu" style="cursor: pointer;">
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu">
               <button mat-menu-item [routerLink]="['./', elm.id]">
                 <span>Details</span>
+              </button>
+              <button
+                *ngFor="let offer of leadQuotations(elm)"
+                mat-menu-item
+                [routerLink]="quotationDetailsLink(offer)">
+                <span>Quotation #{{ offer.id }}</span>
+              </button>
+              <button mat-menu-item [routerLink]="['/dashboard/permissions/priceoffer1']" [queryParams]="{ lead_id: elm.id }">
+                <span>Create Quotation 1</span>
+              </button>
+              <button mat-menu-item [routerLink]="['/dashboard/permissions/priceoffer2']" [queryParams]="{ lead_id: elm.id }">
+                <span>Create Quotation 2</span>
               </button>
             </mat-menu>
           </td>

@@ -15,6 +15,19 @@
 </div>
 
 <div class="container">
+    <div class="form-row justify-content-center mb-3">
+      <div class="form-group col-md-6">
+        <select
+          class="form-control"
+          [value]="warehouse"
+          (change)="onWarehouseChange($event)"
+          aria-label="اختر المخزن">
+          <option value="">— اختر المخزن —</option>
+          <option *ngFor="let name of warehouseOptions" [value]="name">{{ name }}</option>
+        </select>
+      </div>
+    </div>
+    <p *ngIf="!warehouse" class="alert alert-warning text-right">اختر مخزناً لعرض الأصناف.</p>
     <form>
         <div class="form-row justify-content-center">
           <div class="form-group col-md-6">
@@ -39,7 +52,7 @@
 </div>
 
 
-<div class="container-fluid table-responsive text-center py-2">
+<div class="container-fluid table-responsive text-center py-2" *ngIf="warehouse">
     <table class="table table-bordered table-hover">
       <thead class="thead-dark">
         <tr>
@@ -59,11 +72,23 @@
         </tr>
       </thead>
       <tbody>
+        <tr *ngIf="listLoading && !categories?.length">
+          <td colspan="6" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 mb-0 font-weight-bold">جاري تحميل الأصناف…</p>
+          </td>
+        </tr>
+        <tr *ngIf="listError && !listLoading">
+          <td colspan="6" class="text-center py-4 text-danger">تعذر تحميل الأصناف. حدّث الصفحة أو أعد البحث.</td>
+        </tr>
+        <tr *ngIf="!listLoading && !listError && !categories?.length">
+          <td colspan="6" class="text-center py-4 text-muted">لا توجد أصناف في هذا المخزن.</td>
+        </tr>
         <tr *ngFor="let item of categories; let i = index">
           <td>{{item.category_name}}</td>
-          <td >{{item.measurement.unit}}</td>
+          <td >{{ item.measurement?.unit || '—' }}</td>
           <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'">
-            <button type="button" class="btn btn-link p-0 align-baseline border-0 mr-1" (click)="editQuantiy(item.id, item.category_name)">
+            <button type="button" class="btn btn-link p-0 align-baseline border-0 mr-1" (click)="editQuantiy(item.id, item.category_name, item.quantity)">
               <i class="fa-solid fa-pen ml-2" aria-hidden="true"></i>
             </button>
             <span>{{ item.quantity | customNumber }}</span>
@@ -72,9 +97,10 @@
           <td dir="ltr" *ngIf="warehouse !='مخزن صيانة'">{{item.total_price | customNumber}}</td>
           <td dir="ltr" *ngIf="warehouse =='مخزن منتج تام'">{{item.sell_total_price | customNumber}}</td>
           <td>
-            <a class="btn btn-success" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام'" (click)="addQuantiy(item.id , item.category_name)">+</a>
+            <a class="btn btn-success" *ngIf="canAdjustClassicQty" (click)="addQuantiy(item.id , item.category_name)">+</a>
+            <a class="btn btn-warning mx-1" *ngIf="isOperatingSuppliesWarehouse" (click)="issueToProduction(item)">صرف للإنتاج</a>
             <a class="btn btn-dark mx-2" [routerLink]="['/dashboard/warehouse/cat_details',item.id]">التفاصيل</a>
-            <a class="btn btn-danger" *ngIf="warehouse =='مخزن منتج تام' || warehouse =='مخزن مواد خام'" (click)="removeQuantiy(item.id, item.category_name)">-</a>
+            <a class="btn btn-danger" *ngIf="canAdjustClassicQty" (click)="removeQuantiy(item.id, item.category_name)">-</a>
           </td>
         </tr>
       </tbody>
@@ -84,6 +110,8 @@
       <mat-paginator #paginator
         class="demo-paginator"
         [length]="length"
+        [pageIndex]="page"
+        [pageSize]="pageSize"
         showFirstLastButtons
         (page)="onPageChange($event)"
         [pageSizeOptions]="pageSizeOptions"

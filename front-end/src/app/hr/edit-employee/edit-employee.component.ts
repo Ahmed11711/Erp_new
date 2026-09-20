@@ -32,7 +32,9 @@ export class EditEmployeeComponent {
         'salary_type': res.salary_type,
         'working_hours': res.working_hours,
         'acc_no': res.acc_no,
+        'payable_tree_account_id': res.payable_tree_account_id ?? null,
       })
+      this.payableTreeAccountId = res.payable_tree_account_id ?? null;
       if(res.working_hours == null){
         this.form.patchValue({
           'working_hours': 'عدد ساعات العمل'
@@ -59,7 +61,10 @@ export class EditEmployeeComponent {
     'salary_type' :new FormControl(null , [Validators.required ]),
     'working_hours' :new FormControl(null),
     'acc_no' :new FormControl(null),
+    'payable_tree_account_id' :new FormControl(null),
   })
+
+  payableTreeAccountId: number | null = null;
 
   submitform(){
     if (this.form.valid) {
@@ -69,6 +74,7 @@ export class EditEmployeeComponent {
       if (this.form.value.working_hours == 'عدد ساعات العمل') {
         this.form.value['working_hours'] = null;
       }
+      this.form.patchValue({ payable_tree_account_id: this.payableTreeAccountId });
       this.employeeService.edit(this.id , this.form.value).subscribe(result=>{
         if (result) {
           this.route.navigate(['/dashboard/hr/employee']);

@@ -15,6 +15,23 @@ class OrderDetails extends Model
         'status_date',
         'collection_date',
         'shipping_company_id',
+        'shipping_provider_id',
+        'collection_company_id',
+        'collection_provider_type',
+        'collection_provider_id',
+        'shipping_receivable_amount',
+        'collection_receivable_amount',
+        'total_amount',
+        'paid_amount',
+        'remaining_amount',
+        'amount_to_collect',
+        'delivery_status',
+        'collection_status',
+        'settlement_status',
+        'settlement_voucher_id',
+        'liability_holder_type',
+        'liability_holder_id',
+        'liability_transferred_at',
         'shipping_line_id',
         'edits',
         'postponed',
@@ -25,14 +42,47 @@ class OrderDetails extends Model
         'shippment_number',
         'user_reviewed_note',
         'user_reviewed',
+        'confirm_date',
+        'confirmed_by_user_id',
+        'confirmed_by_name',
+        'delivery_date',
+        'delivered_by_user_id',
+        'delivery_batch_code',
+        'canceled_date',
     ];
     public function order()
     {
         return $this->belongsTo(Order::class);
     }
+
+    public function confirmedByUser()
+    {
+        return $this->belongsTo(User::class, 'confirmed_by_user_id');
+    }
+
+    public function deliveredByUser()
+    {
+        return $this->belongsTo(User::class, 'delivered_by_user_id');
+    }
     public function shipping_company()
     {
         return $this->belongsTo(ShippingCompany::class);
+    }
+
+    /** شركة التحصيل الإلكتروني (Paymob وغيرها) — اختياري — legacy FK على shipping_companies */
+    public function collection_company()
+    {
+        return $this->belongsTo(ShippingCompany::class, 'collection_company_id');
+    }
+
+    public function shipping_provider()
+    {
+        return $this->belongsTo(ShippingCompany::class, 'shipping_provider_id');
+    }
+
+    public function collection_provider_company()
+    {
+        return $this->belongsTo(CollectionCompany::class, 'collection_provider_id');
     }
     public function shipping_line(){
         return $this->belongsTo(shippingline::class);

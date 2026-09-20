@@ -6,12 +6,15 @@ import { SnackBarComponent } from 'src/app/shared/snack-bar/snack-bar.component'
 import { CategoryService } from '../services/category.service';
 import { ProductionService } from '../services/production.service';
 import { UnitsService } from '../services/units.service';
+import { ItemClassificationService } from '../services/item-classification.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { environment } from 'src/env/env';
 import { StockService } from 'src/app/warehouse/services/stock.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { warehouseOptionsFromStocks } from 'src/app/shared/constants/warehouse-stock-rows';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { canSelectCategoryWarehouse } from 'src/app/shared/utils/category-warehouse-access';
 
 /** قيم نموذج تعديل الصنف — يُستخدم لتطبيع patchValue و FormData */
 interface EditCategoryFormValue {
@@ -24,7 +27,10 @@ interface EditCategoryFormValue {
   production_id: number | null;
   item_code: string | null;
   color: string | null;
+  item_classification_id: number | null;
   recipe_id: number | null;
+  product_type: string | null;
+  allow_wip_sale: boolean;
 }
 
 @Component({
@@ -35,6 +41,7 @@ interface EditCategoryFormValue {
 export class EditCategoryComponent implements OnInit {
   user!: string;
   productionData: any;
+  classificationsData: any;
   unitsData: any;
   warehouse = '';
   stockData: any[] = [];
@@ -49,11 +56,13 @@ export class EditCategoryComponent implements OnInit {
     private _snackBar: MatSnackBar,
     private production: ProductionService,
     private units: UnitsService,
+    private classifications: ItemClassificationService,
     private category: CategoryService,
     private StockService: StockService,
     private authService: AuthService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private rbac: RbacService
   ) {
     this.imgUrl = environment.imgUrl;
   }
@@ -74,8 +83,10 @@ export class EditCategoryComponent implements OnInit {
 
     this.category.getCategoryById(this.id).subscribe((res: any) => {
       this.warehouse = res.warehouse;
+      this.syncMeasurementProductionValidators();
       this.getProduction();
       this.getUnits();
+      this.getClassifications();
       this.form.patchValue({
         category_name: res.category_name,
         category_price: res.category_price,
@@ -86,7 +97,10 @@ export class EditCategoryComponent implements OnInit {
         production_id: res.production_id != null ? Number(res.production_id) : null,
         item_code: res.item_code ?? '',
         color: res.color ?? '',
+        item_classification_id: res.item_classification_id != null ? Number(res.item_classification_id) : null,
         recipe_id: res.recipe_id != null ? Number(res.recipe_id) : null,
+        product_type: res.product_type ?? null,
+        allow_wip_sale: !!res.allow_wip_sale,
       });
     });
   }
@@ -110,8 +124,29 @@ export class EditCategoryComponent implements OnInit {
     production_id: new FormControl<number | null>(null, [Validators.required]),
     item_code: new FormControl<string | null>(null),
     color: new FormControl<string | null>(null),
+    item_classification_id: new FormControl<number | null>(null),
     recipe_id: new FormControl<number | null>(null),
+    product_type: new FormControl<string | null>(null),
+    allow_wip_sale: new FormControl<boolean>(false),
   });
+
+  get isOperatingSuppliesWarehouse(): boolean {
+    return this.warehouse === 'مستلزمات تشغيل وأدوات تشغيل';
+  }
+
+  private syncMeasurementProductionValidators(): void {
+    const measurement = this.form.get('measurement_id');
+    const production = this.form.get('production_id');
+    if (this.isOperatingSuppliesWarehouse) {
+      measurement?.clearValidators();
+      production?.clearValidators();
+    } else {
+      measurement?.setValidators([Validators.required]);
+      production?.setValidators([Validators.required]);
+    }
+    measurement?.updateValueAndValidity({ emitEvent: false });
+    production?.updateValueAndValidity({ emitEvent: false });
+  }
 
   openFileInput(): void {
     const fileInput = document.getElementById('fileInput');
@@ -136,18 +171,34 @@ export class EditCategoryComponent implements OnInit {
     formData.append('initial_balance', String(data.initial_balance ?? ''));
     formData.append('minimum_quantity', String(data.minimum_quantity ?? ''));
     formData.append('warehouse', String(data.warehouse ?? ''));
-    formData.append('measurement_id', String(data.measurement_id ?? ''));
-    formData.append('production_id', String(data.production_id ?? ''));
+    if (data.measurement_id != null && data.measurement_id !== ('' as any)) {
+      formData.append('measurement_id', String(data.measurement_id));
+    }
+    if (data.production_id != null && data.production_id !== ('' as any)) {
+      formData.append('production_id', String(data.production_id));
+    }
 
     const ic = (data.item_code ?? '').toString().trim();
     formData.append('item_code', ic);
     const col = (data.color ?? '').toString().trim();
     formData.append('color', col);
+    const classificationId = data.item_classification_id;
+    if (classificationId != null) {
+      formData.append('item_classification_id', String(classificationId));
+    } else {
+      formData.append('item_classification_id', '');
+    }
     if (data.recipe_id != null) {
       formData.append('recipe_id', String(data.recipe_id));
     } else {
       formData.append('recipe_id', '');
     }
+
+    const productType = (data.product_type ?? '').toString().trim();
+    if (productType) {
+      formData.append('product_type', productType);
+    }
+    formData.append('allow_wip_sale', data.allow_wip_sale ? '1' : '0');
 
     const warehouseName = String(data.warehouse ?? '');
     const stockRow = this.stockData.find((elm: { name: string; id?: number }) => elm.name === warehouseName);
@@ -176,20 +227,35 @@ export class EditCategoryComponent implements OnInit {
   }
 
   getProduction(): void {
-    this.production.getProductions().subscribe((data: any) => {
-      this.productionData = data.filter((item: any) => item.warehouse == this.warehouse);
+    this.production.getProductions().pipe(catchError(() => of([]))).subscribe((data: any) => {
+      this.productionData = (Array.isArray(data) ? data : []).filter((item: any) => item.warehouse == this.warehouse);
     });
   }
 
   getUnits(): void {
-    this.units.getUnits().subscribe((data: any) => {
-      this.unitsData = data.filter((item: any) => item.warehouse == this.warehouse);
+    this.units.getUnits().pipe(catchError(() => of([]))).subscribe((data: any) => {
+      this.unitsData = (Array.isArray(data) ? data : []).filter((item: any) => item.warehouse == this.warehouse);
     });
+  }
+
+  getClassifications(): void {
+    this.classifications.getClassifications().pipe(catchError(() => of([]))).subscribe((data: any) => {
+      this.classificationsData = (Array.isArray(data) ? data : []).filter((item: any) => item.warehouse == this.warehouse);
+    });
+  }
+
+  canSelectWarehouse(warehouseName: string): boolean {
+    return canSelectCategoryWarehouse(warehouseName, this.user, this.rbac);
   }
 
   onWarehouseChange(): void {
     this.warehouse = this.form.get('warehouse')?.value ?? '';
+    this.syncMeasurementProductionValidators();
+    if (this.isOperatingSuppliesWarehouse) {
+      this.form.patchValue({ measurement_id: null, production_id: null });
+    }
     this.getProduction();
     this.getUnits();
+    this.getClassifications();
   }
 }

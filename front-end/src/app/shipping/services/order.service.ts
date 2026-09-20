@@ -1,6 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { environment } from 'src/env/env';
+import { httpOptionsFromParams } from 'src/app/shared/utils/http-query.util';
+
+const SKIP_GLOBAL_LOADING = new HttpHeaders({ 'X-Skip-Global-Loading': '1' });
 
 @Injectable({
   providedIn: 'root'
@@ -18,6 +21,14 @@ export class OrderService {
     return this.http.get(`${environment.Url}/tracking` , {params});
   }
 
+  getActivityLogs(params={}){
+    return this.http.get(`${environment.Url}/activity-logs` , {params});
+  }
+
+  getActivityModules(){
+    return this.http.get(`${environment.Url}/activity-logs/modules`);
+  }
+
   getActions(){
     return this.http.get(`${environment.Url}/getActions`);
   }
@@ -28,6 +39,49 @@ export class OrderService {
 
   getOrderById(id:number){
     return this.http.get(`${environment.Url}/orders/${id}`);
+  }
+
+  getSalesMovement(params: {
+    date_from: string;
+    date_to: string;
+    mode?: string;
+    search?: string;
+    page?: number;
+    itemsPerPage?: number;
+    missing_only?: boolean;
+    summary_only?: boolean;
+  }) {
+    const q: Record<string, string | number> = {
+      date_from: params.date_from,
+      date_to: params.date_to,
+      page: params.page ?? 1,
+      itemsPerPage: params.itemsPerPage ?? 15,
+    };
+    if (params.mode) {
+      q['mode'] = params.mode;
+    }
+    if (params.search) {
+      q['search'] = params.search;
+    }
+    if (params.missing_only) {
+      q['missing_only'] = 1;
+    }
+    if (params.summary_only) {
+      q['summary_only'] = 1;
+    }
+    return this.http.get(`${environment.Url}/orders/sales-movement`, { params: q });
+  }
+
+  getAccountingCycle(id: number) {
+    return this.http.get<{
+      order_id: number;
+      journals_count: number;
+      lines_count: number;
+      total_debit: number;
+      total_credit: number;
+      journals: any[];
+      stages?: any[];
+    }>(`${environment.Url}/orders/${id}/accounting-cycle`);
   }
 
   getProducts(){
@@ -50,17 +104,42 @@ export class OrderService {
     return this.http.post(`${environment.Url}/editorder/${id}` , formData);
   }
 
-  chngeStatus(id:number , status:string,note:string , amount:any , bank:any ,receviedOrder:any , param = {}){
-    console.log(id , status);
-    return this.http.get(`${environment.Url}/changestatus/${id}?status=${status}&note=${note}&amount=${amount}&bank=${bank}&receviedOrder=${receviedOrder}` , {params:param});
+  cancelOrderLines(orderId: number, payload: {
+    lines: Array<{ order_product_id: number; quantity: number; reason: string }>;
+    note?: string;
+  }) {
+    return this.http.post(`${environment.Url}/orders/${orderId}/cancel-lines`, payload);
+  }
+
+  adjustPrepaid(orderId: number, payload: Record<string, unknown>) {
+    return this.http.post(`${environment.Url}/orders/${orderId}/prepaid-adjustment`, payload);
+  }
+
+  chngeStatus(id:number , status:string,note:string , amount:any , bank:any ,receviedOrder:any , param: Record<string, string | number | boolean> = {}){
+    return this.http.get(
+      `${environment.Url}/changestatus/${id}`,
+      httpOptionsFromParams({
+        status,
+        note,
+        amount,
+        bank,
+        receviedOrder,
+        ...param,
+      }),
+    );
   }
 
   refuseOrder(id:number ,note:string , amount:any , bank:any ,receviedorder:any , reasoncat:any){
     return this.http.get(`${environment.Url}/refuseorder/${id}?note=${note}&amount=${amount}&bank=${bank}&getorder=${receviedorder}&reasoncat=${reasoncat}`);
   }
 
-  confirmOrder(id:number,date:string,line_id:number,note:string , maintenReason:string){
-    return this.http.post(`${environment.Url}/confirm/${id}`,{date,line_id,note,maintenReason});
+  confirmOrder(id:number,date:string,line_id:number | null,note:string , maintenReason:string){
+    return this.http.post(`${environment.Url}/confirm/${id}`,{
+      date,
+      line_id: line_id || null,
+      note,
+      maintenReason,
+    });
   }
 
   shipOrder(formData:any,id:number){
@@ -86,16 +165,120 @@ export class OrderService {
     return this.http.get(`${environment.Url}/readtempreview/${id}`);
   }
 
-  addNote(id:number,value:string){
-    return this.http.get(`${environment.Url}/addnote/${id}?value=${value}`);
+  addNote(id:number,value:string, addedFrom?: string){
+    const body: { value: string; added_from?: string } = { value };
+    if (addedFrom?.trim()) {
+      body.added_from = addedFrom.trim();
+    }
+    return this.http.post(`${environment.Url}/addnote/${id}`, body);
+  }
+
+  updateNote(id:number,value:string){
+    return this.http.put(`${environment.Url}/updatenote/${id}`, { value });
+  }
+
+  getOrderFulfillment(id: number) {
+    return this.http.get(`${environment.Url}/orders/${id}/fulfillment`);
+  }
+
+  assignOrderFulfillmentProviders(id: number, body: any) {
+    return this.http.put(`${environment.Url}/orders/${id}/fulfillment/providers`, body);
+  }
+
+  transferOrderLiability(id: number, body: { to_holder_type: string; to_holder_id: number; amount?: number; reason?: string }) {
+    return this.http.post(`${environment.Url}/orders/${id}/fulfillment/transfer-liability`, body);
+  }
+
+  checkDeliveryTransfer(id: number) {
+    return this.http.get<{
+      needs_transfer: boolean;
+      amount?: number;
+      default_holder?: { type: string; id: number; name: string } | null;
+      holders?: { type: string; id: number; name: string; label: string }[];
+      is_mixed_online_cash?: boolean;
+      mixed_split?: {
+        online_amount: number;
+        online_holder_name?: string | null;
+        cash_amount: number;
+        cash_holder_name?: string | null;
+      } | null;
+    }>(`${environment.Url}/order/${id}/delivery-transfer-check`);
+  }
+
+  deliverOrder(id: number, body: any = {}) {
+    return this.http.post(`${environment.Url}/order/${id}/deliver`, body);
+  }
+
+  bulkDeliverOrders(body: { order_ids: number[] }) {
+    return this.http.post(`${environment.Url}/orders/bulk-deliver`, body);
   }
 
   collectOrder(id:number,formData:any){
     return this.http.post(`${environment.Url}/collectorder/${id}`,formData);
   }
 
+  bulkCollectOrders(formData: FormData) {
+    return this.http.post(`${environment.Url}/collectorder-bulk`, formData);
+  }
+
+  getOrderRollbackPreview(id: number, target: 'confirmed' | 'new' = 'confirmed') {
+    return this.http.get(`${environment.Url}/orders/${id}/rollback/preview`, {
+      params: { target },
+    });
+  }
+
+  executeOrderRollback(id: number, body: { target: string; reason: string; confirmed: boolean }) {
+    return this.http.post(`${environment.Url}/orders/${id}/rollback`, body);
+  }
+
+  getShippingAccountsSummary(params: any = {}) {
+    return this.http.get(`${environment.Url}/reports/shipping-accounts`, httpOptionsFromParams(params));
+  }
+
+  getShippingCompanyStatement(id: number, params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/${id}/statement`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  getShippingCompanyInHand(id: number, params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/${id}/in-hand`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  settleShippingWithShipping(
+    id: number,
+    body: { order_ids: number[]; cash_account_id: number; date: string; mode?: string; notes?: string }
+  ) {
+    return this.http.post<any>(
+      `${environment.Url}/reports/shipping-accounts/${id}/settle-with-shipping`,
+      body
+    );
+  }
+
+  getShippingPendingOrders(params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/pending-orders`,
+      httpOptionsFromParams(params)
+    );
+  }
+
+  getSettlementSummary(params: any = {}) {
+    return this.http.get(
+      `${environment.Url}/reports/shipping-accounts/settlement-summary`,
+      httpOptionsFromParams(params)
+    );
+  }
+
   reviewOrder(formData:any){
     return this.http.post(`${environment.Url}/revieworder`,formData);
+  }
+
+  shopifyReviewOrder(id: number, payload: { note?: string | null; order?: any; order_products?: any[] }) {
+    return this.http.post(`${environment.Url}/orders/${id}/shopify-review`, payload);
   }
 
   userReviewOrder(formData:any){
@@ -115,5 +298,59 @@ export class OrderService {
 
   postGoogleSheet(sheet:string, data:any){
     return this.http.post(`${environment.Url}/googlesheet/${sheet}` , data);
+  }
+
+  /** Printable invoice payload for one or more orders. */
+  printOrders(orderIds: number[]) {
+    return this.http.post<{ orders: any[]; show_invoice_date: boolean }>(
+      `${environment.Url}/orders/print`,
+      { order_ids: orderIds }
+    );
+  }
+
+  getInvoicePrintSettings() {
+    return this.http.get<Record<string, string>>(`${environment.Url}/accounting/settings`);
+  }
+
+  /** معاينة الطلبات بدون قيد إثبات فاتورة أو تكلفة ضمن تاريخ الطلب أو تاريخ الشحن. */
+  previewMissingSalesInvoices(body: { date_from: string; date_to: string; mode?: 'order_date' | 'shipping_date' }) {
+    return this.http.post(`${environment.Url}/orders/sales-movement/missing-invoices/preview`, body);
+  }
+
+  /** ترحيل القيود الناقصة حسب تاريخ الطلب أو تاريخ الشحن — لا يحذف قيوداً موجودة. */
+  runMissingSalesInvoices(body: { date_from: string; date_to: string; mode?: 'order_date' | 'shipping_date' }) {
+    return this.http.post(`${environment.Url}/orders/sales-movement/missing-invoices/run`, body);
+  }
+
+  previewOrderMissingInvoice(orderId: number) {
+    return this.http.get<any>(`${environment.Url}/orders/${orderId}/missing-invoice/preview`, {
+      headers: SKIP_GLOBAL_LOADING,
+    });
+  }
+
+  postOrderMissingInvoice(orderId: number, body: {
+    date?: string;
+    description?: string;
+    lines?: Array<{ account_id: number; debit: number; credit: number; description?: string }>;
+    journals?: Array<{
+      key: 'invoice' | 'cogs' | 'prepaid' | 'delivery';
+      date?: string;
+      description?: string;
+      lines: Array<{ account_id: number; debit: number; credit: number; description?: string }>;
+    }>;
+  }) {
+    return this.http.post(`${environment.Url}/orders/${orderId}/missing-invoice/post`, body, {
+      headers: SKIP_GLOBAL_LOADING,
+    });
+  }
+
+  /** معاينة عدد الطلبات في نطاق «تاريخ الطلب» قبل تسوية القيود (أدمن فقط — API). */
+  previewOrdersAccountingReconcile(body: { date_from: string; date_to: string }) {
+    return this.http.post(`${environment.Url}/orders/accounting/reconcile/preview`, body);
+  }
+
+  /** إعادة بناء قيود الفاتورة ORD-* من بيانات الطلب الحالية ضمن النطاق (أدمن فقط — API). */
+  runOrdersAccountingReconcile(body: { date_from: string; date_to: string; rebuild_prepaid?: boolean }) {
+    return this.http.post(`${environment.Url}/orders/accounting/reconcile/run`, body);
   }
 }

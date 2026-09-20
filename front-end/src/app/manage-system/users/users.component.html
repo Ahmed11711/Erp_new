@@ -44,7 +44,16 @@
               <mat-icon>more_vert</mat-icon>
             </span>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="deleteData(elm.id)" *ngIf="elm?.status != 1">
+              <a mat-menu-item [routerLink]="['/dashboard/system/powers']" [queryParams]="{ userId: elm.id }">
+                <mat-icon class="me-1" style="vertical-align: middle;">security</mat-icon>
+                <span>صلاحيات المستخدم</span>
+              </a>
+              <button mat-menu-item (click)="changePassword(elm)">
+                <mat-icon class="me-1" style="vertical-align: middle;">lock_reset</mat-icon>
+                <span>تغيير كلمة المرور</span>
+              </button>
+              <button mat-menu-item (click)="deleteData(elm)" class="text-danger">
+                <mat-icon class="me-1" style="vertical-align: middle;">delete</mat-icon>
                 <span>حذف</span>
               </button>
             </mat-menu>

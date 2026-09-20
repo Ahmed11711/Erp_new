@@ -18,10 +18,22 @@
         </tr>
       </thead>
       <tbody>
+        <tr *ngIf="listLoading && !tabelData?.length">
+          <td colspan="3" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 mb-0 font-weight-bold">جاري تحميل الفئات…</p>
+          </td>
+        </tr>
+        <tr *ngIf="listError && !listLoading">
+          <td colspan="3" class="text-center py-4 text-danger">تعذر تحميل فئات الموردين. حدّث الصفحة.</td>
+        </tr>
+        <tr *ngIf="!listLoading && !listError && !tabelData?.length">
+          <td colspan="3" class="text-center py-4 text-muted">لا توجد فئات مضافة.</td>
+        </tr>
         <tr *ngFor="let item of tabelData; let i = index">
           <th scope="row">{{i+1}}</th>
           <td>{{item.supplier_type}}</td>
-          <td><i  class="fa fa-trash" aria-hidden="true"></i></td>
+          <td><i (click)="deleteType(item.id)" class="fa fa-trash" aria-hidden="true" style="cursor:pointer;"></i></td>
         </tr>
       </tbody>
     </table>

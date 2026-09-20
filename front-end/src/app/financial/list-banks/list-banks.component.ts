@@ -45,6 +45,7 @@ export class ListBanksComponent implements OnInit{
   depositBank(id){
     let amount;
     let reason='';
+    let counterAccountId: number;
     Swal.fire({
       title: 'مبلغ الايداع',
       input: 'number',
@@ -71,27 +72,44 @@ export class ListBanksComponent implements OnInit{
             }
             if (value !== '') {
               reason = value;
-              this.bankService.depositBank(id , amount , reason).subscribe(res=>{
-                if (res) {
-                  console.log(res);
-
-                  this.getData();
-                }
-              })
             }
             return undefined
           }
-      })}
+        }).then((reasonResult) => {
+          if (!reasonResult.isConfirmed) {
+            return;
+          }
+          Swal.fire({
+            title: 'رقم الحساب المقابل (من شجرة الحسابات)',
+            input: 'number',
+            inputPlaceholder: 'مثال: حساب جاري / رأس مال',
+            showCancelButton: true,
+            inputValidator: (value) => {
+              if (!value) {
+                return 'يجب اختيار الحساب المقابل لتسجيل القيد المحاسبي'
+              }
+              counterAccountId = Number(value);
+              return undefined;
+            }
+          }).then((counterResult) => {
+            if (counterResult.isConfirmed) {
+              this.bankService.depositBank(id, amount, reason, counterAccountId).subscribe({
+                next: () => this.getData(),
+                error: (err) => Swal.fire({ icon: 'error', title: err.error?.message || 'فشل الإيداع' })
+              });
+            }
+          });
+        });
+      }
     });
-
-
   }
 
   editBankBalance(id){
     let amount;
     let reason='';
+    let counterAccountId: number;
     Swal.fire({
-      title: 'تعديل رصيد الخزنة',
+      title: 'تعديل رصيد البنك',
       input: 'number',
       inputPlaceholder:'الرصيد',
       showCancelButton: true,
@@ -117,23 +135,41 @@ export class ListBanksComponent implements OnInit{
             }
             if (value !== '') {
               reason = value;
-              this.bankService.editBankBalance(id , amount , reason).subscribe(res=>{
-                if (res) {
-                  this.getData();
-                }
-              })
             }
             return undefined
           }
-      })}
+        }).then((reasonResult) => {
+          if (!reasonResult.isConfirmed) {
+            return;
+          }
+          Swal.fire({
+            title: 'رقم الحساب المقابل (من شجرة الحسابات)',
+            input: 'number',
+            showCancelButton: true,
+            inputValidator: (value) => {
+              if (!value) {
+                return 'يجب اختيار الحساب المقابل لتسجيل القيد المحاسبي'
+              }
+              counterAccountId = Number(value);
+              return undefined;
+            }
+          }).then((counterResult) => {
+            if (counterResult.isConfirmed) {
+              this.bankService.editBankBalance(id, amount, reason, counterAccountId).subscribe({
+                next: () => this.getData(),
+                error: (err) => Swal.fire({ icon: 'error', title: err.error?.message || 'فشل التعديل' })
+              });
+            }
+          });
+        });
+      }
     });
-
-
   }
 
   withDrawBank(id){
     let amount;
     let reason='';
+    let counterAccountId: number;
     Swal.fire({
       title: 'مبلغ السحب',
       input: 'number',
@@ -160,18 +196,35 @@ export class ListBanksComponent implements OnInit{
             }
             if (value !== '') {
               reason = value;
-              this.bankService.withDrawBank(id , amount , reason).subscribe(res=>{
-                if (res) {
-                  this.getData();
-                }
-              })
             }
             return undefined
           }
-      })}
+        }).then((reasonResult) => {
+          if (!reasonResult.isConfirmed) {
+            return;
+          }
+          Swal.fire({
+            title: 'رقم الحساب المقابل (من شجرة الحسابات)',
+            input: 'number',
+            showCancelButton: true,
+            inputValidator: (value) => {
+              if (!value) {
+                return 'يجب اختيار الحساب المقابل لتسجيل القيد المحاسبي'
+              }
+              counterAccountId = Number(value);
+              return undefined;
+            }
+          }).then((counterResult) => {
+            if (counterResult.isConfirmed) {
+              this.bankService.withDrawBank(id, amount, reason, counterAccountId).subscribe({
+                next: () => this.getData(),
+                error: (err) => Swal.fire({ icon: 'error', title: err.error?.message || 'فشل السحب' })
+              });
+            }
+          });
+        });
+      }
     });
-
-
   }
 
   transferMoney(id:number , name:string){

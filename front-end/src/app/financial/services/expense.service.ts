@@ -33,8 +33,21 @@ export class ExpenseService {
     return this.http.post<any>(`${environment.Url}/deleteexpense/${id}`,'')
   }
 
-  search(items:number,page:number,search:any){
-    return this.http.get(`${environment.Url}/expense/search?itemsPerPage=${items}&page=${page}`,{params:search});
+  search(items:number,page:number,search:any): Observable<any> {
+    return this.http.get<any>(`${environment.Url}/expense/search?itemsPerPage=${items}&page=${page}`,{params:search});
+  }
+
+  purgePreview() {
+    return this.http.get<{
+      active_expense_count: number;
+      total_expense_count: number;
+      gl_entry_count: number;
+      expense_line_count: number;
+    }>(`${environment.Url}/expense/purge-preview`);
+  }
+
+  purgeAll() {
+    return this.http.post(`${environment.Url}/expense/purge-all`, { confirm: true });
   }
 
 }

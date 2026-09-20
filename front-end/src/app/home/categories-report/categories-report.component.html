@@ -37,6 +37,17 @@
         <option *ngFor="let elm of productionData" [value]="elm.id">{{ elm.production_line }}</option>
       </select>
     </div>
+    <div class="chip chip-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input
+        type="search"
+        name="categoriesReportSearch"
+        [(ngModel)]="searchText"
+        (ngModelChange)="onSearchChange($event)"
+        placeholder="بحث بالاسم أو أي كلمة..."
+        autocomplete="off"
+        aria-label="بحث بالاسم">
+    </div>
     <div class="chip chip-date">
       <i class="fa-regular fa-calendar"></i>
       <span class="date-range">
@@ -94,7 +105,7 @@
   </div>
   <div *ngIf="!loading && soldCategories.length === 0" class="state-box empty">
     <i class="fa-regular fa-folder-open"></i>
-    <p>لا توجد بيانات لهذه الفترة. جرب تغيير نطاق التاريخ أو خط الإنتاج.</p>
+    <p>لا توجد بيانات لهذه الفترة. جرب تغيير نطاق التاريخ أو خط الإنتاج أو نص البحث.</p>
   </div>
 
   <!-- Items list as cards -->

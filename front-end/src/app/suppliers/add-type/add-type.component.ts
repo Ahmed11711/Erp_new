@@ -20,9 +20,9 @@ export class AddTypeComponent {
     if(form.invalid){
       return;
     }
-    this.typeService.addType(form.value.type).subscribe((res:any)=>{
-      location.reload();
-    })
-    this.dialogRef.close();
+    this.typeService.addType(form.value.type).subscribe({
+      next: () => this.dialogRef.close(true),
+      error: () => this.dialogRef.close(false),
+    });
   }
 }

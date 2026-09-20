@@ -125,14 +125,89 @@ i.fa-trash{
   cursor: pointer;
 }
 
+.vat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  margin: 0 0 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1.5px solid #c4c4c4;
+  border-radius: 8px;
+  background: #f8f8f8;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.vat-toggle:hover {
+  border-color: #82225e;
+}
+
+.vat-toggle.active {
+  border-color: #82225e;
+  background: #faf0f5;
+}
+
+.vat-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.vat-toggle-box {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #82225e;
+  border-radius: 4px;
+  background: #fff;
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.vat-toggle.active .vat-toggle-box {
+  background: #82225e;
+}
+
+.vat-toggle.active .vat-toggle-box::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.vat-toggle-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.vat-amount-label {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: #555;
+}
+
 .vat {
-  border: none;
-  width: 5rem;
+  width: 6rem;
+  max-width: 100%;
   direction: ltr;
+  text-align: center;
+  margin: 0 auto;
 }
 
 .vat:focus {
   outline: none;
+  border-color: #82225e;
+  box-shadow: 0 0 0 0.15rem rgba(130, 34, 94, 0.2);
 }
 
 .fa-plus{

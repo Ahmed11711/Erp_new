@@ -11,6 +11,12 @@ export class DailyEntryService {
 
   constructor(private http: HttpClient) { }
 
+  getUsers(): Observable<{ data: { id: number; name: string }[] }> {
+    return this.http.get<{ data: { id: number; name: string }[] }>(
+      `${environment.Url}/accounting/daily-entries/users`
+    );
+  }
+
   getAll(params?: any): Observable<DailyEntryResponse> {
     let httpParams = new HttpParams();
     if (params) {

@@ -1,11 +1,24 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { ActivatedRoute, Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import * as XLSX from 'xlsx';
 import { AccountingReportService } from 'src/app/accounting/services/accounting-report.service';
 import { SafeService } from 'src/app/accounting/services/safe.service';
 import { BankService } from 'src/app/accounting/services/bank.service';
 import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { DailyEntryService } from 'src/app/accounting/services/daily-entry.service';
+import { PdfService } from 'src/app/pdf.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { AuthService } from 'src/app/auth/auth.service';
+
+export interface AccountStatementEditLink {
+  source: string;
+  source_id: number;
+  url: string;
+}
 
 @Component({
   selector: 'app-financial-statement',
@@ -23,12 +36,25 @@ export class FinancialStatementComponent implements OnInit {
 
   loading = false;
   errorMessage: string | null = null;
+  lastSearchParams: { date_from?: string | null; date_to?: string | null; user_id?: number | null } | null = null;
+
+  users: { id: number; name: string }[] = [];
+  filteredUsers: { id: number | null; name: string }[] = [];
+  /** خيار ثابت أعلى قائمة المستخدمين */
+  readonly allUsersOption: { id: null; name: string } = { id: null, name: 'كل المستخدمين' };
 
   // ——— تبويب الشجرة ———
   /** كل عُقد الشجرة (رئيسية وفرعية) لاختيار كشف الحساب */
   allTreeAccounts: any[] = [];
   filteredAccounts: any[] = [];
   accountSearchTerm = '';
+
+  /** حقل البحث/الاختيار الموحّد لحساب الشجرة (كود أو اسم داخل نفس الـ select) */
+  accountInputCtrl = new FormControl<any>('');
+
+  /** بحث قابل للكتابة في فلتر المستخدم (نفس أسلوب حساب الشجرة) */
+  ledgerUserInputCtrl = new FormControl<any>('');
+  cashUserInputCtrl = new FormControl<any>('');
 
   accountSourceOptions = [
     { value: 'all', label: 'كل الحسابات' },
@@ -37,6 +63,7 @@ export class FinancialStatementComponent implements OnInit {
     { value: 'expense', label: 'مصروفات' },
     { value: 'revenue', label: 'إيرادات' },
     { value: 'equity', label: 'حقوق ملكية' },
+    { value: 'settlement', label: 'حسابات تسوية' },
     { value: 'safe_only', label: 'خزن فقط' },
     { value: 'bank_only', label: 'بنوك فقط' },
     { value: 'cash_bank', label: 'خزن وبنوك (أصول نقدية)' },
@@ -48,6 +75,7 @@ export class FinancialStatementComponent implements OnInit {
     account_id: new FormControl<number | null>(null, [Validators.required]),
     date_from: new FormControl<string | null>(null),
     date_to: new FormControl<string | null>(null),
+    user_id: new FormControl<number | null>(null),
   });
 
   // ——— تبويب الخزن/البنوك/الخدمات ———
@@ -66,6 +94,7 @@ export class FinancialStatementComponent implements OnInit {
     entity_id: new FormControl<number | null>(null, [Validators.required]),
     date_from: new FormControl<string | null>(null),
     date_to: new FormControl<string | null>(null),
+    user_id: new FormControl<number | null>(null),
   });
 
   constructor(
@@ -73,8 +102,12 @@ export class FinancialStatementComponent implements OnInit {
     private safeService: SafeService,
     private bankService: BankService,
     private serviceAccountsService: ServiceAccountsService,
+    private dailyEntryService: DailyEntryService,
+    private pdfService: PdfService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private rbac: RbacService,
+    private authService: AuthService,
   ) {
     const today = new Date();
     const year = today.getFullYear();
@@ -88,11 +121,14 @@ export class FinancialStatementComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.stripTrailingQuestionMarkOnly();
+
     this.route.queryParamMap.subscribe(() => {
       this.applyRouteFromQuery();
     });
 
     this.loadAccountingTree();
+    this.initUserFilter();
 
     forkJoin({
       safes: this.safeService.getAll(),
@@ -114,8 +150,41 @@ export class FinancialStatementComponent implements OnInit {
 
     this.ledgerForm.get('source_type')?.valueChanges.subscribe(() => {
       this.ledgerForm.patchValue({ account_id: null });
+      this.accountSearchTerm = '';
+      this.accountInputCtrl.setValue('', { emitEvent: false });
       this.updateFilteredAccounts();
       this.clearReportOnly();
+    });
+
+    this.accountInputCtrl.valueChanges.subscribe((val) => {
+      if (typeof val !== 'string') {
+        return;
+      }
+      this.accountSearchTerm = val;
+      this.updateFilteredAccounts();
+      if (!val.trim()) {
+        this.ledgerForm.patchValue({ account_id: null });
+      }
+    });
+
+    this.ledgerUserInputCtrl.valueChanges.subscribe((val) => {
+      if (typeof val !== 'string') {
+        return;
+      }
+      this.updateFilteredUsers(val);
+      if (!val.trim()) {
+        this.ledgerForm.patchValue({ user_id: null });
+      }
+    });
+
+    this.cashUserInputCtrl.valueChanges.subscribe((val) => {
+      if (typeof val !== 'string') {
+        return;
+      }
+      this.updateFilteredUsers(val);
+      if (!val.trim()) {
+        this.cashForm.patchValue({ user_id: null });
+      }
     });
 
     this.cashForm.get('entity_type')?.valueChanges.subscribe(() => {
@@ -124,25 +193,304 @@ export class FinancialStatementComponent implements OnInit {
     });
   }
 
+  private initUserFilter(): void {
+    let myId = 0;
+    let myName = '';
+
+    this.authService.fetchMe().pipe(
+      catchError(() => of(null))
+    ).subscribe((me) => {
+      myId = Number(me?.id ?? 0);
+      myName = String(me?.name ?? '').trim();
+      if (myId > 0) {
+        this.ledgerForm.patchValue({ user_id: myId }, { emitEvent: false });
+        this.cashForm.patchValue({ user_id: myId }, { emitEvent: false });
+      }
+      this.loadEntryUsers(myId, myName);
+    });
+  }
+
+  private loadEntryUsers(currentUserId = 0, currentUserName = ''): void {
+    this.dailyEntryService.getUsers().pipe(
+      catchError(() => of({ data: [] as { id: number; name: string }[] }))
+    ).subscribe((res) => {
+      const raw = Array.isArray(res?.data)
+        ? res.data
+        : (Array.isArray(res) ? res : []);
+      const byId = new Map<number, { id: number; name: string }>();
+      for (const row of raw) {
+        const id = Number(row?.id ?? 0);
+        const name = String(row?.name ?? '').trim();
+        if (id > 0) {
+          byId.set(id, { id, name: name || `#${id}` });
+        }
+      }
+      if (currentUserId > 0 && !byId.has(currentUserId)) {
+        byId.set(currentUserId, {
+          id: currentUserId,
+          name: currentUserName || 'أنا',
+        });
+      }
+      this.users = Array.from(byId.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, 'ar', { sensitivity: 'base' })
+      );
+      this.updateFilteredUsers('');
+      this.syncUserInputDisplay(this.ledgerUserInputCtrl, this.ledgerForm.get('user_id')?.value ?? null);
+      this.syncUserInputDisplay(this.cashUserInputCtrl, this.cashForm.get('user_id')?.value ?? null);
+    });
+  }
+
+  private syncUserInputDisplay(ctrl: FormControl<any>, userId: number | null): void {
+    if (userId == null || userId <= 0) {
+      ctrl.setValue(this.allUsersOption, { emitEvent: false });
+      return;
+    }
+    const found = this.users.find((u) => u.id === userId);
+    ctrl.setValue(found ?? { id: userId, name: `#${userId}` }, { emitEvent: false });
+  }
+
+  updateFilteredUsers(term: string = ''): void {
+    const q = String(term ?? '').trim().toLowerCase();
+    const matched = !q
+      ? [...this.users]
+      : this.users.filter((u) => String(u.name ?? '').toLowerCase().includes(q));
+    this.filteredUsers = [this.allUsersOption, ...matched];
+  }
+
+  displayUserOption = (value: any): string => {
+    if (!value) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return value.name ?? '';
+  };
+
+  onLedgerUserSelected(event: MatAutocompleteSelectedEvent): void {
+    const user = event.option.value;
+    this.ledgerForm.patchValue({ user_id: user?.id ?? null });
+    this.updateFilteredUsers('');
+  }
+
+  onCashUserSelected(event: MatAutocompleteSelectedEvent): void {
+    const user = event.option.value;
+    this.cashForm.patchValue({ user_id: user?.id ?? null });
+    this.updateFilteredUsers('');
+  }
+
+  onUserFilterFocus(ctrl: FormControl<any>): void {
+    const val = ctrl.value;
+    this.updateFilteredUsers(typeof val === 'string' ? val : '');
+  }
+
   setTab(tab: 'ledger' | 'cash'): void {
     if (this.activeTab === tab) {
       return;
     }
     this.activeTab = tab;
     this.clearReportOnly();
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { tab },
-      queryParamsHandling: 'merge',
-      replaceUrl: true
-    });
+  }
+
+  /** يزيل ? من شريط العنوان عندما لا توجد query params (مثلاً financialstatement?) */
+  private stripTrailingQuestionMarkOnly(): void {
+    if (this.route.snapshot.queryParamMap.keys.length > 0) {
+      return;
+    }
+    const clean = this.router.url.split('?')[0];
+    if (clean && clean !== this.router.url) {
+      this.router.navigateByUrl(clean, { replaceUrl: true });
+    }
   }
 
   private clearReportOnly(): void {
     this.data = [];
     this.details = null;
     this.totals = null;
+    this.lastSearchParams = null;
     this.errorMessage = null;
+  }
+
+  get canExport(): boolean {
+    return !!this.details && !this.loading;
+  }
+
+  get canAdminEditEntries(): boolean {
+    return this.rbac.canAny(['finance.account_statement.edit', 'system.rbac'])
+      || this.authService.getUser() === 'Admin';
+  }
+
+  get hasEditableRows(): boolean {
+    return this.data.some((item) => this.isEntryEditable(item));
+  }
+
+  isEntryEditable(item: { can_edit?: boolean; edit_link?: AccountStatementEditLink | null }): boolean {
+    return item?.can_edit === true && !!item?.edit_link?.url;
+  }
+
+  postedAt(item: { posted_at?: string; daily_entry?: { created_at?: string }; created_at?: string }): string | null {
+    return item?.posted_at || item?.daily_entry?.created_at || item?.created_at || null;
+  }
+
+  openEntry(item: { can_edit?: boolean; edit_link?: AccountStatementEditLink | null }): void {
+    if (!this.isEntryEditable(item) || !item.edit_link?.url) {
+      return;
+    }
+    window.open(item.edit_link.url, '_blank', 'noopener');
+  }
+
+  exportToPdf(): void {
+    if (!this.canExport || !this.details) {
+      return;
+    }
+
+    void this.pdfService.generateAccountStatementPdf(
+      {
+        fileName: this.buildExportFileName(),
+        accountCode: String(this.details.account?.code ?? ''),
+        accountName: String(this.details.account?.name ?? ''),
+        dateFrom: this.lastSearchParams?.date_from ?? null,
+        dateTo: this.lastSearchParams?.date_to ?? null,
+        consolidated: this.details.consolidated === true,
+        accountsInScope: this.details.accounts_in_scope,
+        openingBalance: this.details.opening_balance ?? 0,
+        totalDebit: this.totals?.debit ?? 0,
+        totalCredit: this.totals?.credit ?? 0,
+        closingBalance: this.details.closing_balance ?? 0,
+        entries: this.data.map((item) => ({
+          entryDate: item.entry_date || item.created_at,
+          createdAt: this.postedAt(item) || item.created_at,
+          description: item.description ?? '',
+          userName: item.user_name ?? '',
+          debit: item.debit ?? 0,
+          credit: item.credit ?? 0,
+          runningBalance: item.running_balance ?? 0,
+          subAccountCode: item.account?.code,
+          subAccountName: item.account?.name,
+        })),
+      },
+      'download'
+    );
+  }
+
+  exportToExcel(): void {
+    if (!this.canExport || !this.details) {
+      return;
+    }
+
+    const consolidated = this.details.consolidated === true;
+    const rows: unknown[][] = [
+      ['كشف حساب تفصيلي'],
+      [`الحساب: (${this.details.account?.code ?? ''}) ${this.details.account?.name ?? ''}`],
+      [
+        `من تاريخ: ${this.lastSearchParams?.date_from ?? ''}`,
+        `إلى تاريخ: ${this.lastSearchParams?.date_to ?? ''}`
+      ]
+    ];
+
+    if (consolidated) {
+      rows.push([`عرض مجمّع — ${this.details.accounts_in_scope ?? 0} حساب في النطاق`]);
+    }
+
+    rows.push(
+      [],
+      ['الرصيد الافتتاحي', this.details.opening_balance ?? 0],
+      ['إجمالي مدين (وارد)', this.totals?.debit ?? 0],
+      ['إجمالي دائن (صادر)', this.totals?.credit ?? 0],
+      ['الرصيد الحالي', this.details.closing_balance ?? 0],
+      []
+    );
+
+    const headers = ['تاريخ القيد', 'تاريخ التسجيل'];
+    if (consolidated) {
+      headers.push('الحساب الفرعي');
+    }
+    headers.push('البيان / الشرح', 'المستخدم', 'مدين', 'دائن', 'الرصيد المتحرك');
+    rows.push(headers);
+
+    for (const item of this.data) {
+      const datePart = this.formatExportDatePart(item.entry_date || item.created_at);
+      const timePart = this.formatExportDateTime(this.postedAt(item));
+      const row: unknown[] = [datePart, timePart];
+      if (consolidated) {
+        row.push(`${item.account?.code ?? ''} — ${item.account?.name ?? ''}`);
+      }
+      row.push(
+        item.description ?? '',
+        item.user_name ?? '',
+        item.debit > 0 ? item.debit : '',
+        item.credit > 0 ? item.credit : '',
+        item.running_balance ?? ''
+      );
+      rows.push(row);
+    }
+
+    const totalRow: unknown[] = ['', ''];
+    if (consolidated) {
+      totalRow.push('');
+    }
+    totalRow.push(
+      'الإجمالي',
+      this.totals?.debit ?? 0,
+      this.totals?.credit ?? 0,
+      this.details.closing_balance ?? 0
+    );
+    rows.push(totalRow);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = headers.map(() => ({ width: 18 }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'كشف حساب');
+    if (!wb.Workbook) {
+      wb.Workbook = { Views: [{}] };
+    }
+    if (!wb.Workbook.Views) {
+      wb.Workbook.Views = [{}];
+    }
+    wb.Workbook.Views[0].RTL = true;
+
+    XLSX.writeFile(wb, `${this.buildExportFileName()}.xlsx`);
+  }
+
+  private buildExportFileName(): string {
+    const code = this.details?.account?.code ?? 'account';
+    const from = this.lastSearchParams?.date_from ?? 'from';
+    const to = this.lastSearchParams?.date_to ?? 'to';
+    return `كشف_حساب_${code}_${from}_${to}`;
+  }
+
+  private formatExportDatePart(value: unknown): string {
+    if (!value) {
+      return '';
+    }
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) {
+      return String(value);
+    }
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  private formatExportTimePart(value: unknown): string {
+    if (!value) {
+      return '';
+    }
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) {
+      return '';
+    }
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${mins}`;
+  }
+
+  private formatExportDateTime(value: unknown): string {
+    const datePart = this.formatExportDatePart(value);
+    const timePart = this.formatExportTimePart(value);
+    return [datePart, timePart].filter(Boolean).join(' ');
   }
 
   /** ?tab=ledger|cash & ?preset=safes|banks|service */
@@ -250,6 +598,8 @@ export class FinancialStatementComponent implements OnInit {
       base = base.filter((a) => a.type === 'revenue');
     } else if (sourceType === 'equity') {
       base = base.filter((a) => a.type === 'equity');
+    } else if (sourceType === 'settlement') {
+      base = base.filter((a) => a.type === 'settlement');
     } else if (sourceType === 'safe_only') {
       base = base.filter((a) => this.isSafeLeaf(a));
     } else if (sourceType === 'bank_only') {
@@ -275,18 +625,22 @@ export class FinancialStatementComponent implements OnInit {
     );
   }
 
-  onAccountSearchChange(): void {
-    this.updateFilteredAccounts();
-  }
-
-  onDateChange(which: 'ledger' | 'cash', part: 'from' | 'to', event: Event): void {
-    const v = (event.target as HTMLInputElement).value;
-    const g = which === 'ledger' ? this.ledgerForm : this.cashForm;
-    if (part === 'from') {
-      g.patchValue({ date_from: v });
-    } else {
-      g.patchValue({ date_to: v });
+  /** تسمية خيار حساب الشجرة داخل قائمة البحث */
+  displayAccountOption = (value: any): string => {
+    if (!value) {
+      return '';
     }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return `${value.code ?? ''} — ${value.name ?? ''}`;
+  };
+
+  onAccountOptionSelected(event: MatAutocompleteSelectedEvent): void {
+    const acc = event.option.value;
+    this.ledgerForm.patchValue({ account_id: acc?.id ?? null });
+    this.accountSearchTerm = '';
+    this.updateFilteredAccounts();
   }
 
   submitLedgerForm(): void {
@@ -301,7 +655,8 @@ export class FinancialStatementComponent implements OnInit {
     this.runReport({
       account_id: accountId,
       date_from: this.ledgerForm.value.date_from,
-      date_to: this.ledgerForm.value.date_to
+      date_to: this.ledgerForm.value.date_to,
+      user_id: this.ledgerForm.value.user_id,
     });
   }
 
@@ -332,11 +687,12 @@ export class FinancialStatementComponent implements OnInit {
     this.runReport({
       account_id: treeAccountId,
       date_from: this.cashForm.value.date_from,
-      date_to: this.cashForm.value.date_to
+      date_to: this.cashForm.value.date_to,
+      user_id: this.cashForm.value.user_id,
     });
   }
 
-  private runReport(params: { account_id: number; date_from: any; date_to: any }): void {
+  private runReport(params: { account_id: number; date_from: any; date_to: any; user_id?: number | null }): void {
     this.loading = true;
     this.errorMessage = null;
     this.data = [];
@@ -349,6 +705,16 @@ export class FinancialStatementComponent implements OnInit {
     if (params.date_to) {
       httpParams.date_to = params.date_to;
     }
+    const userId = Number(params.user_id ?? 0);
+    if (userId > 0) {
+      httpParams.user_id = userId;
+    }
+
+    this.lastSearchParams = {
+      date_from: params.date_from,
+      date_to: params.date_to,
+      user_id: userId > 0 ? userId : null,
+    };
 
     this.accountingReportService.getAccountStatement(httpParams).subscribe({
       next: (res: any) => {

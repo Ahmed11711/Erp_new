@@ -4,6 +4,7 @@ import { DailyLedgerReportRoutingModule } from './daily-ledger-report-routing.mo
 import { SharedModule } from '../../shared/shared.module';
 import { DailyLedgerReportComponent } from './daily-ledger-report.component';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 @NgModule({
   declarations: [
@@ -14,7 +15,8 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
     DailyLedgerReportRoutingModule,
     SharedModule,
     FormsModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    MatAutocompleteModule
   ]
 
 })

@@ -26,6 +26,7 @@ class Expense extends Model
         'safe_id',
         'service_account_id',
         'kind_id',
+        'tree_account_id',
         'expens_statement',
         'amount',
         'note',
@@ -51,6 +52,30 @@ class Expense extends Model
 
     public function kind(){
         return $this->belongsTo(ExpenseKind::class);
+    }
+
+    public function treeAccount()
+    {
+        return $this->belongsTo(TreeAccount::class, 'tree_account_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function lines()
+    {
+        return $this->hasMany(ExpenseLine::class)->orderBy('sort_order');
+    }
+
+    public function isSplit(): bool
+    {
+        if ($this->relationLoaded('lines')) {
+            return $this->lines->count() > 1;
+        }
+
+        return $this->lines()->count() > 1;
     }
 
 }

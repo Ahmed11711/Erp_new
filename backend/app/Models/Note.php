@@ -12,6 +12,7 @@ class Note extends Model
     protected $fillable = [
         'order_id',
         'user_id',
+        'edited_by_user_id',
         'note',
         'added_from',
         'is_problem',
@@ -21,8 +22,14 @@ class Note extends Model
     {
         return $this->belongsTo(Order::class);
     }
+
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function editedBy()
+    {
+        return $this->belongsTo(User::class, 'edited_by_user_id');
     }
 }

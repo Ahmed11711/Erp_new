@@ -24,6 +24,7 @@
             <option value="مراجعة مؤقتة">مراجعة مؤقتة</option>
             <option value="تعديل">تعديل</option>
             <option value="استعجال الشحن">استعجال الشحن</option>
+            <option value="كشف حضور">كشف حضور</option>
           </select>
         </div>
         <div class="col-md-2 form-group">
@@ -55,7 +56,7 @@
           </select>
         </div>
         <div class="col-md-2 form-group">
-          <input id="order_number" (change)="search($event)" type="text" name="orderNumber" class="form-control"  placeholder="رقم الطلب" />
+          <input id="order_number" (input)="search($event)" type="text" name="orderNumber" class="form-control"  placeholder="رقم الطلب / الموظف" />
         </div>
       </div>
     </form>

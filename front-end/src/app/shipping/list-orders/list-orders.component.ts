@@ -1,5 +1,7 @@
-import { Component, ElementRef, HostListener, Inject, Renderer2 } from '@angular/core';
+import { Component, ElementRef, HostListener, Inject, OnDestroy, Renderer2 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { OrderService } from '../services/order.service';
+import { OrderInvoicePrintService } from '../services/order-invoice-print.service';
 import {MatDialog, MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import { NavigationEnd, Router } from '@angular/router';
 import { ShippingCompanyService } from '../services/shipping-company.service';
@@ -14,28 +16,257 @@ import { UserService } from 'src/app/manage-system/services/user.service';
 import { DialogNotificationNoteComponent } from '../dialog-notification-note/dialog-notification-note.component';
 import { DialogOrderNotificationComponent } from '../dialog-order-notification/dialog-order-notification.component';
 import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/dialog-cancel-refuse-order.component';
+import { DialogOrderRollbackComponent } from '../dialog-order-rollback/dialog-order-rollback.component';
 import { DialogWhatsAppMessageComponent } from 'src/app/whatsapp/components/dialog-whatsapp-message/dialog-whatsapp-message.component';
 import { BanksService } from 'src/app/financial/services/banks.service';
+import { SafeService } from 'src/app/accounting/services/safe.service';
+import { ServiceAccountsService } from 'src/app/financial/services/service-accounts.service';
+import { CollectionCompanyService } from '../services/collection-company.service';
 import { AuthService } from 'src/app/auth/auth.service';
 import { WhatsAppService } from 'src/app/whatsapp/services/whatsapp.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { SystemLockService } from 'src/app/system-lock/system-lock.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
+import { Subject, Subscription, firstValueFrom, skip, takeUntil } from 'rxjs';
+import { environment } from 'src/env/env';
+import {
+  collectRenewPrepaidParams,
+  promptReturnPrepaidAmount,
+  requiresManualPrepaidRefundSelection,
+} from '../utils/order-renew-prepaid.flow';
+import {
+  isCompanyCustomerType,
+  isIndividualCustomerType,
+  isRefuseEligibleOrderStatus,
+} from '../utils/order-refuse.utils';
+import { canShowCollectOrderMenu as isCollectOrderMenuVisible } from '../utils/order-collect-eligibility.utils';
+import {
+  OrderStatusFilterOption,
+  orderStatusFilterOptions,
+} from '../utils/order-status-visibility.utils';
 
 @Component({
   selector: 'app-list-orders',
   templateUrl: './list-orders.component.html',
-  styleUrls: ['./list-orders.component.css']
+  styleUrls: ['../../shared/styles/report-page-shell.css', './list-orders.component.css']
 })
-export class ListOrdersComponent {
+export class ListOrdersComponent implements OnDestroy {
   user!:string;
+  /** قسم الحسابات المالية: عرض فقط (طلبات مشحونة/محصّلة) دون إجراءات. */
+  get isFinancialAccountsReadonly(): boolean {
+    return this.user === 'Financial Accounts';
+  }
   /** True if the current user is assigned to at least one WhatsApp number */
   hasWhatsAppAccess = false;
 
   trackById(index: number, item: any): number {
     return item?.id;
   }
+
+  isShopifyOrder(item: any): boolean {
+    return item?.shopify_order_id != null && item?.shopify_order_id !== '';
+  }
+
+  isShopifyReviewed(item: any): boolean {
+    return !!item?.shopify_reviewed_at;
+  }
+
+  canShopifyReview(): boolean {
+    return this.rbac.canAny([...RBAC_ROUTE.shopifyOrderReview]);
+  }
+
+  /** خيارات فلتر حالة الطلب حسب صلاحيات RBAC (ثابتة بعد التحميل حتى لا يُعاد رسم الـ select). */
+  statusFilterOptions: OrderStatusFilterOption[] = [];
+  /** القيمة المعروضة في فلتر الحالة — مربوطة حتى لا ترجع لأول خيار بعد البحث. */
+  orderStatusFilter = '';
+  customerNameFilter = '';
+  customerPhoneFilter = '';
+  orderNumberFilter = '';
+  shipmentNumberFilter = '';
+
+  trackByStatusFilter(_index: number, opt: OrderStatusFilterOption): string {
+    return opt.value;
+  }
+
+  canPostponeOrder(): boolean {
+    const allowed = new Set([
+      'admin',
+      'shipping management',
+      'operation management',
+      'operation specialist',
+      'logistics specialist',
+    ]);
+    const dept = String(this.user || '').trim().toLowerCase();
+    if (allowed.has(dept)) {
+      return true;
+    }
+    return this.rbac.can('orders.change_status');
+  }
+
+  /** قائمة تأكيد الطلب: صلاحية orders.change_status فقط (بدون اعتماد على اسم القسم). */
+  canConfirmOrderMenu(): boolean {
+    return this.rbac.can('orders.change_status');
+  }
+
+  /** تأكيد الطلب: صلاحية + حالة الطلب المسموح. */
+  canConfirmOrder(item: any): boolean {
+    if (!this.canConfirmOrderMenu()) {
+      return false;
+    }
+    const status = String(item?.order_status ?? '').trim();
+    return ['جديد', 'طلب جديد', 'تم الصيانة'].includes(status);
+  }
+
+  /** تعديل الطلب: صلاحية orders.edit + حالة/نوع الطلب المسموح */
+  canEditOrder(item: any): boolean {
+    if (!this.rbac.can('orders.edit')) {
+      return false;
+    }
+    if (item?.order_status === 'تم شحن') {
+      return false;
+    }
+    const editableTypes = ['جديد', 'طلب استبدال', 'طلب مرتجع', 'طلب صيانة'];
+    const editableStatuses = ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي'];
+    return editableTypes.includes(item?.order_type) && editableStatuses.includes(item?.order_status);
+  }
+
+  /** تحصيل متغير للطلبات المشحونة أو المسلَّمة */
+  canEditShippedOrder(item: any): boolean {
+    return this.rbac.can('orders.edit')
+      && (item?.order_status === 'تم شحن' || item?.order_status === 'تم التسليم');
+  }
+
+  shopifyReviewTooltip(item: any): string {
+    if (!this.isShopifyOrder(item)) return '';
+    if (this.isShopifyReviewed(item)) {
+      const name = item?.shopify_reviewer?.name || '—';
+      return `تمت المراجعة بواسطة ${name}`;
+    }
+    return 'طلب Shopify — بانتظار المراجعة';
+  }
+
+  openShopifyReview(item: any): void {
+    if (!item?.id) return;
+    this.router.navigate(['/dashboard/shipping/orderdetails', item.id], {
+      queryParams: { shopifyReview: '1' },
+    });
+  }
+
+  /** Shopify وغيره: «فرد» / «افراد» / individual — وأي نوع غير «شركة». */
+  isIndividualCustomer(item: any): boolean {
+    return isIndividualCustomerType(item?.customer_type);
+  }
+
+  isCompanyCustomer(item: any): boolean {
+    return isCompanyCustomerType(item?.customer_type);
+  }
+
+  canRefuseOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  /** إلغاء الطلب: صلاحية orders.change_status أو أقسام التشغيل/الإدخال/خدمة العملاء. */
+  canCancelOrderMenu(): boolean {
+    return this.canChangeOrderStatusMenu();
+  }
+
+  canCancelOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    return ['طلب جديد', 'طلب مؤكد', 'مؤجل'].includes(status);
+  }
+
+  /** تجديد الطلب: صلاحية orders.change_status أو أقسام مسموحة (مع تقييد إدارة الشحن). */
+  canRenewOrder(item: any): boolean {
+    const status = String(item?.order_status ?? '').trim();
+    if (!['ملغي', 'أرشيف', 'ارشيف', 'مؤجل', 'رفض استلام', 'طلب مؤكد'].includes(status)) {
+      return false;
+    }
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
+    const dept = String(this.user || '').trim().toLowerCase();
+    if (dept === 'admin' || dept === 'data entry' || dept === 'customer service') {
+      return true;
+    }
+    if (dept === 'shipping management') {
+      return status === 'رفض استلام' || status === 'مؤجل';
+    }
+    return false;
+  }
+
+  private canChangeOrderStatusMenu(): boolean {
+    if (this.rbac.can('orders.change_status')) {
+      return true;
+    }
+    const allowed = new Set([
+      'admin',
+      'shipping management',
+      'operation management',
+      'finance and operations management',
+      'operation specialist',
+      'logistics specialist',
+      'data entry',
+      'review management',
+      'customer service',
+    ]);
+    const dept = String(this.user || '').trim().toLowerCase();
+    return allowed.has(dept);
+  }
+
+  /** رفض استلام: متاح لكل الحالات باستثناء المحصّل / الملغي / المرفوض / الأرشيف. */
+  canRefuseOrder(item: any): boolean {
+    return isRefuseEligibleOrderStatus(item?.order_status);
+  }
+
+  canShowCollectOrderMenu(item: any): boolean {
+    return isCollectOrderMenuVisible(item);
+  }
+
+  canShipOrder(item: any): boolean {
+    if (!item) return false;
+    const status = item.order_status;
+    // أفراد وشركات: شحن المتبقي بعد «شحن جزئي» / «تسليم جزئي» — مطابق للـ API
+    if (this.isCompanyCustomer(item) || this.isIndividualCustomer(item)) {
+      return ['طلب جديد', 'طلب مؤكد', 'شحن جزئي', 'تسليم جزئي', 'مؤجل'].includes(status);
+    }
+    return false;
+  }
+
+  /**
+   * فيه كمية على الأصناف لسه مش متعلّمة مشحونة — لأنواع الطلبات التي تتابع
+   * الشحن على مستوى الصنف فقط. الصيانة/المرتجع تُشحن بحالة الطلب بالكامل.
+   */
+  orderHasUnshippedRemaining(item: any): boolean {
+    if (!['جديد', 'طلب استبدال'].includes(String(item?.order_type ?? '').trim())) {
+      return false;
+    }
+    const products = Array.isArray(item?.order_products) ? item.order_products : [];
+    return products.some((p: any) => {
+      const remaining =
+        Number(p?.quantity || 0) - Number(p?.shipped_quantity || 0) - Number(p?.cancelled_quantity || 0);
+      return remaining > 0.009;
+    });
+  }
+
+  canShipOrderMenu(): boolean {
+    const roles = new Set([
+      'Admin',
+      'Operation Management',
+      'Finance and operations management',
+      'Operation Specialist',
+      'Logistics Specialist',
+      'Shipping Management',
+    ]);
+    return roles.has(this.user) || this.rbac.can('orders.fulfillment');
+  }
+
   /** قائمة الإجراءات بجانب رقم الطلب — Spatie: assign to whatsapp number، أو مستخدم معيّن لرقم واتساب (hasWhatsAppAccess) */
   canAssignWhatsAppNumbers = false;
   orders :any = [];
   banks :any = [];
+  safes: any[] = [];
+  serviceAccounts: any[] = [];
+  collectionCompanies: any[] = [];
   currentPageData :any = [];
   companies :any = [];
   location:any[]=[];
@@ -45,29 +276,85 @@ export class ListOrdersComponent {
   shippingWays:any[]=[];
   shippingLines:any[]=[];
   products:any[]=[];
+  private productSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private textFilterTimer: ReturnType<typeof setTimeout> | null = null;
 
-  length = 50;
-  pageSize = 100;
+  length = 0;
+  pageSize = 15;
   page = 0;
-  pageSizeOptions = [100,15,50];
+  pageSizeOptions = [15, 50, 100];
+  listLoading = false;
+  listError = false;
+
+  /** عرض البطاقات بدل الجدول تحت عرض ~768px */
+  isMobileView = false;
+  /** تفاصيل مفتوحة لبطاقات الموبايل */
+  mobileExpandedIds = new Set<number>();
+  private readonly destroy$ = new Subject<void>();
+  private searchSub?: Subscription;
 
   constructor(private orderSource:OrderSourceService ,private shippingWay: ShippingWayService , private datePipe:DatePipe,
-    private http:HttpClient ,private order: OrderService,public dialog: MatDialog, private company:ShippingCompanyService,
-    private filterService:FilterOrderService , private shippingLine:ShippingLinesService,
+    private http:HttpClient ,private order: OrderService, private orderInvoicePrint: OrderInvoicePrintService,
+    public dialog: MatDialog, private company:ShippingCompanyService,
+    public filterService:FilterOrderService , private shippingLine:ShippingLinesService,
     private userService:UserService ,private renderer: Renderer2 ,private el: ElementRef, private bankService:BanksService,
+    private safeService: SafeService,
+    private serviceAccountsService: ServiceAccountsService,
+    private collectionCompanyService: CollectionCompanyService,
     private authService:AuthService, private router: Router,
-    private whatsappService: WhatsAppService
+    private whatsappService: WhatsAppService,
+    private rbac: RbacService,
+    private breakpointObserver: BreakpointObserver,
+    private systemLock: SystemLockService,
     ) {
       document.addEventListener('scroll', (event) => {
         this.onListenerTriggered(event);
       }, true);
   }
 
+  get isLockPreview(): boolean {
+    return this.systemLock.isRestricted;
+  }
+
+  private lockPreviewLoaded = false;
+
   ngOnInit(): void {
     this.user = this.authService.getUser();
+    this.statusFilterOptions = orderStatusFilterOptions(this.user, (slug) => this.rbac.can(slug));
+    this.restoreFiltersFromService();
     const perms = this.authService.getPermission();
     this.canAssignWhatsAppNumbers =
       Array.isArray(perms) && perms.includes('assign to whatsapp number');
+
+    this.breakpointObserver
+      .observe(['(max-width: 767.98px)'])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        this.isMobileView = state.matches;
+        if (!state.matches) {
+          this.mobileExpandedIds = new Set();
+        }
+      });
+
+    this.systemLock.status$.pipe(skip(1), takeUntil(this.destroy$)).subscribe((status) => {
+      if (status.restricted && !this.lockPreviewLoaded) {
+        this.lockPreviewLoaded = true;
+        this.pageSize = 10;
+        this.pageSizeOptions = [10];
+        this.loadLockPreview();
+        this.loadLocalLocationLookups();
+      }
+    });
+
+    if (this.isLockPreview) {
+      this.lockPreviewLoaded = true;
+      this.pageSize = 10;
+      this.pageSizeOptions = [10];
+      this.loadLockPreview();
+      this.loadLocalLocationLookups();
+      return;
+    }
+
     this.whatsappService.getUserPhoneNumbers().subscribe({
       next: (res) => {
         const list = res?.data ?? res ?? [];
@@ -75,29 +362,122 @@ export class ListOrdersComponent {
       },
       error: () => { this.hasWhatsAppAccess = false; }
     });
-    this.order.getProducts().subscribe((result:any)=>this.products = result);
 
-    this.filterService.value.subscribe(res=>{
-      this.filter(arguments);
-    })
+    this.filterService.value.pipe(skip(1), takeUntil(this.destroy$)).subscribe(() => {
+      this.restoreFiltersFromService();
+      this.filter(null);
+    });
 
+    this.filter(null);
+    setTimeout(() => this.loadFilterLookups(), 0);
+  }
+
+  /** قوائم الفلاتر والحوارات بعد أول رسم حتى لا تنافس جدول الطلبات. */
+  private loadFilterLookups(): void {
+    if (this.isLockPreview) {
+      return;
+    }
     this.getUsers();
-
-
-
     this.company.shippingCompanySelect().subscribe((res:any)=>{
       this.companies = res
     });
+    this.loadLocalLocationLookups();
+    this.bankService.bankSelect().subscribe(res=>this.banks=res);
+    this.safeService.getAll().subscribe((res: any) => {
+      this.safes = res?.data ?? res ?? [];
+    });
+    this.serviceAccountsService.index().subscribe((res: any) => {
+      this.serviceAccounts = res ?? [];
+    });
+    this.collectionCompanyService.select().subscribe((res: any) => {
+      this.collectionCompanies = res ?? [];
+    });
+    this.orderSource.data().subscribe(reuslt=>this.orderSources = reuslt);
+    this.shippingWay.data().subscribe(result=>this.shippingWays = result);
+    this.shippingLine.dataLines().subscribe(result=>this.shippingLines = result);
+  }
 
+  private loadLocalLocationLookups(): void {
     this.http.get('assets/egypt/governorates.json').subscribe((data:any)=>this.location=data);
     this.http.get('assets/egypt/cities.json').subscribe((data:any)=>{
       this.cities = data.filter((elem:any)=>elem.governorate_id == 1);
     });
+  }
 
-    this.bankService.bankSelect().subscribe(res=>this.banks=res);
-    this.orderSource.data().subscribe(reuslt=>this.orderSources = reuslt);
-    this.shippingWay.data().subscribe(result=>this.shippingWays = result);
-    this.shippingLine.dataLines().subscribe(result=>this.shippingLines = result);
+  private loadLockPreview(): void {
+    this.listLoading = true;
+    this.listError = false;
+    this.searchSub?.unsubscribe();
+    this.searchSub = this.systemLock.ordersPreview().subscribe({
+      next: (result) => {
+        this.applyOrdersResult(result);
+        this.companies = result?.lookups?.companies ?? [];
+        this.orderSources = result?.lookups?.order_sources ?? [];
+        this.shippingWays = result?.lookups?.shipping_ways ?? [];
+        this.shippingLines = result?.lookups?.shipping_lines ?? [];
+        this.pageSize = 10;
+        this.pageSizeOptions = [10];
+      },
+      error: () => {
+        this.orders = [];
+        this.length = 0;
+        this.listLoading = false;
+        this.listError = true;
+        this.syncSelectAllState();
+      },
+    });
+  }
+
+  private applyOrdersResult(result: any): void {
+    this.orders = result?.data ?? [];
+    this.length = Number(result?.total ?? 0);
+    this.pageSize = Number(result?.per_page ?? this.pageSize);
+
+    this.orders.forEach((elm: any) => {
+      const notes = Array.isArray(elm?.notifications) ? elm.notifications : [];
+      elm.new_notification = notes.some((notification: any) => notification.is_read == 0);
+      elm.notification_number = notes.length;
+
+      const orderDateObj = new Date(elm.order_date);
+      const differenceInMilliseconds = Date.now() - orderDateObj.getTime();
+      elm.days = Math.floor(differenceInMilliseconds / (1000 * 60 * 60 * 24));
+    });
+    this.listLoading = false;
+    this.syncSelectAllState();
+  }
+
+  ngOnDestroy(): void {
+    if (this.productSearchTimer) {
+      clearTimeout(this.productSearchTimer);
+    }
+    if (this.textFilterTimer) {
+      clearTimeout(this.textFilterTimer);
+    }
+    this.searchSub?.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  toggleMobileOrderCard(id: number): void {
+    const next = new Set(this.mobileExpandedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.mobileExpandedIds = next;
+  }
+
+  isMobileOrderExpanded(id: number): boolean {
+    return this.mobileExpandedIds.has(id);
+  }
+
+  mobileOrderProducts(item: any): any[] {
+    return Array.isArray(item?.order_products) ? item.order_products : [];
+  }
+
+  mobileProductName(product: any): string {
+    return product?.category?.category_name || product?.category_name || 'صنف';
   }
 
   onListenerTriggered(event: Event): void {
@@ -114,15 +494,126 @@ export class ListOrdersComponent {
   }
 
   catword = 'category_name';
-  productChange(event) {
-    this.filterService.category_id = event.id;
-    this.filter(arguments);
+  allProducts: any[] = [];
+
+  private stripHighlightTags(value: string): string {
+    return String(value ?? '').replace(/<\/?b>/gi, '');
   }
 
-  resetInp(){
-    this.filterService.category_id = null;
-    this.filter(arguments);
+  selectedCategoryLabel = (item: any): string => {
+    if (!item?.category_name) {
+      return '';
+    }
+    const name = this.stripHighlightTags(String(item.category_name));
+    const code = String(item.item_code ?? '').trim();
+    return code ? `${name} (${code})` : name;
+  };
 
+  filterCategorySearch = (items: any[], query: string) => {
+    const q = (query ?? '').trim().toLowerCase();
+    if (!q) {
+      return [...items];
+    }
+    return items.filter((item) => {
+      const name = this.stripHighlightTags(String(item.category_name ?? '')).toLowerCase();
+      const code = String(item.item_code ?? '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    });
+  };
+
+  searchOrderProducts(query: string): void {
+    const q = (query ?? '').trim();
+    if (!q) {
+      this.products = [];
+      return;
+    }
+
+    this.http.get<any>(`${environment.Url}/categories/search`, {
+      params: {
+        itemsPerPage: 50,
+        warehouse: 'مخزن منتج تام',
+        category_name: q,
+      },
+    }).subscribe({
+      next: (res) => {
+        this.products = (res?.data || []).map((item: any) => ({
+          ...item,
+          category_name: item.category_name || '',
+        }));
+      },
+      error: () => {
+        this.products = this.filterCategorySearch(this.allProducts, q);
+      },
+    });
+  }
+
+  onProductInputChanged(value: string): void {
+    if (this.productSearchTimer) {
+      clearTimeout(this.productSearchTimer);
+    }
+    const q = (value ?? '').trim();
+    if (!q) {
+      this.products = [];
+      return;
+    }
+    this.productSearchTimer = setTimeout(() => this.searchOrderProducts(q), 300);
+  }
+
+  onTextFilterInput(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    if (!target?.id) {
+      return;
+    }
+
+    if (this.textFilterTimer) {
+      clearTimeout(this.textFilterTimer);
+    }
+
+    this.textFilterTimer = setTimeout(() => {
+      this.applyTextFilter(target.id, target.value);
+      this.page = 0;
+      this.filter(null);
+    }, 400);
+  }
+
+  private applyTextFilter(id: string, rawValue: string): void {
+    const value = String(rawValue ?? '').trim();
+
+    switch (id) {
+      case 'customer_name':
+        this.filterService.customer_name = value;
+        break;
+      case 'customer_phone': {
+        let number = value.replace(/\s+/g, '');
+        if (number.startsWith('+2') || number.startsWith('2')) {
+          number = number.substring(2);
+        }
+        this.filterService.customer_phone = number;
+        break;
+      }
+      case 'order_number':
+        this.filterService.order_number = value;
+        break;
+      case 'shippment_number':
+        this.filterService.shippment_number = value;
+        break;
+    }
+  }
+
+  productChange(event: { id?: number } | null): void {
+    if (!event?.id) {
+      return;
+    }
+    this.filterService.category_id = event.id;
+    this.page = 0;
+    this.filter(null);
+  }
+
+  resetProductFilter(): void {
+    this.filterService.category_id = null;
+    this.products = [];
+    this.page = 0;
+    this.filter(null);
   }
 
   userdata:any[]=[];
@@ -155,9 +646,45 @@ export class ListOrdersComponent {
 
 
   onPageChange(event: any) {
+    if (this.isLockPreview) {
+      return;
+    }
     this.pageSize = event.pageSize;
     this.page = event.pageIndex;
+    this.persistPaging();
     this.filter(arguments);
+  }
+
+  private persistPaging(): void {
+    this.filterService.page = this.page;
+    this.filterService.pageSize = this.pageSize;
+  }
+
+  private restoreFiltersFromService(): void {
+    const s = this.filterService;
+    const text = (value: string | null | undefined): string | null => value || null;
+
+    this.need_by_date = text(s.need_by_date);
+    this.need_by_date_from = text(s.need_by_date_from);
+    this.need_by_date_to = text(s.need_by_date_to);
+    this.status_date = text(s.status_date);
+    this.status_date_from = text(s.status_date_from);
+    this.status_date_to = text(s.status_date_to);
+    this.order_date = text(s.order_date);
+    this.order_date_from = text(s.order_date_from);
+    this.order_date_to = text(s.order_date_to);
+    this.delivery_date = text(s.delivery_date);
+    this.delivery_date_from = text(s.delivery_date_from);
+    this.delivery_date_to = text(s.delivery_date_to);
+
+    this.orderStatusFilter = s.order_status || '';
+    this.customerNameFilter = s.customer_name || '';
+    this.customerPhoneFilter = s.customer_phone || '';
+    this.orderNumberFilter = s.order_number || '';
+    this.shipmentNumberFilter = s.shippment_number || '';
+    this.governName = s.governorate === 'القاهرة';
+    this.page = typeof s.page === 'number' && s.page >= 0 ? s.page : 0;
+    this.pageSize = typeof s.pageSize === 'number' && s.pageSize > 0 ? s.pageSize : 15;
   }
 
 
@@ -189,43 +716,45 @@ export class ListOrdersComponent {
   }
 
 
-  need_by_datekey = false;
-  need_by_date:any;
-  OnDateChange(event){
-    const inputDate = new Date(event);
-    this.need_by_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
-    this.need_by_datekey = true;
-    this.filter('');
+  need_by_date: string | null = null;
+  need_by_date_from: string | null = null;
+  need_by_date_to: string | null = null;
+  status_date: string | null = null;
+  status_date_from: string | null = null;
+  status_date_to: string | null = null;
+  order_date: string | null = null;
+  order_date_from: string | null = null;
+  order_date_to: string | null = null;
+  delivery_date: string | null = null;
+  delivery_date_from: string | null = null;
+  delivery_date_to: string | null = null;
+
+  private setDateFilter(
+    field:
+      | 'need_by_date' | 'need_by_date_from' | 'need_by_date_to'
+      | 'status_date' | 'status_date_from' | 'status_date_to'
+      | 'order_date' | 'order_date_from' | 'order_date_to'
+      | 'delivery_date' | 'delivery_date_from' | 'delivery_date_to',
+    iso: string | null
+  ): void {
+    this[field] = iso || null;
+    this.page = 0;
+    this.persistPaging();
+    this.filter(null);
   }
 
-  status_datekey = false;
-  status_date:any;
-  OnStatusDateChange(event){
-    const inputDate = new Date(event);
-    this.status_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
-    this.status_datekey = true;
-    console.log(this.status_date);
-
-    this.filter('');
-  }
-
-  order_datekey = false;
-  order_date:any;
-  OnOrderDateChange(event){
-    const inputDate = new Date(event);
-    this.order_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
-    this.order_datekey = true;
-    this.filter('');
-  }
-
-  deliver_datekey = false;
-  delivery_date:any;
-  OnDeliverDateChange(event){
-    const inputDate = new Date(event);
-    this.delivery_date = this.datePipe.transform(inputDate, 'yyyy-MM-dd');
-    this.deliver_datekey = true;
-    this.filter('');
-  }
+  OnNeedByDateChange(iso: string | null){ this.setDateFilter('need_by_date', iso); }
+  OnNeedByDateFromChange(iso: string | null){ this.setDateFilter('need_by_date_from', iso); }
+  OnNeedByDateToChange(iso: string | null){ this.setDateFilter('need_by_date_to', iso); }
+  OnStatusDateChange(iso: string | null){ this.setDateFilter('status_date', iso); }
+  OnStatusDateFromChange(iso: string | null){ this.setDateFilter('status_date_from', iso); }
+  OnStatusDateToChange(iso: string | null){ this.setDateFilter('status_date_to', iso); }
+  OnOrderDateChange(iso: string | null){ this.setDateFilter('order_date', iso); }
+  OnOrderDateFromChange(iso: string | null){ this.setDateFilter('order_date_from', iso); }
+  OnOrderDateToChange(iso: string | null){ this.setDateFilter('order_date_to', iso); }
+  OnDeliveryDateChange(iso: string | null){ this.setDateFilter('delivery_date', iso); }
+  OnDeliveryDateFromChange(iso: string | null){ this.setDateFilter('delivery_date_from', iso); }
+  OnDeliveryDateToChange(iso: string | null){ this.setDateFilter('delivery_date_to', iso); }
 
   receive(id:number){
     let bank;
@@ -365,6 +894,8 @@ export class ListOrdersComponent {
         return 'shipped';
       case 'شحن جزئي':
         return 'partshipped';
+      case 'تسليم جزئي':
+        return 'partdelivered';
       case 'تم الاستلام':
         return 'received';
       case 'مؤجل':
@@ -375,6 +906,8 @@ export class ListOrdersComponent {
         return 'canceled';
         case 'تم التحصيل':
           return 'collected';
+          case 'تم التسليم':
+          return 'delivered';
           case 'تم الصيانة':
           return 'fixed';
           case 'أرشيف' :
@@ -382,6 +915,189 @@ export class ListOrdersComponent {
       default:
         return '';
     }
+  }
+
+  confirmDelivery(item: any) {
+    const orderId = typeof item === 'object' ? item?.id : item;
+    const order = typeof item === 'object' ? item : this.orders?.find((o: any) => o?.id === orderId);
+    this.order.checkDeliveryTransfer(orderId).subscribe(
+      (check) => this.showDeliveryDialog(orderId, check, order),
+      () => this.showDeliveryDialog(orderId, { needs_transfer: false, holders: [] }, order)
+    );
+  }
+
+  private async showDeliveryDialog(orderId: number, check: any, order?: any) {
+    const amount = check?.amount;
+    const hasAmount = amount != null && Number(amount) > 0.009;
+    const holders: any[] = Array.isArray(check?.holders) ? check.holders : [];
+    const hasRemaining = this.orderHasUnshippedRemaining(order);
+
+    // بلا مديونية للنقل — تأكيد تسليم بسيط.
+    if (!hasAmount && holders.length === 0 && !check?.needs_transfer) {
+      Swal.fire({
+        title: hasRemaining ? 'تأكيد تسليم جزئي' : 'تأكيد التسليم',
+        html: hasRemaining
+          ? '<div style="text-align:right;direction:rtl">فيه أصناف متبقية للشحن. تأكيد التسليم هيسجّل <b>تسليم جزئي</b> من غير ما يقفل الطلب.<br>لو العميل استلم الكل: استخدم <b>شحن المتبقي</b> أولاً ثم أكّد التسليم.</div>'
+          : 'هل تم تسليم الطلب للعميل؟',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: hasRemaining ? 'نعم، تسليم الجزء المتاح' : 'نعم، تم التسليم',
+        cancelButtonText: 'إلغاء',
+        input: 'text',
+        inputPlaceholder: 'ملاحظة (اختياري)',
+        inputValidator: () => undefined
+      }).then((result) => {
+        if (result.isConfirmed) {
+          this.submitDelivery(orderId, { note: result.value || '' }, hasRemaining);
+        }
+      });
+      return;
+    }
+
+    // تحميل القوائم الكاملة (شركات الشحن/المناديب + شركات التحصيل) حتى يمكن اختيار أي شركة.
+    let shippingList: any[] = [];
+    let collectionList: any[] = [];
+    try {
+      const s: any = await firstValueFrom(this.company.shippingCompanySelect());
+      shippingList = Array.isArray(s) ? s : (s?.data ?? []);
+    } catch {}
+    try {
+      const c: any = await firstValueFrom(this.collectionCompanyService.select());
+      collectionList = Array.isArray(c) ? c : (c?.data ?? []);
+    } catch {}
+
+    const shipOpts = shippingList
+      .filter((c) => c?.id)
+      .map((c) => {
+        const type = c.type === 'مندوب' ? 'courier' : 'shipping_company';
+        return `<option value="${type}:${c.id}">${this.escapeHtml(c.name)}</option>`;
+      })
+      .join('');
+
+    const mixed = !!check?.is_mixed_online_cash && check?.mixed_split;
+    const collOpts = mixed
+      ? ''
+      : collectionList
+          .filter((c) => c?.id && c.status !== 'inactive')
+          .map((c) => `<option value="collection_company:${c.id}">${this.escapeHtml(c.name)}</option>`)
+          .join('');
+
+    // بدون قوائم شركات — نعود لقائمة الجهات المقترحة من الطلب أو تأكيد بسيط.
+    if (!shipOpts && !collOpts) {
+      const fallbackOpts = holders
+        .map((h) => `<option value="${h.type}:${h.id}">${this.escapeHtml(`${h.label ? h.label + ' — ' : ''}${h.name}`)}</option>`)
+        .join('');
+      if (!fallbackOpts) {
+        this.submitDelivery(orderId, { note: '' }, hasRemaining);
+        return;
+      }
+      this.openDeliveryHolderDialog(orderId, check, `<select id="swal-holder" class="swal2-select" style="width:100%;margin:0 0 10px">${fallbackOpts}</select>`, hasRemaining);
+      return;
+    }
+
+    const selectHtml = `
+      <select id="swal-holder" class="swal2-select" style="width:100%;margin:0 0 10px">
+        ${shipOpts ? `<optgroup label="شركات الشحن / المناديب">${shipOpts}</optgroup>` : ''}
+        ${collOpts ? `<optgroup label="شركات التحصيل">${collOpts}</optgroup>` : ''}
+      </select>`;
+
+    this.openDeliveryHolderDialog(orderId, check, selectHtml, hasRemaining);
+  }
+
+  private openDeliveryHolderDialog(orderId: number, check: any, selectHtml: string, hasRemaining = false) {
+    const amount = check?.amount;
+    const mixed = check?.is_mixed_online_cash && check?.mixed_split;
+    const defaultKey = check?.default_holder
+      ? `${check.default_holder.type}:${check.default_holder.id}`
+      : (Array.isArray(check?.holders) && check.holders[0]
+          ? `${check.holders[0].type}:${check.holders[0].id}`
+          : '');
+
+    const amountLine = mixed
+      ? `<div style="margin:0 0 10px;padding:8px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px">
+           <p style="margin:0 0 6px">عند التسليم تتنقل <b>الذمتين</b>:</p>
+           <p style="margin:0">أونلاين <b>${this.escapeHtml(check.mixed_split.online_amount)}</b> → ${this.escapeHtml(check.mixed_split.online_holder_name || 'شركة التحصيل')}</p>
+           <p style="margin:6px 0 0">كاش <b>${this.escapeHtml(check.mixed_split.cash_amount)}</b> → ${this.escapeHtml(check.mixed_split.cash_holder_name || 'المندوب / شركة الشحن')}</p>
+         </div>`
+      : (amount != null
+          ? `<p style="margin:0 0 8px">المبلغ الذي ستُنقل ذمته: <b>${this.escapeHtml(amount)}</b></p>`
+          : '');
+
+    const remainingHint = hasRemaining
+      ? '<p style="margin:0 0 8px;color:#b45309">فيه أصناف متبقية للشحن — هيتسجل تسليم جزئي ولن تُنقل الذمة كاملة حتى التسليم النهائي. لو العميل استلم الكل استخدم «شحن المتبقي» أولاً.</p>'
+      : '';
+    const intro = mixed
+      ? 'الأونلاين يفضل على شركة التحصيل. اختر المندوب / شركة الشحن لذمة الكاش فقط:'
+      : 'عند التسليم ستُرمى المديونية على الجهة التالية. الافتراضي هو الشركة المرتبطة بالطلب، ويمكنك اختيار شركة أخرى:';
+
+    Swal.fire({
+      title: hasRemaining
+        ? 'تأكيد تسليم جزئي'
+        : (mixed ? 'تأكيد التسليم — نقل الذمتين' : 'تأكيد التسليم — نقل الذمة'),
+      html: `
+        <div style="text-align:right;direction:rtl">
+          ${remainingHint}
+          <p style="margin:0 0 8px">${intro}</p>
+          ${amountLine}
+          <label style="display:block;margin:0 0 4px;font-weight:600">${mixed ? 'ذمة الكاش على' : 'نقل الذمة على'}</label>
+          ${selectHtml}
+          <input id="swal-note" class="swal2-input" placeholder="ملاحظة (اختياري)" style="margin:0;width:100%">
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'تأكيد ونقل الذمة',
+      cancelButtonText: 'إلغاء',
+      focusConfirm: false,
+      didOpen: () => {
+        const el = document.getElementById('swal-holder') as HTMLSelectElement | null;
+        if (el && defaultKey) {
+          el.value = defaultKey;
+        }
+      },
+      preConfirm: () => {
+        const holderEl = document.getElementById('swal-holder') as HTMLSelectElement | null;
+        const noteEl = document.getElementById('swal-note') as HTMLInputElement | null;
+        const [type, id] = (holderEl?.value || '').split(':');
+        return {
+          liability_holder_type: type || undefined,
+          liability_holder_id: id ? Number(id) : undefined,
+          note: noteEl?.value || ''
+        };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.submitDelivery(orderId, result.value || {}, hasRemaining);
+      }
+    });
+  }
+
+  private escapeHtml(value: any): string {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) =>
+      (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[ch])
+    );
+  }
+
+  private submitDelivery(orderId: number, body: any, partial = false) {
+    this.order.deliverOrder(orderId, body).subscribe(
+      (res: any) => {
+        if (res.message === 'success') {
+          Swal.fire({
+            icon: 'success',
+            title: 'تم',
+            text: partial
+              ? 'تم تسجيل تسليم جزئي — شحن المتبقي من قائمة الطلب ثم أكّد التسليم لتقفل الحالة'
+              : 'تم تأكيد تسليم الطلب بنجاح',
+            timer: partial ? 2800 : 1400,
+            showConfirmButton: false,
+          });
+          this.filter(null);
+        }
+      },
+      (err) => {
+        Swal.fire('خطأ', err?.error?.message || 'حدث خطأ', 'error');
+      }
+    );
   }
 
   reviewFn(){
@@ -398,6 +1114,196 @@ export class ListOrdersComponent {
       }
     });
 
+  }
+
+  /**
+   * أدمن: إعادة بناء قيود الفاتورة (ORD-*) من بيانات الطلب الحالية لنطاق «تاريخ الطلب»،
+   * ثم إعادة حساب أرصدة شجرة الحسابات. لا تُعدّ قيود التحصيل الفعلية.
+   */
+  async openOrdersAccountingReconcileWizard(): Promise<void> {
+    if (this.user !== 'Admin') {
+      return;
+    }
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const defaultTo = `${yyyy}-${mm}-${dd}`;
+    const firstOfMonth = `${yyyy}-${mm}-01`;
+
+    const step1 = await Swal.fire({
+      title: 'تسوية قيود المحاسبة للطلبات',
+      html: `
+        <p class="text-right small text-muted mb-2" style="max-width:100%;">
+          يُعاد إنشاء قيود الفاتورة (ORD-*) من إجمالي الطلب والخصم وإيراد الشحن وربط ذمم شركة الشحن/التحصيل الحالي.
+          <strong>الطلبات الملغية والمؤرشفة تُستبعد تلقائياً.</strong>
+          قيود التحصيل والدفعات الإضافية المسجّلة لاحقاً لا تُلغى. بعد الانتهاء تُحدَّث أرصدة الشجرة بالكامل.
+        </p>
+        <label class="d-block text-right fw-bold">من تاريخ الطلب</label>
+        <input id="swal-ord-acc-from" type="date" class="swal2-input" style="width:100%;box-sizing:border-box;" value="${firstOfMonth}">
+        <label class="d-block text-right fw-bold mt-2">إلى تاريخ الطلب</label>
+        <input id="swal-ord-acc-to" type="date" class="swal2-input" style="width:100%;box-sizing:border-box;" value="${defaultTo}">
+        <label class="d-flex align-items-start mt-3 text-right gap-2" style="cursor:pointer;">
+          <input type="checkbox" id="swal-ord-acc-prepaid" class="mt-1">
+          <span class="small">إعادة بناء قيود الدفعة المقدمة عند إنشاء الطلب (ORD-PREPAID) — للاستخدام النادر فقط؛ إن وُجدت تحصيلات جزئية لاحقة قد لا تطابق السجل التاريخي.</span>
+        </label>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'معاينة العدد',
+      cancelButtonText: 'إلغاء',
+      preConfirm: () => {
+        const fromEl = document.getElementById('swal-ord-acc-from') as HTMLInputElement | null;
+        const toEl = document.getElementById('swal-ord-acc-to') as HTMLInputElement | null;
+        const prepaidEl = document.getElementById('swal-ord-acc-prepaid') as HTMLInputElement | null;
+        const dateFrom = fromEl?.value ?? '';
+        const dateTo = toEl?.value ?? '';
+        if (!dateFrom || !dateTo) {
+          Swal.showValidationMessage('حدد تاريخ البداية والنهاية');
+          return false;
+        }
+        if (dateFrom > dateTo) {
+          Swal.showValidationMessage('"من" يجب أن يكون قبل أو مساوياً لـ "إلى"');
+          return false;
+        }
+        const maxDays = 731;
+        const diffMs = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays > maxDays) {
+          Swal.showValidationMessage(`نطاق التاريخ (${diffDays} يوم) يتجاوز الحد المسموح (${maxDays} يوم)`);
+          return false;
+        }
+        return {
+          date_from: dateFrom,
+          date_to: dateTo,
+          rebuild_prepaid: !!prepaidEl?.checked,
+        };
+      },
+    });
+
+    const payload = step1.value as { date_from: string; date_to: string; rebuild_prepaid: boolean } | undefined;
+    if (!step1.isConfirmed || !payload) {
+      return;
+    }
+
+    try {
+      Swal.fire({
+        title: 'جاري تحميل المعاينة...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const preview: any = await firstValueFrom(
+        this.order.previewOrdersAccountingReconcile({
+          date_from: payload.date_from,
+          date_to: payload.date_to,
+        })
+      );
+
+      Swal.close();
+
+      if (preview?.would_exceed_limit) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'تجاوز الحد',
+          html: `عدد الطلبات النشطة (${preview.orders_count}) يتجاوز الحد المسموح لكل تشغيل (${preview.max_orders_per_run}). قلّل نطاق التاريخ.`,
+        });
+        return;
+      }
+
+      if ((preview?.orders_count ?? 0) === 0) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'لا توجد طلبات',
+          text: `لا توجد طلبات نشطة في الفترة من ${payload.date_from} إلى ${payload.date_to}.`,
+        });
+        return;
+      }
+
+      let statusBreakdown = '';
+      const byStatus = preview?.by_status;
+      if (byStatus && Object.keys(byStatus).length > 0) {
+        const rows = Object.entries(byStatus)
+          .map(([status, count]) => `<tr><td class="text-right px-2">${status}</td><td class="text-center px-2"><b>${count}</b></td></tr>`)
+          .join('');
+        statusBreakdown = `
+          <table class="table table-sm table-bordered mt-2 mb-0" style="font-size:0.85rem;">
+            <thead><tr><th class="text-right">الحالة</th><th class="text-center">العدد</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+
+      const excludedNote = (preview?.excluded_count ?? 0) > 0
+        ? `<p class="text-right small text-warning mt-2 mb-0">سيتم تجاوز <b>${preview.excluded_count}</b> طلب ملغي/مؤرشف تلقائياً.</p>`
+        : '';
+
+      const runConfirm = await Swal.fire({
+        icon: 'question',
+        title: 'تأكيد التسوية',
+        html: `
+          <p class="text-right">سيُعاد ترحيل قيود الفاتورة لـ <b>${preview?.orders_count ?? 0}</b> طلب نشط بين
+          <b>${payload.date_from}</b> و <b>${payload.date_to}</b>.
+          ${payload.rebuild_prepaid ? '<br><strong class="text-danger">تضمين إعادة بناء الدفعات المقدمة مفعّل.</strong>' : ''}
+          </p>
+          ${statusBreakdown}
+          ${excludedNote}
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'تنفيذ التسوية',
+        cancelButtonText: 'رجوع',
+        confirmButtonColor: '#d33',
+      });
+
+      if (!runConfirm.isConfirmed) {
+        return;
+      }
+
+      Swal.fire({
+        title: 'جاري التسوية...',
+        html: '<p class="small text-muted">قد يستغرق ذلك بضع دقائق حسب عدد الطلبات. لا تغلق الصفحة.</p>',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      const result: any = await firstValueFrom(
+        this.order.runOrdersAccountingReconcile({
+          date_from: payload.date_from,
+          date_to: payload.date_to,
+          rebuild_prepaid: payload.rebuild_prepaid,
+        })
+      );
+
+      Swal.close();
+
+      let failHtml = '';
+      const fails = Array.isArray(result?.failures) ? result.failures.slice(0, 15) : [];
+      if (fails.length) {
+        failHtml =
+          '<p class="text-right small mt-2">أول الطلبات الفاشلة:</p><ul class="text-right small" style="max-height:140px;overflow:auto;">' +
+          fails.map((f: any) => `<li>#${f.order_id}: ${(f.error || '').toString().slice(0, 120)}</li>`).join('') +
+          '</ul>';
+      }
+
+      const skippedHtml = (result?.orders_skipped_cancelled ?? 0) > 0
+        ? `<p class="text-right small text-muted">تم تجاوز: <b>${result.orders_skipped_cancelled}</b> طلب ملغي/مؤرشف</p>`
+        : '';
+
+      await Swal.fire({
+        icon: result?.success ? 'success' : 'error',
+        title: result?.message || 'انتهى',
+        html:
+          `<p class="text-right">المعالجة بنجاح: <b>${result?.orders_processed ?? 0}</b> — فشل: <b>${result?.orders_failed ?? 0}</b></p>` +
+          skippedHtml +
+          failHtml,
+      });
+    } catch (err: any) {
+      Swal.close();
+      const msg = err?.error?.message || err?.message || 'حدث خطأ';
+      Swal.fire({ icon: 'error', title: 'لم يكتمل الطلب', text: msg });
+    }
   }
 
   sendOrder(item:any){
@@ -521,6 +1427,33 @@ export class ListOrdersComponent {
     });
   }
 
+  canRollbackOrder(item: { order_status?: string }): boolean {
+    const status = item?.order_status ?? '';
+    return status === 'تم التسليم' || status === 'تم التحصيل' || status === 'تم الاستلام';
+  }
+
+  canShowRollbackMenu(): boolean {
+    const dept = String(this.user || '').trim();
+    return dept === 'Admin'
+      || dept === 'Operation Management'
+      || dept === 'Operation Specialist'
+      || dept === 'Logistics Specialist'
+      || dept === 'Shipping Management'
+      || this.rbac.canAny(['orders.change_status', 'orders.assign_driver']);
+  }
+
+  reopenOrder(item: { id: number; order_status?: string }): void {
+    this.dialog.open(DialogOrderRollbackComponent, {
+      width: '520px',
+      maxWidth: '95vw',
+      data: {
+        orderId: item.id,
+        currentStatus: item.order_status ?? '',
+        refreshData: () => this.reloadOrdersList(),
+      },
+    });
+  }
+
   postponeReceipt(type:string,id:number){
     Swal.fire({
       title: `${id} تأجيل استلام طلب رقم `,
@@ -540,6 +1473,39 @@ export class ListOrdersComponent {
     });
   }
 
+
+  private reloadOrdersList(): void {
+    this.filter(undefined as unknown as Event);
+  }
+
+  private statusChangeHandlers(): {
+    next: (res: unknown) => void;
+    error: (err: { error?: { message?: string } }) => void;
+  } {
+    return {
+      next: (res) => {
+        if (res) {
+          this.reloadOrdersList();
+          Swal.fire({
+            icon: 'success',
+            timer: 3000,
+            showConfirmButton: false,
+            titleText: 'تم ارسال اشعار للادمن',
+            position: 'bottom-end',
+            toast: true,
+            timerProgressBar: true,
+          });
+        }
+      },
+      error: (err) => {
+        Swal.fire({
+          icon: 'error',
+          title: 'لم يتم تنفيذ الإجراء',
+          text: err?.error?.message || 'حدث خطأ أثناء تحديث حالة الطلب',
+        });
+      },
+    };
+  }
 
   async changeOrderStatus(type:string,id:number,title:string,action:string,order:any){
     if (type =='شركة' && (action=='cancel' || action=='refused')) {
@@ -564,20 +1530,7 @@ export class ListOrdersComponent {
               }
 
               if (action=='cancel' && order.prepaid_amount >= amount) {
-                this.order.chngeStatus(id, action, value , amount,0,0).subscribe(res => {
-                  if (res) {
-                    this.filter(arguments);
-                    Swal.fire({
-                      icon : 'success',
-                      timer:3000,
-                      showConfirmButton:false,
-                      titleText: 'تم ارسال اشعار للادمن',
-                      position: 'bottom-end',
-                      toast: true,
-                      timerProgressBar: true,
-                    });
-                  };
-                });
+                this.order.chngeStatus(id, action, value , amount,0,0).subscribe(this.statusChangeHandlers());
                 return;
               }
 
@@ -610,21 +1563,7 @@ export class ListOrdersComponent {
                       console.log('in');
                       if (selectedBankId) {
                         bank = selectedBankId;
-                        this.order.chngeStatus(id, action, value , amount,bank,0).subscribe(res => {
-                          console.log(res);
-                          if (res) {
-                            this.filter(arguments);
-                            Swal.fire({
-                              icon : 'success',
-                              timer:3000,
-                              showConfirmButton:false,
-                              titleText: 'تم ارسال اشعار للادمن',
-                              position: 'bottom-end',
-                              toast: true,
-                              timerProgressBar: true,
-                            });
-                          };
-                        });
+                        this.order.chngeStatus(id, action, value , amount,bank,0).subscribe(this.statusChangeHandlers());
 
                       } else{
                         Swal.fire({
@@ -636,21 +1575,7 @@ export class ListOrdersComponent {
                   });
 
                 } else if (result.dismiss == "cancel") {
-                    this.order.chngeStatus(id, action, value , amount,0,0).subscribe(res => {
-                      console.log(res);
-                      if (res) {
-                        this.filter(arguments);
-                        Swal.fire({
-                          icon : 'success',
-                          timer:3000,
-                          showConfirmButton:false,
-                          titleText: 'تم ارسال اشعار للادمن',
-                          position: 'bottom-end',
-                          toast: true,
-                          timerProgressBar: true,
-                        });
-                      };
-                    });
+                    this.order.chngeStatus(id, action, value , amount,0,0).subscribe(this.statusChangeHandlers());
                 }
 
                 return undefined;
@@ -677,145 +1602,51 @@ export class ListOrdersComponent {
         input: 'text',
         inputPlaceholder: 'السبب',
         showCancelButton: true,
-        inputValidator: async (value) => {
+        inputValidator: (value) => {
           if (!value) {
-            return 'يجب ادخال ملاحظة'
+            return 'يجب ادخال ملاحظة';
           }
-          if (value !== '') {
-            let param = {}
-            if (action=='cancel' && order.prepaid_amount > 0) {
-              let returnPaidMoney = await this.returnPrepaidAmount(order)
-              if (Object.keys(returnPaidMoney).length === 0) {
-                return undefined;
-              }
-              param['moneyReturnedStatus'] = returnPaidMoney['returnedStatus'];
-              if (returnPaidMoney['returnedStatus'] === 'approved') {
-                param['moneyReturnedBank'] = returnPaidMoney['returnedBank'];
-              }
-            }
-
-            if (action=='renew') {
-              const result = await Swal.fire({
-                title: 'هل يوجد مبلغ تحت الحساب؟',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'نعم',
-                cancelButtonText: 'لا',
-              });
-
-              if (result.dismiss === Swal.DismissReason.backdrop) {
-                return;
-              }
-
-              if (result.isConfirmed) {
-                let prepaidAmountData = await this.renewPrepaidAmount();
-                if (Object.keys(prepaidAmountData).length === 0) {
-                  return undefined;
-                }
-                param['renewAmount'] = prepaidAmountData['renewAmount'];
-                param['renewBankId'] = prepaidAmountData['renewBankId'];
-              }
-            }
-
-            this.order.chngeStatus(id,action,value,0,0,0,param).subscribe(res=>{
-              if (res) {
-                this.filter(arguments);
-                Swal.fire({
-                  icon : 'success',
-                  timer:3000,
-                  showConfirmButton:false,
-                  titleText: 'تم ارسال اشعار للادمن',
-                  position: 'bottom-end',
-                  toast: true,
-                  timerProgressBar: true,
-                });
-              };
-            }
-            )
-          }
-          return undefined
+          return null;
+        },
+      }).then(async (result) => {
+        if (!result.isConfirmed || !result.value) {
+          return;
         }
-      })
+
+        const note = result.value;
+        const param: Record<string, string | number> = {};
+
+        if (action === 'cancel' && order.prepaid_amount > 0 && requiresManualPrepaidRefundSelection(order)) {
+          const returnPaidMoney = await this.returnPrepaidAmount(order);
+          if (Object.keys(returnPaidMoney).length === 0) {
+            return;
+          }
+          param['moneyReturnedStatus'] = returnPaidMoney['returnedStatus'] as string;
+          if (returnPaidMoney['returnedStatus'] === 'approved' && returnPaidMoney['returnedBank'] != null) {
+            param['moneyReturnedBank'] = returnPaidMoney['returnedBank'];
+          }
+        }
+
+        if (action === 'renew') {
+          const renewParams = await collectRenewPrepaidParams(order, {
+            banks: this.banks,
+            safes: this.safes,
+            serviceAccounts: this.serviceAccounts,
+            collectionCompanies: this.collectionCompanies,
+          });
+          if (renewParams === null) {
+            return;
+          }
+          Object.assign(param, renewParams);
+        }
+
+        this.order.chngeStatus(id, action, note, 0, 0, 0, param).subscribe(this.statusChangeHandlers());
+      });
     }
   }
 
-  async returnPrepaidAmount(order){
-    const banks = this.banks;
-    const bankSelectOptions = banks.reduce((options, bank) => {
-      options[bank.id] = bank.name;
-      return options;
-    }, {});
-
-    let data={}
-    await Swal.fire({
-      title: ' إرجاع مبلغ تحت الحساب '+ order.prepaid_amount,
-      input: 'select',
-      inputOptions: bankSelectOptions,
-      inputPlaceholder: 'اختر الخزينة',
-      inputValue:order.bank_id,
-      showCancelButton: true,
-      confirmButtonText: 'تأكيد',
-      cancelButtonText: 'قيد الانتظار',
-      customClass: {
-        input: 'text-center',
-      },
-    }).then((result:any) => {
-      const selectedBankId = result.value;
-      if (result.isConfirmed) {
-        data['returnedStatus'] = 'approved';
-        data['returnedBank'] = selectedBankId;
-      } else if (result.dismiss == "cancel"){
-        data['returnedStatus'] = 'pending';
-      }
-    });
-    return data
-  }
-
-  async renewPrepaidAmount() {
-    let options;
-    this.banks.forEach(elm =>{
-      let selected = '';
-      options += `<option ${selected} value="${elm.id}">${elm.name}</option>`;
-    })
-
-    let data = {};
-    const { value: formValues } = await Swal.fire({
-      title: ' ادخال مبلغ تحت الحساب ' ,
-      html: `
-      <div class="row w-100 m-auto">
-        <div class="col-md-12">
-          <div class="form-group">
-            <input id="swal-input-renewAmount" class="form-control text-center" placeholder="المبلغ" type="number" min="0">
-          </div>
-        </div>
-        <div class="col-md-12">
-          <div class="form-group">
-            <select id="swal-input-bank" class="form-control  text-center bg-main">
-              <option value="اختر الخزينة" disabled selected>اختر الخزينة</option>
-              ${options}
-            </select>
-          </div>
-        </div>
-      </div>
-    `,
-      showCancelButton: true,
-      confirmButtonText: 'تأكيد',
-      cancelButtonText: 'الغاء',
-      preConfirm: () => {
-        let renewAmount:any = document.getElementById('swal-input-renewAmount');
-        let selectedBankId:any = document.getElementById('swal-input-bank');
-        return {
-          renewAmount: renewAmount.value,
-          selectedBankId: selectedBankId.value
-        }
-      }
-    });
-
-    if (formValues) {
-      data['renewAmount'] = formValues.renewAmount;
-      data['renewBankId'] = formValues.selectedBankId;
-    }
-    return data;
+  async returnPrepaidAmount(order: { prepaid_amount?: number; bank_id?: number }) {
+    return promptReturnPrepaidAmount(order, this.banks);
   }
 
 
@@ -825,15 +1656,18 @@ export class ListOrdersComponent {
 
 
   filter(event: any):void{
-    if (event.target?.id ==="customer_type") {
+    if (this.isLockPreview) {
+      return;
+    }
+    if (event?.target?.id ==="customer_type") {
       this.filterService.customer_type = event.target.value;
     }
 
-    if (event.target?.id ==="order_type") {
+    if (event?.target?.id ==="order_type") {
       this.filterService.order_type = event.target.value;
     }
 
-    if (event.target?.id ==="private_order") {
+    if (event?.target?.id ==="private_order") {
       if (event.target.value == 1) {
         this.filterService.private_order = '1';
       } else {
@@ -841,35 +1675,35 @@ export class ListOrdersComponent {
       }
     }
 
-    if (event.target?.id ==="order_status") {
+    if (event?.target?.id ==="order_status") {
+      this.orderStatusFilter = event.target.value;
       this.filterService.order_status = event.target.value;
     }
 
-    if (event.target?.id ==="collectType") {
+    if (event?.target?.id ==="collectType") {
       this.filterService.collectType = event.target.value;
     }
 
-    if (event.target?.id ==="shipping_company_id") {
+    if (event?.target?.id ==="shipping_company_id") {
       this.filterService.shipping_company_id = event.target.value;
     }
 
-    if (this.need_by_datekey) {
-      this.filterService.need_by_date = this.need_by_date;
-    }
+    // Exact day takes precedence over range for the same date field.
+    this.filterService.need_by_date = this.need_by_date || '';
+    this.filterService.status_date = this.status_date || '';
+    this.filterService.order_date = this.order_date || '';
+    this.filterService.delivery_date = this.delivery_date || '';
 
-    if (this.status_datekey) {
-      this.filterService.status_date = this.status_date;
-    }
+    this.filterService.need_by_date_from = this.need_by_date ? '' : (this.need_by_date_from || '');
+    this.filterService.need_by_date_to = this.need_by_date ? '' : (this.need_by_date_to || '');
+    this.filterService.status_date_from = this.status_date ? '' : (this.status_date_from || '');
+    this.filterService.status_date_to = this.status_date ? '' : (this.status_date_to || '');
+    this.filterService.order_date_from = this.order_date ? '' : (this.order_date_from || '');
+    this.filterService.order_date_to = this.order_date ? '' : (this.order_date_to || '');
+    this.filterService.delivery_date_from = this.delivery_date ? '' : (this.delivery_date_from || '');
+    this.filterService.delivery_date_to = this.delivery_date ? '' : (this.delivery_date_to || '');
 
-    if (this.order_datekey) {
-      this.filterService.order_date = this.order_date;
-    }
-
-    if (this.deliver_datekey) {
-      this.filterService.delivery_date = this.delivery_date;
-    }
-
-    if (event.target?.id ==="vip") {
+    if (event?.target?.id ==="vip") {
       if (event.target.checked) {
         this.filterService.vip = '1';
       } else {
@@ -878,7 +1712,7 @@ export class ListOrdersComponent {
       // this.filterService.vip = event.target.checked;
     }
 
-    if (event.target?.id ==="shortage") {
+    if (event?.target?.id ==="shortage") {
       if (event.target.checked) {
         this.filterService.shortage = '1';
       } else {
@@ -886,7 +1720,7 @@ export class ListOrdersComponent {
       }
     }
 
-    if (event.target?.id ==="paid") {
+    if (event?.target?.id ==="paid") {
       if (event.target.checked) {
         this.filterService.paid = '1';
       } else {
@@ -894,7 +1728,7 @@ export class ListOrdersComponent {
       }
     }
 
-    if (event.target?.id ==="prepaidAmount") {
+    if (event?.target?.id ==="prepaidAmount") {
       if (event.target.checked) {
         this.filterService.prepaidAmount = '1';
       } else {
@@ -902,70 +1736,72 @@ export class ListOrdersComponent {
       }
     }
 
-    if (event.target?.id ==="governorate") {
+    if (event?.target?.id ==="governorate") {
       this.filterService.governorate = event.target.value;
     }
 
-    if (event.target?.id ==="city") {
+    if (event?.target?.id ==="city") {
       this.filterService.city = event.target.value;
     }
 
-    if (event.target?.id ==="customer_name") {
+    if (event?.target?.id ==="customer_name") {
       this.filterService.customer_name = event.target.value;
     }
 
-    if (event.target?.id ==="customer_phone") {
-      let number = event.target.value;
+    if (event?.target?.id ==="customer_phone") {
+      let number = String(event.target.value ?? '').trim().replace(/\s+/g, '');
       if (number.startsWith('+2') || number.startsWith('2')) {
         number = number.substring(2);
       }
       this.filterService.customer_phone = number;
     }
 
-    if (event.target?.id ==="order_number") {
+    if (event?.target?.id ==="order_number") {
       this.filterService.order_number = event.target.value;
     }
 
-    if (event.target?.id ==="shippment_number") {
+    if (event?.target?.id ==="shippment_number") {
       console.log(event.target.value);
       this.filterService.shippment_number = event.target.value;
     }
 
-    if (event.target?.id ==="order_source_id") {
+    if (event?.target?.id ==="order_source_id") {
       this.filterService.order_source_id = event.target.value;
     }
 
-    if (event.target?.id ==="shipping_method_id") {
+    if (event?.target?.id ==="shipping_method_id") {
       this.filterService.shipping_method_id = event.target.value;
     }
 
-    if (event.target?.id ==="shipping_line_id") {
+    if (event?.target?.id ==="shipping_line_id") {
       this.filterService.shipping_line_id = event.target.value;
     }
 
-    if (event.target?.id ==="reviewfilter") {
+    if (event?.target?.id ==="reviewfilter") {
       this.filterService.reviewed = event.target.value;
     }
 
-    this.filterService.filter(this.pageSize,this.page+1).subscribe(result=>{
-      this.orders = result.data;
-      this.length=result.total;
-      this.pageSize=result.per_page;
+    if (event?.target?.id === 'shopifyfilter') {
+      const val = event.target.value;
+      this.filterService.shopify = val === 'all' ? '' : val;
+    }
 
-      this.orders.map(elm=>{
-        elm.new_notification = elm.notifications.some(notification => notification.is_read == 0);
-        elm.notification_number = elm.notifications.length;
-
-        const needByDateObj = new Date();
-        const orderDateObj = new Date(elm.order_date);
-
-        const differenceInMilliseconds = needByDateObj.getTime() - orderDateObj.getTime();
-
-        const differenceInDays = Math.floor(differenceInMilliseconds / (1000 * 60 * 60 * 24));
-        elm.days = differenceInDays
-
-      })
-    })
+    this.persistPaging();
+    this.listLoading = true;
+    this.listError = false;
+    this.searchSub?.unsubscribe();
+    this.searchSub = this.filterService.filter(this.pageSize,this.page+1).subscribe({
+      next: (result) => {
+        this.applyOrdersResult(result);
+      },
+      error: () => {
+        this.orders = [];
+        this.length = 0;
+        this.listLoading = false;
+        this.listError = true;
+        this.syncSelectAllState();
+      },
+    });
 
   }
 
@@ -986,10 +1822,76 @@ export class ListOrdersComponent {
 
 
   clearFilter(){
-    window.location.reload();
+    this.filterService.resetFilters();
+    this.restoreFiltersFromService();
+    this.filter(null);
   }
 
   googleSheetData: any[] = [];
+  allOrdersSelected = false;
+  printSelectedLoading = false;
+
+  isOrderSelected(item: any): boolean {
+    return this.googleSheetData.includes(item);
+  }
+
+  toggleSelectAllPrint(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.allOrdersSelected = checked;
+    if (checked) {
+      this.googleSheetData = [...(this.orders || [])];
+      return;
+    }
+    this.googleSheetData = [];
+  }
+
+  private syncSelectAllState(): void {
+    const visible = this.orders || [];
+    this.allOrdersSelected = visible.length > 0 && visible.every((item) => this.googleSheetData.includes(item));
+  }
+
+  printSelectedOrders(): void {
+    if (!this.googleSheetData.length) {
+      Swal.fire({
+        icon: 'info',
+        text: 'Please select at least one order to print.',
+      });
+      return;
+    }
+
+    const orderIds = this.googleSheetData.map((item) => Number(item.id)).filter((id) => id > 0);
+    if (!orderIds.length) {
+      Swal.fire({
+        icon: 'info',
+        text: 'Please select at least one order to print.',
+      });
+      return;
+    }
+
+    this.printSelectedLoading = true;
+    this.order.printOrders(orderIds).subscribe({
+      next: (res) => {
+        this.printSelectedLoading = false;
+        const opened = this.orderInvoicePrint.openPrintWindow(res.orders || [], {
+          showInvoiceDate: res.show_invoice_date !== false,
+          size: 'A4',
+        });
+        if (!opened) {
+          Swal.fire({
+            icon: 'warning',
+            text: 'تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.',
+          });
+        }
+      },
+      error: (err) => {
+        this.printSelectedLoading = false;
+        Swal.fire({
+          icon: 'error',
+          text: err?.error?.message || 'تعذر تحضير الفواتير للطباعة',
+        });
+      },
+    });
+  }
 
   selectOrder(e: any, item: any) {
     this.sendOneOrder = false;
@@ -1004,6 +1906,7 @@ export class ListOrdersComponent {
       this.googleSheetData = this.googleSheetData.filter(elm=> elm !== item);
     }
 
+    this.syncSelectAllState();
   }
 
   googleSheet:any[]=[];
@@ -1178,6 +2081,62 @@ export class ListOrdersComponent {
 
 
   private hasScrolled = false;
+
+  get canManageOrderNotes(): boolean {
+    return this.user !== 'Review Management' && this.user !== 'Financial Accounts';
+  }
+
+  addOrderNote(item: any): void {
+    const orderId = Number(item?.id);
+    if (!orderId || !this.canManageOrderNotes) {
+      return;
+    }
+
+    Swal.fire({
+      titleText: `إضافة ملاحظة للطلب #${orderId}`,
+      input: 'textarea',
+      inputPlaceholder: 'اكتب الملاحظة هنا...',
+      showCancelButton: true,
+      confirmButtonText: 'حفظ',
+      cancelButtonText: 'إلغاء',
+      inputAttributes: {
+        rows: '4',
+        dir: 'rtl',
+      },
+      inputValidator: (value) => {
+        if (!value || !String(value).trim()) {
+          return 'يجب ادخال ملاحظة';
+        }
+        return undefined;
+      },
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+      const value = String(result.value || '').trim();
+      if (!value) {
+        return;
+      }
+
+      this.order.addNote(orderId, value, 'قائمة الطلبات').subscribe({
+        next: () => {
+          Swal.fire({
+            icon: 'success',
+            title: 'تم حفظ الملاحظة',
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        },
+        error: (err) => {
+          Swal.fire({
+            icon: 'error',
+            title: 'تعذر حفظ الملاحظة',
+            text: err?.error?.message || 'حدث خطأ',
+          });
+        },
+      });
+    });
+  }
 
   orderScroll(id:string){
     this.filterService.scrollOrder = id;

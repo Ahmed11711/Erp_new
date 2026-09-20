@@ -12,7 +12,9 @@
 
   <div class="container">
     <p class="text-muted small mb-2">
-      كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري). إذا ظهر عمود «نوع المصروف» فارغاً للسجلات القديمة، اختر النوع من القائمة ثم اضغط «حفظ».
+      كل فئة تُربط بـ <strong>نوع مصروف رئيسي</strong> (تشغيل / تسويق / إداري).
+      <strong>حساب الشجرة (مدين):</strong> ابحث واختر أي حساب من شجرة الحسابات كاملة،
+      أو اترك الحقل فارغاً / اختر «تلقائي» لإنشاء حساب فرعي تحت <strong>{{ cashOutParentName }}</strong>.
     </p>
     <button *ngIf="openbtn" class="btn btn-add my-3" (click)="openForm()">اضافة<i class="fa-solid fa-plus"></i></button>
 
@@ -36,6 +38,26 @@
             formControlName="expense_kind" type="text">
           <p *ngIf="form.get('expense_kind')?.errors !=null && form.get('expense_kind')?.touched"
             class="error mb-0 text-danger">مطلوب</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">حساب الشجرة للقيد المدين <span class="text-muted">(اختياري)</span></label>
+          <input class="form-control expense-kind-account-input"
+            [formControl]="formAccountCtrl"
+            [matAutocomplete]="formAccAuto"
+            (focus)="onFormAccountFocus()"
+            (blur)="onFormAccountBlur()"
+            placeholder="ابحث بالرمز أو الاسم — فارغ = تلقائي"
+            autocomplete="off" />
+          <mat-autocomplete #formAccAuto="matAutocomplete"
+            panelClass="expense-kind-autocomplete-panel"
+            [displayWith]="displayAccountOption"
+            (optionSelected)="onFormAccountSelected($event)"
+            [autoActiveFirstOption]="true">
+            <mat-option [value]="autoSentinel">{{ autoAccountLabel() }}</mat-option>
+            <mat-option *ngFor="let acc of filteredFormAccounts" [value]="acc">
+              {{ accountOptionLabel(acc) }}
+            </mat-option>
+          </mat-autocomplete>
         </div>
         <div class="text-center my-3">
           <button [disabled]="form.invalid" *ngIf="addbtn" type="submit" class="btn btn-add my-3">اضافة<i class="fa-solid fa-plus"></i></button>
@@ -61,12 +83,13 @@
         </select>
       </div>
     </div>
-    <table class="table w-75 m-auto table-bordered">
+    <table class="table w-100 m-auto table-bordered">
       <thead class="bg-dark text-white">
         <tr>
           <th>فئة المصروف</th>
           <th>نوع المصروف (الربط)</th>
-          <th style="width: 140px;">—</th>
+          <th>حساب الشجرة (مدين)</th>
+          <th style="width: 170px;">—</th>
         </tr>
       </thead>
       <tbody>
@@ -83,6 +106,25 @@
               <option ngValue="مصروف تسويق">مصروف تسويق</option>
               <option ngValue="مصروف ادارى">مصروف ادارى</option>
             </select>
+          </td>
+          <td>
+            <input class="form-control form-control-sm expense-kind-account-input"
+              [formControl]="getRowAccountCtrl(elm)"
+              [matAutocomplete]="rowAccAuto"
+              (focus)="onRowAccountFocus(elm)"
+              (blur)="onRowAccountBlur(elm)"
+              placeholder="ابحث بالرمز أو الاسم"
+              autocomplete="off" />
+            <mat-autocomplete #rowAccAuto="matAutocomplete"
+              panelClass="expense-kind-autocomplete-panel"
+              [displayWith]="displayAccountOption"
+              (optionSelected)="onRowAccountSelected(elm, $event)"
+              [autoActiveFirstOption]="true">
+              <mat-option [value]="autoSentinel">{{ autoAccountLabel() }}</mat-option>
+              <mat-option *ngFor="let acc of getRowFilteredAccounts(elm)" [value]="acc">
+                {{ accountOptionLabel(acc) }}
+              </mat-option>
+            </mat-autocomplete>
           </td>
           <td class="text-nowrap">
             <button type="button" class="btn btn-sm btn-primary mr-1" (click)="saveRow(elm)"

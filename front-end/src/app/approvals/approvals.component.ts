@@ -11,7 +11,7 @@ import { BreakpointObserver, BreakpointState } from '@angular/cdk/layout';
   styleUrls: ['./approvals.component.css']
 })
 export class ApprovalsComponent implements OnInit{
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15,50,100];

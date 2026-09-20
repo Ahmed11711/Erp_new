@@ -7,6 +7,10 @@
             ميزان المراجعة
         </h2>
         <div class="header-actions">
+            <button class="btn btn-outline-primary" *ngIf="canImportOpening" (click)="toggleImportPanel()"
+                [disabled]="loading">
+                <i class="fas fa-file-import"></i> استيراد أرصدة افتتاحية
+            </button>
             <button class="btn bg-main text-white" (click)="exportToExcel()"
                 [disabled]="loading || trialBalanceData.length === 0">
                 <i class="fas fa-file-excel"></i> تصدير Excel
@@ -15,6 +19,370 @@
                 [disabled]="loading || trialBalanceData.length === 0">
                 <i class="fas fa-print"></i> طباعة
             </button>
+        </div>
+    </div>
+
+    <!-- Import Opening Balances -->
+    <div class="erp-card import-card" *ngIf="showImportPanel && canImportOpening">
+        <div class="import-card__head">
+            <h3><i class="fas fa-upload"></i> استيراد أرصدة افتتاحية من Excel</h3>
+            <p class="text-muted mb-0">
+                يقبل تصدير شاشة ميزان المراجعة (كود الحساب + رصيد أول المدة فقط، بدون الحركة أو آخر المدة)،
+                أو الصيغة: <code>AccountID</code> و <code>AccountName</code> و <code>PrevCRBalance</code> و <code>PrevDBBalance</code>.
+                التاريخ المحدد = بداية الرصيد (يظهر كرصيد أول المدة في ميزان المراجعة من نفس التاريخ).
+            </p>
+        </div>
+
+        <div class="import-grid">
+            <div class="filter-field">
+                <label>ملف Excel</label>
+                <input type="file" class="form-control" accept=".xlsx,.xls,.csv,.txt"
+                    (change)="onImportFileSelected($event)">
+            </div>
+            <div class="filter-field">
+                <label>تاريخ بداية الرصيد</label>
+                <input type="date" class="form-control" [(ngModel)]="importOpeningDate">
+            </div>
+            <div class="filter-field filter-field--wide">
+                <label>الحساب المقابل (رأس مال / أرباح مرحلة)</label>
+                <div class="counter-dropdown" [class.open]="counterDropdownOpen" (click)="$event.stopPropagation()">
+                    <button type="button" class="form-control counter-dropdown-toggle"
+                        (click)="toggleCounterDropdown($event)" [disabled]="loadingAccounts">
+                        <span *ngIf="selectedCounterAccount">
+                            {{ selectedCounterAccount.code }} — {{ selectedCounterAccount.name }}
+                        </span>
+                        <span *ngIf="!selectedCounterAccount" class="text-muted">
+                            {{ loadingAccounts ? 'جاري تحميل الحسابات...' : '— ابحث واختر حساباً مقابلاً —' }}
+                        </span>
+                        <span class="toggle-actions">
+                            <i class="fas fa-times clear-counter" *ngIf="selectedCounterAccount"
+                                (click)="clearCounterSelection($event)" title="مسح الاختيار"></i>
+                            <i class="fas fa-chevron-down toggle-caret"></i>
+                        </span>
+                    </button>
+
+                    <div class="counter-dropdown-panel" *ngIf="counterDropdownOpen">
+                        <input
+                            type="search"
+                            class="form-control counter-search-input"
+                            [(ngModel)]="counterSearch"
+                            name="importCounterSearch"
+                            placeholder="ابحث بالكود أو الاسم..."
+                            autocomplete="off"
+                            dir="rtl"
+                            (click)="$event.stopPropagation()"
+                        >
+                        <ul class="counter-options">
+                            <li
+                                *ngFor="let acc of filteredCounterAccounts"
+                                class="counter-option"
+                                [class.active]="acc.id === importCounterAccountId"
+                                (click)="selectCounter(acc)"
+                            >
+                                {{ acc.code }} — {{ acc.name }}
+                            </li>
+                            <li class="counter-option no-result" *ngIf="filteredCounterAccounts.length === 0">
+                                لا توجد حسابات مطابقة للبحث.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-field filter-field--wide">
+                <label>ملاحظة (اختياري)</label>
+                <input type="text" class="form-control" [(ngModel)]="importReason"
+                    placeholder="مثال: أرصدة افتتاحية من ميزان الواقع">
+            </div>
+            <div class="filter-actions">
+                <button type="button" class="btn btn-outline-primary" (click)="previewImport()"
+                    [disabled]="!importFile || importLoading">
+                    <i class="fas" [ngClass]="importLoading ? 'fa-spinner fa-spin' : 'fa-search'"></i>
+                    معاينة المطابقة
+                </button>
+                <button type="button" class="btn bg-main text-white" (click)="applyImport()"
+                    [disabled]="!canApplyImport">
+                    <i class="fas" [ngClass]="importApplying ? 'fa-spinner fa-spin' : 'fa-check'"></i>
+                    ترحيل الأرصدة
+                </button>
+            </div>
+        </div>
+
+        <div class="alert alert-danger mt-3 mb-0" *ngIf="importError">{{ importError }}</div>
+        <div class="alert alert-success mt-3 mb-0" *ngIf="importSuccess && !importError">{{ importSuccess }}</div>
+
+        <div class="import-section" *ngIf="operationalSyncResult && (operationalSyncResult.synced?.length || operationalSyncResult.skipped?.length)">
+            <h4 class="import-section__title">
+                <i class="fas fa-link"></i>
+                مزامنة الأرصدة التشغيلية المرتبطة
+                <span class="text-muted small" *ngIf="operationalSyncResult.counts">
+                    ({{ operationalSyncResult.counts.synced || 0 }} محدّث)
+                </span>
+            </h4>
+            <div class="table-responsive import-table-wrap" *ngIf="operationalSyncResult.synced?.length">
+                <table class="table table-sm table-bordered mb-2 import-data-table">
+                    <thead>
+                        <tr>
+                            <th>النوع</th>
+                            <th>الاسم</th>
+                            <th>كود الحساب</th>
+                            <th>قبل</th>
+                            <th>بعد</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let row of operationalSyncResult.synced">
+                            <td>{{ operationalTypeLabel(row.type) }}</td>
+                            <td>{{ row.name }}</td>
+                            <td dir="ltr">{{ row.tree_code || '—' }}</td>
+                            <td dir="ltr">{{ formatNumber(row.before) }}</td>
+                            <td dir="ltr"><strong>{{ formatNumber(row.after) }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-warning py-2 mb-0" *ngIf="operationalSyncResult.skipped?.length">
+                تخطي {{ operationalSyncResult.skipped.length }} كيان:
+                <span *ngFor="let s of operationalSyncResult.skipped; let last = last">
+                    {{ operationalTypeLabel(s.type) }} «{{ s.name }}» ({{ s.reason }})<span *ngIf="!last">؛ </span>
+                </span>
+            </div>
+        </div>
+
+        <div class="import-summary" *ngIf="importTotals">
+            <span>مطابق: <strong>{{ importTotals.matched_count }}</strong></span>
+            <span>ناقص: <strong>{{ importTotals.missing_count }}</strong></span>
+            <span>مدين: <strong dir="ltr">{{ formatNumber(importTotals.debit) }}</strong></span>
+            <span>دائن: <strong dir="ltr">{{ formatNumber(importTotals.credit) }}</strong></span>
+            <span [class.has-diff]="importTotals.difference !== 0">
+                الفرق: <strong dir="ltr">{{ formatNumber(importTotals.difference) }}</strong>
+            </span>
+        </div>
+
+        <!-- Missing accounts -->
+        <div class="import-section" *ngIf="missingLines.length > 0">
+            <h4 class="import-section__title text-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                حسابات تحتاج إضافة أو ربط ({{ missingLines.length }})
+            </h4>
+            <p class="text-muted small mb-2">
+                الصفوف المميزة بدون <code>AccountID</code>: اختر حساباً أباً ثم اضغط إضافة (يُولَّد الكود تلقائياً)، أو اربطها بحساب موجود عبر استبدال.
+            </p>
+            <div class="table-responsive import-table-wrap">
+                <table class="table table-sm table-bordered mb-0 import-data-table">
+                    <thead>
+                        <tr>
+                            <th>كود Excel</th>
+                            <th>الاسم (Excel)</th>
+                            <th>مدين</th>
+                            <th>دائن</th>
+                            <th>استبدال بحساب موجود</th>
+                            <th>النوع</th>
+                            <th>الحساب الأب</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let line of missingLines; let i = index; trackBy: trackByIndex"
+                            [class.table-danger]="line.no_account_id">
+                            <td dir="ltr">
+                                <span *ngIf="line.account_code">{{ line.account_code }}</span>
+                                <span *ngIf="!line.account_code" class="badge badge-danger">بدون كود</span>
+                            </td>
+                            <td>{{ line.account_name_excel }}</td>
+                            <td dir="ltr">{{ formatNumber(line.debit) }}</td>
+                            <td dir="ltr">{{ formatNumber(line.credit) }}</td>
+                            <td class="parent-cell">
+                                <div class="counter-dropdown parent-dropdown"
+                                    [class.open]="replaceDropdownCode === lineKey(line)"
+                                    (click)="$event.stopPropagation()">
+                                    <button type="button" class="form-control form-control-sm counter-dropdown-toggle"
+                                        (click)="toggleReplaceDropdown($event, line)">
+                                        <span *ngIf="selectedReplaceAccount(line) as acc">
+                                            {{ acc.code }} — {{ acc.name }}
+                                        </span>
+                                        <span *ngIf="!selectedReplaceAccount(line)" class="text-muted">
+                                            — ابحث واختر حساب النظام —
+                                        </span>
+                                        <span class="toggle-actions">
+                                            <i class="fas fa-times clear-counter" *ngIf="line.replace_account_id"
+                                                (click)="clearReplaceSelection($event, line)" title="مسح"></i>
+                                            <i class="fas fa-chevron-down toggle-caret"></i>
+                                        </span>
+                                    </button>
+
+                                    <div class="counter-dropdown-panel" *ngIf="replaceDropdownCode === lineKey(line)">
+                                        <input
+                                            type="search"
+                                            class="form-control form-control-sm counter-search-input"
+                                            [(ngModel)]="replaceSearch"
+                                            [name]="'replaceSearch_' + i"
+                                            [ngModelOptions]="{standalone: true}"
+                                            placeholder="ابحث بالكود أو الاسم..."
+                                            autocomplete="off"
+                                            dir="rtl"
+                                            (click)="$event.stopPropagation()"
+                                        >
+                                        <ul class="counter-options">
+                                            <li
+                                                *ngFor="let acc of filteredReplaceAccounts(line)"
+                                                class="counter-option"
+                                                [class.active]="acc.id === line.replace_account_id"
+                                                (click)="selectReplaceAccount(line, acc)"
+                                            >
+                                                {{ acc.code }} — {{ acc.name }}
+                                            </li>
+                                            <li class="counter-option no-result"
+                                                *ngIf="filteredReplaceAccounts(line).length === 0">
+                                                لا توجد حسابات مطابقة للبحث.
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <select class="form-control form-control-sm"
+                                    [(ngModel)]="line.type"
+                                    [name]="'missingType_' + i"
+                                    [ngModelOptions]="{standalone: true}">
+                                    <option *ngFor="let t of createAccountTypes" [value]="t.value">{{ t.label }}</option>
+                                </select>
+                            </td>
+                            <td class="parent-cell">
+                                <div class="counter-dropdown parent-dropdown"
+                                    [class.open]="parentDropdownCode === lineKey(line)"
+                                    (click)="$event.stopPropagation()">
+                                    <button type="button" class="form-control form-control-sm counter-dropdown-toggle"
+                                        (click)="toggleParentDropdown($event, line)">
+                                        <span *ngIf="selectedParentAccount(line) as parent">
+                                            {{ parent.code }} — {{ parent.name }}
+                                        </span>
+                                        <span *ngIf="!selectedParentAccount(line)" class="text-muted">
+                                            {{ line.no_account_id ? '— اختر الأب (مطلوب) —' : '— بدون أب (رئيسي) —' }}
+                                        </span>
+                                        <span class="toggle-actions">
+                                            <i class="fas fa-times clear-counter" *ngIf="line.parent_id"
+                                                (click)="clearParentSelection($event, line)" title="مسح الأب"></i>
+                                            <i class="fas fa-chevron-down toggle-caret"></i>
+                                        </span>
+                                    </button>
+
+                                    <div class="counter-dropdown-panel" *ngIf="parentDropdownCode === lineKey(line)">
+                                        <input
+                                            type="search"
+                                            class="form-control form-control-sm counter-search-input"
+                                            [(ngModel)]="parentSearch"
+                                            [name]="'parentSearch_' + i"
+                                            [ngModelOptions]="{standalone: true}"
+                                            placeholder="ابحث بالكود أو الاسم..."
+                                            autocomplete="off"
+                                            dir="rtl"
+                                            (click)="$event.stopPropagation()"
+                                        >
+                                        <ul class="counter-options">
+                                            <li class="counter-option" *ngIf="!line.no_account_id"
+                                                [class.active]="line.parent_id == null"
+                                                (click)="selectParent(line, null)">
+                                                — بدون أب (رئيسي) —
+                                            </li>
+                                            <li
+                                                *ngFor="let acc of filteredParentAccounts(line.type)"
+                                                class="counter-option"
+                                                [class.active]="acc.id === line.parent_id"
+                                                (click)="selectParent(line, acc)"
+                                            >
+                                                {{ acc.code }} — {{ acc.name }}
+                                            </li>
+                                            <li class="counter-option no-result"
+                                                *ngIf="filteredParentAccounts(line.type).length === 0">
+                                                لا توجد حسابات مطابقة للبحث.
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="missing-actions">
+                                <button type="button" class="btn btn-sm btn-warning"
+                                    (click)="replaceWithExisting(line)"
+                                    [disabled]="!line.replace_account_id"
+                                    title="ربط رصيد Excel بحساب موجود في الشجرة">
+                                    <i class="fas fa-exchange-alt"></i>
+                                    استبدال
+                                </button>
+                                <button type="button" class="btn btn-sm btn-success"
+                                    (click)="createMissing(line)"
+                                    [disabled]="line.creating || (line.no_account_id && !line.parent_id)">
+                                    <i class="fas" [ngClass]="line.creating ? 'fa-spinner fa-spin' : 'fa-plus'"></i>
+                                    إضافة
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Skipped rows (debug aid) -->
+        <div class="import-section" *ngIf="skippedLines.length > 0 && matchedLines.length === 0 && missingLines.length === 0">
+            <h4 class="import-section__title text-warning">
+                <i class="fas fa-info-circle"></i>
+                صفوف تم تخطيها ({{ skippedLines.length }})
+            </h4>
+            <div class="table-responsive" style="max-height: 220px; overflow:auto;">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>صف</th>
+                            <th>كود</th>
+                            <th>اسم</th>
+                            <th>السبب</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let s of skippedLines">
+                            <td>{{ s.excel_row }}</td>
+                            <td dir="ltr">{{ s.account_code || '—' }}</td>
+                            <td>{{ s.account_name || s.account_name_excel || '—' }}</td>
+                            <td>{{ s.reason }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Matched accounts -->
+        <div class="import-section" *ngIf="matchedLines.length > 0">
+            <h4 class="import-section__title text-success">
+                <i class="fas fa-check-circle"></i>
+                حسابات مطابقة جاهزة للترحيل ({{ matchedLines.length }})
+            </h4>
+            <div class="table-responsive import-table-wrap">
+                <table class="table table-sm table-hover mb-0 import-data-table">
+                    <thead>
+                        <tr>
+                            <th>كود النظام</th>
+                            <th>اسم النظام</th>
+                            <th>اسم Excel</th>
+                            <th>مدين</th>
+                            <th>دائن</th>
+                            <th>المصدر</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let line of matchedLines; let i = index; trackBy: trackByIndex"
+                            [class.table-warning]="line.name_mismatch">
+                            <td dir="ltr">{{ line.account_code }}</td>
+                            <td>{{ line.account_name_system }}</td>
+                            <td>{{ line.account_name_excel }}</td>
+                            <td dir="ltr">{{ formatNumber(line.debit) }}</td>
+                            <td dir="ltr">{{ formatNumber(line.credit) }}</td>
+                            <td>
+                                <span class="badge badge-info" *ngIf="line.mapped_from_excel">استبدال</span>
+                                <span class="badge badge-success" *ngIf="!line.mapped_from_excel">مطابقة كود</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -41,6 +409,10 @@
                     <select class="form-control" formControlName="level">
                         <option *ngFor="let lvl of levels" [value]="lvl.value">{{ lvl.label }}</option>
                     </select>
+                    <small class="text-muted d-block mt-1" *ngIf="filterForm.value.level">
+                        عند اختيار مستوى: يُعرض كل حساب في هذا المستوى برصيد مجمّع من فروعه،
+                        مع الحسابات النهائية في مستويات أعلى حتى يبقى الميزان مكتملاً. البحث يشمل الاسم والكود في الحساب وفروعه.
+                    </small>
                 </div>
                 <div class="filter-field filter-field--search">
                     <label>بحث</label>

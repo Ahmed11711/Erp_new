@@ -17,6 +17,7 @@ import { LeadActivityReportComponent } from './lead-activity-report/lead-activit
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatPaginatorModule } from '@angular/material/paginator';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 
 @NgModule({
@@ -40,7 +41,8 @@ import { MatPaginatorModule } from '@angular/material/paginator';
     SharedModule,
     MatIconModule,
     MatMenuModule,
-    MatPaginatorModule
+    MatPaginatorModule,
+    MatAutocompleteModule
   ]
 })
 export class ReportsModule { }

@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
-// use Illuminate\Support\Facades\Gate;
+use App\Models\User;
+use App\Services\Rbac\PermissionResolutionService;
+use App\Services\Rbac\RegisteredSlugRegistry;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Gate;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -25,6 +28,22 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        //
+        Gate::before(function ($user, $ability) {
+            if (! $user instanceof User) {
+                return null;
+            }
+
+            $needle = strtolower(trim((string) $ability));
+            if ($needle === '') {
+                return null;
+            }
+
+            $registry = app(RegisteredSlugRegistry::class)->all();
+            if (! in_array($needle, $registry, true)) {
+                return null;
+            }
+
+            return app(PermissionResolutionService::class)->hasPermission($user, $needle);
+        });
     }
 }

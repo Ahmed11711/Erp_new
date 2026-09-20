@@ -1,7 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener } from '@angular/core';
 import { TreeAccountService } from '../services/tree-account.service';
 import { AccountingReportService } from '../services/accounting-report.service';
-import { TreeAccount } from '../interfaces/tree-account.interface';
+import { TreeAccount, TreeAccountAuditEntry } from '../interfaces/tree-account.interface';
+import { AuthService } from 'src/app/auth/auth.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import { RBAC_ROUTE } from 'src/app/guards/rbac-route-data';
+import * as XLSX from 'xlsx';
+import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-accounting-tree',
@@ -16,10 +21,40 @@ export class AccountingTreeComponent implements OnInit {
   searchTerm = '';
   loading = false;
   recalculating = false;
+  syncingInventoryGl = false;
   showAddDialog = false;
   showEditDialog = false;
+  showTrashDialog = false;
   selectedAccount: TreeAccount | null = null;
+  accountAudits: TreeAccountAuditEntry[] = [];
+  loadingAccountMeta = false;
+  trashedAccounts: TreeAccount[] = [];
+  loadingTrash = false;
+  trashActionId: number | null = null;
+  /** سلة المحذوفات / استرجاع / حذف نهائي — للأدمن فقط */
+  isAdmin = false;
   expandedNodes: Set<number> = new Set();
+
+  // ── رصيد افتتاحي / تسوية رصيد ──
+  showBalanceDialog = false;
+  balanceAccount: TreeAccount | null = null;
+  savingBalance = false;
+  /** قائمة مسطّحة بكل الحسابات لاختيار الحساب المقابل */
+  flatAccounts: TreeAccount[] = [];
+  /** نص البحث في قائمة الحساب المقابل */
+  counterSearch = '';
+  /** حالة فتح قائمة الحساب المقابل المنسدلة */
+  counterDropdownOpen = false;
+  /** معلومات الرصيد الافتتاحي المسجّل حالياً للحساب المفتوح */
+  openingInfo: { exists: boolean; date?: string; target_net?: number } | null = null;
+  loadingOpeningInfo = false;
+  baForm = {
+    mode: 'current' as 'current' | 'opening',
+    targetDisplay: 0,
+    date: '',
+    counterAccountId: null as number | null,
+    reason: ''
+  };
 
   accountTypes = [
     { value: 'asset', label: 'أصول' },
@@ -41,10 +76,19 @@ export class AccountingTreeComponent implements OnInit {
 
   constructor(
     private treeAccountService: TreeAccountService,
-    private accountingReportService: AccountingReportService
+    private accountingReportService: AccountingReportService,
+    private authService: AuthService,
+    private rbac: RbacService
   ) { }
 
+  /** صلاحية إدخال/تعديل الرصيد الافتتاحي وتسوية الأرصدة عبر قيد متوازن */
+  get canBalanceAdjustment(): boolean {
+    return this.rbac.canAny(RBAC_ROUTE.treeAccountBalanceAdjustment);
+  }
+
   ngOnInit(): void {
+    const dept = String(this.authService.getUser() || '').trim().toLowerCase();
+    this.isAdmin = dept === 'admin';
     this.loadAccounts();
   }
 
@@ -231,14 +275,325 @@ export class AccountingTreeComponent implements OnInit {
   }
 
   openEditDialog(account: TreeAccount): void {
+    if (!account.id) {
+      return;
+    }
     this.selectedAccount = { ...account };
+    this.accountAudits = [];
     this.showEditDialog = true;
+    this.loadingAccountMeta = true;
+
+    this.treeAccountService.getById(account.id).subscribe({
+      next: (response) => {
+        if (response?.data) {
+          this.selectedAccount = response.data;
+        }
+        this.loadingAccountMeta = false;
+      },
+      error: () => {
+        this.loadingAccountMeta = false;
+      }
+    });
+
+    this.treeAccountService.getAudits(account.id).subscribe({
+      next: (response) => {
+        this.accountAudits = Array.isArray(response?.data) ? response.data : [];
+      },
+      error: () => {
+        this.accountAudits = [];
+      }
+    });
+  }
+
+  formatAuditChanges(entry: TreeAccountAuditEntry): string {
+    const changes = entry.changes ?? {};
+    const labels: Record<string, string> = {
+      name: 'الاسم',
+      name_en: 'الاسم بالإنجليزية',
+      type: 'النوع',
+      parent_id: 'الحساب الأب',
+      is_trading_account: 'حساب تداول',
+      budget_type: 'نوع الموازنة',
+      budget_amount: 'مبلغ الموازنة',
+      budget_period: 'فترة الموازنة',
+      main_account_id: 'الحساب الرئيسي',
+      account_type: 'نوع الحساب',
+      detail_type: 'نوع التفصيل',
+    };
+
+    return Object.entries(changes)
+      .map(([field, value]) => {
+        const label = labels[field] ?? field;
+        const oldVal = value?.old ?? '—';
+        const newVal = value?.new ?? '—';
+        return `${label}: ${oldVal} ← ${newVal}`;
+      })
+      .join(' · ');
   }
 
   closeDialogs(): void {
     this.showAddDialog = false;
     this.showEditDialog = false;
+    this.showTrashDialog = false;
+    this.showBalanceDialog = false;
+    this.balanceAccount = null;
     this.selectedAccount = null;
+    this.accountAudits = [];
+    this.loadingAccountMeta = false;
+  }
+
+  /** إشارة عرض الرصيد الطبيعي: أصول/مصروفات = +، بقية الأنواع = − (تطابق getDisplayBalance) */
+  private displaySign(type: string): number {
+    return (type === 'liability' || type === 'equity' || type === 'revenue' || type === 'settlement') ? -1 : 1;
+  }
+
+  /** يبني قائمة مسطّحة بكل الحسابات (لاختيار الحساب المقابل) */
+  private buildFlatAccounts(): void {
+    const out: TreeAccount[] = [];
+    const walk = (nodes: TreeAccount[]) => {
+      for (const n of nodes) {
+        out.push(n);
+        if (n.children?.length) {
+          walk(n.children);
+        }
+      }
+    };
+    walk(this.treeData);
+    out.sort((a, b) => (a.code ?? 0) - (b.code ?? 0));
+    this.flatAccounts = out;
+  }
+
+  /** الحسابات المطابقة لنص بحث الحساب المقابل (كود/اسم عربي/إنجليزي) */
+  get filteredCounterAccounts(): TreeAccount[] {
+    const q = this.counterSearch.trim().toLowerCase();
+    if (!q) {
+      return this.flatAccounts;
+    }
+    return this.flatAccounts.filter(acc =>
+      String(acc.code ?? '').toLowerCase().includes(q) ||
+      (acc.name || '').toLowerCase().includes(q) ||
+      (acc.name_en || '').toLowerCase().includes(q)
+    );
+  }
+
+  /** الحساب المقابل المختار حالياً (لعرضه في زر القائمة) */
+  get selectedCounterAccount(): TreeAccount | null {
+    if (this.baForm.counterAccountId == null) {
+      return null;
+    }
+    return this.flatAccounts.find(a => a.id === this.baForm.counterAccountId) ?? null;
+  }
+
+  toggleCounterDropdown(event: Event): void {
+    event.stopPropagation();
+    this.counterDropdownOpen = !this.counterDropdownOpen;
+  }
+
+  /** اختيار الحساب المقابل: يثبّت القيمة ويغلق القائمة ويخفي باقي الخيارات */
+  selectCounter(acc: TreeAccount): void {
+    if (!acc.id || acc.id === this.balanceAccount?.id) {
+      return;
+    }
+    this.baForm.counterAccountId = acc.id;
+    this.counterDropdownOpen = false;
+    this.counterSearch = '';
+  }
+
+  /** إغلاق القائمة عند النقر خارجها */
+  @HostListener('document:click')
+  closeCounterDropdown(): void {
+    this.counterDropdownOpen = false;
+  }
+
+  /** يفتح شاشة إدخال/تعديل الرصيد الافتتاحي (تسوية عبر قيد متوازن بتاريخ) */
+  openBalanceDialog(account: TreeAccount): void {
+    if (!this.canBalanceAdjustment || !account.id) {
+      return;
+    }
+    this.buildFlatAccounts();
+    this.counterSearch = '';
+    this.counterDropdownOpen = false;
+    this.balanceAccount = account;
+    this.openingInfo = null;
+    this.baForm = {
+      mode: 'current',
+      targetDisplay: Number(this.getDisplayBalance(account).toFixed(2)),
+      date: this.todayYmd(),
+      counterAccountId: null,
+      reason: ''
+    };
+    this.showBalanceDialog = true;
+
+    this.loadingOpeningInfo = true;
+    this.treeAccountService.getOpeningBalanceInfo(account.id).subscribe({
+      next: (res) => {
+        this.openingInfo = res?.data ?? { exists: false };
+        this.loadingOpeningInfo = false;
+      },
+      error: () => {
+        this.openingInfo = { exists: false };
+        this.loadingOpeningInfo = false;
+      }
+    });
+  }
+
+  /** تبديل نوع العملية مع تعبئة القيم المناسبة */
+  setBalanceMode(mode: 'current' | 'opening'): void {
+    this.baForm.mode = mode;
+    const account = this.balanceAccount;
+    if (!account) {
+      return;
+    }
+    if (mode === 'opening' && this.openingInfo?.exists) {
+      this.baForm.date = this.openingInfo.date || this.todayYmd();
+      this.baForm.targetDisplay = Number((this.displaySign(account.type) * (this.openingInfo.target_net ?? 0)).toFixed(2));
+    } else if (mode === 'opening') {
+      this.baForm.date = this.todayYmd();
+      this.baForm.targetDisplay = 0;
+    } else {
+      this.baForm.date = this.todayYmd();
+      this.baForm.targetDisplay = Number(this.getDisplayBalance(account).toFixed(2));
+    }
+  }
+
+  /** تحويل صافي (مدين−دائن) إلى رصيد العرض حسب نوع الحساب المفتوح */
+  displayFromNet(net?: number): number {
+    if (!this.balanceAccount) {
+      return net ?? 0;
+    }
+    return this.displaySign(this.balanceAccount.type) * (net ?? 0);
+  }
+
+  private todayYmd(): string {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  /** يرسل تسوية الرصيد: يحوّل الرصيد المعروض إلى صافي (مدين−دائن) حسب نوع الحساب */
+  saveBalanceAdjustment(): void {
+    const account = this.balanceAccount;
+    if (!account?.id || this.savingBalance) {
+      return;
+    }
+    if (this.baForm.counterAccountId == null) {
+      alert('الرجاء اختيار الحساب المقابل (مثل رأس المال أو أرباح مرحّلة أو حساب افتتاحي).');
+      return;
+    }
+    if (this.baForm.counterAccountId === account.id) {
+      alert('الحساب المقابل يجب أن يختلف عن الحساب المُعدَّل.');
+      return;
+    }
+    if (!this.baForm.date) {
+      alert('الرجاء اختيار تاريخ الرصيد الافتتاحي / التسوية.');
+      return;
+    }
+
+    const targetNet = Number((this.displaySign(account.type) * Number(this.baForm.targetDisplay || 0)).toFixed(2));
+
+    this.savingBalance = true;
+    this.treeAccountService.balanceAdjustment(account.id, {
+      target_balance: targetNet,
+      counter_account_id: this.baForm.counterAccountId,
+      date: this.baForm.date,
+      reason: this.baForm.reason?.trim() || undefined,
+      mode: this.baForm.mode
+    }).subscribe({
+      next: (res) => {
+        this.savingBalance = false;
+        const entryNo = res?.data?.daily_entry?.entry_number;
+        const title = this.baForm.mode === 'opening'
+          ? 'تم تسجيل الرصيد الافتتاحي'
+          : 'تم تسجيل التسوية كقيد يومي متوازن';
+        Swal.fire({
+          icon: 'success',
+          title,
+          text: res?.message || (entryNo ? `رقم القيد: ${entryNo}` : ''),
+        });
+        this.closeDialogs();
+        this.loadAccounts();
+      },
+      error: (err) => {
+        this.savingBalance = false;
+        const msg = err?.status === 403
+          ? 'ليست لديك صلاحية إدخال/تعديل الرصيد الافتتاحي.'
+          : this.getHttpErrorMessage(err, 'فشل تسجيل قيد الرصيد');
+        Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+      }
+    });
+  }
+
+  openTrashDialog(): void {
+    if (!this.isAdmin) {
+      return;
+    }
+    this.showTrashDialog = true;
+    this.loadTrash();
+  }
+
+  loadTrash(): void {
+    if (!this.isAdmin) {
+      return;
+    }
+    this.loadingTrash = true;
+    this.treeAccountService.getTrash().subscribe({
+      next: (response) => {
+        this.trashedAccounts = Array.isArray(response?.data) ? response.data : [];
+        this.loadingTrash = false;
+      },
+      error: (error) => {
+        console.error('Error loading trash:', error);
+        this.trashedAccounts = [];
+        this.loadingTrash = false;
+        alert(this.getHttpErrorMessage(error, 'تعذر تحميل سلة المحذوفات'));
+      }
+    });
+  }
+
+  restoreAccount(account: TreeAccount): void {
+    if (!this.isAdmin || !account.id) {
+      return;
+    }
+    if (!confirm(`استرجاع الحساب «${account.name}» وجميع فروعه المحذوفة معه؟`)) {
+      return;
+    }
+
+    this.trashActionId = account.id;
+    this.treeAccountService.restore(account.id).subscribe({
+      next: () => {
+        this.trashActionId = null;
+        this.loadTrash();
+        this.loadAccounts();
+      },
+      error: (error) => {
+        this.trashActionId = null;
+        alert(this.getHttpErrorMessage(error, 'فشل استرجاع الحساب'));
+      }
+    });
+  }
+
+  forceDeleteAccount(account: TreeAccount): void {
+    if (!this.isAdmin || !account.id) {
+      return;
+    }
+    if (!confirm(
+      `حذف نهائي للحساب «${account.name}»؟\nلن يمكن استرجاعه، وقد تُحذف القيود المرتبطة به نهائياً.`
+    )) {
+      return;
+    }
+
+    this.trashActionId = account.id;
+    this.treeAccountService.forceDelete(account.id).subscribe({
+      next: () => {
+        this.trashActionId = null;
+        this.loadTrash();
+      },
+      error: (error) => {
+        this.trashActionId = null;
+        alert(this.getHttpErrorMessage(error, 'فشل الحذف النهائي'));
+      }
+    });
   }
 
   saveAccount(): void {
@@ -304,13 +659,17 @@ export class AccountingTreeComponent implements OnInit {
   }
 
   deleteAccount(account: TreeAccount): void {
-    if (!confirm(`هل أنت متأكد من حذف الحساب "${account.name}" وجميع الحسابات الفرعية؟`)) {
+    if (!confirm(
+      this.isAdmin
+        ? `نقل الحساب «${account.name}» وجميع فروعه إلى سلة المحذوفات؟\nيمكن استرجاعها لاحقاً من زر سلة المحذوفات.`
+        : `نقل الحساب «${account.name}» وجميع فروعه إلى سلة المحذوفات؟\nالاسترجاع متاح لحساب الأدمن فقط.`
+    )) {
       return;
     }
 
     this.loading = true;
     this.treeAccountService.delete(account.id!).subscribe({
-      next: (response) => {
+      next: () => {
         this.loadAccounts();
         this.loading = false;
       },
@@ -364,9 +723,201 @@ export class AccountingTreeComponent implements OnInit {
     });
   }
 
+  private escHtml(s: string): string {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private formatMoney(n: number): string {
+    const x = Number(n ?? 0);
+    if (Number.isNaN(x)) {
+      return '0.00';
+    }
+    return x.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /**
+   * مطابقة أرصدة حسابات المخزون في الشجرة مع التكلفة الفعلية للأصناف في المخازن.
+   * يعرض الفروقات أولاً، ثم يُرحّل قيد تسوية واحد بالفرق فقط (آمن وقابل للتكرار).
+   */
+  openInventoryGlSync(): void {
+    if (this.syncingInventoryGl) {
+      return;
+    }
+
+    this.syncingInventoryGl = true;
+    this.accountingReportService.previewInventoryGlSync().subscribe({
+      next: (preview: any) => {
+        this.syncingInventoryGl = false;
+        const rows: any[] = preview?.adjustments ?? [];
+        const willPost = !!preview?.will_post;
+
+        let table =
+          '<div dir="rtl" style="max-height:320px;overflow:auto;text-align:right;font-size:13px;">';
+        if (!willPost || rows.length === 0) {
+          table +=
+            '<p class="mb-2">لا توجد فروقات تتطلب ترحيلاً؛ أرصدة حسابات المخزون متطابقة بالفعل مع مجموع تكلفة الأصناف في المخازن.</p>';
+        } else {
+          table +=
+            '<table class="table table-sm table-bordered mb-0"><thead><tr>' +
+            '<th>الحساب</th><th>الكود</th><th>تكلفة الأصناف</th><th>رصيد القيود</th><th>فرق التسوية</th>' +
+            '</tr></thead><tbody>';
+          for (const r of rows) {
+            const nm = this.escHtml(String(r.account_name ?? ''));
+            const adj = Number(r.adjustment ?? 0);
+            const adjCls = adj >= 0 ? 'text-success' : 'text-danger';
+            table += `<tr><td>${nm}</td><td>${this.escHtml(String(r.account_code ?? ''))}</td>` +
+              `<td>${this.formatMoney(Number(r.target_cost_from_items ?? 0))}</td>` +
+              `<td>${this.formatMoney(Number(r.book_balance_from_entries ?? 0))}</td>` +
+              `<td class="${adjCls}">${this.formatMoney(adj)}</td></tr>`;
+          }
+          table += '</tbody></table>';
+        }
+        table += '</div>';
+
+        Swal.fire({
+          title: 'تصحيح أرصدة المخزون',
+          html:
+            '<p class="text-muted small mb-2">يُحسب مجموع تكلفة الأصناف لكل حساب مخزون ويُقارن برصيد القيود، ثم يُنشأ <strong>قيد يومية واحد</strong> بالفرق فقط مع طرف مقابل فروقات الجرد.</p>' +
+            table,
+          width: '720px',
+          showCancelButton: willPost && rows.length > 0,
+          confirmButtonText: willPost && rows.length > 0 ? 'ترحيل قيد التسوية' : 'حسناً',
+          cancelButtonText: 'إلغاء',
+        }).then((res: { isConfirmed: boolean }) => {
+          if (!res.isConfirmed || !willPost || rows.length === 0) {
+            return;
+          }
+          this.syncingInventoryGl = true;
+          this.accountingReportService.postInventoryGlSync().subscribe({
+            next: (out: any) => {
+              this.syncingInventoryGl = false;
+              if (!out?.success) {
+                Swal.fire({ icon: 'error', title: 'لم يتم الترحيل', text: String(out?.message ?? '') });
+                return;
+              }
+              if (!out?.posted) {
+                Swal.fire({ icon: 'info', title: out?.message ?? 'لا يوجد ما يُرحَّل' });
+                return;
+              }
+
+              const jl: any[] = out?.journal_lines ?? [];
+              let jt =
+                '<div dir="rtl" style="max-height:280px;overflow:auto;font-size:13px;">' +
+                `<p class="mb-2"><strong>رقم القيد:</strong> ${this.escHtml(String(out.entry_number ?? ''))} ` +
+                `(معرّف ${this.escHtml(String(out.daily_entry_id ?? ''))})</p>` +
+                '<table class="table table-sm table-bordered mb-0"><thead><tr>' +
+                '<th>الحساب</th><th>مدين</th><th>دائن</th><th>البيان</th>' +
+                '</tr></thead><tbody>';
+              for (const ln of jl) {
+                const nm = this.escHtml(String(ln.account_name ?? ln.account_code ?? ''));
+                jt += `<tr><td>${nm}</td><td>${this.formatMoney(Number(ln.debit ?? 0))}</td>` +
+                  `<td>${this.formatMoney(Number(ln.credit ?? 0))}</td>` +
+                  `<td>${this.escHtml(String(ln.note ?? ''))}</td></tr>`;
+              }
+              jt += '</tbody></table></div>';
+
+              Swal.fire({
+                icon: 'success',
+                title: 'تم إنشاء القيد وتحديث الشجرة',
+                html: jt,
+                width: '720px',
+              });
+              this.loadAccounts();
+            },
+            error: (err: any) => {
+              this.syncingInventoryGl = false;
+              const msg =
+                err?.error?.message ||
+                (err?.status === 403
+                  ? 'ليست لديك صلاحية لترحيل تسوية المخزون.'
+                  : 'فشل ترحيل قيد التسوية.');
+              Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+            },
+          });
+        });
+      },
+      error: (err: any) => {
+        this.syncingInventoryGl = false;
+        const msg =
+          err?.error?.message ||
+          (err?.status === 403
+            ? 'ليست لديك صلاحية لمعاينة تسوية المخزون.'
+            : 'فشل تحميل معاينة التسوية.');
+        Swal.fire({ icon: 'error', title: 'خطأ', text: String(msg) });
+      },
+    });
+  }
+
   getAccountTypeLabel(type: string): string {
     const accountType = this.accountTypes.find(t => t.value === type);
     return accountType ? accountType.label : type;
+  }
+
+  /** تصدير الشجرة المعروضة حالياً (كامل أو بعد البحث) إلى Excel */
+  exportToExcel(): void {
+    if (!this.displayTree.length) {
+      Swal.fire({ icon: 'info', title: 'لا توجد بيانات', text: 'لا توجد حسابات للتصدير.' });
+      return;
+    }
+
+    const rows: unknown[][] = [
+      ['شجرة الحسابات'],
+      [this.searchTerm.trim() ? `بحث: ${this.searchTerm.trim()}` : 'كل الحسابات'],
+      [`تاريخ التصدير: ${new Date().toLocaleDateString('ar-EG')}`],
+      [],
+      ['المستوى', 'كود الحساب', 'اسم الحساب', 'النوع', 'مدين', 'دائن', 'الرصيد', 'الاسم بالإنجليزية']
+    ];
+
+    const walk = (nodes: TreeAccount[]): void => {
+      for (const node of nodes) {
+        const level = Number(node.level ?? 1);
+        const indent = '  '.repeat(Math.max(0, level - 1));
+        rows.push([
+          level,
+          node.code ?? '',
+          `${indent}${node.name ?? ''}`,
+          this.getAccountTypeLabel(node.type),
+          Number(node.debit_balance ?? 0),
+          Number(node.credit_balance ?? 0),
+          Number(this.getDisplayBalance(node).toFixed(2)),
+          node.name_en ?? ''
+        ]);
+        if (node.children?.length) {
+          walk(node.children);
+        }
+      }
+    };
+    walk(this.displayTree);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+      { width: 10 },
+      { width: 16 },
+      { width: 40 },
+      { width: 14 },
+      { width: 14 },
+      { width: 14 },
+      { width: 14 },
+      { width: 28 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'شجرة الحسابات');
+    if (!wb.Workbook) {
+      wb.Workbook = { Views: [{}] };
+    }
+    if (!wb.Workbook.Views) {
+      wb.Workbook.Views = [{}];
+    }
+    wb.Workbook.Views[0].RTL = true;
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `شجرة_الحسابات_${stamp}.xlsx`);
   }
 
   /**
@@ -374,7 +925,10 @@ export class AccountingTreeComponent implements OnInit {
    * ليتوافق مع «ما على الشركة للمورد» مثل رصيد المورد في شاشة الموردين.
    */
   getDisplayBalance(node: TreeAccount): number {
-    const b = node.balance ?? 0;
+    const b = Number(node.balance ?? 0);
+    if (!Number.isFinite(b)) {
+      return 0;
+    }
     if (node.type === 'liability' || node.type === 'equity' || node.type === 'revenue' || node.type === 'settlement') {
       return -b;
     }

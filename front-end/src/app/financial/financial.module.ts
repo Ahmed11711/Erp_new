@@ -24,7 +24,6 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
 import { ExpenseDetailsComponent } from './expense-details/expense-details.component';
 import { BankDetailsComponent } from './bank-details/bank-details.component';
-import { EditexpenseComponent } from './editexpense/editexpense.component';
 import { PendingComponent } from './pending/pending.component';
 import { BanksMovementsComponent } from './banks-movements/banks-movements.component';
 import { BankMovementDetailsDialogComponent } from './bank-movement-details-dialog/bank-movement-details-dialog.component';
@@ -50,6 +49,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 
 @NgModule({
@@ -71,7 +71,6 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
     AddCovenantComponent,
     ExpenseDetailsComponent,
     BankDetailsComponent,
-    EditexpenseComponent,
     PendingComponent,
     BanksMovementsComponent,
     BankMovementDetailsDialogComponent,
@@ -108,7 +107,8 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
     MatDialogModule,
     MatButtonModule,
     MatTableModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatAutocompleteModule
 
   ]
 })

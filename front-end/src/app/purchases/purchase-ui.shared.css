@@ -1,0 +1,49 @@
+/* ——— مشترك: قائمة وتفاصيل فواتير المشتريات ——— */
+.pp-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.pp-status--new {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.pp-status--received {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
+.pp-status--return {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.pp-status--sales-return {
+  background: #ffedd5;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.pp-status--amanat {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border-color: #e9d5ff;
+}
+
+.pp-status--default {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}

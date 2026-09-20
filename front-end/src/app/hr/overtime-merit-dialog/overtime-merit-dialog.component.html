@@ -1,0 +1,89 @@
+<div class="ot-dialog" dir="rtl">
+  <h2 mat-dialog-title class="ot-dialog__title">
+    {{ isDeduction ? 'خصم (أيام / ساعات)' : 'إضافة إضافي (أيام / ساعات)' }}
+  </h2>
+
+  <mat-dialog-content>
+    <p class="ot-dialog__meta">
+      الموظف: <strong>{{ data.employeeName || data.employeeId }}</strong>
+      — شهر السياق: {{ data.year }}-{{ data.month < 10 ? '0' + data.month : data.month }}
+    </p>
+    <p class="ot-dialog__hint text-muted">{{ formulaHint }}</p>
+    <p class="ot-dialog__rates">
+      يوم كامل: <strong dir="ltr">{{ dayAmount | number: '1.2-2' }} ج</strong>
+      — سعر الساعة: <strong dir="ltr">{{ overtimeHourRate | number: '1.2-2' }} ج</strong>
+    </p>
+
+    <table class="table table-bordered table-sm text-center ot-dialog__table">
+      <thead>
+        <tr>
+          <th>التاريخ</th>
+          <th>النوع</th>
+          <th>الساعات / المبلغ</th>
+          <th>المبلغ المحتسب</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows; let i = index">
+          <td>
+            <input
+              type="date"
+              class="form-control form-control-sm"
+              [(ngModel)]="row.date"
+              [min]="data.dateFrom || null"
+              [max]="data.dateTo || null">
+          </td>
+          <td>
+            <select class="form-control form-control-sm" [(ngModel)]="row.kind" (ngModelChange)="onKindChange(row)">
+              <option value="day">يوم كامل</option>
+              <option value="hours">ساعات</option>
+              <option *ngIf="isDeduction" value="amount">مبلغ معيّن</option>
+            </select>
+          </td>
+          <td>
+            <input
+              *ngIf="row.kind === 'hours'"
+              type="number"
+              min="0.25"
+              step="0.25"
+              class="form-control form-control-sm"
+              [(ngModel)]="row.hours"
+              placeholder="عدد الساعات">
+            <input
+              *ngIf="row.kind === 'amount'"
+              type="number"
+              min="0.01"
+              step="0.01"
+              class="form-control form-control-sm"
+              [(ngModel)]="row.amount"
+              placeholder="المبلغ">
+            <span *ngIf="row.kind === 'day'" class="text-muted">—</span>
+          </td>
+          <td dir="ltr">{{ rowAmount(row) | number: '1.2-2' }} ج</td>
+          <td>
+            <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeRow(i)" [disabled]="rows.length <= 1">
+              حذف
+            </button>
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold">
+          <td colspan="3">الإجمالي</td>
+          <td dir="ltr">{{ totalAmount | number: '1.2-2' }} ج</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="addRow()">+ سطر</button>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button type="button" class="btn btn-light mx-1" (click)="cancel()" [disabled]="saving">إلغاء</button>
+    <button type="button" class="btn btn-main mx-1" (click)="save()" [disabled]="saving">
+      {{ saving ? 'جاري الحفظ...' : (isDeduction ? 'حفظ كخصومات' : 'حفظ كحوافز') }}
+    </button>
+  </mat-dialog-actions>
+</div>

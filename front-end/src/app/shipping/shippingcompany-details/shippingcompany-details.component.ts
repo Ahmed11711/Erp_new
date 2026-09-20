@@ -1,5 +1,4 @@
 import { Component } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
 import { ShippingCompanyService } from '../services/shipping-company.service';
 import { ActivatedRoute } from '@angular/router';
 import Swal from 'sweetalert2';
@@ -10,6 +9,13 @@ import { DialogCancelRefuseOrderComponent } from '../dialog-cancel-refuse-order/
 import { MatDialog } from '@angular/material/dialog';
 import { DialogNotificationNoteComponent } from '../dialog-notification-note/dialog-notification-note.component';
 import { UserService } from 'src/app/manage-system/services/user.service';
+import { RbacService } from 'src/app/core/rbac/rbac.service';
+import {
+  canRefuseFromShippingRow,
+  isCompanyCustomerType,
+  isIndividualCustomerType,
+} from '../utils/order-refuse.utils';
+import { allowsManualShippingCollection } from '../utils/order-collect-eligibility.utils';
 
 @Component({
   selector: 'app-shippingcompany-details',
@@ -34,13 +40,14 @@ export class ShippingcompanyDetailsComponent {
 
   totalcheck:number=0;
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15,50,100];
 
   constructor(private shippingService:ShippingCompanyService,private order: OrderService , private route:ActivatedRoute , private authService:AuthService,
-    private bankService:BanksService , public dialog: MatDialog , private userService:UserService
+    private bankService:BanksService , public dialog: MatDialog , private userService:UserService,
+    private rbac: RbacService,
     ){
   }
 
@@ -50,7 +57,7 @@ export class ShippingcompanyDetailsComponent {
     this.user = this.authService.getUser();
     this.bankService.bankSelect().subscribe(res=>this.banks=res);
     if (this.user == 'Admin') {
-      this.reviewed = '0';
+      this.reviewed = 'all';
     }
     this.status = 'تم شحن';
     this.getUsers();
@@ -62,19 +69,6 @@ export class ShippingcompanyDetailsComponent {
     this.userService.usersForNotifi().subscribe((res:any)=>this.userdata = res);
   }
 
-  selectedOrders:any=[];
-
-  selectOrder(e: any, item: any) {
-    if (e.target.checked) {
-      if (!this.selectedOrders.includes(item)) {
-        this.selectedOrders.push(item);
-      }
-    } else{
-      this.selectedOrders = this.selectedOrders.filter(elm=> elm !== item);
-    }
-
-  }
-
   sendOneOrder:boolean = false;
   orderToSend:any[]=[];
   sendOrder(item:any){
@@ -84,11 +78,7 @@ export class ShippingcompanyDetailsComponent {
 
   notificationOrders:any[]=[];
   sendNotification(user:any): void {
-    if (this.sendOneOrder) {
-      this.notificationOrders = this.orderToSend.map(elm => elm.order);
-    } else {
-      this.notificationOrders = this.selectedOrders.map(elm => elm.order);
-    }
+    this.notificationOrders = this.orderToSend.map(elm => elm.order);
     if (this.notificationOrders.length >0) {
       const dialogRef = this.dialog.open(DialogNotificationNoteComponent, {
         width: '25%',data: {user,orders: this.notificationOrders ,  refreshData: ()=>this.search(arguments)},
@@ -96,26 +86,9 @@ export class ShippingcompanyDetailsComponent {
       dialogRef.afterClosed().subscribe(result => {
         this.notificationOrders = [];
         this.sendOneOrder = false;
-        this.selectedOrders = [];
+        this.orderToSend = [];
       });
     }
-  }
-
-  reviewFn(){
-    this.selectedOrders = this.selectedOrders.map(elm=> {
-      return {'id': elm.order_id}
-    });
-
-    this.order.reviewOrder({orders:this.selectedOrders}).subscribe(res=>{
-      if (res) {
-      Swal.fire({
-        icon : 'success',
-        timer:1500,
-        showConfirmButton:false,
-      }).then(res=> this.search(arguments));
-      }
-    });
-
   }
 
   onPageChange(event: any) {
@@ -124,6 +97,115 @@ export class ShippingcompanyDetailsComponent {
     this.search(arguments);
   }
 
+  trackByDetailId(_index: number, row: { id?: number; order_id?: number }): number {
+    return row?.id ?? row?.order_id ?? _index;
+  }
+
+  private normStatus(v: unknown): string {
+    return v == null ? '' : String(v).trim();
+  }
+
+  /** ملخّص يظهر في عمود التعديلات: عداد التعديلات + تأكيد التسليم + آخر أحداث التتبع */
+  modificationsSummary(elm: any): {
+    hasAny: boolean;
+    editsCount: number;
+    deliveryDate: string | null;
+    deliveryBatch: string | null;
+    recentTracking: { line: string; title: string }[];
+  } {
+    const od = elm?.order?.order_details;
+    const editsCount = Math.max(0, Number(od?.edits ?? 0));
+    const deliveryDate = od?.delivery_date != null && od.delivery_date !== '' ? String(od.delivery_date) : null;
+    const deliveryBatch =
+      od?.delivery_batch_code != null && String(od.delivery_batch_code).trim() !== ''
+        ? String(od.delivery_batch_code).trim()
+        : null;
+    const raw = elm?.order?.traking;
+    const list = Array.isArray(raw) ? raw : [];
+    const recentTracking = list.slice(0, 5).map((tr: any) => {
+      const action = tr?.action != null ? String(tr.action) : '';
+      const date = tr?.date != null ? String(tr.date) : tr?.created_at != null ? String(tr.created_at).slice(0, 16) : '';
+      const user = tr?.user?.name != null ? String(tr.user.name) : '';
+      const line = user ? `${action} — ${date} — ${user}` : `${action} — ${date}`;
+      return { line: line.replace(/ — $/, '').trim(), title: line };
+    });
+    const hasAny = editsCount > 0 || !!deliveryDate || recentTracking.length > 0;
+    return { hasAny, editsCount, deliveryDate, deliveryBatch, recentTracking };
+  }
+
+  /** قائمة الإجراءات (تحصيل / إشعار) مفعّلة لطلبات «تم شحن» أو «تم التسليم» المتطابقة مع حالة الطلب */
+  menuVisibleForRow(elm: any): boolean {
+    const st = this.normStatus(elm?.status);
+    const os = this.normStatus(elm?.order?.order_status);
+    return (
+      (st === 'تم شحن' && os === 'تم شحن') ||
+      (st === 'تم التسليم' && os === 'تم التسليم')
+    );
+  }
+
+  canCollectFromRow(elm: any): boolean {
+    const st = this.normStatus(elm?.status);
+    const os = this.normStatus(elm?.order?.order_status);
+    if (st !== 'تم التسليم' || os !== 'تم التسليم') {
+      return false;
+    }
+    const done = elm.is_done === true || elm.is_done === 1 || elm.is_done === '1';
+    if (done) {
+      return false;
+    }
+    const order = elm?.order;
+    if (order && !allowsManualShippingCollection(order)) {
+      return false;
+    }
+    return true;
+  }
+
+  isIndividualCustomer(order: any): boolean {
+    return isIndividualCustomerType(order?.customer_type);
+  }
+
+  isCompanyCustomer(order: any): boolean {
+    return isCompanyCustomerType(order?.customer_type);
+  }
+
+  canRefuseOrderMenu(): boolean {
+    const allowed = new Set([
+      'Admin',
+      'Shipping Management',
+      'Operation Management',
+      'Finance and operations management',
+      'Operation Specialist',
+      'Logistics Specialist',
+      'Data Entry',
+      'Review Management',
+    ]);
+    return allowed.has(this.user) || this.rbac.can('orders.change_status');
+  }
+
+  canShowShippingActionsMenu(): boolean {
+    return this.canRefuseOrderMenu() || this.canCollectRole;
+  }
+
+  canRefuseFromRow(elm: any): boolean {
+    return canRefuseFromShippingRow(elm?.order?.order_status, elm?.status, elm?.is_done);
+  }
+
+  get canCollectRole(): boolean {
+    const u = this.user;
+    return u === 'Admin' || u === 'Operation Management' || u === 'Finance and operations management'
+      || u === 'Operation Specialist' || u === 'Logistics Specialist';
+  }
+
+  shippingAccountsQuery(orderId?: number): Record<string, string | number> {
+    const q: Record<string, string | number> = { company_id: this.id };
+    if (this.name) {
+      q['company_name'] = this.name;
+    }
+    if (orderId) {
+      q['order_id'] = orderId;
+    }
+    return q;
+  }
 
   oncollectDateChange(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -289,15 +371,18 @@ export class ShippingcompanyDetailsComponent {
     }
 
     this.shippingService.search(this.pageSize,this.page+1,this.param).subscribe((res:any)=>{
-      console.log(res.orderDetails.data);
+      const od = res?.orderDetails;
+      const rows = Array.isArray(od?.data) ? od.data : [];
+      const total = Number(od?.total ?? 0);
+      const perPage = Number(od?.per_page ?? this.pageSize) || this.pageSize;
 
-      this.data = res.orderDetails.data;
-      this.length=res.orderDetails.total;
-      this.pageSize=res.orderDetails.per_page;
-      this.totalOrders=res.orderDetails.total;
-      this.totalPrice=res.totalNet;
-      this.name=res.name.name;
-      this.tableData = this.data;
+      this.data = rows;
+      this.tableData = rows;
+      this.length = total;
+      this.totalOrders = total;
+      this.pageSize = perPage;
+      this.totalPrice = res?.totalNet ?? 0;
+      this.name = res?.name?.name ?? '';
     })
   }
 

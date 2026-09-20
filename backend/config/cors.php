@@ -19,9 +19,24 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['https://mag-opt.com' , 'https://www.mag-opt.com' , 'http://localhost:4200'],
+    'allowed_origins' => [
+        'https://mag-opt.com',
+        'https://www.mag-opt.com',
+        'https://erp.mag-opt.com',
+        'https://chat.mag-opt.com',
+        'https://test.mag-opt.com',
+        'http://localhost:4200',
+        'http://127.0.0.1:4200',
+    ],
 
-    'allowed_origins_patterns' => [],
+    // Flutter web (random localhost port) + local Angular/XAMPP + LAN + mag-opt subdomains
+    'allowed_origins_patterns' => [
+        '#^https?://localhost(:\d+)?$#',
+        '#^https?://127\.0\.0\.1(:\d+)?$#',
+        '#^https://([a-z0-9-]+\.)?mag-opt\.com$#',
+        '#^https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+        '#^https?://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+    ],
 
     'allowed_headers' => ['*'],
 

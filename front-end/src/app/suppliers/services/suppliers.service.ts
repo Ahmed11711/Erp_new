@@ -2,6 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { environment } from 'src/env/env';
 
+export interface SupplierPurgePreview {
+  supplier_count: number;
+  purchase_count: number;
+  processing_count: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -12,6 +18,14 @@ export class SuppliersService {
 
   addSupplier(obj:any){
     return this.http.post(`${environment.Url}/suppliers` ,obj);
+  }
+
+  getSupplier(id: number) {
+    return this.http.get(`${environment.Url}/suppliers/${id}`);
+  }
+
+  updateSupplier(id: number, obj: Record<string, unknown>) {
+    return this.http.put(`${environment.Url}/suppliers/${id}`, obj);
   }
 
   getSuppliers(itemsperpage:number,page:number = 1){
@@ -32,6 +46,25 @@ export class SuppliersService {
 
   supplierPay(id:number , obj:any){
     return this.http.post(`${environment.Url}/suppliers/supplierPay/${id}` ,obj);
+  }
+
+  deleteSupplier(id: number) {
+    return this.http.delete(`${environment.Url}/suppliers/${id}`);
+  }
+
+  deleteSuppliers(ids: number[]) {
+    return this.http.post(`${environment.Url}/suppliers/bulk-delete`, { ids });
+  }
+
+  purgePreview() {
+    return this.http.get<SupplierPurgePreview>(`${environment.Url}/suppliers/purge-preview`);
+  }
+
+  purgeAll(includeProcessing = true) {
+    return this.http.post(`${environment.Url}/suppliers/purge-all`, {
+      confirm: true,
+      include_processing: includeProcessing,
+    });
   }
 
   // search(items:number,page:number,search:any){

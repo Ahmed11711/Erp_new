@@ -13,7 +13,7 @@ export class WarehouseDetailsComponent {
   data:any = [];
   type!:string;
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
 

@@ -13,6 +13,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 
 @NgModule({
   declarations: [ShopifyIntegrationDashboardComponent],
@@ -30,6 +31,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
     MatInputModule,
     MatFormFieldModule,
     MatTooltipModule,
+    MatSnackBarModule,
   ],
 })
 export class ShopifyIntegrationModule {}

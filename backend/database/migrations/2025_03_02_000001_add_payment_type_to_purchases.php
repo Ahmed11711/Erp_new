@@ -17,19 +17,23 @@ return new class extends Migration
             });
         }
 
-        try {
-            Schema::table('purchases', function (Blueprint $table) {
-                $table->foreign('safe_id')->references('id')->on('safes')->nullOnDelete();
-            });
-        } catch (\Exception $e) {
-            if (strpos($e->getMessage(), 'Duplicate') === false) throw $e;
+        if (Schema::hasTable('safes') && Schema::hasColumn('purchases', 'safe_id')) {
+            try {
+                Schema::table('purchases', function (Blueprint $table) {
+                    $table->foreign('safe_id')->references('id')->on('safes')->nullOnDelete();
+                });
+            } catch (\Exception $e) {
+                if (strpos($e->getMessage(), 'Duplicate') === false) throw $e;
+            }
         }
-        try {
-            Schema::table('purchases', function (Blueprint $table) {
-                $table->foreign('service_account_id')->references('id')->on('service_accounts')->nullOnDelete();
-            });
-        } catch (\Exception $e) {
-            if (strpos($e->getMessage(), 'Duplicate') === false) throw $e;
+        if (Schema::hasTable('service_accounts') && Schema::hasColumn('purchases', 'service_account_id')) {
+            try {
+                Schema::table('purchases', function (Blueprint $table) {
+                    $table->foreign('service_account_id')->references('id')->on('service_accounts')->nullOnDelete();
+                });
+            } catch (\Exception $e) {
+                if (strpos($e->getMessage(), 'Duplicate') === false) throw $e;
+            }
         }
 
         try {

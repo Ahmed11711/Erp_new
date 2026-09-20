@@ -7,8 +7,10 @@ use App\Models\DailyEntry;
 use App\Models\DailyEntryItem;
 use App\Models\TreeAccount;
 use App\Models\AccountEntry;
+use App\Models\User;
 use App\Services\Accounting\AccountingService;
 use App\Services\Accounting\BudgetReviewService;
+use App\Services\Accounting\DirectCashTransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -31,10 +33,30 @@ class DailyEntryController extends Controller
             });
         }
 
+        if ($request->filled('user_id')) {
+            $query->where('user_id', (int) $request->user_id);
+        }
+
         $perPage = $request->get('per_page', 25);
         $entries = $query->orderBy('date', 'desc')->paginate($perPage);
 
         return response()->json($entries, 200);
+    }
+
+    /**
+     * كل مستخدمي النظام لفلتر التقارير المحاسبية (كشف حساب، قيود يومية، إلخ).
+     * لا تُقيَّد بمن لديهم قيود فقط — حتى يظهر الجميع في الـ select.
+     */
+    public function users()
+    {
+        $users = User::query()
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json([
+            'data' => $users,
+            'meta' => ['total' => $users->count()],
+        ], 200);
     }
 
     public function store(Request $request)
@@ -146,6 +168,12 @@ class DailyEntryController extends Controller
             return response()->json(['message' => 'القيد اليومي غير موجود'], 404);
         }
 
+        try {
+            $this->assertNotSystemLinkedJournal($dailyEntry);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         $validator = Validator::make($request->all(), [
             'date' => 'sometimes|date',
             'description' => 'nullable|string',
@@ -226,6 +254,12 @@ class DailyEntryController extends Controller
             return response()->json(['message' => 'القيد اليومي غير موجود'], 404);
         }
 
+        try {
+            $this->assertNotSystemLinkedJournal($dailyEntry);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         DB::beginTransaction();
         try {
             $touchedAccountIds = $dailyEntry->items->pluck('account_id')->toArray();
@@ -244,6 +278,24 @@ class DailyEntryController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => 'حدث خطأ: ' . $e->getMessage()], 500);
+        }
+    }
+
+    private function assertNotSystemLinkedJournal(DailyEntry $dailyEntry): void
+    {
+        $codes = AccountEntry::query()
+            ->where('daily_entry_id', $dailyEntry->id)
+            ->whereNotNull('entry_batch_code')
+            ->pluck('entry_batch_code');
+
+        foreach ($codes as $code) {
+            $code = (string) $code;
+            if (str_starts_with($code, DirectCashTransactionService::BANK_BATCH_PREFIX)
+                || str_starts_with($code, DirectCashTransactionService::SAFE_BATCH_PREFIX)) {
+                throw new \InvalidArgumentException(
+                    'هذا القيد مرتبط بحركة بنك أو خزينة. عدّله أو احذفه من شاشة السحب والإيداع.'
+                );
+            }
         }
     }
 }

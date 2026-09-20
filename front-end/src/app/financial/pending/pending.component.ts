@@ -8,7 +8,7 @@ import Swal from 'sweetalert2';
   styleUrls: ['./pending.component.css']
 })
 export class PendingComponent implements OnInit{
-  length = 50;
+  length = 0;
   pageSize = 30;
   page = 0;
   pageSizeOptions = [30,50,100];

@@ -1,9 +1,56 @@
-.header{
+.header {
   background-color: black;
   color: white;
   text-align: center;
   font-size: 2rem;
   border-radius: 7px;
+}
+
+.page-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0;
+}
+
+.page-title.title.header {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.45rem 1rem;
+  font-size: clamp(1.05rem, 2.4vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.page-title__name {
+  display: block;
+  font-size: 0.75em;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 767.98px) {
+  .page-head {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    text-align: center;
+    padding: 0.75rem 0 0.5rem;
+  }
+
+  .page-head__time {
+    justify-self: start;
+  }
+
+  .page-head__spacer {
+    display: none;
+  }
+
+  .page-title.title.header {
+    font-size: 1.15rem;
+    padding: 0.5rem 0.75rem;
+  }
 }
 
 tbody td{
@@ -26,6 +73,15 @@ tbody td{
   background-color: rgb(202, 201, 201);
 }
 
+.absent-day--editable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.absent-day--editable:hover {
+  background-color: rgb(180, 180, 180);
+}
+
 tr td:last-child , th td:last-child{
   width: 30px;
   padding: auto 0;
@@ -36,4 +92,203 @@ tr td:last-child , th td:last-child{
   cursor: pointer;
   font-size: 0.6rem;
   margin-right: 0.3rem;
+}
+
+.log-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  color: #adb5bd;
+}
+
+.revert-permission-btn {
+  vertical-align: middle;
+}
+
+.revert-permission-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  color: #82225e;
+}
+
+.ot-day-btn {
+  position: relative;
+  vertical-align: middle;
+}
+
+.ot-day-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  color: #0d6efd;
+}
+
+.ot-day-icon--deduct {
+  color: #dc3545;
+}
+
+.ot-day-btn:hover .ot-day-icon {
+  color: #82225e;
+}
+
+.ot-day-count {
+  position: absolute;
+  top: -4px;
+  left: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: #82225e;
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+
+.ot-day-count--deduct {
+  background: #dc3545;
+}
+
+.log-icon--has-data {
+  color: #82225e;
+}
+
+tr.row-edited td {
+  background-color: #fff3cd !important;
+}
+
+tr.row-edited td.bg-main,
+tr.row-edited td.bg-success,
+tr.row-edited td.bg-gray,
+tr.row-edited td.bg-danger {
+  background-color: #ffe69c !important;
+}
+
+:host ::ng-deep .fp-log-list {
+  max-height: 360px;
+  overflow-y: auto;
+  text-align: right;
+  direction: rtl;
+}
+
+:host ::ng-deep .fp-log-item {
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.65rem 0;
+  font-size: 0.9rem;
+}
+
+:host ::ng-deep .fp-log-item:last-child {
+  border-bottom: none;
+}
+
+:host ::ng-deep .fp-log-head {
+  margin-bottom: 0.15rem;
+}
+
+:host ::ng-deep .fp-log-when {
+  color: #6c757d;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+:host ::ng-deep .fp-log-change {
+  margin-top: 0.15rem;
+}
+
+:host ::ng-deep .fp-log-note {
+  margin-top: 0.25rem;
+  color: #856404;
+  font-size: 0.82rem;
+}
+
+.month-sheet-summary {
+  margin: 2rem 0 1rem;
+  padding: 1.25rem;
+  border: 2px solid #82225e;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.month-sheet-summary__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #82225e;
+  margin-bottom: 0.75rem;
+}
+
+.month-sheet-summary__formula {
+  text-align: center;
+}
+
+.month-sheet-summary__formula-main {
+  font-size: 1.15rem;
+  font-weight: 600;
+  direction: ltr;
+  margin-bottom: 0.75rem;
+}
+
+.month-sheet-summary__formula-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: center;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.month-sheet-summary__count {
+  background: #f3e8ef;
+  padding: 0.25rem 0.7rem;
+  border-radius: 6px;
+  font-weight: 700;
+  color: #82225e;
+}
+
+.month-sheet-summary__qty {
+  display: block;
+  font-size: 0.8rem;
+  color: #82225e;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.month-sheet-summary__table td,
+.month-sheet-summary__table th {
+  vertical-align: middle;
+}
+
+.month-sheet-summary__table td[dir="rtl"] {
+  direction: rtl;
+  unicode-bidi: isolate;
+  letter-spacing: 0;
+  word-break: normal;
+}
+
+.month-sheet-summary__net {
+  max-width: 480px;
+  margin: 1rem auto 0;
+}
+
+.bg-navy {
+  background-color: #82225e !important;
+}
+
+.month-sheet-summary__actions {
+  margin-top: 1rem;
+}
+
+.month-sheet-summary__btn {
+  border: 2px solid #82225e !important;
+  border-radius: 8px;
+  padding: 0.5rem 1.25rem;
+  font-weight: 600;
+}
+
+.btn-outline-dark.month-sheet-summary__btn {
+  border-color: #333 !important;
 }

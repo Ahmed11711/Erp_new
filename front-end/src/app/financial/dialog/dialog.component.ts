@@ -19,13 +19,17 @@ export class DialogComponent {
   ngOnInit(): void {
     this.getAssets();
     if (this.data.id) {
+      this.form.get('asset_id')?.clearValidators();
+      this.form.get('asset_id')?.updateValueAndValidity();
+      this.form.get('balance')?.clearValidators();
+      this.form.get('balance')?.updateValueAndValidity();
       this.form.patchValue({
-        name:this.data.name,
-        type:this.data.type,
-        balance:this.data.balance,
-        usage:this.data.usage,
-        asset_id:this.data.asset_id ?? 0,
-      })
+        name: this.data.name,
+        type: this.data.type,
+        balance: this.data.balance,
+        usage: this.data.usage,
+        asset_id: this.data.asset_id ?? 0,
+      });
     }
   }
 
@@ -35,31 +39,48 @@ export class DialogComponent {
     })
   }
 
-  form:FormGroup = new FormGroup({
-    'id' :new FormControl(null),
-    'name' :new FormControl(null , [Validators.required ]),
-    'type' :new FormControl(null , [Validators.required ]),
-    'balance' :new FormControl(null , [Validators.required]),
-    'usage' :new FormControl(null , [Validators.required]),
-    'asset_id' :new FormControl(0 , [Validators.required, Validators.min(1)]),
-  })
+  form: FormGroup = new FormGroup({
+    id: new FormControl(null),
+    name: new FormControl(null, [Validators.required]),
+    type: new FormControl(null, [Validators.required]),
+    balance: new FormControl(null, [Validators.required]),
+    usage: new FormControl(null, [Validators.required]),
+    asset_id: new FormControl(0, [Validators.required, Validators.min(1)]),
+    counter_account_id: new FormControl(null),
+  });
 
-  submitform(){
-    if(this.form.valid){
-      if (this.data.id) {
-        this.bankService.edit(this.data.id,this.form.value).subscribe((result:any)=>{
-          if (result.message === "success") {
-            this.dialogRef.close(this.form.value);
-          }
-        })
-      }else{
-        this.bankService.add(this.form.value).subscribe((result:any)=>{
-          if (result.message === "success") {
-            this.dialogRef.close(this.form.value);
-          }
-        })
-      }
+  submitform() {
+    if (!this.form.valid) {
+      return;
     }
+    if (this.data.id) {
+      const payload = {
+        name: this.form.value.name,
+        usage: this.form.value.usage,
+        type: this.form.value.type,
+      };
+      this.bankService.edit(this.data.id, payload).subscribe((result: any) => {
+        if (result.message === 'success') {
+          this.dialogRef.close(this.form.value);
+        }
+      });
+      return;
+    }
+
+    const bal = Number(this.form.value.balance) || 0;
+    if (bal > 0.000001 && !this.form.value.counter_account_id) {
+      return;
+    }
+
+    const addPayload = {
+      ...this.form.value,
+      parent_account_id: this.form.value.asset_id,
+    };
+    this.bankService.add(addPayload).subscribe((result: any) => {
+      if (result.message === 'success') {
+        this.dialogRef.close(this.form.value);
+      }
+    });
   }
 
 }

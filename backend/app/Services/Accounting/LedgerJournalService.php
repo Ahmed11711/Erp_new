@@ -30,7 +30,8 @@ class LedgerJournalService
         ?int $orderId = null,
         ?string $entryBatchCode = null,
         ?int $userId = null,
-        ?\DateTimeInterface $date = null
+        ?\DateTimeInterface $date = null,
+        bool $syncOperationalSources = false
     ): DailyEntry {
         $normalized = [];
         foreach ($lines as $line) {
@@ -68,13 +69,21 @@ class LedgerJournalService
             );
         }
 
-        return DB::transaction(function () use ($normalized, $headerDescription, $orderId, $entryBatchCode, $userId, $date) {
+        return DB::transaction(function () use ($normalized, $headerDescription, $orderId, $entryBatchCode, $userId, $date, $syncOperationalSources) {
             $dailyEntry = DailyEntry::create([
                 'date' => $date ?? now(),
                 'entry_number' => DailyEntry::getNextEntryNumber(),
                 'description' => $headerDescription,
                 'user_id' => $userId ?? auth()->id() ?? 1,
             ]);
+
+            $entryDate = $date instanceof \DateTimeInterface
+                ? $date->format('Y-m-d')
+                : ($date ? (string) $date : date('Y-m-d'));
+            $postedAt = $date
+                ? \Carbon\Carbon::parse($date)->startOfDay()
+                : now();
+            $operationalRef = $entryBatchCode ?? ('DE-' . $dailyEntry->id);
 
             $touched = [];
             foreach ($normalized as $line) {
@@ -94,8 +103,8 @@ class LedgerJournalService
                     'order_id' => $orderId,
                     'entry_batch_code' => $entryBatchCode,
                     'daily_entry_id' => $dailyEntry->id,
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'created_at' => $postedAt,
+                    'updated_at' => $postedAt,
                 ]);
                 $touched[$line['account_id']] = true;
             }
@@ -108,6 +117,28 @@ class LedgerJournalService
                         'account_id' => $accountId,
                         'error' => $e->getMessage(),
                     ]);
+                }
+            }
+
+            if ($syncOperationalSources) {
+                $paymentSync = app(PaymentSourceOperationalLedgerService::class);
+                foreach ($normalized as $line) {
+                    try {
+                        $paymentSync->syncFromJournalLine(
+                            (int) $line['account_id'],
+                            (float) $line['debit'],
+                            (float) $line['credit'],
+                            $line['description'],
+                            $operationalRef,
+                            $entryDate
+                        );
+                    } catch (\Throwable $e) {
+                        Log::warning('LedgerJournalService: operational source sync failed', [
+                            'account_id' => $line['account_id'],
+                            'batch' => $operationalRef,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
 
@@ -145,7 +176,10 @@ class LedgerJournalService
             ],
             $description,
             $orderId,
-            $batchCode
+            $batchCode,
+            null,
+            null,
+            true
         );
     }
 
@@ -182,7 +216,10 @@ class LedgerJournalService
             ],
             $description,
             $orderId,
-            $batchCode
+            $batchCode,
+            null,
+            null,
+            true
         );
     }
 }

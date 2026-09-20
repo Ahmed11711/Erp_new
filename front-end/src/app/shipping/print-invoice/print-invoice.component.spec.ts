@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { PrintInvoiceComponent } from './print-invoice.component';
+import { OrderInvoicePrintService } from '../services/order-invoice-print.service';
 
 describe('PrintInvoiceComponent', () => {
   let component: PrintInvoiceComponent;
@@ -8,7 +9,8 @@ describe('PrintInvoiceComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [PrintInvoiceComponent]
+      declarations: [PrintInvoiceComponent],
+      providers: [OrderInvoicePrintService],
     });
     fixture = TestBed.createComponent(PrintInvoiceComponent);
     component = fixture.componentInstance;

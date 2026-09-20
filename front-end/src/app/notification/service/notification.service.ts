@@ -1,7 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { environment } from 'src/env/env';
+
+const SKIP_GLOBAL_LOADING = new HttpHeaders({ 'X-Skip-Global-Loading': '1' });
 @Injectable({
   providedIn: 'root',
 })
@@ -41,7 +43,9 @@ export class NotificationService {
   }
 
   getById(): Observable<any> {
-    return this.http.get<any>(`${environment.Url}/notification`);
+    return this.http.get<any>(`${environment.Url}/notification`, {
+      headers: SKIP_GLOBAL_LOADING,
+    });
   }
 
   readNotify(id:number): Observable<any> {
@@ -52,16 +56,34 @@ export class NotificationService {
     return this.http.post<any>(`${environment.Url}/notification/${id}` , {orders:data});
   }
 
-  recievedNotifiy(items:number,page:number){
-    return this.http.get(`${environment.Url}/recievednotification?itemsPerPage=${items}&page=${page}`,{params:this.recievedParam});
+  recievedNotifiy(items: number, page: number, params: Record<string, string | number | boolean | null | undefined> = {}) {
+    const cleanParams: Record<string, string> = {};
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        cleanParams[key] = String(value);
+      }
+    });
+    return this.http.get(`${environment.Url}/recievednotification?itemsPerPage=${items}&page=${page}`, { params: cleanParams });
   }
 
-  sentNotifiy(items:number,page:number,search:any){
-    return this.http.get(`${environment.Url}/sentnotification?itemsPerPage=${items}&page=${page}`,{params:search});
+  sentNotifiy(items: number, page: number, search: Record<string, string | number | boolean | null | undefined> = {}) {
+    const cleanParams: Record<string, string> = {};
+    Object.entries(search).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        cleanParams[key] = String(value);
+      }
+    });
+    return this.http.get(`${environment.Url}/sentnotification?itemsPerPage=${items}&page=${page}`, { params: cleanParams });
   }
 
-  allNotifiy(items:number,page:number,search:any){
-    return this.http.get(`${environment.Url}/allnotification?itemsPerPage=${items}&page=${page}`,{params:search});
+  allNotifiy(items: number, page: number, search: Record<string, string | number | boolean | null | undefined> = {}) {
+    const cleanParams: Record<string, string> = {};
+    Object.entries(search).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        cleanParams[key] = String(value);
+      }
+    });
+    return this.http.get(`${environment.Url}/allnotification?itemsPerPage=${items}&page=${page}`, { params: cleanParams });
   }
 
   delete(id:number){

@@ -32,7 +32,10 @@ export class AddEmployeeComponent {
     'salary_type' :new FormControl(null , [Validators.required ]),
     'working_hours' :new FormControl(null),
     'acc_no' :new FormControl(null),
+    'payable_tree_account_id' :new FormControl(null),
   })
+
+  payableTreeAccountId: number | null = null;
 
   salarytype!: string;
   salaryType(e){
@@ -47,7 +50,12 @@ export class AddEmployeeComponent {
       if (this.form.value.working_hours == 'عدد ساعات العمل') {
         this.form.value['working_hours'] = null;
       }
-      this.employeeService.add(this.form.value).subscribe(result=>{
+      const payload = {
+        ...this.form.value,
+        // الحساب اختياري — لا نرسله إلا إذا تم اختياره
+        payable_tree_account_id: this.payableTreeAccountId ?? null,
+      };
+      this.employeeService.add(payload).subscribe(result=>{
         if (result) {
           this.route.navigate(['/dashboard/hr/employee']);
         }
@@ -59,6 +67,9 @@ export class AddEmployeeComponent {
         if(error.status === 422 && error.error.message === "The code has already been taken."){
           this.errorform = true;
           this.errorMessage = "هذا الكود مستخدم  ";
+        } else if (error.status === 422) {
+          this.errorform = true;
+          this.errorMessage = error?.error?.message || 'تعذر حفظ الموظف — راجع البيانات';
         }
         if (error.status === 500) {
           this.errorform = true;

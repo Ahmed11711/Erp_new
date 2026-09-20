@@ -1,54 +1,49 @@
-import { Component, Input, SimpleChanges } from '@angular/core';
-import * as html2pdf from 'html2pdf.js';
-import { saveAs } from 'file-saver';
+import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { OrderInvoicePrintService } from '../services/order-invoice-print.service';
 
 @Component({
   selector: 'app-print-invoice',
   templateUrl: './print-invoice.component.html',
   styleUrls: ['./print-invoice.component.css']
 })
-export class PrintInvoiceComponent {
-  @Input() data: any = {};
+export class PrintInvoiceComponent implements OnChanges {
+  /** Single-order print. */
+  @Input() data: any = null;
+  /** Batch print from orders list. */
+  @Input() orders: any[] | null = null;
+  @Input() size = 'A4';
+  @Input() showInvoiceDate = true;
+  @Input() reloadAfterPrint = false;
+  /** Bumped to re-trigger print after each batch request. */
+  @Input() printToken = 0;
+
+  constructor(private orderInvoicePrint: OrderInvoicePrintService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.data && this.data) {
-      if (Object.keys(this.data).length === 0 && this.data.constructor === Object) {
+    if (changes.orders && this.orders?.length) {
+      this.orderInvoicePrint.openPrintWindow(this.orders, {
+        showInvoiceDate: this.showInvoiceDate,
+        size: this.size,
+      });
+      return;
+    }
 
-      } else {
-        this.downloadPDF();
+    if (!changes.data && !changes.printToken && !changes.showInvoiceDate) {
+      return;
+    }
+
+    if (!this.data || !Object.keys(this.data).length) {
+      return;
+    }
+
+    const pageSize = this.data.size || this.size;
+    this.orderInvoicePrint.openPrintWindow(
+      [{ ...this.data, size: pageSize }],
+      {
+        showInvoiceDate: this.showInvoiceDate,
+        size: pageSize,
+        reloadAfterPrint: this.reloadAfterPrint,
       }
-    }
+    );
   }
-
-  downloadPDF() {
-    const element = document.getElementById('capture');
-    if (element) {
-      const options = {
-        filename: this.data?.id +'-'+ this.data.size +'.pdf',
-        image: { type: 'png' },
-        html2canvas: { scale:4 },
-        jsPDF: { unit: 'mm', format: this.data.size, orientation: 'portrait', autoPrint: { variant: 'non-conform' } }
-      };
-
-      html2pdf(element, options)
-        .from(element)
-        .toPdf()
-        .output('blob')
-        .then((pdfBlob: Blob) => {
-          const url = URL.createObjectURL(pdfBlob);
-          const printWindow = window.open(url, '_blank');
-
-          if (printWindow) {
-            printWindow.print();
-            window.location.reload();
-          } else {
-            console.error('Error opening print window.');
-          }
-        })
-        .catch((error: any) => {
-          console.error('Error generating PDF:', error);
-        });
-    }
-  }
-
 }

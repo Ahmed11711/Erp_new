@@ -1,0 +1,583 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\CollectionProviderType;
+use App\Enums\OrderSettlementStatus;
+use App\Models\CollectionCompany;
+use App\Models\Order;
+use App\Models\OrderShippingNumber;
+use App\Models\shippingCompanyDetails;
+use App\Services\Shipping\CollectionShippingNettingService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class CollectionAccountingReportController extends Controller
+{
+    /**
+     * ملخص ذمم شركات التحصيل — المبلغ المطلوب تحصيله من كل شركة.
+     * GET /api/reports/collection-accounts
+     */
+    public function accountsSummary(Request $request)
+    {
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        $status = $request->query('status'); // active | inactive
+
+        $query = CollectionCompany::query()
+            ->with(['linkedShippingCompany:id,name,balance', 'receivableTreeAccount:id,code,name,balance,debit_balance,credit_balance']);
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        $companies = $query->orderBy('name')->get();
+        $rows = [];
+
+        foreach ($companies as $cc) {
+            $rows[] = $this->buildCompanySummaryRow($cc, $dateFrom, $dateTo);
+        }
+
+        $collection = collect($rows);
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => [
+                'total_companies' => $collection->count(),
+                'total_pending_to_collect' => round($collection->sum('pending_to_collect'), 3),
+                'total_collected' => round($collection->sum('total_collected'), 3),
+                'total_orders_pending' => (int) $collection->sum('pending_orders_count'),
+            ],
+        ]);
+    }
+
+    /**
+     * تسوية مزدوجة (مقاصّة): قبض قيمة البضاعة نقداً + إطفاء مستحق الشحن للمندوب.
+     * POST /api/reports/collection-accounts/{id}/settle-with-shipping
+     */
+    public function settleWithShipping(Request $request, int $id, CollectionShippingNettingService $service)
+    {
+        $data = $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'integer|exists:orders,id',
+            'cash_account_id' => 'required|integer|exists:tree_accounts,id',
+            'date' => 'required|date',
+            'mode' => 'nullable|in:netting,cash_out',
+            'notes' => 'nullable|string',
+        ]);
+
+        try {
+            $result = $service->settle(
+                $id,
+                $data['order_ids'],
+                (int) $data['cash_account_id'],
+                $data['date'],
+                $data['mode'] ?? 'netting',
+                $data['notes'] ?? null,
+                auth()->id()
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'تعذر إتمام التسوية: '.$e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'message' => sprintf(
+                'تمت تسوية %d طلب — قيمة البضاعة %.2f، الشحن %.2f.',
+                $result['order_count'],
+                $result['product_total'],
+                $result['shipping_total']
+            ),
+            'data' => $result,
+        ]);
+    }
+
+    /**
+     * كشف تفصيلي لشركة تحصيل واحدة.
+     * GET /api/reports/collection-accounts/{id}/statement
+     */
+    public function companyStatement(Request $request, int $id)
+    {
+        $company = CollectionCompany::with(['linkedShippingCompany', 'receivableTreeAccount'])->findOrFail($id);
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        $source = $request->query('source', 'auto'); // auto | orders | ledger
+
+        $useLedger = $company->linked_shipping_company_id
+            && in_array($source, ['auto', 'ledger'], true);
+
+        if ($useLedger) {
+            return $this->ledgerStatement($request, $company, (int) $company->linked_shipping_company_id, $dateFrom, $dateTo);
+        }
+
+        return $this->ordersStatement($request, $company, $dateFrom, $dateTo);
+    }
+
+    /**
+     * طلبات معلّقة لشركة تحصيل.
+     * GET /api/reports/collection-accounts/pending-orders
+     */
+    public function pendingOrders(Request $request)
+    {
+        $companyId = (int) $request->query('company_id');
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+
+        $cc = CollectionCompany::findOrFail($companyId);
+
+        $query = $this->applyPendingCollectionScope(
+            $this->ordersBaseQuery($cc->id, $cc->linked_shipping_company_id),
+            $dateFrom,
+            $dateTo
+        );
+
+        $orders = $query->orderByDesc('orders.id')
+            ->paginate($request->integer('per_page', 50));
+
+        return response()->json($orders);
+    }
+
+    private function buildCompanySummaryRow(CollectionCompany $cc, ?string $dateFrom, ?string $dateTo): array
+    {
+        $orderStats = $this->orderDetailsStats($cc->id, $dateFrom, $dateTo);
+        $ledgerStats = $cc->linked_shipping_company_id
+            ? $this->ledgerStats((int) $cc->linked_shipping_company_id, $dateFrom, $dateTo)
+            : [
+                'pending_to_collect' => 0,
+                'total_collected' => 0,
+                'pending_orders_count' => 0,
+                'shipped_pending' => 0,
+                'delivered_pending' => 0,
+                'operational_balance' => 0,
+            ];
+
+        $pendingToCollect = $cc->linked_shipping_company_id
+            ? max((float) $ledgerStats['pending_to_collect'], (float) $orderStats['pending_to_collect'])
+            : (float) $orderStats['pending_to_collect'];
+
+        return [
+            'id' => $cc->id,
+            'name' => $cc->name,
+            'status' => $cc->status,
+            'linked_shipping_company_id' => $cc->linked_shipping_company_id,
+            'linked_shipping_company_name' => $cc->linkedShippingCompany?->name,
+            'receivable_tree_account_id' => $cc->receivable_tree_account_id,
+            'receivable_tree_account' => $cc->receivableTreeAccount,
+            'receivable_tree_balance' => round((float) ($cc->receivableTreeAccount?->balance ?? 0), 3),
+            'pending_to_collect' => round($pendingToCollect, 3),
+            'pending_from_orders' => round((float) $orderStats['pending_to_collect'], 3),
+            'pending_from_ledger' => round((float) $ledgerStats['pending_to_collect'], 3),
+            'total_collected' => round((float) ($ledgerStats['total_collected'] ?: $orderStats['total_collected']), 3),
+            'pending_orders_count' => (int) max($orderStats['pending_orders_count'], $ledgerStats['pending_orders_count']),
+            'shipped_pending' => round((float) $ledgerStats['shipped_pending'], 3),
+            'delivered_pending' => round((float) $ledgerStats['delivered_pending'], 3),
+            'operational_balance' => (float) ($ledgerStats['operational_balance'] ?? $cc->linkedShippingCompany?->balance ?? 0),
+            'pending_order_ids' => $orderStats['pending_order_ids'],
+            'data_source' => $cc->linked_shipping_company_id ? 'ledger_and_orders' : 'orders',
+        ];
+    }
+
+    private function orderDetailsStats(int $collectionCompanyId, ?string $dateFrom, ?string $dateTo): array
+    {
+        $cc = CollectionCompany::find($collectionCompanyId);
+        $linkedId = $cc?->linked_shipping_company_id;
+
+        // المتبقّي مطلوب تحصيله = كل طلب بذمة تحصيل (collection_receivable_amount > 0) لم تُسوَّ بعد،
+        // بصرف النظر عن حالة الشحن — لأن التحصيل الإلكتروني المسبق (Paymob/Sympl/Visa) يقع وقت الطلب.
+        $settledStatus = OrderSettlementStatus::Settled->value;
+
+        $pendingQ = $this->applyPendingCollectionScope(
+            $this->ordersBaseQuery($collectionCompanyId, $linkedId),
+            $dateFrom,
+            $dateTo
+        );
+
+        $pendingRows = (clone $pendingQ)->get([
+            'orders.id as order_id',
+            DB::raw('COALESCE(order_details.collection_receivable_amount, 0) as coll_amt'),
+        ]);
+
+        $pendingOrderIds = [];
+        $pendingSum = 0.0;
+        foreach ($pendingRows as $row) {
+            $amt = (float) $row->coll_amt;
+            if ($amt <= 0.009) {
+                continue;
+            }
+            $pendingSum += $amt;
+            $pendingOrderIds[] = (int) $row->order_id;
+        }
+
+        $collectedDateExpr = "COALESCE(NULLIF(order_details.collection_date, '0000-00-00'), orders.order_date)";
+        $collectedQ = $this->ordersBaseQuery($collectionCompanyId, $linkedId)
+            ->where(function ($q) use ($settledStatus) {
+                $q->where('orders.order_status', 'تم التحصيل')
+                    ->orWhere('order_details.settlement_status', $settledStatus);
+            });
+        if ($dateFrom) {
+            $collectedQ->whereRaw("DATE($collectedDateExpr) >= ?", [$dateFrom]);
+        }
+        if ($dateTo) {
+            $collectedQ->whereRaw("DATE($collectedDateExpr) <= ?", [$dateTo]);
+        }
+
+        $collectedSum = (float) (clone $collectedQ)->sum(DB::raw('COALESCE(order_details.collection_receivable_amount, 0)'));
+
+        return [
+            'pending_to_collect' => $pendingSum,
+            'total_collected' => $collectedSum,
+            'pending_orders_count' => count(array_unique($pendingOrderIds)),
+            'pending_order_ids' => array_values(array_unique($pendingOrderIds)),
+        ];
+    }
+
+    private function ledgerStats(int $shippingCompanyId, ?string $dateFrom, ?string $dateTo): array
+    {
+        $base = shippingCompanyDetails::query()
+            ->where('shipping_company_id', $shippingCompanyId);
+
+        if ($dateFrom) {
+            $base->whereDate('shipping_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $base->whereDate('shipping_date', '<=', $dateTo);
+        }
+
+        $pending = (clone $base)->where('is_done', 0)
+            ->whereIn('status', ['تم شحن', 'تم التسليم']);
+
+        $aggregates = (clone $base)->select([
+            DB::raw('SUM(CASE WHEN is_done = 0 THEN amount ELSE 0 END) as pending_to_collect'),
+            DB::raw('SUM(CASE WHEN is_done = 1 THEN ABS(amount) ELSE 0 END) as total_collected'),
+            DB::raw('SUM(CASE WHEN status = "تم شحن" AND is_done = 0 THEN amount ELSE 0 END) as shipped_pending'),
+            DB::raw('SUM(CASE WHEN status = "تم التسليم" AND is_done = 0 THEN amount ELSE 0 END) as delivered_pending'),
+            DB::raw('COUNT(DISTINCT CASE WHEN is_done = 0 THEN order_id END) as pending_orders_count'),
+        ])->first();
+
+        $balance = \App\Models\ShippingCompany::find($shippingCompanyId)?->balance ?? 0;
+
+        return [
+            'pending_to_collect' => (float) ($aggregates->pending_to_collect ?? 0),
+            'total_collected' => (float) ($aggregates->total_collected ?? 0),
+            'pending_orders_count' => (int) ($aggregates->pending_orders_count ?? 0),
+            'shipped_pending' => (float) ($aggregates->shipped_pending ?? 0),
+            'delivered_pending' => (float) ($aggregates->delivered_pending ?? 0),
+            'operational_balance' => (float) $balance,
+        ];
+    }
+
+    /**
+     * نطاق «المطلوب تحصيله»: ذمة تحصيل قائمة (> 0) لم تُسوَّ، لطلب غير ملغى/محصّل،
+     * بصرف النظر عن حالة الشحن (يشمل التحصيل الإلكتروني المسبق من وقت الطلب).
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Query\Builder
+     */
+    private function applyPendingCollectionScope($query, ?string $dateFrom, ?string $dateTo)
+    {
+        $settledStatus = OrderSettlementStatus::Settled->value;
+        $dateExpr = "COALESCE(NULLIF(order_details.shipping_date, '0000-00-00'), orders.order_date)";
+
+        $query->whereRaw('COALESCE(order_details.collection_receivable_amount, 0) > 0.009')
+            ->whereNotIn('orders.order_status', ['ملغي', 'تم التحصيل'])
+            ->where(function ($q) use ($settledStatus) {
+                $q->whereNull('order_details.settlement_status')
+                    ->orWhere('order_details.settlement_status', '!=', $settledStatus);
+            });
+
+        if ($dateFrom) {
+            $query->whereRaw("DATE($dateExpr) >= ?", [$dateFrom]);
+        }
+        if ($dateTo) {
+            $query->whereRaw("DATE($dateExpr) <= ?", [$dateTo]);
+        }
+
+        return $query;
+    }
+
+    private function ordersBaseQuery(int $collectionCompanyId, ?int $linkedShippingCompanyId)
+    {
+        return DB::table('order_details')
+            ->join('orders', 'orders.id', '=', 'order_details.order_id')
+            ->where(function ($q) use ($collectionCompanyId, $linkedShippingCompanyId) {
+                $q->where(function ($q2) use ($collectionCompanyId) {
+                    $q2->where('order_details.collection_provider_type', CollectionProviderType::CollectionCompany->value)
+                        ->where('order_details.collection_provider_id', $collectionCompanyId);
+                });
+                if ($linkedShippingCompanyId) {
+                    $q->orWhere('order_details.collection_company_id', $linkedShippingCompanyId);
+                }
+            });
+    }
+
+    private function ledgerStatement(Request $request, CollectionCompany $company, int $shippingCompanyId, ?string $dateFrom, ?string $dateTo)
+    {
+        $status = $request->query('status');
+        $isDone = $request->query('is_done');
+        $pendingOnly = $request->boolean('pending_only');
+
+        $query = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
+            ->with([
+                'order:id,customer_name,customer_phone_1,net_total,shipping_cost,courier_shipping_cost,order_status,prepaid_amount',
+                'order.order_shipment_number:id,order_id,shipment_number',
+            ])
+            ->orderByDesc('id');
+
+        if ($pendingOnly) {
+            $query->where('is_done', 0)->whereIn('status', ['تم شحن', 'تم التسليم']);
+        }
+
+        if ($dateFrom) {
+            $query->whereDate('shipping_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('shipping_date', '<=', $dateTo);
+        }
+        if ($status) {
+            $query->where('status', $status);
+        }
+        if (! $pendingOnly && $isDone !== null && $isDone !== '') {
+            $query->where('is_done', (int) $isDone);
+        }
+
+        $details = $query->paginate($request->integer('per_page', 50));
+        $details->getCollection()->transform(function ($row) {
+            $row->collectible = ! $row->is_done && in_array($row->status, ['تم شحن', 'تم التسليم'], true);
+            $row->collectible_amount = $row->collectible ? round(abs((float) $row->amount), 2) : 0;
+
+            $outstanding = round(abs((float) $row->amount), 2);
+            [$product, $shipping] = $this->splitProductShipping($row->order, $outstanding);
+            $row->product_value = $product;
+            $row->shipping_value = $shipping;
+
+            return $row;
+        });
+
+        $aggregates = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
+            ->when($dateFrom, fn ($q) => $q->whereDate('shipping_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->whereDate('shipping_date', '<=', $dateTo))
+            ->select([
+                DB::raw('SUM(CASE WHEN is_done = 0 THEN amount ELSE 0 END) as outstanding'),
+                DB::raw('SUM(CASE WHEN is_done = 1 THEN ABS(amount) ELSE 0 END) as settled'),
+                DB::raw('SUM(CASE WHEN status = "تم شحن" AND is_done = 0 THEN amount ELSE 0 END) as shipped_pending'),
+                DB::raw('SUM(CASE WHEN status = "تم التسليم" AND is_done = 0 THEN amount ELSE 0 END) as delivered_pending'),
+                DB::raw('COUNT(DISTINCT order_id) as total_orders'),
+            ])
+            ->first();
+
+        $collectibleOptions = shippingCompanyDetails::where('shipping_company_id', $shippingCompanyId)
+            ->where('is_done', 0)
+            ->whereIn('status', ['تم شحن', 'تم التسليم'])
+            ->when($dateFrom, fn ($q) => $q->whereDate('shipping_date', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->whereDate('shipping_date', '<=', $dateTo))
+            ->with([
+                'order:id,customer_name,net_total,shipping_cost,courier_shipping_cost',
+                'order.order_shipment_number:id,order_id,shipment_number',
+            ])
+            ->orderByDesc('id')
+            ->get()
+            ->unique('order_id')
+            ->values()
+            ->map(function ($row) {
+                $shipmentNumbers = $row->order?->order_shipment_number
+                    ? $row->order->order_shipment_number->pluck('shipment_number')->filter()->values()->all()
+                    : [];
+
+                $outstanding = round(abs((float) $row->amount), 2);
+                [$product, $shipping] = $this->splitProductShipping($row->order, $outstanding);
+
+                return [
+                    'order_id' => (int) $row->order_id,
+                    'amount' => $outstanding,
+                    'product_value' => $product,
+                    'shipping_value' => $shipping,
+                    'customer_name' => $row->order?->customer_name,
+                    'shipment_numbers' => $shipmentNumbers,
+                    'status' => $row->status,
+                ];
+            });
+
+        $aggregates->product_outstanding = round((float) $collectibleOptions->sum('product_value'), 2);
+        $aggregates->shipping_outstanding = round((float) $collectibleOptions->sum('shipping_value'), 2);
+
+        return response()->json([
+            'company' => $company,
+            'source' => 'ledger',
+            'aggregates' => $aggregates,
+            'details' => $details,
+            'collectible_options' => $collectibleOptions,
+        ]);
+    }
+
+    private function ordersStatement(Request $request, CollectionCompany $company, ?string $dateFrom, ?string $dateTo)
+    {
+        $pendingOnly = $request->boolean('pending_only');
+        $settledStatus = OrderSettlementStatus::Settled->value;
+
+        $query = $this->ordersBaseQuery($company->id, $company->linked_shipping_company_id)
+            ->select([
+                'orders.id',
+                'orders.customer_name',
+                'orders.customer_phone_1',
+                'orders.net_total',
+                'orders.shipping_cost',
+                'orders.courier_shipping_cost',
+                'orders.prepaid_amount',
+                'orders.order_status',
+                'orders.order_date',
+                'order_details.shipping_date',
+                'order_details.collection_date',
+                'order_details.collection_receivable_amount',
+                'order_details.shipping_receivable_amount',
+                'order_details.collection_status',
+                'order_details.settlement_status',
+            ]);
+
+        if ($pendingOnly) {
+            $query = $this->applyPendingCollectionScope($query, $dateFrom, $dateTo);
+        } else {
+            if ($dateFrom) {
+                $query->whereDate('order_details.shipping_date', '>=', $dateFrom);
+            }
+            if ($dateTo) {
+                $query->whereDate('order_details.shipping_date', '<=', $dateTo);
+            }
+        }
+
+        if ($request->filled('order_status')) {
+            $query->where('orders.order_status', $request->order_status);
+        }
+
+        $pendingSum = (float) $this->applyPendingCollectionScope(
+            $this->ordersBaseQuery($company->id, $company->linked_shipping_company_id),
+            $dateFrom,
+            $dateTo
+        )->sum(DB::raw('COALESCE(order_details.collection_receivable_amount, 0)'));
+
+        $details = $query->orderByDesc('orders.id')
+            ->paginate($request->integer('per_page', 50));
+
+        $pageOrderIds = $details->getCollection()->pluck('id')->filter()->map(fn ($id) => (int) $id)->values()->all();
+        $pageShipments = $this->shipmentNumbersByOrderIds($pageOrderIds);
+
+        $details->getCollection()->transform(function ($row) use ($settledStatus, $pageShipments) {
+            $amt = round((float) ($row->collection_receivable_amount ?? 0), 2);
+            $isPending = $amt > 0.009
+                && ! in_array($row->order_status, ['ملغي', 'تم التحصيل'], true)
+                && ($row->settlement_status === null || $row->settlement_status !== $settledStatus);
+            $row->collectible = $isPending;
+            $row->collectible_amount = $isPending ? $amt : 0;
+            $row->shipment_numbers = $pageShipments[(int) $row->id] ?? [];
+
+            [$product, $shipping] = $this->splitProductShipping($row, $amt);
+            $row->product_value = $product;
+            $row->shipping_value = $shipping;
+
+            return $row;
+        });
+
+        $optionRows = $this->applyPendingCollectionScope(
+            $this->ordersBaseQuery($company->id, $company->linked_shipping_company_id),
+            $dateFrom,
+            $dateTo
+        )
+            ->select([
+                'orders.id',
+                'orders.customer_name',
+                'orders.net_total',
+                'orders.shipping_cost',
+                'orders.courier_shipping_cost',
+                'orders.order_status',
+                'order_details.collection_receivable_amount',
+            ])
+            ->orderByDesc('orders.id')
+            ->get();
+
+        $optionOrderIds = $optionRows->pluck('id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $optionShipments = $this->shipmentNumbersByOrderIds($optionOrderIds);
+
+        $collectibleOptions = $optionRows
+            ->unique('id')
+            ->values()
+            ->map(function ($row) use ($optionShipments) {
+                $outstanding = round((float) ($row->collection_receivable_amount ?? 0), 2);
+                [$product, $shipping] = $this->splitProductShipping($row, $outstanding);
+
+                return [
+                    'order_id' => (int) $row->id,
+                    'amount' => $outstanding,
+                    'product_value' => $product,
+                    'shipping_value' => $shipping,
+                    'customer_name' => $row->customer_name,
+                    'shipment_numbers' => $optionShipments[(int) $row->id] ?? [],
+                    'status' => $row->order_status,
+                ];
+            });
+
+        return response()->json([
+            'company' => $company,
+            'source' => 'orders',
+            'aggregates' => [
+                'outstanding' => round($pendingSum, 3),
+                'total_orders' => $details->total(),
+                'product_outstanding' => round((float) $collectibleOptions->sum('product_value'), 2),
+                'shipping_outstanding' => round((float) $collectibleOptions->sum('shipping_value'), 2),
+            ],
+            'details' => $details,
+            'collectible_options' => $collectibleOptions,
+        ]);
+    }
+
+    /**
+     * تقسيم المتبقّي على الطلب إلى: قيمة البضاعة (net_total - shipping_cost) وقيمة الشحن (الباقي).
+     *
+     * @param  object|null  $order  كائن يحمل net_total و shipping_cost
+     * @return array{0: float, 1: float}  [product_value, shipping_value]
+     */
+    private function splitProductShipping($order, float $outstanding): array
+    {
+        $outstanding = round(max(0, $outstanding), 2);
+        if ($outstanding <= 0.009 || ! $order) {
+            return [0.0, 0.0];
+        }
+
+        $net = round((float) ($order->net_total ?? 0), 2);
+        $customerShipping = round(max(0, (float) ($order->shipping_cost ?? 0)), 2);
+        $product = round(max(0, $net - $customerShipping), 2);
+        $product = round(min($product, $outstanding), 2);
+        $shipping = round(max(0, $outstanding - $product), 2);
+
+        return [$product, $shipping];
+    }
+
+    /**
+     * @param  array<int>  $orderIds
+     * @return array<int, array<int, string>>
+     */
+    private function shipmentNumbersByOrderIds(array $orderIds): array
+    {
+        if ($orderIds === []) {
+            return [];
+        }
+
+        $grouped = [];
+        OrderShippingNumber::query()
+            ->whereIn('order_id', $orderIds)
+            ->orderByDesc('id')
+            ->get(['order_id', 'shipment_number'])
+            ->each(function ($row) use (&$grouped) {
+                $oid = (int) $row->order_id;
+                $num = trim((string) $row->shipment_number);
+                if ($num === '') {
+                    return;
+                }
+                $grouped[$oid] ??= [];
+                if (! in_array($num, $grouped[$oid], true)) {
+                    $grouped[$oid][] = $num;
+                }
+            });
+
+        return $grouped;
+    }
+}

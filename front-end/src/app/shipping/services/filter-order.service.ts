@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { environment } from 'src/env/env';
@@ -17,6 +17,8 @@ export class FilterOrderService {
   constructor( private http:HttpClient) { }
 
   scrollOrder!:string;
+  page = 0;
+  pageSize = 15;
 
   private_order!:string;
   customer_type!:string;
@@ -28,6 +30,14 @@ export class FilterOrderService {
   status_date!:string;
   order_date!:string;
   delivery_date!:string;
+  need_by_date_from!:string;
+  need_by_date_to!:string;
+  status_date_from!:string;
+  status_date_to!:string;
+  order_date_from!:string;
+  order_date_to!:string;
+  delivery_date_from!:string;
+  delivery_date_to!:string;
   vip!:string;
   shortage!:string;
   paid!:string;
@@ -42,128 +52,112 @@ export class FilterOrderService {
   shipping_method_id!:string;
   shipping_line_id!:string;
   reviewed!:string;
+  shopify!:string;
   company_id!:number;
   category_id!:number | null;
   confimedOrderNotifi!:boolean;
+
+  /** Clears list-order search state so the next visit starts from the default list. */
+  resetFilters(): void {
+    this.private_order = '';
+    this.customer_type = '';
+    this.order_type = '';
+    this.order_status = '';
+    this.collectType = '';
+    this.shipping_company_id = '';
+    this.need_by_date = '';
+    this.status_date = '';
+    this.order_date = '';
+    this.delivery_date = '';
+    this.need_by_date_from = '';
+    this.need_by_date_to = '';
+    this.status_date_from = '';
+    this.status_date_to = '';
+    this.order_date_from = '';
+    this.order_date_to = '';
+    this.delivery_date_from = '';
+    this.delivery_date_to = '';
+    this.vip = '';
+    this.shortage = '';
+    this.paid = '';
+    this.prepaidAmount = '';
+    this.governorate = '';
+    this.city = '';
+    this.customer_name = '';
+    this.customer_phone = '';
+    this.order_number = '';
+    this.shippment_number = '';
+    this.order_source_id = '';
+    this.shipping_method_id = '';
+    this.shipping_line_id = '';
+    this.reviewed = '';
+    this.shopify = '';
+    this.company_id = undefined as unknown as number;
+    this.category_id = null;
+    this.confimedOrderNotifi = false;
+    this.page = 0;
+    this.pageSize = 15;
+  }
 
   getOrders(items:number,page:number){
     return this.http.get(`${environment.Url}/orders?itemsPerPage=${items}&page=${page}`);
   }
 
   filter(items:number,page:number): Observable<any> {
+    let params = new HttpParams()
+      .set('itemsPerPage', String(items))
+      .set('page', String(page));
 
-    // let url = `${environment.Url}/orders/search?`;
-    let url = `${environment.Url}/orders/search?itemsPerPage=${items}&page=${page}&`;
+    const set = (key: string, value: string | number | boolean | null | undefined) => {
+      if (value !== null && value !== undefined && value !== '') {
+        params = params.set(key, String(value));
+      }
+    };
 
+    set('company_id', this.company_id);
+    set('category_id', this.category_id);
+    set('reviewed', this.reviewed);
+    set('shopify', this.shopify);
+    set('customer_type', this.customer_type);
+    set('order_type', this.order_type);
+    set('order_status', this.order_status);
+    set('order_date', this.order_date);
+    set('delivery_date', this.delivery_date);
+    set('order_date_from', this.order_date_from);
+    set('order_date_to', this.order_date_to);
+    set('delivery_date_from', this.delivery_date_from);
+    set('delivery_date_to', this.delivery_date_to);
+    set('need_by_date_from', this.need_by_date_from);
+    set('need_by_date_to', this.need_by_date_to);
+    set('status_date_from', this.status_date_from);
+    set('status_date_to', this.status_date_to);
+    set('collectType', this.collectType);
+    set('private_order', this.private_order);
+    set('shipping_company_id', this.shipping_company_id);
+    set('need_by_date', this.need_by_date);
+    set('status_date', this.status_date);
+    set('vip', this.vip);
+    set('shortage', this.shortage);
+    set('governorate', this.governorate);
+    set('city', this.city);
+    set('customer_name', this.customer_name);
+    set('customer_phone', this.customer_phone);
+    set('order_number', this.order_number);
+    set('shippment_number', this.shippment_number);
+    set('order_source_id', this.order_source_id);
+    set('shipping_method_id', this.shipping_method_id);
+    set('shipping_line_id', this.shipping_line_id);
 
-    if (this.company_id) {
-      url += `company_id=${this.company_id}&`
+    if (this.paid === '1') {
+      params = params.set('paid', this.paid);
     }
-
-    if (this.category_id) {
-      url += `category_id=${this.category_id}&`
+    if (this.prepaidAmount === '1') {
+      params = params.set('prepaidAmount', this.prepaidAmount);
     }
-
-    if (this.reviewed) {
-      url += `reviewed=${this.reviewed}&`
-    }
-
-    if (this.customer_type) {
-      url += `customer_type=${this.customer_type}&`
-    }
-
-    if (this.order_type) {
-      url += `order_type=${this.order_type}&`
-    }
-
-    if (this.order_status) {
-      url += `order_status=${this.order_status}&`
-    }
-
-    if (this.order_date) {
-      url += `order_date=${this.order_date}&`
-    }
-
-    if (this.delivery_date) {
-      url += `delivery_date=${this.delivery_date}&`
-    }
-
-    if (this.collectType) {
-      url += `collectType=${this.collectType}&`
-    }
-
-    if (this.private_order) {
-      url += `private_order=${this.private_order}&`
-    }
-
-    if (this.shipping_company_id) {
-      url += `shipping_company_id=${this.shipping_company_id}&`
-    }
-
-    if (this.need_by_date) {
-      url += `need_by_date=${this.need_by_date}&`
-    }
-
-    if (this.status_date) {
-      url += `status_date=${this.status_date}&`
-    }
-
-    if (this.vip) {
-      url += `vip=${this.vip}&`
-    }
-
-    if (this.shortage) {
-      url += `shortage=${this.shortage}&`
-    }
-
-    if (this.paid && this.paid == '1') {
-      url += `paid=${this.paid}&`
-    }
-
-    if (this.prepaidAmount && this.prepaidAmount == '1') {
-      url += `prepaidAmount=${this.prepaidAmount}&`
-    }
-
-    if (this.governorate) {
-      url += `governorate=${this.governorate}&`
-    }
-
-    if (this.city) {
-      url += `city=${this.city}&`
-    }
-
-    if (this.customer_name) {
-      url += `customer_name=${this.customer_name}&`
-    }
-
-    if (this.customer_phone) {
-      url += `customer_phone=${this.customer_phone}&`
-    }
-
-    if (this.order_number) {
-      url += `order_number=${this.order_number}&`
-    }
-
-    if (this.shippment_number) {
-      url += `shippment_number=${this.shippment_number}&`
-    }
-
-    if (this.order_source_id) {
-      url += `order_source_id=${this.order_source_id}&`
-    }
-
-    if (this.shipping_method_id) {
-      url += `shipping_method_id=${this.shipping_method_id}&`
-    }
-
-    if (this.shipping_line_id) {
-      url += `shipping_line_id=${this.shipping_line_id}&`
-    }
-
     if (this.confimedOrderNotifi) {
-      url += `confimedOrderNotifi=${this.confimedOrderNotifi}&`
+      params = params.set('confimedOrderNotifi', '1');
     }
 
-    return this.http.get(url)
+    return this.http.get(`${environment.Url}/orders/search`, { params });
   }
 }

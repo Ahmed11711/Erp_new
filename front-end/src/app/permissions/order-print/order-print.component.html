@@ -7,51 +7,31 @@
       <div><p class="title header w-50 m-auto"> فواتير الطلبات</p></div>
     </div>
     <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
     </div>
   </div>
 
-
   <div class="container-fluid mt-5">
-
-    <table class="table table-bordered w-25 m-auto text-center">
-      <thead class="bg-dark text-white">
-        <th>رقم الطلب</th>
-      </thead>
-      <tbody>
-        <tr >
-          <td>
-            <ng-autocomplete
-              [data]="products"
-              [searchKeyword]="catword"
-              placeholder=""
-              (selected)='productChange($event)'
-              [itemTemplate]="itemTemplates"
-              [notFoundTemplate]="notFoundTemplate">
-            </ng-autocomplete>
-
-            <ng-template #itemTemplates let-item>
-              <a [innerHTML]="item.category_name"></a>
-            </ng-template>
-
-            <ng-template #notFoundTemplate let-notFound>
-              <div [innerHTML]="notFound"></div>
-            </ng-template>
-          </td>
-        </tr>
-        <tr>
-          <td>
-            <div class="text-center">
-              <button class="btn btn-add">اضافة<i class="fa-solid fa-plus"></i></button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="text-center my-3">
-      <mat-icon>print</mat-icon>
+    <div class="order-print-settings card mx-auto">
+      <div class="card-body">
+        <h2 class="order-print-settings__title">إعدادات طباعة الفاتورة</h2>
+        <label class="order-print-settings__toggle d-flex align-items-center gap-2">
+          <input
+            type="checkbox"
+            [(ngModel)]="showInvoiceDate"
+            (change)="onShowInvoiceDateChange()"
+            [disabled]="saving">
+          <span>Show Invoice Date</span>
+        </label>
+        <p class="order-print-settings__hint mb-0">
+          عند التفعيل، يظهر تاريخ الطلب بجانب رقم الفاتورة في الطباعة. القيمة الافتراضية: مفعّل.
+        </p>
+        <p class="order-print-settings__status mb-0" *ngIf="saveMessage">{{ saveMessage }}</p>
+      </div>
     </div>
 
+    <div class="text-center my-4 order-print-note">
+      <mat-icon>print</mat-icon>
+      <p class="mb-0">لطباعة عدة فواتير، استخدم «Print Selected» من قائمة الطلبات.</p>
+    </div>
   </div>
 </div>

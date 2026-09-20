@@ -38,6 +38,7 @@
         <tr>
           <th>اسم العميل</th>
           <th>نوع العميل</th>
+          <th>الحساب</th>
           <th> عدد الطلبات</th>
           <th>المبلغ المستحق</th>
           <th>المبلغ المقدم</th>
@@ -51,6 +52,12 @@
         <tr *ngFor="let item of data">
           <td>{{ item?.customer_name }}</td>
           <td>فرد</td>
+          <td>
+            <span *ngIf="item?.tree_account" class="badge bg-success" [title]="item.tree_account.name">
+              {{ item.tree_account.code || 'مرتبط' }}
+            </span>
+            <span *ngIf="!item?.tree_account" class="badge bg-warning text-dark">غير مربوط</span>
+          </td>
           <td>{{ item?.orders_count }}</td>
           <td dir="ltr">{{ sumDue(item) | customNumber }}</td>
           <td dir="ltr">{{ item?.total_credit ?? 0 | customNumber }}</td>
@@ -65,13 +72,14 @@
           </td>
         </tr>
         <tr *ngIf="!data?.length">
-          <td colspan="8" class="text-muted py-4">لا توجد بيانات</td>
+          <td colspan="9" class="text-muted py-4">لا توجد بيانات</td>
         </tr>
       </tbody>
 
       <tfoot *ngIf="data?.length">
         <tr>
           <td>الاجمالى</td>
+          <td></td>
           <td></td>
           <td>{{ footOrdersCount() }}</td>
           <td dir="ltr">{{ footSumDue() | customNumber }}</td>

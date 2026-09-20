@@ -72,8 +72,6 @@ class RecipeWorkflowTest extends TestCase
             'category_price'   => $price,
             'unit_price'       => $price,
             'initial_balance'  => $qty,
-            'quantity'         => $qty,
-            'total_price'      => $price * $qty,
             'minimum_quantity' => 0,
             'warehouse'        => 'مخزن مواد خام',
             'production_id'    => $this->production->id,
@@ -81,6 +79,9 @@ class RecipeWorkflowTest extends TestCase
             'stock_id'         => $this->rawStock->id,
             'category_image'   => '',
         ]);
+        $cat->quantity = $qty;
+        $cat->total_price = $price * $qty;
+        $cat->save();
         $this->createdCategoryIds[] = $cat->id;
         return $cat;
     }
@@ -93,7 +94,6 @@ class RecipeWorkflowTest extends TestCase
             'unit_price'       => $sellPrice,
             'sell_total_price' => 0,
             'initial_balance'  => 0,
-            'quantity'         => 0,
             'minimum_quantity' => 0,
             'warehouse'        => 'مخزن منتج تام',
             'production_id'    => $this->production->id,
@@ -101,6 +101,8 @@ class RecipeWorkflowTest extends TestCase
             'stock_id'         => $this->finishedStock->id,
             'category_image'   => '',
         ]);
+        $cat->quantity = 0;
+        $cat->save();
         $this->createdCategoryIds[] = $cat->id;
         return $cat;
     }

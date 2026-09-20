@@ -24,11 +24,34 @@ export class CompaniesService {
     return this.http.get(`${environment.Url}/companies/search?itemsPerPage=${items}&page=${page}`,{params:search});
   }
 
+  /** بيانات شركة واحدة (لتهيئة عرض سعر من عملاء الشركات). */
+  getCompany(id: number | string) {
+    return this.http.get<any>(`${environment.Url}/companies/search`, {
+      params: { itemsPerPage: 1, page: 1, id: String(id) },
+    });
+  }
+
   companyBalanceDetails(id:any , items:number,page:number){
     return this.http.get(`${environment.Url}/companies/${id}?itemsPerPage=${items}&page=${page}`);
   }
 
   companyCollect(id:number , formData:any){
     return this.http.post(`${environment.Url}/companies/companycollect/${id}` ,formData);
+  }
+
+  unlinkedSummary(){
+    return this.http.get(`${environment.Url}/companies/unlinked-summary`);
+  }
+
+  linkUnlinked(){
+    return this.http.post(`${environment.Url}/companies/link-unlinked`, {});
+  }
+
+  linkAccount(id:number){
+    return this.http.post(`${environment.Url}/companies/${id}/link-account`, {});
+  }
+
+  updateCompany(id:number, formData:any){
+    return this.http.put(`${environment.Url}/companies/${id}`, formData);
   }
 }

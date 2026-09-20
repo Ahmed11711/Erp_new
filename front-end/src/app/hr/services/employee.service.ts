@@ -22,6 +22,12 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/employees/edit/${id}`,formData)
   }
 
+  updatePayableAccount(id: number, payableTreeAccountId: number | null): Observable<any> {
+    return this.http.patch<any>(`${environment.Url}/employees/${id}/payable-account`, {
+      payable_tree_account_id: payableTreeAccountId,
+    });
+  }
+
 
   getById(id:any){
     return this.http.get<any>(`${environment.Url}/employees/${id}`);
@@ -64,6 +70,11 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/employeemerit`,formData)
   }
 
+  deleteMerit(id: number): Observable<any>
+  {
+    return this.http.delete<any>(`${environment.Url}/employeemerit/${id}`)
+  }
+
   employeeAbsenseStatus(formData:any):Observable<any>
   {
     return this.http.post<any>(`${environment.Url}/employee/absencestatus`,formData)
@@ -87,6 +98,10 @@ export class EmployeeService {
   addSalaryPayment(formData:any):Observable<any>
   {
     return this.http.post<any>(`${environment.Url}/employeemonthpaid`,formData)
+  }
+
+  bulkSalaryPayment(formData: { month: number; year: number; source_type: string; source_id: number; payments: { employee_id: number; amount: number }[] }): Observable<any> {
+    return this.http.post<any>(`${environment.Url}/employeemonthpaid/bulk`, formData);
   }
 
   addExtraHours(formData:any):Observable<any>
@@ -117,6 +132,10 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/empHoursPermission`,data);
   }
 
+  revertAbsenceDayPermission(data:any):Observable<any>{
+    return this.http.post<any>(`${environment.Url}/empHoursPermission/revert`,data);
+  }
+
   empHoursPermisionAll(data:any):Observable<any>{
     return this.http.post<any>(`${environment.Url}/empHoursPermissionall`,data);
   }
@@ -125,8 +144,15 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/updatefingerprintsheet`,data);
   }
 
-  reviewMonth(month , id):Observable<any>{
-    return this.http.get<any>(`${environment.Url}/reviewMonth?month=${month}&employee_id=${id}`);
+  reviewMonth(month, id, dateFrom?: string, dateTo?: string):Observable<any>{
+    let url = `${environment.Url}/reviewMonth?month=${month}&employee_id=${id}`;
+    if (dateFrom) {
+      url += `&date_from=${dateFrom}`;
+    }
+    if (dateTo) {
+      url += `&date_to=${dateTo}`;
+    }
+    return this.http.get<any>(url);
   }
 
   addCheckOut(id:number , data:any):Observable<any>{
@@ -137,12 +163,45 @@ export class EmployeeService {
     return this.http.post<any>(`${environment.Url}/editCheckInOrOut/${id}`,data);
   }
 
+  registerAttendance(data:any):Observable<any>{
+    return this.http.post<any>(`${environment.Url}/registerAttendance`,data);
+  }
+
   changeCheckIn(id:number , data:any):Observable<any>{
     return this.http.post<any>(`${environment.Url}/changeCheckIn/${id}`,data);
+  }
+
+  getFingerPrintSheetLogs(id:number):Observable<any>{
+    return this.http.get<any>(`${environment.Url}/fingerprint-sheet-logs/${id}`);
   }
 
   addFixedChangedSalary(formData:any):Observable<any>
   {
     return this.http.post<any>(`${environment.Url}/addFixedChangedSalary`,formData)
+  }
+
+  previewPayrollAccrualImport(file: File, month: number, year: number): Observable<any> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('month', String(month));
+    fd.append('year', String(year));
+    return this.http.post<any>(`${environment.Url}/payroll/accrual-import/preview`, fd);
+  }
+
+  applyPayrollAccrualImport(month: number, year: number, lines: {
+    employee_id: number;
+    amount: number;
+    extra_day_value?: number;
+    overtime_value?: number;
+    rewards?: number;
+    allowances?: number;
+    deductions?: number;
+    advance?: number;
+  }[]): Observable<any> {
+    return this.http.post<any>(`${environment.Url}/payroll/accrual-import/apply`, {
+      month,
+      year,
+      lines,
+    });
   }
 }

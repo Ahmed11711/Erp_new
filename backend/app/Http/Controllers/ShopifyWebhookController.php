@@ -12,6 +12,19 @@ class ShopifyWebhookController extends Controller
 {
     public function __construct(private ShopifyWebhookVerifier $verifier) {}
 
+    /**
+     * فحص أن الرابط يعمل من المتصفح أو من Monito قبل تسجيل الويبهوك في Shopify.
+     * الويبهوك الفعلي: POST فقط (مع ترويسات Shopify و HMAC).
+     */
+    public function ping()
+    {
+        return response()->json([
+            'ok' => true,
+            'message' => 'Shopify webhook: register POST to this path in Shopify Admin / Partner.',
+            'post_url' => url('/api/shopify/webhook'),
+        ]);
+    }
+
     public function handle(Request $request)
     {
         $raw = $request->getContent();

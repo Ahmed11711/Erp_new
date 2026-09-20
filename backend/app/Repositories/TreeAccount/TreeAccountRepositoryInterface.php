@@ -7,4 +7,6 @@ use App\Repositories\BaseRepository\BaseRepositoryInterface;
 interface TreeAccountRepositoryInterface extends BaseRepositoryInterface
 {
         public function getAccounts($request);
+
+        public function getNestedTree();
 }

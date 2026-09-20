@@ -21,3 +21,28 @@
 ::ng-deep .mat-mdc-paginator-container{
   justify-content: center !important;
 }
+
+.company-total-bar{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0 auto;
+  padding: 12px 28px;
+  width: fit-content;
+  border: 1px solid #d6e4ff;
+  border-radius: 10px;
+  background: #f3f8ff;
+}
+
+.company-total-bar__label{
+  font-weight: 700;
+  color: #1f2d3d;
+  font-size: 1.05rem;
+}
+
+.company-total-bar__value{
+  font-weight: 800;
+  font-size: 1.3rem;
+  color: #0d6efd;
+}

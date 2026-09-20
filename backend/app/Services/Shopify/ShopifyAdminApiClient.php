@@ -80,11 +80,31 @@ class ShopifyAdminApiClient
      */
     private function http()
     {
+        $timeout = max(30, (int) config('services.shopify.http_timeout', 120));
+        $connectTimeout = max(15, (int) config('services.shopify.connect_timeout', 30));
+
         return Http::withHeaders([
             'X-Shopify-Access-Token' => $this->accessToken,
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
-        ])->timeout((int) config('services.shopify.http_timeout', 120));
+        ])
+            ->timeout($timeout)
+            ->connectTimeout($connectTimeout)
+            ->retry(
+                3,
+                1500,
+                function ($exception) {
+                    // أعد المحاولة فقط عند فشل الشبكة/DNS وليس على 401/403 من Shopify.
+                    return $exception instanceof \Illuminate\Http\Client\ConnectionException;
+                },
+                false
+            )
+            ->withOptions([
+                // تجنّب تعليق DNS/الاتصال على IPv6 في بعض شبكات Windows.
+                'curl' => [
+                    \CURLOPT_IPRESOLVE => \CURL_IPRESOLVE_V4,
+                ],
+            ]);
     }
 
     public static function extractNextPageUrl(?string $linkHeader): ?string
@@ -98,5 +118,39 @@ class ShopifyAdminApiClient
         }
 
         return null;
+    }
+
+    /**
+     * رسالة خطأ للمطوّر/المشرف مع تلميحات عربية شائعة لـ 401/403.
+     */
+    public static function formatAdminApiFailureMessage(Response $response, string $arabicPrefix): string
+    {
+        $status = $response->status();
+        $json = $response->json();
+        $detail = '';
+        if (is_array($json)) {
+            $errs = $json['errors'] ?? null;
+            if (is_string($errs)) {
+                $detail = trim($errs);
+            } elseif (is_array($errs)) {
+                $detail = json_encode($errs, JSON_UNESCAPED_UNICODE);
+            }
+        }
+        if ($detail === '') {
+            $body = (string) $response->body();
+            $detail = strlen($body) > 500 ? substr($body, 0, 500).'…' : $body;
+        }
+
+        $detailLower = strtolower($detail);
+        $apiAccessDisabled = str_contains($detailLower, 'api access has been disabled');
+
+        $hint = match (true) {
+            $apiAccessDisabled => ' تم تعطيل وصول Admin API لهذا التطبيق/التوكن في Shopify. أنشئ Custom app جديداً (أو أعد تفعيل التطبيق): Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes (read_products, write_products إن لزم، read_orders, …) → Install app → انسخ Admin API access token إلى SHOPIFY_ADMIN_ACCESS_TOKEN في .env ثم نفّذ php artisan config:clear.',
+            $status === 403 => ' غالباً: نطاقات Admin API للتطبيق لا تسمح بهذا الطلب (مثلاً read_products للمنتجات، read_orders و read_all_orders للطلبات القديمة)، أو أُضيفت الصلاحية بعد إنشاء التوكن؛ من Shopify: الإعدادات ← التطبيقات والقنوات ← تطوير التطبيقات ← تطبيقك ← تكامل Admin API ← فعّل الصلاحيات ثم انسخ **Admin API access token** جديداً وحدّث SHOPIFY_ADMIN_ACCESS_TOKEN في .env ثم php artisan config:clear.',
+            $status === 401 => ' التوكن غير مقبول. تحقق من SHOPIFY_ADMIN_ACCESS_TOKEN وأن المتجر في SHOPIFY_SHOP_DOMAIN مطابق (مثل your-store.myshopify.com).',
+            default => '',
+        };
+
+        return $arabicPrefix.' (HTTP '.$status.').'.$hint.' رد Shopify: '.$detail;
     }
 }

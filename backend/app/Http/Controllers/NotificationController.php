@@ -52,25 +52,34 @@ class NotificationController extends Controller
     {
 
         $notifications = Notification::where('send_to', auth()->id())
-                ->with('sender')->orderBy('id', 'desc')->limit(200)->get();
+                ->with('sender:id,name')
+                ->orderBy('id', 'desc')
+                ->limit(200)
+                ->get();
 
+        $confirmedOrdersCount = 0;
+        $department = (string) (auth()->user()->department ?? '');
+        if (in_array($department, ['Admin', 'Shipping Management', 'Operation Management'], true)) {
+            $confirmedOrdersCount = (int) Cache::remember('late_confirmed_orders_count', 120, function () {
+                $cutoff = Carbon::now()->subDays(3)->toDateTimeString();
 
-        $confirmedOrders = collect();
-            if (auth()->user()->department == 'Admin' || auth()->user()->department == 'Shipping Management' || auth()->user()->department == 'Operation Management') {
-                $confirmedOrders = Order::where('order_status', 'طلب مؤكد')
-                    ->whereHas('order_details', function ($query) {
-                        $query->where('status_date', '<', Carbon::now()->subDays(3));
+                return Order::query()
+                    ->where('order_status', 'طلب مؤكد')
+                    ->whereExists(function ($query) use ($cutoff) {
+                        $query->selectRaw('1')
+                            ->from('order_details')
+                            ->whereColumn('order_details.order_id', 'orders.id')
+                            ->where('order_details.status_date', '<', $cutoff);
                     })
-                    ->get();
-            }
+                    ->count();
+            });
+        }
 
-        $response = [
+        return response()->json([
             'notifications' => $notifications,
-            'confirmedOrders' => $confirmedOrders,
-            'confirmedOrdersCount' => $confirmedOrders->count(),
-        ];
-
-        return response()->json($response, 200);
+            'confirmedOrders' => [],
+            'confirmedOrdersCount' => $confirmedOrdersCount,
+        ], 200);
     }
 
     public function readNotify($id)
@@ -103,22 +112,31 @@ class NotificationController extends Controller
     public function recievedNotifiy(Request $request){
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
-        $search = Notification::query()->where('send_to', auth()->id())->with('sender');
-        if($request->has('type')){
+        $search = Notification::query()->where('send_to', auth()->id())->with([
+            'sender:id,name',
+            'order:id,order_status,customer_name',
+        ]);
+        if($request->filled('type')){
             $search->where('type',$request->type);
         }
-        if($request->has('send_from')){
+        if($request->filled('send_from')){
             $search->where('send_from',$request->send_from);
         }
-        if($request->has('is_read')){
+        if($request->filled('is_read')){
             $search->where('is_read',$request->is_read);
         }
-        if($request->has('order_id')){
-            $search->where('order_id','like' , '%'.$request->order_id.'%');
+        if($request->filled('order_id')){
+            $term = $request->order_id;
+            $search->where(function ($q) use ($term) {
+                $q->where('order_id', 'like', '%'.$term.'%')
+                    ->orWhere('ref', 'like', '%'.$term.'%');
+            });
         }
-        if($request->has('review_status_user')){
+        if($request->filled('review_status_user')){
             $search->where('review_status',$request->review_status_user);
-            $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            if(!$request->filled('type')){
+                $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            }
         }
 
         $search = $search->orderBy('id' , 'desc')->paginate($itemsPerPage);
@@ -130,29 +148,35 @@ class NotificationController extends Controller
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
         $search = Notification::query()->where('send_from', auth()->id())->with('receiver');
-        if($request->has('type')){
+        if($request->filled('type')){
             $search->where('type',$request->type);
         }
-        if($request->has('order_id')){
-            $search->where('order_id','like' , '%'.$request->order_id.'%');
+        if($request->filled('order_id')){
+            $term = $request->order_id;
+            $search->where(function ($q) use ($term) {
+                $q->where('order_id', 'like', '%'.$term.'%')
+                    ->orWhere('ref', 'like', '%'.$term.'%');
+            });
         }
-        if($request->has('send_to')){
+        if($request->filled('send_to')){
             $search->where('send_to',$request->send_to);
         }
-        if($request->has('is_read')){
+        if($request->filled('is_read')){
             $search->where('is_read',$request->is_read);
         }
 
-        if($request->has('review_status_admin')){
+        if($request->filled('review_status_admin')){
             $search->where('review_status',$request->review_status_admin);
-            // $search->where('type','مراجعة');
-            $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            if(!$request->filled('type')){
+                $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            }
         }
 
-        if($request->has('review_status_user')){
+        if($request->filled('review_status_user')){
             $search->where('review_status',$request->review_status_user);
-            // $search->where('type','مراجعة');
-            $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            if(!$request->filled('type')){
+                $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            }
         }
 
         $search = $search->orderBy('id' , 'desc')->paginate($itemsPerPage);
@@ -163,30 +187,38 @@ class NotificationController extends Controller
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
         $search = Notification::query()->with(['receiver','sender']);
-        if($request->has('type')){
+        if($request->filled('type')){
             $search->where('type',$request->type);
         }
-        if($request->has('send_to')){
+        if($request->filled('send_to')){
             $search->where('send_to',$request->send_to);
         }
-        if($request->has('order_id')){
-            $search->where('order_id','like' , '%'.$request->order_id.'%');
+        if($request->filled('order_id')){
+            $term = $request->order_id;
+            $search->where(function ($q) use ($term) {
+                $q->where('order_id', 'like', '%'.$term.'%')
+                    ->orWhere('ref', 'like', '%'.$term.'%');
+            });
         }
-        if($request->has('send_from')){
+        if($request->filled('send_from')){
             $search->where('send_from',$request->send_from);
         }
-        if($request->has('is_read')){
+        if($request->filled('is_read')){
             $search->where('is_read',$request->is_read);
         }
 
-        if($request->has('review_status_admin')){
+        if($request->filled('review_status_admin')){
             $search->where('review_status',$request->review_status_admin);
-            $search->where('type','مراجعة');
+            if(!$request->filled('type')){
+                $search->where('type','مراجعة');
+            }
         }
 
-        if($request->has('review_status_user')){
+        if($request->filled('review_status_user')){
             $search->where('review_status',$request->review_status_user);
-            $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            if(!$request->filled('type')){
+                $search->whereIn('type',['مراجعة','مراجعة مؤقتة']);
+            }
         }
 
         $search = $search->orderBy('id' , 'desc')->paginate($itemsPerPage);

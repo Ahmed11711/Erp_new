@@ -2,22 +2,81 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ProductType;
 use App\Models\Category;
 use App\Models\ConfirmedManfucture;
+use App\Models\Item;
 use App\Models\Manufacture;
 use App\Models\ManufactureProduct;
+use App\Models\Recipe;
+use App\Models\Stock;
 use App\Models\TreeAccount;
-use App\Models\AccountEntry;
-use App\Models\DailyEntry;
-use App\Models\DailyEntryItem;
-use App\Services\Accounting\AccountingService;
+use App\Services\Accounting\LedgerJournalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\CategoryInventoryCostService;
+use App\Enums\InventoryMovementType;
+use App\Services\Inventory\InventoryMovementLedgerService;
+use App\Exceptions\Manufacturing\ProductAlreadyCompletedException;
+use App\Services\Manufacturing\ItemsWithoutRecipeReportService;
+use App\Services\Manufacturing\ManufactureRecipeSyncService;
+use App\Services\Manufacturing\ManufacturingConsumptionPlannerService;
+use App\Services\Manufacturing\ManufacturingConsumptionResolver;
+use App\Services\Manufacturing\ManufacturingOrderReversalService;
+use App\Services\Manufacturing\ManufacturingRecipeFromConsumptionService;
+use App\Services\Manufacturing\WipToFinishedPromotionService;
 
 class ManufactureController extends Controller
 {
+    public function __construct(
+        private ManufactureRecipeSyncService $manufactureRecipeSync,
+        private ItemsWithoutRecipeReportService $itemsWithoutRecipeReport,
+    ) {
+    }
+
+    /**
+     * تقرير الأصناف (منتج تام / تحت التشغيل) التي لا تملك وصفة تصنيع.
+     */
+    public function itemsWithoutRecipes(Request $request)
+    {
+        $request->validate([
+            'warehouse' => 'nullable|string|max:255',
+            'product_type' => 'nullable|string|in:finished,semi_finished',
+            'search' => 'nullable|string|max:200',
+        ]);
+
+        $result = $this->itemsWithoutRecipeReport->report(
+            $request->input('warehouse'),
+            $request->input('product_type'),
+            $request->filled('search') ? trim((string) $request->search) : null,
+        );
+
+        return response()->json($result, 200);
+    }
+
+    /**
+     * صنف واحد لنموذج إضافة الوصفة (بدون الاعتماد على صلاحيات categories).
+     */
+    public function recipeProduct(int $id)
+    {
+        $item = Item::query()->find($id);
+        if (! $item) {
+            return response()->json(['message' => 'الصنف غير موجود.'], 404);
+        }
+
+        return response()->json([
+            'id' => (int) $item->id,
+            'category_name' => (string) ($item->category_name ?? ''),
+            'item_code' => $item->item_code,
+            'warehouse' => (string) ($item->warehouse ?? ''),
+            'color' => $item->color,
+            'category_price' => $item->category_price,
+            'unit_price' => $item->unit_price,
+            'product_type' => $item->product_type,
+        ], 200);
+    }
+
     public function index()
     {
         $manufactures = Manufacture::with('product')->get();
@@ -33,10 +92,16 @@ class ManufactureController extends Controller
             'products.*.id' => 'required|integer|exists:categories,id',
             'products.*.quantity' => 'required|numeric|min:0.000001',
             'products.*.total_price' => 'required|numeric',
+            'extra_costs' => ['nullable', 'array'],
+            'extra_costs.*.name' => ['required', 'string', 'max:255'],
+            'extra_costs.*.type' => ['required', 'in:fixed,percentage'],
+            'extra_costs.*.value' => ['required', 'numeric', 'min:0'],
         ]);
 
         $productId = (int) $request->product_id;
-        if (Manufacture::where('product_id', $productId)->exists()) {
+        $outputItem = Item::query()->findOrFail($productId);
+        $anchorId = ManufacturingConsumptionResolver::outputAnchorId($outputItem);
+        if (Manufacture::where('product_id', $anchorId)->exists()) {
             return response()->json([
                 'message' => 'يوجد بالفعل وصفة لهذا المنتج. لا يمكن تسجيل وصفة مكرّرة لنفس الصنف.',
             ], 422);
@@ -49,39 +114,229 @@ class ManufactureController extends Controller
             ], 422);
         }
 
-        $manfuture = Manufacture::create([
-            'product_id' => $productId,
-            'total' => $request->total
-        ]);
-        foreach ($request->products as $product) {
-            ManufactureProduct::create([
-                'manufacture_id' => $manfuture->id,
-                'product_id' => $product['id'],
-                'quantity' => $product['quantity'],
-                'total_price' => $product['total_price']
-            ]);
+        $extraCosts = $request->input('extra_costs', []);
+        if (! is_array($extraCosts)) {
+            $extraCosts = [];
         }
-        return response()->json('success', 201);
+
+        try {
+            return DB::transaction(function () use ($request, $anchorId, $extraCosts) {
+                $manfuture = Manufacture::create([
+                    'product_id' => $anchorId,
+                    'total' => $request->total,
+                ]);
+                foreach ($request->products as $product) {
+                    ManufactureProduct::create([
+                        'manufacture_id' => $manfuture->id,
+                        'product_id' => $product['id'],
+                        'quantity' => $product['quantity'],
+                        'total_price' => $product['total_price'],
+                    ]);
+                }
+
+                $this->manufactureRecipeSync->sync($anchorId, $request->products, $extraCosts);
+
+                return response()->json('success', 201);
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function manfucture_by_warhouse(Request $request)
     {
         $request->validate([
-            'warehouse' => 'required'
+            'warehouse' => 'required|string',
+            'scope' => 'nullable|string|in:manufacture_only,all_categories',
         ]);
-        $manufactures = Manufacture::with('product')->get();
-        $p = [];
-        foreach ($manufactures as $manufacture) {
-            if ($manufacture->product->warehouse == $request->warehouse) {
-                $data = (object) [
-                    'id' => $manufacture->product->id,
-                    'category_name' => $manufacture->product->category_name,
-                    'cost' => $manufacture->total,
+        $warehouse = (string) $request->input('warehouse');
+        $scope = (string) $request->input('scope', 'manufacture_only');
+
+        /**
+         * manufacture_only: أصناف لها وصفة تصنيع (Recipe و/أو Manufacture) في هذا المخزن.
+         * all_categories: كل الأصناف في المخزن — مطلوب لدمج WIP→تام نحو صنف تام أُنشئ من ترقية/تجزئة دون Manufacture يشير إليه.
+         */
+        if ($scope === 'all_categories') {
+            $p = [];
+            $rows = Category::query()
+                ->where('warehouse', $warehouse)
+                ->whereNull('parent_item_id')
+                ->orderBy('category_name')
+                ->get(['id', 'category_name', 'quantity', 'category_price', 'unit_price']);
+            foreach ($rows as $row) {
+                $p[] = (object) [
+                    'id' => $row->id,
+                    'category_name' => $row->category_name,
+                    'cost' => (float) ($row->unit_price ?: $row->category_price ?: 0),
+                    'quantity' => $row->quantity,
                 ];
-                array_push($p, $data);
             }
+
+            return response()->json($p, 200);
         }
+
+        $p = [];
+        $seenIds = [];
+        $warehouseTrimmed = trim($warehouse);
+
+        // Include any item (base or color variant) that has its own Manufacture row.
+        $filteredManufactures = Manufacture::with('product')
+            ->get()
+            ->filter(function ($manufacture) use ($warehouseTrimmed) {
+                return $manufacture->product
+                    && trim((string) $manufacture->product->warehouse) === $warehouseTrimmed;
+            });
+
+        foreach ($filteredManufactures as $manufacture) {
+            $base = $manufacture->product;
+            if (! $base) {
+                continue;
+            }
+
+            $id = (int) $base->id;
+            if (isset($seenIds[$id])) {
+                continue;
+            }
+            $seenIds[$id] = true;
+
+            $p[] = (object) [
+                'id' => $id,
+                'category_name' => $base->category_name,
+                'cost' => (float) $manufacture->total,
+                'quantity' => $base->quantity,
+            ];
+        }
+
+        // Include products that have a Recipe (including color variants with their own BOM).
+        $recipeOutputs = Recipe::query()
+            ->with(['outputItem', 'ingredients'])
+            ->whereNotNull('output_item_id')
+            ->get();
+
+        foreach ($recipeOutputs as $recipe) {
+            $base = $recipe->outputItem;
+            if (! $base) {
+                continue;
+            }
+            if (trim((string) $base->warehouse) !== $warehouseTrimmed) {
+                continue;
+            }
+
+            $id = (int) $base->id;
+            if (isset($seenIds[$id])) {
+                continue;
+            }
+            $seenIds[$id] = true;
+
+            $cost = 0.0;
+            foreach ($recipe->ingredients as $ingredient) {
+                $qty = (float) ($ingredient->quantity ?? 0);
+                $unitCost = (float) ($ingredient->unit_cost ?? 0);
+                if ($qty > 0) {
+                    $cost += $qty * $unitCost;
+                }
+            }
+
+            $p[] = (object) [
+                'id' => $id,
+                'category_name' => $base->category_name,
+                'cost' => round($cost, 2),
+                'quantity' => $base->quantity,
+            ];
+        }
+
+        usort($p, fn ($a, $b) => strcmp((string) $a->category_name, (string) $b->category_name));
+
         return response()->json($p, 200);
+    }
+
+    public function previewConsumption(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|integer|exists:categories,id',
+            'quantity' => 'required|numeric|gt:0',
+            'status' => 'nullable|string',
+            'wip_keep_under_processing' => 'nullable|boolean',
+            'consumption_lines' => 'nullable|array',
+            'consumption_lines.*.bom_item_id' => 'required_with:consumption_lines|integer',
+            'consumption_lines.*.resolved_category_id' => 'required_with:consumption_lines|integer|exists:categories,id',
+            'consumption_lines.*.quantity' => 'required_with:consumption_lines|numeric|min:0',
+        ]);
+
+        $productItem = Item::query()->findOrFail((int) $request->product_id);
+        $status = (string) $request->input('status', 'تم الانتهاء');
+        $stayWipOnly = $request->boolean('wip_keep_under_processing');
+
+        /** @var ManufacturingConsumptionPlannerService $planner */
+        $planner = app(ManufacturingConsumptionPlannerService::class);
+
+        if (! $planner->shouldConsumeRawMaterials($productItem, $status, $stayWipOnly)) {
+            return response()->json([
+                'applies' => false,
+                'lines' => [],
+                'total_cost' => 0,
+                'all_sufficient' => true,
+                'message' => 'لا يُستهلك مخزون خام في هذه الحالة (يُخصم عند الإتمام أو لا ينطبق على هذا المسار).',
+            ]);
+        }
+
+        try {
+            $preview = $planner->preview(
+                (int) $request->product_id,
+                (float) $request->quantity,
+                $request->input('consumption_lines')
+            );
+
+            return response()->json($preview);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * تحديث الوصفة (Recipe + Manufacture) من مواد الاستهلاك الحالية في شاشة التأكيد.
+     */
+    public function updateRecipeFromConsumption(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|integer|exists:categories,id',
+            'quantity' => 'required|numeric|gt:0',
+            'consumption_lines' => 'required|array|min:1',
+            'consumption_lines.*.bom_item_id' => 'required|integer',
+            'consumption_lines.*.resolved_category_id' => 'required|integer|exists:categories,id',
+            'consumption_lines.*.quantity' => 'required|numeric|min:0',
+        ]);
+
+        /** @var ManufacturingConsumptionPlannerService $planner */
+        $planner = app(ManufacturingConsumptionPlannerService::class);
+        /** @var ManufacturingRecipeFromConsumptionService $recipeUpdater */
+        $recipeUpdater = app(ManufacturingRecipeFromConsumptionService::class);
+
+        try {
+            $lines = $planner->resolveForExecution(
+                (int) $request->product_id,
+                (float) $request->quantity,
+                $request->input('consumption_lines')
+            );
+
+            DB::transaction(function () use ($recipeUpdater, $request, $lines) {
+                $recipeUpdater->updateFromConsumptionLines(
+                    (int) $request->product_id,
+                    (float) $request->quantity,
+                    $lines
+                );
+            });
+
+            return response()->json([
+                'message' => 'تم تحديث الوصفة بنجاح.',
+            ]);
+        } catch (ProductAlreadyCompletedException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     public function confirm(Request $request)
@@ -91,11 +346,69 @@ class ManufactureController extends Controller
             'status' => 'required',
             'total' => 'required',
             'date' => 'required',
-            'product_id' => 'required'
+            'product_id' => 'required|integer|exists:categories,id',
+            'wip_mode' => 'nullable|string|in:auto,full_same,partial_new,partial_merge',
+            'wip_target_product_id' => 'nullable|integer|exists:categories,id',
+            'wip_keep_under_processing' => 'nullable|boolean',
+            'consumption_lines' => 'nullable|array',
+            'consumption_lines.*.bom_item_id' => 'required_with:consumption_lines|integer',
+            'consumption_lines.*.resolved_category_id' => 'required_with:consumption_lines|integer|exists:categories,id',
+            'consumption_lines.*.quantity' => 'required_with:consumption_lines|numeric|min:0',
+            'update_recipe' => 'nullable|boolean',
         ]);
 
         DB::beginTransaction();
+        $wipResult = null;
         try {
+            $productItem = Item::query()->findOrFail((int) $request->product_id);
+            $isWipSemiFinished = $productItem->resolvedProductType() === ProductType::SemiFinished;
+            $stayWipOnly = $request->boolean('wip_keep_under_processing');
+
+            $needsManufactureDefinition = ! $isWipSemiFinished
+                || ($isWipSemiFinished && $stayWipOnly && $request->status === 'تم الانتهاء');
+
+            $manufactureAnchorProductId = ManufacturingConsumptionResolver::outputAnchorId($productItem);
+            $selectedProductId = (int) $request->product_id;
+
+            if ($needsManufactureDefinition) {
+                $manfuctureExists = Manufacture::where('product_id', $selectedProductId)->exists()
+                    || Manufacture::where('product_id', $manufactureAnchorProductId)->exists();
+                if (! $manfuctureExists) {
+                    $manfuctureExists = $this->manufactureRecipeSync->ensureLegacyManufactureForProduct($selectedProductId)
+                        || ($manufactureAnchorProductId !== $selectedProductId
+                            && $this->manufactureRecipeSync->ensureLegacyManufactureForProduct($manufactureAnchorProductId));
+                }
+                if (! $manfuctureExists) {
+                    DB::rollBack();
+
+                    return response()->json(['message' => 'لا توجد وصفة تصنيع لهذا الصنف في النظام.'], 422);
+                }
+            }
+
+            $consumptionLines = null;
+            $runRawConsumption = ! $isWipSemiFinished
+                || ($isWipSemiFinished && $stayWipOnly && $request->status === 'تم الانتهاء');
+
+            if ($runRawConsumption && $request->filled('consumption_lines')) {
+                /** @var ManufacturingConsumptionPlannerService $planner */
+                $planner = app(ManufacturingConsumptionPlannerService::class);
+                $consumptionLines = $planner->resolveForExecution(
+                    (int) $request->product_id,
+                    (float) $request->quantity,
+                    $request->input('consumption_lines')
+                );
+
+                if ($request->boolean('update_recipe')) {
+                    /** @var ManufacturingRecipeFromConsumptionService $recipeUpdater */
+                    $recipeUpdater = app(ManufacturingRecipeFromConsumptionService::class);
+                    $recipeUpdater->updateFromConsumptionLines(
+                        (int) $request->product_id,
+                        (float) $request->quantity,
+                        $consumptionLines
+                    );
+                }
+            }
+
             $confirmed = ConfirmedManfucture::create([
                 'quantity' => $request->quantity,
                 'status' => $request->status,
@@ -104,93 +417,182 @@ class ManufactureController extends Controller
                 'user_id' => auth()->user()->id,
                 'product_id' => $request->product_id
             ]);
-            $manfucture = Manufacture::where('product_id', $confirmed->product_id)->first();
-            $manproducts = ManufactureProduct::where('manufacture_id', $manfucture->id)->get();
 
             $totalRawMaterialCost = 0;
+            $completeDirectToFinished = ! $isWipSemiFinished && $request->status === 'تم الانتهاء';
 
-            foreach ($manproducts as $manproduct) {
-                $category = Category::find($manproduct->product_id);
-                $neededQuantity = $manproduct->quantity * $request->quantity;
-                $warehouseRatings = DB::table('warehouse_ratings')->where('category_id', $manproduct->product_id)->get();
-                $total_price = $category->total_price;
-
-                foreach ($warehouseRatings as $product) {
-                    if ($product->quantity == 0) {
-                        continue;
-                    }
-                    $availableQuantity = $product->quantity - $neededQuantity;
-                    if ($availableQuantity <= 0) {
-                        $neededQuantity = $neededQuantity - $product->quantity;
-                        DB::table('warehouse_ratings')->where('id', $product->id)->update(['quantity' => 0]);
-                        $total_price -= $product->quantity * $product->price;
-                    } else {
-                        $total_price -= $neededQuantity * $product->price;
-                        DB::table('warehouse_ratings')->where('id', $product->id)->increment('quantity', -$neededQuantity);
-                        $category->total_price = $total_price;
-                        break;
-                    }
+            if ($runRawConsumption) {
+                /** @var ManufacturingConsumptionPlannerService $planner */
+                $planner = app(ManufacturingConsumptionPlannerService::class);
+                if ($consumptionLines === null) {
+                    $consumptionLines = $planner->resolveForExecution(
+                        (int) $request->product_id,
+                        (float) $confirmed->quantity,
+                        $request->input('consumption_lines')
+                    );
                 }
 
-                $category->total_price = $total_price;
-
-                $consumedQty = $manproduct['quantity'] * $confirmed['quantity'];
-                $unitCost = ($manproduct['quantity'] ?? 0) > 0 ? $manproduct['total_price'] / $manproduct['quantity'] : 0;
-                $lineCost = $unitCost * $consumedQty;
-                $totalRawMaterialCost += $lineCost;
-
-                DB::table('categories_balance')->insert([
-                    'invoice_number' => $confirmed->id,
-                    'category_id' => $category->id,
-                    'type' => 'تصنيع',
-                    'quantity' => $consumedQty,
-                    'balance_before' => $category->quantity,
-                    'balance_after' => $category->quantity - $consumedQty,
-                    'price' => $unitCost,
-                    'total_price' => $manproduct['total_price'],
-                    'unit_cost' => $unitCost,
-                    'cost_total' => $manproduct['total_price'],
-                    'by' => auth()->user()->name,
-                    'created_at' => now()
-                ]);
-
-                $category->quantity = $category->quantity - $consumedQty;
-                $category->save();
-                CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
-            }
-
-            // GL: Dr WIP (or Finished Goods) / Cr Raw Materials Inventory
-            if ($totalRawMaterialCost > 0.00001) {
-                $this->postManufacturingConsumptionGl(
-                    $totalRawMaterialCost,
-                    'استهلاك مواد خام — أمر تصنيع #' . $confirmed->id,
-                    $confirmed->id
+                $totalRawMaterialCost = $planner->applyConsumption(
+                    $confirmed,
+                    $consumptionLines,
+                    auth()->user()->name ?? null
                 );
+
+                $existingMeta = is_array($confirmed->completion_meta) ? $confirmed->completion_meta : [];
+                $existingMeta['consumption_lines'] = $consumptionLines;
+                $existingMeta['total_raw_material_cost'] = $totalRawMaterialCost;
+                $confirmed->completion_meta = $existingMeta;
+                $confirmed->save();
+
+                if ($totalRawMaterialCost > 0.00001 && ! $completeDirectToFinished) {
+                    $this->postManufacturingConsumptionGl(
+                        $totalRawMaterialCost,
+                        'استهلاك مواد خام — أمر تصنيع #' . $confirmed->id,
+                        $confirmed->id,
+                        $confirmed->date
+                    );
+                }
             }
 
             if ($confirmed->status == 'تم الانتهاء') {
-                $this->postProductionCompletionInventory($confirmed, $request);
+                if ($isWipSemiFinished && $stayWipOnly) {
+                    $this->postProductionCompletionStayWip($confirmed, $request);
+                } elseif ($isWipSemiFinished && ! $stayWipOnly) {
+                    $wipMode = strtolower(trim((string) $request->input('wip_mode', 'auto')));
+                    $mergeTarget = $request->filled('wip_target_product_id')
+                        ? (int) $request->input('wip_target_product_id')
+                        : null;
+                    $wipResult = app(WipToFinishedPromotionService::class)->transferForManufactureConfirm(
+                        (int) $request->product_id,
+                        (float) $request->quantity,
+                        $wipMode,
+                        $mergeTarget,
+                        (int) $confirmed->id,
+                        auth()->id()
+                    );
+                } else {
+                    $this->postProductionCompletionInventory(
+                        $confirmed,
+                        $request,
+                        $completeDirectToFinished ? $totalRawMaterialCost : null
+                    );
+                }
             }
 
             DB::commit();
-            return response()->json($confirmed, 201);
+
+            $payload = $confirmed->toArray();
+            if ($isWipSemiFinished && $stayWipOnly && $confirmed->status === 'تم الانتهاء') {
+                $payload['wip_stayed_under_processing'] = true;
+            }
+            if ($wipResult !== null) {
+                $existingMeta = is_array($confirmed->completion_meta) ? $confirmed->completion_meta : [];
+                $confirmed->completion_meta = array_merge($existingMeta, [
+                    'strategy' => $wipResult['strategy'],
+                    'result_category_id' => $wipResult['result_category']->id,
+                    'new_category_id' => $wipResult['new_category']?->id,
+                    'daily_entry_id' => $wipResult['daily_entry_id'] ?? null,
+                ]);
+                $confirmed->save();
+
+                $payload['wip_completion'] = [
+                    'strategy' => $wipResult['strategy'],
+                    'result_category_id' => $wipResult['result_category']->id,
+                    'new_category_id' => $wipResult['new_category']?->id,
+                    'daily_entry_id' => $wipResult['daily_entry_id'] ?? null,
+                ];
+            }
+
+            return response()->json($payload, 201);
+        } catch (ProductAlreadyCompletedException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\InvalidArgumentException $e) {
+            DB::rollBack();
+
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
         }
     }
 
-    public function confirmed()
+    public function confirmed(Request $request)
     {
-        $confirmed = ConfirmedManfucture::with([
-            'user' => function ($query) {
-                $query->select('id', 'name');
-            },
-            'product' => function ($query) {
-                $query->select('id', 'category_name');
-            }
-        ])->get();
+        $query = ConfirmedManfucture::query()->whereNull('deleted_at');
+
+        if ($request->boolean('count_only')) {
+            return response()->json(['total' => $query->count()]);
+        }
+
+        $confirmed = $query
+            ->with([
+                'user' => function ($query) {
+                    $query->select('id', 'name');
+                },
+                'product' => function ($query) {
+                    $query->select('id', 'category_name');
+                },
+            ])
+            ->orderByDesc('id')
+            ->get();
+
         return response()->json($confirmed, 200);
+    }
+
+    public function confirmedDeleted()
+    {
+        if (! has_permission('manufacturing.delete_order') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $deleted = ConfirmedManfucture::query()
+            ->whereNotNull('deleted_at')
+            ->with([
+                'user' => function ($query) {
+                    $query->select('id', 'name');
+                },
+                'deletedByUser' => function ($query) {
+                    $query->select('id', 'name');
+                },
+                'product' => function ($query) {
+                    $query->select('id', 'category_name');
+                },
+            ])
+            ->orderByDesc('deleted_at')
+            ->get();
+
+        return response()->json($deleted, 200);
+    }
+
+    public function destroy(int $id)
+    {
+        if (! has_permission('manufacturing.delete_order') && ! has_permission('system.rbac')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        try {
+            $result = app(ManufacturingOrderReversalService::class)->deleteAndReverse(
+                $id,
+                (int) auth()->id()
+            );
+
+            return response()->json($result, 200);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            Log::error('ManufactureController::destroy failed', [
+                'order_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
     }
 
     public function done($id)
@@ -198,8 +600,32 @@ class ManufactureController extends Controller
         DB::beginTransaction();
         try {
             $confirmed = ConfirmedManfucture::find($id);
+            if (! $confirmed) {
+                return response()->json(['message' => 'أمر التصنيع غير موجود'], 404);
+            }
+
             $confirmed->status = 'تم الانتهاء';
             $confirmed->save();
+
+            $productItem = Item::query()->findOrFail((int) $confirmed->product_id);
+
+            if ($productItem->resolvedProductType() === ProductType::SemiFinished) {
+                $wipResult = app(WipToFinishedPromotionService::class)->transferForManufactureConfirm(
+                    (int) $confirmed->product_id,
+                    (float) $confirmed->quantity,
+                    'auto',
+                    null,
+                    (int) $confirmed->id,
+                    auth()->id()
+                );
+                $confirmed->completion_meta = [
+                    'strategy' => $wipResult['strategy'],
+                    'result_category_id' => $wipResult['result_category']->id,
+                    'new_category_id' => $wipResult['new_category']?->id,
+                    'daily_entry_id' => $wipResult['daily_entry_id'] ?? null,
+                ];
+                $confirmed->save();
+            } else {
 
             $category = Category::find($confirmed->product_id);
 
@@ -225,18 +651,38 @@ class ManufactureController extends Controller
             $category->save();
             CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
 
+            $uc = $confirmed->quantity > 0 ? ($confirmed->total / $confirmed->quantity) : 0.0;
+            app(InventoryMovementLedgerService::class)->appendInboundMovement(
+                $category->fresh(),
+                InventoryMovementType::ProductionToFinished,
+                (float) $confirmed->quantity,
+                $uc,
+                (float) $confirmed->total,
+                'manufacture_done',
+                $confirmed->id,
+                'إتمام تصنيع — إضافة منتج تام',
+                null,
+                auth()->user()->name ?? null
+            );
+
             // GL: Dr Finished Goods Inventory / Cr WIP
             $completionCost = (float) $confirmed->total;
             if ($completionCost > 0.00001) {
                 $this->postProductionCompletionGl(
                     $completionCost,
                     'إتمام تصنيع — أمر #' . $confirmed->id,
-                    $confirmed->id
+                    $confirmed->id,
+                    $confirmed->date
                 );
+            }
+
             }
 
             DB::commit();
             return response()->json('success', 200);
+        } catch (\RuntimeException $e) {
+            DB::rollBack();
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
@@ -244,122 +690,127 @@ class ManufactureController extends Controller
     }
 
     /**
-     * GL: Dr WIP (or COGS) / Cr Raw Materials Inventory
-     * Assumption: raw material consumption reduces inventory and increases WIP.
+     * GL: مدين مخزون تحت التشغيل / دائن مخزون مواد خام (حركة تكلفة إلى WIP دون المساس بتكلفة المبيعات).
      */
-    private function postManufacturingConsumptionGl(float $amount, string $description, int $refId): void
+    private function postManufacturingConsumptionGl(float $amount, string $description, int $refId, $date = null): void
     {
-        $inventoryAcc = TreeAccount::resolveInventoryAccount();
-        $cogsAcc = TreeAccount::resolveCogsAccount();
+        $wipAcc = TreeAccount::resolveInventoryAccountForStock($this->stockByStandardName('مخزن منتج تحت التشغيل'));
+        $rawAcc = TreeAccount::resolveInventoryAccountForStock($this->stockByStandardName('مخزن مواد خام'));
 
-        if (!$inventoryAcc || !$cogsAcc) {
-            Log::warning('ManufactureController: GL not posted — missing inventory or COGS account', [
-                'ref_id' => $refId,
-            ]);
-            return;
+        if (! $wipAcc || ! $rawAcc) {
+            throw new \RuntimeException(
+                'تعذر ترحيل قيد التصنيع: حساب مخزن تحت التشغيل أو المواد الخام غير مرتبط بالحسابات. راجع إعداد المخازن.'
+            );
         }
 
-        $dailyEntry = DailyEntry::create([
-            'date' => now(),
-            'entry_number' => DailyEntry::getNextEntryNumber(),
-            'description' => $description,
-            'user_id' => auth()->id(),
-        ]);
-
-        DailyEntryItem::create([
-            'daily_entry_id' => $dailyEntry->id,
-            'account_id' => $cogsAcc->id,
-            'debit' => $amount,
-            'credit' => 0,
-            'notes' => 'تكلفة مواد خام مستهلكة في التصنيع',
-        ]);
-        DailyEntryItem::create([
-            'daily_entry_id' => $dailyEntry->id,
-            'account_id' => $inventoryAcc->id,
-            'debit' => 0,
-            'credit' => $amount,
-            'notes' => 'نقص مخزون مواد خام',
-        ]);
-
-        AccountEntry::create([
-            'tree_account_id' => $cogsAcc->id,
-            'debit' => $amount,
-            'credit' => 0,
-            'description' => $description,
-            'daily_entry_id' => $dailyEntry->id,
-        ]);
-        AccountEntry::create([
-            'tree_account_id' => $inventoryAcc->id,
-            'debit' => 0,
-            'credit' => $amount,
-            'description' => $description,
-            'daily_entry_id' => $dailyEntry->id,
-        ]);
-
-        $accService = app(AccountingService::class);
-        $accService->updateAccountHierarchyBalances($cogsAcc->id);
-        $accService->updateAccountHierarchyBalances($inventoryAcc->id);
+        $this->postManufacturingJournal(
+            $wipAcc->id,
+            $rawAcc->id,
+            $amount,
+            $description,
+            'تكلفة مواد في التصنيع (WIP)',
+            'نقص مخزون مواد خام',
+            'MFG-CONS-' . $refId,
+            $date
+        );
     }
 
     /**
-     * GL: Dr Finished Goods Inventory / Cr COGS (reversal of raw material cost
-     * capitalized into finished goods at production cost).
+     * GL: مدين مخزون منتج تام / دائن مخزون تحت التشغيل (إغلاق أمر تصنيع إلى بضاعة أخيرة).
      */
-    private function postProductionCompletionGl(float $amount, string $description, int $refId): void
+    private function postProductionCompletionGl(float $amount, string $description, int $refId, $date = null): void
     {
-        $inventoryAcc = TreeAccount::resolveInventoryAccount();
-        $cogsAcc = TreeAccount::resolveCogsAccount();
+        $fgAcc = TreeAccount::resolveInventoryAccountForStock($this->stockByStandardName('مخزن منتج تام'));
+        $wipAcc = TreeAccount::resolveInventoryAccountForStock($this->stockByStandardName('مخزن منتج تحت التشغيل'));
 
-        if (!$inventoryAcc || !$cogsAcc) {
-            Log::warning('ManufactureController: GL not posted for completion — missing accounts', [
-                'ref_id' => $refId,
-            ]);
-            return;
+        if (! $fgAcc || ! $wipAcc) {
+            throw new \RuntimeException(
+                'تعذر ترحيل قيد إتمام التصنيع: حساب مخزن المنتج التام أو تحت التشغيل غير مرتبط بالحسابات. راجع إعداد المخازن.'
+            );
         }
 
-        $dailyEntry = DailyEntry::create([
-            'date' => now(),
-            'entry_number' => DailyEntry::getNextEntryNumber(),
-            'description' => $description,
-            'user_id' => auth()->id(),
-        ]);
-
-        DailyEntryItem::create([
-            'daily_entry_id' => $dailyEntry->id,
-            'account_id' => $inventoryAcc->id,
-            'debit' => $amount,
-            'credit' => 0,
-            'notes' => 'إضافة منتج تام للمخزون',
-        ]);
-        DailyEntryItem::create([
-            'daily_entry_id' => $dailyEntry->id,
-            'account_id' => $cogsAcc->id,
-            'debit' => 0,
-            'credit' => $amount,
-            'notes' => 'رسملة تكلفة التصنيع',
-        ]);
-
-        AccountEntry::create([
-            'tree_account_id' => $inventoryAcc->id,
-            'debit' => $amount,
-            'credit' => 0,
-            'description' => $description,
-            'daily_entry_id' => $dailyEntry->id,
-        ]);
-        AccountEntry::create([
-            'tree_account_id' => $cogsAcc->id,
-            'debit' => 0,
-            'credit' => $amount,
-            'description' => $description,
-            'daily_entry_id' => $dailyEntry->id,
-        ]);
-
-        $accService = app(AccountingService::class);
-        $accService->updateAccountHierarchyBalances($inventoryAcc->id);
-        $accService->updateAccountHierarchyBalances($cogsAcc->id);
+        $this->postManufacturingJournal(
+            $fgAcc->id,
+            $wipAcc->id,
+            $amount,
+            $description,
+            'إضافة منتج تام للمخزون',
+            'إخراج من تحت التشغيل',
+            'MFG-DONE-' . $refId,
+            $date
+        );
     }
 
-    private function postProductionCompletionInventory($confirmed, $request): void
+    /**
+     * منتج تام اكتمل في خطوة واحدة: مدين مخزون تام / دائن خام — بدون المرور على WIP.
+     */
+    private function postDirectFinishedFromRawGl(float $amount, string $description, int $refId, $date = null): void
+    {
+        $fgAcc = TreeAccount::resolveInventoryAccountForStock($this->stockByStandardName('مخزن منتج تام'));
+        $rawAcc = TreeAccount::resolveInventoryAccountForStock($this->stockByStandardName('مخزن مواد خام'));
+
+        if (! $fgAcc || ! $rawAcc) {
+            throw new \RuntimeException(
+                'تعذر ترحيل قيد التصنيع: حساب مخزن المنتج التام أو المواد الخام غير مرتبط بالحسابات. راجع إعداد المخازن.'
+            );
+        }
+
+        $this->postManufacturingJournal(
+            $fgAcc->id,
+            $rawAcc->id,
+            $amount,
+            $description,
+            'إضافة منتج تام للمخزون',
+            'نقص مخزون مواد خام',
+            'MFG-DONE-' . $refId,
+            $date
+        );
+    }
+
+    private function postManufacturingJournal(
+        int $debitAccountId,
+        int $creditAccountId,
+        float $amount,
+        string $headerDescription,
+        string $debitNote,
+        string $creditNote,
+        string $batchCode,
+        $date = null
+    ): void {
+        $journalDate = $date
+            ? \Carbon\Carbon::parse($date)->startOfDay()
+            : now();
+
+        app(LedgerJournalService::class)->postBalancedJournal(
+            [
+                [
+                    'account_id' => $debitAccountId,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'description' => $debitNote,
+                ],
+                [
+                    'account_id' => $creditAccountId,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => $creditNote,
+                ],
+            ],
+            $headerDescription,
+            null,
+            $batchCode,
+            auth()->id(),
+            $journalDate,
+            false
+        );
+    }
+
+    private function stockByStandardName(string $warehouseName): ?Stock
+    {
+        return Stock::query()->where('name', $warehouseName)->first();
+    }
+
+    private function postProductionCompletionInventory($confirmed, $request, ?float $directFromRawAmount = null): void
     {
         $category = Category::find($request->product_id);
         DB::table('categories_balance')->insert([
@@ -384,13 +835,84 @@ class ManufactureController extends Controller
         $category->save();
         CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
 
+        $uc = $confirmed->quantity > 0 ? ($confirmed->total / $confirmed->quantity) : 0.0;
+        app(InventoryMovementLedgerService::class)->appendInboundMovement(
+            $category->fresh(),
+            InventoryMovementType::ProductionToFinished,
+            (float) $confirmed->quantity,
+            $uc,
+            (float) $confirmed->total,
+            'manufacture_confirm_complete',
+            (int) $confirmed->id,
+            'إتمام تصنيع ضمن التأكيد',
+            null,
+            auth()->user()->name ?? null
+        );
+
+        if ($directFromRawAmount !== null) {
+            if ($directFromRawAmount > 0.00001) {
+                $this->postDirectFinishedFromRawGl(
+                    $directFromRawAmount,
+                    'إتمام تصنيع — أمر #' . $confirmed->id,
+                    $confirmed->id,
+                    $confirmed->date
+                );
+            }
+
+            return;
+        }
+
         $completionCost = (float) $confirmed->total;
         if ($completionCost > 0.00001) {
             $this->postProductionCompletionGl(
                 $completionCost,
                 'إتمام تصنيع — أمر #' . $confirmed->id,
-                $confirmed->id
+                $confirmed->id,
+                $confirmed->date
             );
         }
+    }
+
+    /**
+     * زيادة رصيد صنف تحت التشغيل بعد استهلاك الخام — بدون قيد تحويل إلى منتج تام.
+     */
+    private function postProductionCompletionStayWip($confirmed, Request $request): void
+    {
+        $category = Category::find($request->product_id);
+        DB::table('categories_balance')->insert([
+            'invoice_number' => $confirmed->id,
+            'category_id' => $category->id,
+            'type' => 'تصنيع',
+            'quantity' => $confirmed['quantity'],
+            'balance_before' => $category->quantity,
+            'balance_after' => $category->quantity + $confirmed->quantity,
+            'price' => $confirmed['total'] / $confirmed['quantity'],
+            'total_price' => $confirmed['total'],
+            'unit_cost' => $confirmed['total'] / $confirmed['quantity'],
+            'cost_total' => $confirmed['total'],
+            'by' => auth()->user()->name,
+            'created_at' => now()
+        ]);
+
+        $category->quantity = $category->quantity + $confirmed->quantity;
+        $category->total_price = $category->total_price + $confirmed->total;
+        $category->unit_price = $confirmed->total / $confirmed->quantity;
+        $category->sell_total_price = $category->sell_total_price + ($category->category_price * $request->quantity);
+        $category->save();
+        CategoryInventoryCostService::syncUnitPriceFromWeightedAverage((int) $category->id);
+
+        $uc = $confirmed->quantity > 0 ? ($confirmed->total / $confirmed->quantity) : 0.0;
+        app(InventoryMovementLedgerService::class)->appendInboundMovement(
+            $category->fresh(),
+            InventoryMovementType::ProductionToWip,
+            (float) $confirmed->quantity,
+            $uc,
+            (float) $confirmed->total,
+            'manufacture_confirm_wip_only',
+            (int) $confirmed->id,
+            'إتمام تصنيع — إيقاف في تحت التشغيل',
+            null,
+            auth()->user()->name ?? null
+        );
     }
 }

@@ -6,8 +6,14 @@
     <div class="col-5">
       <div><p class="title header w-50 m-auto">Lead Details</p></div>
     </div>
-    <div class="col-3 d-flex align-items-center justify-content-end">
-      <!-- <app-time></app-time> -->
+    <div class="col-3 d-flex align-items-center justify-content-end gap-2">
+      <a
+        class="lead-quote-icon"
+        [routerLink]="headerQuotationLink()"
+        [queryParams]="headerQuotationQuery()"
+        [title]="latestQuotation() ? ('Open quotation #' + latestQuotation().id) : 'Create Quotation'">
+        <i class="fa-solid fa-file-invoice"></i>
+      </a>
     </div>
   </div>
 
@@ -223,6 +229,76 @@
       </div>
     </div>
 
+
+    <div class="col-md-12">
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h5 class="mb-0" style="font-size: 20px; font-weight: 500;">Quotations</h5>
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn bg-main btn-sm" type="button" (click)="createQuotation('offer1')">
+              <i class="fa-solid fa-file-invoice me-1"></i> Quotation 1
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" (click)="createQuotation('offer2')">
+              Quotation 2
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" type="button" [disabled]="linkingOffer" (click)="linkExistingQuotation()">
+              Link existing
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table dir="ltr" class="table table-bordered table-hover text-center mb-0">
+              <thead class="text-white">
+                <tr>
+                  <th>#</th>
+                  <th>Type</th>
+                  <th>Client</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>By</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let offer of quotations; let i = index">
+                  <td>
+                    <a [routerLink]="offerDetailsLink(offer)">#{{ offer.id }}</a>
+                  </td>
+                  <td>{{ offer.offer === 'offer2' ? 'Quotation 2' : 'Quotation 1' }}</td>
+                  <td>{{ offer.quote || '-' }}</td>
+                  <td>{{ offer.total || 0 }}</td>
+                  <td>
+                    <span *ngIf="offer.converted_order_id" class="badge bg-success">Order #{{ offer.converted_order_id }}</span>
+                    <span *ngIf="!offer.converted_order_id" class="badge bg-secondary">Open</span>
+                  </td>
+                  <td>{{ offer.creator?.name || '-' }}</td>
+                  <td>
+                    <a class="btn btn-sm btn-outline-secondary me-1" [routerLink]="offerDetailsLink(offer)">Details</a>
+                    <a
+                      *ngIf="canConvertOffer(offer)"
+                      class="btn btn-sm text-white me-1"
+                      style="background:#82225e;"
+                      [routerLink]="['/dashboard/shipping/convert-offer', offer.id]">
+                      Convert to order
+                    </a>
+                    <a
+                      *ngIf="offer.converted_order_id"
+                      class="btn btn-sm btn-outline-success"
+                      [routerLink]="['/dashboard/shipping/orderdetails', offer.converted_order_id]">
+                      Order
+                    </a>
+                  </td>
+                </tr>
+                <tr *ngIf="!quotations.length">
+                  <td colspan="7" class="text-muted">No quotations linked to this lead</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="col-md-12">
       <div class="card shadow-sm mb-4 border-0">

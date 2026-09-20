@@ -18,6 +18,18 @@
       <div *ngIf="errorform" class="alert alert-danger">
         {{errorMessage}}
       </div>
+      <div *ngIf="sourceCompanyId && sourceCompanyName" class="alert alert-info py-2" dir="rtl">
+        عرض لعميل الشركة: <strong>{{ sourceCompanyName }}</strong>
+        — بعد الحفظ سيتم الربط وترحيل المديونية تلقائياً.
+      </div>
+      <div *ngIf="sourceLeadId && sourceLeadName" class="alert alert-info py-2" dir="rtl">
+        عرض مربوط بالـ Lead: <strong>{{ sourceLeadName }}</strong>
+        <a class="ms-2" [routerLink]="['/dashboard/corparates-sales/leads', sourceLeadId]">فتح الـ Lead</a>
+      </div>
+      <div *ngIf="convertedOrderId" class="alert alert-warning py-2" dir="rtl">
+        هذا العرض محوّل إلى الطلب رقم <strong>#{{ convertedOrderId }}</strong>.
+        عند الحفظ يمكنك اختيار تحديث الطلب أيضاً أو الاكتفاء بتعديل العرض.
+      </div>
     </div>
 
       <div id="capture" class="row m-5 ">
@@ -28,8 +40,25 @@
           <div class="mx-4 mt-5">
             <h4 style="text-align: right; direction: rtl;"><input type="date" (change)="onDateFromChange($event)" [value]="dateFrom"> : Date </h4>
             <h4 style="text-align: right; direction: rtl;"><input type="date" (change)="onDateToChange($event)" [value]="dateTo"> :  Valid till </h4>
-            <h4 style="text-align: right; direction: rtl;"> <input name="quote233" autocomplete="off" [(ngModel)]="quote" class="quote" type="text" placeholder="..........." style="unicode-bidi: embed;"> : <span class="arabic-text">عرض سعر لـ</span> </h4>
-            <h4 style="text-align: right; direction: rtl;"><input name="title" autocomplete="off"  class="quote" type="text" [(ngModel)]="title"  placeholder="......"> This quotation for   </h4>
+            <h4 style="text-align: right; direction: rtl;">
+              <input name="quote233" autocomplete="off" [(ngModel)]="quote" required
+                class="quote quote-ltr" [class.is-invalid]="clientFieldsInvalid && !quote?.trim()"
+                type="text" placeholder="اسم العميل (إجباري)">
+              : Quote for <span class="req">*</span>
+            </h4>
+            <h4 style="text-align: right; direction: rtl;">
+              <input name="contact_person" autocomplete="off" [(ngModel)]="contact_person" required
+                class="quote quote-ltr" [class.is-invalid]="clientFieldsInvalid && !contact_person?.trim()"
+                type="text" placeholder="مسؤول التواصل (إجباري)">
+              : Contact Person <span class="req">*</span>
+            </h4>
+            <h4 style="text-align: right; direction: rtl;">
+              <input name="client_phone" autocomplete="off" [(ngModel)]="client_phone"
+                class="quote quote-ltr"
+                type="text" placeholder="رقم الهاتف (اختياري)">
+              : Phone
+            </h4>
+            <h4 style="text-align: right; direction: rtl;"><input name="title" autocomplete="off"  class="quote quote-ltr" type="text" [(ngModel)]="title"  placeholder="......"> This quotation for   </h4>
           </div>
 
           <div dir="ltr" class="col-md-12">
@@ -43,6 +72,7 @@
                   <th style="background-color: white!important;color: black;">PRICE</th>
                   <th style="background-color: white!important;color: black;">TOTAL</th>
                   <th style="background-color: white!important;color: black;">IMAGE</th>
+                  <th style="background-color: white!important;color: black; width: 48px;" *ngIf="canEditItems()"></th>
                 </tr>
               </thead>
               <tbody>
@@ -53,16 +83,11 @@
                       style="border: none;"
                       type="text"
                       [(ngModel)]="row.category_name"
+                      [readonly]="!canEditItems()"
                     />
                   </td>
                   <td style="text-align: start; " class="d-flex">
-                    <i (click)="openEditorDialog(row.description, i)" style="font-size: 10px;" class="fa-solid fa-pen"></i><p [innerHTML]="row.description"></p>
-                    <!-- <input
-                      class="form-control text-center"
-                      style="border: none;"
-                      type="text"
-                      [(ngModel)]="row.description"
-                    /> -->
+                    <i *ngIf="canEditItems()" (click)="openEditorDialog(row.description, i)" style="font-size: 10px;" class="fa-solid fa-pen"></i><p [innerHTML]="row.description"></p>
                   </td>
                   <td>
                     <input
@@ -71,6 +96,7 @@
                       type="number"
                       [(ngModel)]="row.category_quantity"
                       (input)="updateTotal(row)"
+                      [readonly]="!canEditItems()"
                     />
                   </td>
                   <td>
@@ -80,6 +106,7 @@
                       type="number"
                       [(ngModel)]="row.old_category_price"
                       (input)="updateTotal(row)"
+                      [readonly]="!canEditItems()"
                     />
                   </td>
                   <td>
@@ -89,6 +116,7 @@
                       type="number"
                       [(ngModel)]="row.new_category_price"
                       (input)="updateTotal(row)"
+                      [readonly]="!canEditItems()"
                     />
                   </td>
                   <td class="pt-4">
@@ -96,7 +124,7 @@
                   </td>
                   <td>
                     <div class="form-group">
-                      <div class="element">
+                      <div class="element" *ngIf="canEditItems()">
                         <i (click)="openFileInput(i)" class="fa fa-camera"></i>
                         <span class="name">{{ row.imageName || 'اختر صورة' }}</span>
                         <input
@@ -112,11 +140,23 @@
                       </div>
                     </div>
                   </td>
+                  <td *ngIf="canEditItems()">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      title="حذف الصنف"
+                      (click)="removeRow(i)">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </td>
                 </tr>
               </tbody>
             </table>
-            <div class="text-right">
-              <button class="btn my-3" (click)="addRow()">+</button>
+            <div class="text-right d-flex justify-content-start gap-2 my-3" *ngIf="canEditItems()">
+              <button type="button" class="btn text-white" style="background:#82225e;" (click)="addRow()" title="إضافة صنف">
+                <i class="fa-solid fa-plus"></i>
+                إضافة صنف
+              </button>
             </div>
           </div>
 
@@ -145,8 +185,8 @@
               class="form-control arabic-textarea arabic-note pdf-arabic-fix"
               [(ngModel)]="note"
               style="direction: rtl; text-align: right; unicode-bidi: embed; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', 'Traditional Arabic', 'Arabic Typesetting'; writing-mode: horizontal-tb; text-orientation: mixed;"
-              dir="rtl"
-          ></textarea>
+              dir="rtl">
+            </textarea>
           </div>
 
           <div class="w-75 m-auto">
@@ -191,7 +231,9 @@
 
 
       <div class="text-center my-3">
-        <button [disabled]="!quote || !dateFrom || !dateTo || total <= 0" class="btn btn-add" (click)="submitform()">{{ !id ? 'اضافة' : 'تعديل'}}  </button>
+        <button [disabled]="saving || !dateFrom || !dateTo || total <= 0" class="btn btn-add" (click)="submitform()">
+          {{ saving ? 'جاري الحفظ...' : (!id ? 'اضافة' : 'تعديل') }}
+        </button>
       </div>
 
 

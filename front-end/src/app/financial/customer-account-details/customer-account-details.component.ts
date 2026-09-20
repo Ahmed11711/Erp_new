@@ -15,7 +15,7 @@ export class CustomerAccountDetailsComponent {
 
   data:any[] = [];
 
-  length = 50;
+  length = 0;
   pageSize = 15;
   page = 0;
   pageSizeOptions = [15,50,100];

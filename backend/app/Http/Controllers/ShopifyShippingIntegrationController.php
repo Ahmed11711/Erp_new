@@ -12,34 +12,95 @@ class ShopifyShippingIntegrationController extends Controller
 {
     public function integrationOrders(Request $request)
     {
-        $perPage = min(max((int) $request->query('per_page', 25), 1), 100);
+        $perPage = min(max((int) $request->query('per_page', 25), 1), 1000);
+        $q = trim((string) $request->query('q', ''));
 
-        return Order::query()
+        $query = Order::query()
             ->whereNotNull('shopify_order_id')
-            ->orderByDesc('id')
-            ->paginate($perPage, [
-                'id',
-                'shopify_order_id',
-                'shopify_financial_status',
-                'shopify_fulfillment_status',
-                'shipping_tracking_number',
-                'shipping_partner_status',
-                'customer_name',
-                'customer_phone_1',
-                'net_total',
-                'order_status',
-                'reference_number',
-                'updated_at',
-            ]);
+            ->with([
+                'shipping_method:id,name',
+                'order_products' => function ($builder) {
+                    $builder->select([
+                        'id',
+                        'order_id',
+                        'category_id',
+                        'quantity',
+                        'price',
+                        'total_price',
+                        'special_details',
+                        'shopify_line_item_id',
+                        'shopify_variant_id',
+                        'shipped_quantity',
+                        'cancelled_quantity',
+                    ])->with(['category:id,category_name,item_code,category_image']);
+                },
+            ])
+            ->orderByDesc('id');
+
+        if ($q !== '') {
+            $query->where(function ($builder) use ($q) {
+                $builder->where('reference_number', 'like', '%'.$q.'%')
+                    ->orWhere('customer_name', 'like', '%'.$q.'%')
+                    ->orWhere('customer_phone_1', 'like', '%'.$q.'%')
+                    ->orWhere('shopify_order_id', 'like', '%'.$q.'%')
+                    ->orWhere('id', 'like', '%'.$q.'%')
+                    ->orWhere('shipping_tracking_number', 'like', '%'.$q.'%');
+            });
+        }
+
+        return $query->paginate($perPage, [
+            'id',
+            'shopify_order_id',
+            'shopify_shop_domain',
+            'shopify_financial_status',
+            'shopify_fulfillment_status',
+            'shopify_payment_gateway',
+            'shopify_needs_product_review',
+            'shopify_reviewed_at',
+            'shipping_tracking_number',
+            'shipping_partner_status',
+            'shipping_method_id',
+            'customer_name',
+            'customer_phone_1',
+            'customer_phone_2',
+            'governorate',
+            'city',
+            'address',
+            'order_date',
+            'shipping_cost',
+            'total_invoice',
+            'prepaid_amount',
+            'discount',
+            'vat',
+            'net_total',
+            'order_status',
+            'reference_number',
+            'collect_note',
+            'order_notes',
+            'created_at',
+            'updated_at',
+        ]);
     }
 
     public function integrationProducts(Request $request)
     {
-        $perPage = min(max((int) $request->query('per_page', 25), 1), 100);
+        $perPage = min(max((int) $request->query('per_page', 25), 1), 1000);
+        $q = trim((string) $request->query('q', ''));
 
-        return ShopifyProduct::query()
-            ->orderByDesc('id')
-            ->paginate($perPage);
+        $query = ShopifyProduct::query()
+            ->with(['category:id,category_name,item_code,category_image'])
+            ->orderByDesc('id');
+
+        if ($q !== '') {
+            $query->where(function ($builder) use ($q) {
+                $builder->where('name', 'like', '%'.$q.'%')
+                    ->orWhere('sku', 'like', '%'.$q.'%')
+                    ->orWhere('shopify_product_id', 'like', '%'.$q.'%')
+                    ->orWhere('shopify_variant_id', 'like', '%'.$q.'%');
+            });
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function updateIntegrationProduct(Request $request, int $id)

@@ -1,0 +1,60 @@
+<div class="lock-dialog" dir="rtl">
+  <header class="lock-dialog__head">
+    <mat-icon class="lock-dialog__icon">{{ lock.locked ? 'lock' : 'lock_open' }}</mat-icon>
+    <div>
+      <h2>{{ lock.locked ? 'النظام مقفل حالياً' : 'قفل النظام' }}</h2>
+      <p *ngIf="lock.locked && lock.snapshot.locked_by">
+        تم القفل بواسطة {{ lock.snapshot.locked_by?.name }}
+      </p>
+      <p *ngIf="!lock.locked">يقفل النظام عن كل المستخدمين ما عدا من تستثنيهم هنا، ومن لديهم صلاحية القفل أو إعادة التشغيل.</p>
+      <p *ngIf="lock.locked && !lock.canUnlock" class="lock-dialog__note">
+        إعادة تشغيل النظام متاحة للأدمن أو لمن مُنحت له صلاحية الفتح.
+      </p>
+    </div>
+    <button type="button" mat-icon-button (click)="close()" aria-label="إغلاق">
+      <mat-icon>close</mat-icon>
+    </button>
+  </header>
+
+  <ng-container *ngIf="lock.canLock">
+  <label class="lock-dialog__label" for="lock-message">رسالة العطل المؤقت</label>
+  <textarea id="lock-message" rows="3" [(ngModel)]="message"
+    [placeholder]="defaultMessage"></textarea>
+
+  <label class="lock-dialog__toggle" for="lock-show-message">
+    <input id="lock-show-message" type="checkbox" [(ngModel)]="showMessage">
+    <span>إظهار كارت الرسالة عند الضغط على صفحة الطلبات</span>
+  </label>
+
+  <div class="lock-dialog__label-row">
+    <label class="lock-dialog__label" for="lock-user-search">استثناء مستخدمين معيّنين</label>
+    <span class="lock-dialog__count">{{ selectedIds.size }} مستثنى</span>
+  </div>
+  <input id="lock-user-search" type="search" [(ngModel)]="userQuery" placeholder="بحث بالاسم أو القسم">
+
+  <div class="lock-dialog__users" *ngIf="!loadingUsers; else usersLoading">
+    <label class="lock-dialog__user" *ngFor="let user of filteredUsers">
+      <input type="checkbox" [checked]="isSelected(user.id)"
+        (change)="toggleUser(user.id, $any($event.target).checked)">
+      <span class="lock-dialog__user-name">{{ user.name }}</span>
+      <span class="lock-dialog__user-meta">{{ user.department }}</span>
+    </label>
+    <p class="lock-dialog__empty" *ngIf="filteredUsers.length === 0">لا توجد نتائج.</p>
+  </div>
+  <ng-template #usersLoading>
+    <p class="lock-dialog__empty">جاري تحميل المستخدمين…</p>
+  </ng-template>
+  </ng-container>
+
+  <p class="lock-dialog__error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+  <footer class="lock-dialog__actions">
+    <button type="button" mat-stroked-button (click)="close()" [disabled]="saving">إلغاء</button>
+    <button type="button" mat-flat-button color="primary" *ngIf="lock.locked && lock.canUnlock" (click)="save(false)" [disabled]="saving">
+      إعادة تشغيل النظام
+    </button>
+    <button type="button" mat-flat-button color="warn" *ngIf="lock.canLock" (click)="save(true)" [disabled]="saving">
+      {{ lock.locked ? 'تحديث القفل' : 'قفل النظام' }}
+    </button>
+  </footer>
+</div>

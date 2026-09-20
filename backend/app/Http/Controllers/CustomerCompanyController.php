@@ -12,19 +12,104 @@ use App\Models\AccountEntry;
 use Illuminate\Http\Request;
 use App\Models\customerCompany;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\V2\TreeAccount\AddAssetController;
+use App\Services\Accounting\AccountLinkingService;
+use App\Services\Accounting\ReceivableTreeAccountGuard;
+use App\Services\Shipping\UnlinkedReceivableAccountException;
 
 
 class CustomerCompanyController extends Controller
 {
-    
-    public function __construct(public AddAssetController $addAsset)
-    {
+    public function __construct(
+        public AccountLinkingService $accountLinkingService,
+        public ReceivableTreeAccountGuard $receivableGuard,
+    ) {
     }
     public function index()
     {
-        $companies = customerCompany::all();
+        $companies = customerCompany::query()
+            ->with('treeAccount:id,code,name')
+            ->orderByDesc('id')
+            ->get();
+
         return response()->json($companies);
+    }
+
+    /**
+     * عدد عملاء الشركات غير المربوطين بحسابات الشجرة.
+     */
+    public function unlinkedSummary()
+    {
+        $unlinkedCount = customerCompany::query()->whereNull('tree_account_id')->count();
+        $parent = $this->accountLinkingService->getCustomerCorporateParent();
+
+        return response()->json([
+            'unlinked_count' => $unlinkedCount,
+            'parent_account' => $parent ? [
+                'id' => $parent->id,
+                'name' => $parent->name,
+                'code' => (string) $parent->code,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * ربط جميع عملاء الشركات غير المربوطين دفعة واحدة.
+     */
+    public function linkUnlinked()
+    {
+        $result = $this->accountLinkingService->linkAllUnlinkedCustomerCompanies();
+
+        if (!$result['parent']) {
+            return response()->json([
+                'message' => $result['message'],
+            ], 422);
+        }
+
+        $status = $result['failed'] > 0 ? 207 : 200;
+
+        return response()->json($result, $status);
+    }
+
+    /**
+     * ربط عميل شركة واحد بحساب في شجرة الحسابات.
+     */
+    public function linkAccount($id)
+    {
+        $company = customerCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
+
+        if ($company->tree_account_id) {
+            $account = TreeAccount::find($company->tree_account_id);
+
+            return response()->json([
+                'message' => 'الشركة مربوطة بالفعل بحساب في الشجرة.',
+                'tree_account_id' => $company->tree_account_id,
+                'tree_account' => $account ? [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'code' => (string) $account->code,
+                ] : null,
+            ]);
+        }
+
+        $account = $this->accountLinkingService->ensureCustomerCompanyAccount($company);
+        if (!$account) {
+            return response()->json([
+                'message' => 'تعذر إنشاء حساب للشركة. راجع حساب «عملاء شركات» في شجرة الحسابات.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'success',
+            'tree_account_id' => $account->id,
+            'tree_account' => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ],
+        ]);
     }
 
     /**
@@ -47,12 +132,24 @@ class CustomerCompanyController extends Controller
     {
         $request->validate([
             'name' => 'required|unique:customer_companies,name',
-            'phone1' => 'required|unique:customer_companies,phone1',
+            'phone1' => 'required',
             'governorate' => 'required',
             'address' => 'required',
+            'tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
         ]);
 
-        // إنشاء سجل الشركة
+        if ($request->filled('tree_account_id')) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $request->tree_account_id,
+                    'شركة العميل'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
+        // إنشاء سجل الشركة (مع ربط اختياري بحساب موجود من الشجرة)
         $company = customerCompany::create([
             'name' => $request->name,
             'phone1' => $request->phone1,
@@ -63,18 +160,32 @@ class CustomerCompanyController extends Controller
             'governorate' => $request->governorate,
             'city' => $request->city,
             'address' => $request->address,
+            'tree_account_id' => $request->filled('tree_account_id')
+                ? (int) $request->tree_account_id
+                : null,
         ]);
 
-        // جلب الحساب الأب من الإعدادات وربط العميل به في شجرة الحسابات
-        $parentAccountId = \App\Models\Setting::where('key', 'customer_corporate_parent_account_id')->value('value');
-        $account = $this->addAsset->Addcustomer($request->name, 'شركة', $parentAccountId);
-
-        if ($account) {
-            $company->tree_account_id = $account->id;
-            $company->save();
+        if (!$company->tree_account_id) {
+            // ربط تلقائي بحساب فرعي تحت «عملاء شركات» في شجرة الحسابات
+            $account = $this->accountLinkingService->ensureCustomerCompanyAccount($company);
+            if (!$account) {
+                return response()->json([
+                    'message' => 'تم إنشاء الشركة لكن تعذر إنشاء حسابها في شجرة الحسابات. راجع حساب «عملاء شركات» أو إعدادات الربط المحاسبي.',
+                ], 422);
+            }
+        } else {
+            $account = TreeAccount::find($company->tree_account_id);
         }
 
-        return response()->json(['message' => 'success'], 200);
+        return response()->json([
+            'message' => 'success',
+            'tree_account_id' => $account?->id ?? $company->tree_account_id,
+            'tree_account' => $account ? [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ] : null,
+        ], 200);
     }
 
     /**
@@ -101,14 +212,76 @@ class CustomerCompanyController extends Controller
 
     /**
      * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\Models\customerCompany  $customerCompany
-     * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, customerCompany $customerCompany)
+    public function update(Request $request, $id)
     {
-        //
+        $company = customerCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
+
+        $request->validate([
+            'name' => 'required|unique:customer_companies,name,' . $id,
+            'phone1' => 'required',
+            'governorate' => 'required',
+            'address' => 'required',
+            'tree_account_id' => 'nullable|integer|exists:tree_accounts,id',
+        ]);
+
+        if ($request->filled('tree_account_id')) {
+            try {
+                $this->receivableGuard->assertValidReceivableAssignment(
+                    (int) $request->tree_account_id,
+                    'شركة العميل'
+                );
+            } catch (UnlinkedReceivableAccountException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
+        $payload = [
+            'name' => $request->name,
+            'phone1' => $request->phone1,
+            'phone2' => $request->phone2,
+            'phone3' => $request->phone3,
+            'phone4' => $request->phone4,
+            'tel' => $request->tel,
+            'governorate' => $request->governorate,
+            'city' => $request->city,
+            'address' => $request->address,
+        ];
+
+        // عند إرسال الحقل: ربط بحساب محدد أو فك الربط لإعادة الإنشاء التلقائي
+        if ($request->exists('tree_account_id')) {
+            $payload['tree_account_id'] = $request->filled('tree_account_id')
+                ? (int) $request->tree_account_id
+                : null;
+        }
+
+        $company->update($payload);
+
+        if (!$company->tree_account_id) {
+            $account = $this->accountLinkingService->ensureCustomerCompanyAccount($company);
+            if (!$account) {
+                return response()->json([
+                    'message' => 'تم حفظ بيانات الشركة لكن تعذر ربطها بحساب في شجرة الحسابات.',
+                ], 422);
+            }
+        } else {
+            $account = TreeAccount::find($company->tree_account_id);
+            $this->accountLinkingService->syncCustomerCompanyTreeAccountName($company);
+            $account = TreeAccount::find($company->tree_account_id);
+        }
+
+        return response()->json([
+            'message' => 'success',
+            'tree_account_id' => $account?->id ?? $company->tree_account_id,
+            'tree_account' => $account ? [
+                'id' => $account->id,
+                'name' => $account->name,
+                'code' => (string) $account->code,
+            ] : null,
+        ]);
     }
 
     /**
@@ -125,12 +298,18 @@ class CustomerCompanyController extends Controller
     public function search(Request $request){
 
         $itemsPerPage = request('itemsPerPage') ? request('itemsPerPage') : 10;
-        $search = customerCompany::query();
+        $search = customerCompany::query()->with('treeAccount:id,code,name');
+        if ($request->filled('id')) {
+            $search->where('id', (int) $request->id);
+        }
         if($request->has('name')){
             $search->where('name', 'like' ,  '%'.$request->name.'%');
         }
         if($request->has('phone')){
             $search->where('phone1','like' , $request->phone.'%');
+        }
+        if ($request->boolean('unlinked_only')) {
+            $search->whereNull('tree_account_id');
         }
 
         $search = $search->orderBy('id' , 'desc')->paginate($itemsPerPage);
@@ -141,23 +320,24 @@ class CustomerCompanyController extends Controller
     public function customerCompanyBalance($id , Request $request){
         $itemsPerPage = $request->input('itemsPerPage', 15);
 
-        $name = customerCompany::where('id', $id)->value('name');
+        $company = customerCompany::find($id);
+        if (!$company) {
+            return response()->json(['message' => 'الشركة غير موجودة'], 404);
+        }
 
         $data = DB::table('customer_company_details')
         ->join('users', 'customer_company_details.user_id', '=', 'users.id')
         ->select('customer_company_details.*', 'users.name')
         ->where('customer_company_id', $id)
-        // ->orderBy('customer_company_details.created_at', 'desc')
         ->orderBy('customer_company_details.id', 'desc')
         ->paginate($itemsPerPage);
 
-
-        $result = [
+        return response()->json([
             'data' => $data,
-            $name,
-        ];
-
-        return response()->json($result, 200);
+            'name' => $company->name,
+            'balance' => (float) $company->balance,
+            $company->name,
+        ], 200);
     }
 
     public function companyCollect($id, Request $request)

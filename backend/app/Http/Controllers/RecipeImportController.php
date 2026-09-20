@@ -108,6 +108,7 @@ class RecipeImportController extends Controller
                         'unit' => $i['unit'],
                         'unit_cost' => $i['unit_cost'],
                         'line_cost' => $i['line_cost'] ?? null,
+                        'color' => $i['color'] ?? null,
                         'item_exists' => $i['item_exists'],
                         'existing_item_id' => $i['existing_item_id'] ?? null,
                         'existing_item_name' => $i['existing_item_name'] ?? null,
@@ -119,6 +120,8 @@ class RecipeImportController extends Controller
                 'recipes_total' => count($parsed->recipes),
                 'missing_items_total' => count($parsed->missingItems),
                 'existing_recipes_total' => count($parsed->existingRecipes),
+                'sheets_parsed' => count($parsed->parsedSheetNames),
+                'parsed_sheet_names' => $parsed->parsedSheetNames,
             ],
             'message' => $this->buildPreviewMessage($parsed),
         ]);

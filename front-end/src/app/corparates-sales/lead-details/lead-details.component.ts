@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CorparatesSalesService } from '../services/corparates-sales.service';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import Swal from 'sweetalert2';
 import { environment } from 'src/env/env';
 import { SafeHtml } from '@angular/platform-browser';
@@ -8,6 +8,8 @@ import { HttpClient } from '@angular/common/http';
 import { MatDialog } from '@angular/material/dialog';
 import { LeadAddContactComponent } from '../lead-add-contact/lead-add-contact.component';
 import { LeadStatusService } from '../../services/lead-status.service';
+import { OfferService } from '../../permissions/services/offer.service';
+import { RbacService } from '../../core/rbac/rbac.service';
 
 @Component({
   selector: 'app-lead-details',
@@ -22,9 +24,21 @@ export class LeadDetailsComponent {
   countries:any[]=[];
   leadStatuses: any[] = [];
 
-  constructor(private CorparatesSalesService:CorparatesSalesService, private activateRoute:ActivatedRoute, private http:HttpClient, private dialog: MatDialog, private leadStatusService: LeadStatusService){}
+  linkingOffer = false;
+
+  constructor(
+    private CorparatesSalesService:CorparatesSalesService,
+    private activateRoute:ActivatedRoute,
+    private http:HttpClient,
+    private dialog: MatDialog,
+    private leadStatusService: LeadStatusService,
+    private offerService: OfferService,
+    private router: Router,
+    public rbac: RbacService,
+  ){}
 
   ngOnInit(): void {
+    this.id = this.activateRoute.snapshot.params['id'];
     this.http.get('assets/country/CountryCodes.json').subscribe((data:any)=>{
       this.countries=data;
     })
@@ -49,6 +63,82 @@ export class LeadDetailsComponent {
       });
     });
 
+  }
+
+  get quotations(): any[] {
+    return Array.isArray(this.data?.offers) ? this.data.offers : [];
+  }
+
+  createQuotation(offerType: 'offer1' | 'offer2'): void {
+    if (!this.id) {
+      return;
+    }
+    const path = offerType === 'offer2'
+      ? '/dashboard/permissions/priceoffer2'
+      : '/dashboard/permissions/priceoffer1';
+    this.router.navigate([path], { queryParams: { lead_id: this.id } });
+  }
+
+  offerDetailsLink(offer: any): any[] {
+    return offer?.offer === 'offer2'
+      ? ['/dashboard/permissions/offer2', offer.id]
+      : ['/dashboard/permissions/offer1', offer.id];
+  }
+
+  latestQuotation(): any | null {
+    return this.quotations.length ? this.quotations[0] : null;
+  }
+
+  headerQuotationLink(): any[] {
+    const offer = this.latestQuotation();
+    return offer ? this.offerDetailsLink(offer) : ['/dashboard/permissions/priceoffer1'];
+  }
+
+  headerQuotationQuery(): any {
+    return this.latestQuotation() ? {} : { lead_id: this.id };
+  }
+
+  canConvertOffer(offer: any): boolean {
+    return !offer?.converted_order_id && this.rbac.canConvertFromOffer();
+  }
+
+  linkExistingQuotation(): void {
+    if (!this.id || this.linkingOffer) {
+      return;
+    }
+    Swal.fire({
+      title: 'Link existing quotation',
+      input: 'text',
+      inputLabel: 'Quotation / Offer ID',
+      inputPlaceholder: 'e.g. 125',
+      showCancelButton: true,
+      confirmButtonText: 'Link',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#82225e',
+      inputValidator: (value) => {
+        if (!value || !/^\d+$/.test(String(value).trim())) {
+          return 'Enter a valid quotation number';
+        }
+        return null;
+      },
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+      const offerId = Number(String(result.value).trim());
+      this.linkingOffer = true;
+      this.offerService.linkLead(offerId, Number(this.id)).subscribe({
+        next: () => {
+          this.linkingOffer = false;
+          Swal.fire({ icon: 'success', title: 'Linked', timer: 1400, showConfirmButton: false });
+          this.getLead();
+        },
+        error: (err) => {
+          this.linkingOffer = false;
+          Swal.fire('Error', err?.error?.message || 'Could not link quotation', 'error');
+        },
+      });
+    });
   }
 
   isImage(value: string): boolean {

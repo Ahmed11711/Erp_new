@@ -24,6 +24,18 @@ export class ShippingCompanyService {
     return this.http.get<any>(`${environment.Url}/shippingcompanies`)
   }
 
+  unlinkedSummary() {
+    return this.http.get<any>(`${environment.Url}/shippingcompanies/unlinked-summary`);
+  }
+
+  linkUnlinked() {
+    return this.http.post<any>(`${environment.Url}/shippingcompanies/link-unlinked`, {});
+  }
+
+  linkAccount(id: number) {
+    return this.http.post<any>(`${environment.Url}/shippingcompanies/${id}/link-account`, {});
+  }
+
   shippingCompanySelect(){
     return this.http.get<any>(`${environment.Url}/shippingcompanySelect`)
   }
@@ -45,6 +57,26 @@ export class ShippingCompanyService {
 
   shippingCompaniesReport(params: { date_from: string; date_to: string; q?: string }) {
     return this.http.get<any>(`${environment.Url}/reports/shipping-companies`, { params: params as any });
+  }
+
+  reconcileCount(id: number, dateFrom: string, dateTo: string) {
+    return this.http.get<any>(`${environment.Url}/shippingcompanies/${id}/reconcile-count`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+  }
+
+  reconcileOrders(id: number, dateFrom: string, dateTo: string) {
+    return this.http.get<any>(`${environment.Url}/shippingcompanies/${id}/reconcile-orders`, {
+      params: { date_from: dateFrom, date_to: dateTo },
+    });
+  }
+
+  reconcileReceivables(id: number, dateFrom: string, dateTo: string, orderIds?: number[]) {
+    return this.http.post<any>(`${environment.Url}/shippingcompanies/${id}/reconcile-receivables`, {
+      date_from: dateFrom,
+      date_to: dateTo,
+      order_ids: orderIds || null,
+    });
   }
 
 }

@@ -9,6 +9,7 @@ import { SharedModule } from '../shared/shared.module';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { NgxPaginationModule } from 'ngx-pagination';
 import { CategoriesReportComponent } from './categories-report/categories-report.component';
+import { CategoriesStatusReportComponent } from './categories-status-report/categories-status-report.component';
 import { ReportCategoriesChartComponent } from './charts/report-categories-chart/report-categories-chart.component';
 import { AngularEditorComponent } from '@kolkov/angular-editor';
 
@@ -17,6 +18,7 @@ import { AngularEditorComponent } from '@kolkov/angular-editor';
   declarations: [
     HomeComponent,
     CategoriesReportComponent,
+    CategoriesStatusReportComponent,
     ReportCategoriesChartComponent,
   ],
   imports: [

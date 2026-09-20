@@ -5,11 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use App\Models\Setting;
 
 class TreeAccount extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     /** أنواع الشجرة: asset, liability, equity, revenue, expense, settlement (تسوية — غالباً طبيعتها دائنة للعرض مثل الخصوم) */
 
@@ -51,7 +54,7 @@ class TreeAccount extends Model
             $resolved = static::resolveNextChildCodeAndLevel($parent, $lastChild);
             $code = $resolved['code'];
 
-            while (static::where('code', $code)->exists()) {
+            while (static::withTrashed()->where('code', $code)->exists()) {
                 $code = (string) ((int) $code + 1);
             }
 
@@ -61,7 +64,7 @@ class TreeAccount extends Model
             return;
         }
 
-        $lastRootQuery = static::query()->whereNull('parent_id')->lockForUpdate();
+        $lastRootQuery = static::withTrashed()->whereNull('parent_id')->lockForUpdate();
         $driver = DB::connection()->getDriverName();
         if ($driver === 'mysql') {
             $lastRoot = $lastRootQuery->orderByRaw('CAST(code AS UNSIGNED) DESC')->first();
@@ -85,7 +88,7 @@ class TreeAccount extends Model
      */
     public static function queryLastChildUnderParentLocked(self $parent): ?self
     {
-        $q = static::query()->where('parent_id', $parent->id)->lockForUpdate();
+        $q = static::withTrashed()->where('parent_id', $parent->id)->lockForUpdate();
         $driver = DB::connection()->getDriverName();
         if ($driver === 'mysql') {
             return $q->orderByRaw('CAST(code AS UNSIGNED) DESC')->first();
@@ -159,6 +162,21 @@ class TreeAccount extends Model
         return $this->hasMany(Safe::class, 'account_id');
     }
 
+    public function createdByUser()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updatedByUser()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function audits()
+    {
+        return $this->hasMany(TreeAccountAudit::class)->orderByDesc('created_at');
+    }
+
     /**
      * Whether another tree account already uses this display name (trimmed).
      */
@@ -168,7 +186,7 @@ class TreeAccount extends Model
         if ($trimmed === '') {
             return false;
         }
-        $q = static::query()->whereRaw('TRIM(name) = ?', [$trimmed]);
+        $q = static::withTrashed()->whereRaw('TRIM(name) = ?', [$trimmed]);
         if ($exceptId !== null) {
             $q->where('id', '!=', $exceptId);
         }
@@ -295,6 +313,328 @@ class TreeAccount extends Model
             ?? static::where('type', 'expense')->where('level', 2)->orderBy('id')->first();
     }
 
+    /**
+     * حساب مصروف تشغيلي عام للقيد عندما لا تُحدَّد فئة بحساب شجرة — يتجنّب ربط كل شيء بـ«رواتب موظفين»
+     * (أول فرع تحت مصروفات تشغيلية في الـ seeder الافتراضي).
+     */
+    public static function resolveOperatingExpenseFallbackLedgerAccount(): ?self
+    {
+        $parent = static::resolveDefaultOperatingExpenseParent();
+        if (! $parent) {
+            return null;
+        }
+
+        $existing = static::where('type', 'expense')
+            ->where('parent_id', $parent->id)
+            ->where('detail_type', 'general_operating_expense')
+            ->whereDoesntHave('children')
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = static::nextNumericAccountCodeUnderParent($parent);
+
+        return static::create([
+            'name' => 'مصروفات تشغيلية عامة',
+            'name_en' => 'General operating expenses',
+            'code' => (string) $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'general_operating_expense',
+        ]);
+    }
+
+    /**
+     * حساب الشجرة المدين في قيد المصروف حسب نوع المصروف (مصروف تشغيل / تسويق / ادارى).
+     * يدعم شجرة الـ seeder التي لا تُنشئ حسابات بأسماء مطابقة لنوع المصروف ومستوى 4.
+     */
+    public static function resolveExpenseTypeLedgerAccount(string $expenseType): ?self
+    {
+        $trimmed = trim($expenseType);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $byName = static::where('type', 'expense')
+            ->where('name', $trimmed)
+            ->whereDoesntHave('children')
+            ->orderByDesc('level')
+            ->first();
+        if ($byName) {
+            return $byName;
+        }
+
+        if ($trimmed === 'مصروف تشغيل') {
+            $general = static::resolveOperatingExpenseFallbackLedgerAccount();
+            if ($general) {
+                return $general;
+            }
+
+            $p = static::resolveDefaultOperatingExpenseParent();
+
+            return $p ? static::firstLeafUnderAccount($p) : null;
+        }
+
+        if ($trimmed === 'مصروف ادارى') {
+            $p = static::where('type', 'expense')
+                ->where(function ($q) {
+                    $q->where('name', 'مصروفات إدارية')
+                        ->orWhere('name', 'مصروفات ادارية')
+                        ->orWhere('name', 'like', '%مصروفات إدارية%')
+                        ->orWhere('name', 'like', '%مصروفات ادارية%');
+                })
+                ->orderBy('level')
+                ->first();
+            if ($p) {
+                return static::firstLeafUnderAccount($p);
+            }
+
+            return static::resolveExpenseTypeLedgerAccount('مصروف تشغيل');
+        }
+
+        if ($trimmed === 'مصروف تسويق') {
+            $p = static::where('type', 'expense')
+                ->where(function ($q) {
+                    $q->where('name', 'like', '%تسويق%')
+                        ->orWhere('name_en', 'like', '%market%');
+                })
+                ->where('level', '<=', 3)
+                ->orderBy('level')
+                ->orderBy('id')
+                ->first();
+            if ($p) {
+                return static::firstLeafUnderAccount($p);
+            }
+
+            return static::resolveExpenseTypeLedgerAccount('مصروف تشغيل');
+        }
+
+        return null;
+    }
+
+    /**
+     * حساب الأب لمصروفات «نقد صادر» — من الإعدادات أو بالاسم «النقد الصادر».
+     */
+    public static function resolveCashOutExpenseParent(): ?self
+    {
+        $settingId = Setting::where('key', 'cash_out_expense_parent_account_id')->value('value');
+        if ($settingId) {
+            $acc = static::query()->whereKey((int) $settingId)->where('type', 'expense')->first();
+            if ($acc) {
+                return $acc;
+            }
+        }
+
+        $acc = static::query()
+            ->where('type', 'expense')
+            ->where('detail_type', 'cash_out_expenses')
+            ->orderBy('level')
+            ->orderBy('id')
+            ->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        foreach (['النقد الصادر', 'نقد صادر', 'النقد صادر'] as $name) {
+            $acc = static::query()
+                ->where('type', 'expense')
+                ->where(function ($q) use ($name) {
+                    $q->where('name', $name)
+                        ->orWhere('name', 'like', '%'.$name.'%');
+                })
+                ->orderBy('level')
+                ->orderBy('id')
+                ->first();
+            if ($acc) {
+                return $acc;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * إنشاء حساب «النقد الصادر» تحت جذر المصروفات إن لم يكن موجوداً.
+     */
+    public static function ensureCashOutExpenseParent(): self
+    {
+        $existing = static::resolveCashOutExpenseParent();
+        if ($existing) {
+            return $existing;
+        }
+
+        $expensesRoot = static::query()
+            ->where('code', '5000')
+            ->where('type', 'expense')
+            ->first()
+            ?? static::query()->where('type', 'expense')->whereNull('parent_id')->orderBy('id')->first();
+
+        if (! $expensesRoot) {
+            throw new \RuntimeException('لم يُعثر على حساب جذر المصروفات في شجرة الحسابات لإنشاء «النقد الصادر».');
+        }
+
+        $level = (int) $expensesRoot->level + 1;
+        $nextCode = (string) static::nextNumericAccountCodeUnderParent($expensesRoot);
+        while (static::withTrashed()->where('code', $nextCode)->exists()) {
+            $nextCode = (string) ((int) preg_replace('/\D/', '', $nextCode) + 1);
+        }
+
+        return static::create([
+            'name' => 'النقد الصادر',
+            'name_en' => 'Cash out expenses',
+            'code' => $nextCode,
+            'parent_id' => $expensesRoot->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'cash_out_expenses',
+        ]);
+    }
+
+    public static function isUnderCashOutExpenseParent(self $account): bool
+    {
+        $parent = static::resolveCashOutExpenseParent();
+        if (! $parent) {
+            return false;
+        }
+
+        return static::isDescendantOf($account, (int) $parent->id) || (int) $account->id === (int) $parent->id;
+    }
+
+    public static function isDescendantOf(self $account, int $ancestorId): bool
+    {
+        $current = $account;
+        $guard = 0;
+        while ($current->parent_id && $guard < 32) {
+            if ((int) $current->parent_id === $ancestorId) {
+                return true;
+            }
+            $current = static::query()->whereKey((int) $current->parent_id)->first();
+            if (! $current) {
+                break;
+            }
+            $guard++;
+        }
+
+        return false;
+    }
+
+    /**
+     * حساب طرفي تحت «النقد الصادر» باسم فئة المصروف (يُنشأ تلقائياً عند الحاجة).
+     */
+    public static function ensureExpenseKindLedgerAccount(ExpenseKind $kind, string $expenseType): self
+    {
+        if ($kind->tree_account_id) {
+            $linked = static::query()
+                ->whereKey((int) $kind->tree_account_id)
+                ->first();
+            if ($linked) {
+                return $linked;
+            }
+        }
+
+        $parent = static::ensureCashOutExpenseParent();
+        $label = trim((string) $kind->expense_kind);
+        if ($label === '') {
+            $label = trim($expenseType) !== '' ? trim($expenseType) : 'مصروف عام';
+        }
+
+        $existing = static::query()
+            ->where('parent_id', $parent->id)
+            ->where('type', 'expense')
+            ->where('name', $label)
+            ->whereDoesntHave('children')
+            ->first();
+        if ($existing) {
+            if (! $kind->tree_account_id) {
+                $kind->tree_account_id = $existing->id;
+                $kind->saveQuietly();
+            }
+
+            return $existing;
+        }
+
+        $level = (int) $parent->level + 1;
+        $nextCode = (string) static::nextNumericAccountCodeUnderParent($parent);
+        while (static::withTrashed()->where('code', $nextCode)->exists()) {
+            $nextCode = (string) ((int) preg_replace('/\D/', '', $nextCode) + 1);
+        }
+
+        $created = static::create([
+            'name' => $label,
+            'code' => $nextCode,
+            'parent_id' => $parent->id,
+            'type' => 'expense',
+            'level' => $level,
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+        ]);
+
+        if (! $kind->tree_account_id) {
+            $kind->tree_account_id = $created->id;
+            $kind->saveQuietly();
+        }
+
+        return $created;
+    }
+
+    /**
+     * أوراق المصروف تحت حساب «النقد الصادر» (للقوائم في الواجهة).
+     *
+     * @return \Illuminate\Support\Collection<int, self>
+     */
+    public static function cashOutExpenseLeafAccounts()
+    {
+        $parent = static::ensureCashOutExpenseParent();
+        $ids = static::query()
+            ->where('type', 'expense')
+            ->where('id', '!=', $parent->id)
+            ->get(['id', 'parent_id'])
+            ->filter(fn (self $acc) => static::isDescendantOf($acc, (int) $parent->id))
+            ->pluck('id');
+
+        return static::query()
+            ->whereIn('id', $ids)
+            ->whereDoesntHave('children')
+            ->orderBy('code')
+            ->get();
+    }
+
+    /**
+     * حساب المدين في قيد المصروف: يفضّل الحساب المربوط بفئة المصروف (expense_kinds.tree_account_id)،
+     * ثم حساب فرعي تحت «النقد الصادر» باسم الفئة، ثم الاحتياطي حسب نوع المصروف الرئيسي.
+     */
+    public static function resolveExpenseDebitForKind(?ExpenseKind $kind, string $expenseType): ?self
+    {
+        if ($kind && $kind->tree_account_id) {
+            $acc = static::query()
+                ->whereKey((int) $kind->tree_account_id)
+                ->first();
+            if ($acc) {
+                return $acc;
+            }
+        }
+
+        if ($kind) {
+            try {
+                return static::ensureExpenseKindLedgerAccount($kind, $expenseType);
+            } catch (\Throwable) {
+                // fallback below
+            }
+        }
+
+        return static::resolveExpenseTypeLedgerAccount($expenseType);
+    }
+
     private static function firstLeafUnderAccount(self $account): self
     {
         $current = $account;
@@ -314,19 +654,53 @@ class TreeAccount extends Model
             ->first();
         $max = $row && $row->mx !== null ? (int) $row->mx : 0;
         if ($max > 0) {
-            return $max + 1;
+            $next = $max + 1;
+        } else {
+            $p = (int) preg_replace('/\D/', '', (string) $parent->code);
+            if ($p <= 0) {
+                $p = 50001;
+            }
+            $next = $p * 10 + 1;
         }
 
-        $p = (int) preg_replace('/\D/', '', (string) $parent->code);
-        if ($p <= 0) {
-            $p = 50001;
+        // الأكواد فريدة عالمياً (بما فيها المحذوفة soft-delete لأن فهرس DB يشملها)
+        while (static::withTrashed()->where('code', (string) $next)->exists()) {
+            $next++;
         }
 
-        return $p * 10 + 1;
+        return $next;
     }
 
     /**
-     * ذمم شركات الشحن / مندوبين (دائن).
+     * الحساب التجميعي «ذمم شركات شحن» (قد يكون له فروع لشركات الشحن).
+     */
+    public static function findShippingCourierPayableGroupAccount(): ?self
+    {
+        $withDetail = static::where('detail_type', 'shipping_courier_payable')->orderBy('id')->first();
+        if ($withDetail) {
+            return $withDetail;
+        }
+
+        $byName = static::where('type', 'liability')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%ذمم شركات شحن%')
+                    ->orWhere('name', 'like', '%مستحق شحن%')
+                    ->orWhere('name_en', 'like', '%Shipping companies payable%')
+                    ->orWhere('name_en', 'like', '%shipping%payable%');
+            })
+            ->orderBy('id')
+            ->first();
+
+        if ($byName && $byName->detail_type !== 'shipping_courier_payable') {
+            $byName->detail_type = 'shipping_courier_payable';
+            $byName->saveQuietly();
+        }
+
+        return $byName;
+    }
+
+    /**
+     * ذمم شركات الشحن / مندوبين (دائن) — ورقة قابلة للترحيل إن أمكن.
      * detail_type المقترح: shipping_courier_payable
      */
     public static function resolveShippingCourierPayableAccount(): ?self
@@ -336,9 +710,9 @@ class TreeAccount extends Model
             return $acc;
         }
 
-        $withDetail = static::where('detail_type', 'shipping_courier_payable')->orderBy('id')->first();
-        if ($withDetail) {
-            return static::firstLeafUnderAccount($withDetail);
+        $group = static::findShippingCourierPayableGroupAccount();
+        if ($group) {
+            return static::firstLeafUnderAccount($group);
         }
 
         return static::where('type', 'liability')
@@ -354,14 +728,15 @@ class TreeAccount extends Model
 
     /**
      * ذمم شركات الشحن — إنشاء تلقائي عند غياب الحساب (مثل AccountingInventoryShippingAccountsSeeder).
+     * يُرجع الحساب التجميعي (حتى لو له فروع) لاستخدامه كأب لذمم شركات الشحن.
      *
      * @throws \RuntimeException إن تعذر العثور على مجموعة خصوم متداولة مناسبة
      */
     public static function ensureShippingCourierPayableAccount(): self
     {
-        $acc = static::resolveShippingCourierPayableAccount();
-        if ($acc) {
-            return $acc;
+        $group = static::findShippingCourierPayableGroupAccount();
+        if ($group) {
+            return $group;
         }
 
         $parent = static::where('code', '20001')->first()
@@ -393,6 +768,8 @@ class TreeAccount extends Model
     /**
      * إيراد شحن/توصيل يُحصّل من العميل (ليس مصروف الناقل).
      * detail_type المقترح: shipping_revenue
+     *
+     * يطابق الأسماء الشائعة: «إيراد شحن»، «إيرادات الشحن»، «إيراد شحن وتوصيل»، …
      */
     public static function resolveShippingRevenueAccount(): ?self
     {
@@ -401,13 +778,65 @@ class TreeAccount extends Model
             return $acc;
         }
 
+        $withDetail = static::where('detail_type', 'shipping_revenue')->orderBy('id')->first();
+        if ($withDetail) {
+            return static::firstLeafUnderAccount($withDetail);
+        }
+
+        // %إيراد%شحن% يغطي: إيراد شحن / إيرادات الشحن / إيرادات شحن وتوصيل
         return static::where('type', 'revenue')
             ->where(function ($q) {
-                $q->where('name', 'like', '%إيراد شحن%')
+                $q->where('name', 'like', '%إيراد%شحن%')
+                    ->orWhere('name', 'like', '%ايراد%شحن%')
                     ->orWhere('name', 'like', '%شحن محصل%')
-                    ->orWhere('name_en', 'like', '%shipping%revenue%');
+                    ->orWhere('name', 'like', '%شحن للعميل%')
+                    ->orWhere('name_en', 'like', '%shipping%revenue%')
+                    ->orWhere('name_en', 'like', '%shipping%handling%')
+                    ->orWhere('name_en', 'like', '%delivery%revenue%');
             })
             ->whereDoesntHave('children')
+            ->orderByRaw("CASE
+                WHEN name LIKE '%إيرادات الشحن%' OR name LIKE '%ايرادات الشحن%' THEN 0
+                WHEN name LIKE '%إيراد شحن%' OR name LIKE '%ايراد شحن%' THEN 1
+                WHEN name LIKE '%إيراد%شحن%' OR name LIKE '%ايراد%شحن%' THEN 2
+                ELSE 3
+            END")
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * إيراد خدمات الصيانة (طلبات «طلب صيانة») — ليس مبيعات بضاعة.
+     * detail_type المقترح: maintenance_revenue
+     *
+     * يطابق: «إيرادات الصيانة»، «إيرادات صيانة»، «إيراد صيانة»، …
+     */
+    public static function resolveMaintenanceRevenueAccount(): ?self
+    {
+        $acc = static::where('detail_type', 'maintenance_revenue')->whereDoesntHave('children')->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $withDetail = static::where('detail_type', 'maintenance_revenue')->orderBy('id')->first();
+        if ($withDetail) {
+            return static::firstLeafUnderAccount($withDetail);
+        }
+
+        return static::where('type', 'revenue')
+            ->where(function ($q) {
+                $q->where('name', 'like', '%إيراد%صيان%')
+                    ->orWhere('name', 'like', '%ايراد%صيان%')
+                    ->orWhere('name_en', 'like', '%maintenance%revenue%')
+                    ->orWhere('name_en', 'like', '%service%maintenance%');
+            })
+            ->whereDoesntHave('children')
+            ->orderByRaw("CASE
+                WHEN name LIKE '%إيرادات الصيانة%' OR name LIKE '%ايرادات الصيانة%' THEN 0
+                WHEN name LIKE '%إيرادات صيانة%' OR name LIKE '%ايرادات صيانة%' THEN 1
+                WHEN name LIKE '%إيراد صيانة%' OR name LIKE '%ايراد صيانة%' THEN 2
+                ELSE 3
+            END")
             ->orderBy('id')
             ->first();
     }
@@ -525,6 +954,91 @@ class TreeAccount extends Model
     }
 
     /**
+     * حساب مخزون الجرد المرتبط بصف مخزن (جدول stocks عبر asset_id).
+     */
+    public static function resolveInventoryAccountForStock(?Stock $stock): ?self
+    {
+        if ($stock && $stock->asset_id) {
+            $acc = static::query()->whereKey((int) $stock->asset_id)->first();
+            if ($acc && $acc->type === 'asset') {
+                return $acc;
+            }
+        }
+
+        if ($stock) {
+            $wt = trim((string) ($stock->warehouse_type ?? ''));
+            $name = trim((string) ($stock->name ?? ''));
+            if ($wt === 'wip' || $name === 'مخزن منتج تحت التشغيل') {
+                return static::resolveInventoryWipAccount();
+            }
+            if ($wt === 'raw_materials' || $name === 'مخزن مواد خام') {
+                return static::resolveInventoryRawAccount();
+            }
+            if ($wt === 'finished_goods' || $name === 'مخزن منتج تام') {
+                return static::resolveInventoryFinishedAccount();
+            }
+            if ($wt === 'materials_at_vendor'
+                || $name === 'مخزن التجهيز'
+                || $name === 'مواد لدى مندوب'
+                || $name === 'مخزون لدى معالج خارجي') {
+                return static::resolveInventorySubcontractAccount();
+            }
+            if ($wt === 'operating_supplies'
+                || $name === 'مستلزمات تشغيل وأدوات تشغيل') {
+                return static::resolveInventoryOperatingSuppliesAccount();
+            }
+        }
+
+        return static::resolveInventoryAccount();
+    }
+
+    /**
+     * حساب مخزون الصنف من categories (يفضّل stock_id ثم مطابقة اسم المخزن مع stocks.name).
+     */
+    public static function resolveInventoryAccountForCategoryRow(?object $categoryRow): ?self
+    {
+        if (! $categoryRow) {
+            return static::resolveInventoryAccount();
+        }
+
+        $stock = null;
+        if (! empty($categoryRow->stock_id)) {
+            $stock = Stock::query()->find((int) $categoryRow->stock_id);
+        }
+        if (! $stock && ! empty($categoryRow->warehouse)) {
+            $stock = Stock::query()->where('name', trim((string) $categoryRow->warehouse))->first();
+        }
+
+        $resolved = static::resolveInventoryAccountForStock($stock);
+        if ($resolved) {
+            return $resolved;
+        }
+
+        $w = trim((string) ($categoryRow->warehouse ?? ''));
+        if ($w === 'مخزن منتج تحت التشغيل') {
+            return static::resolveInventoryWipAccount();
+        }
+        if ($w === 'مخزن مواد خام') {
+            return static::resolveInventoryRawAccount();
+        }
+        if ($w === 'مخزن منتج تام') {
+            return static::resolveInventoryFinishedAccount();
+        }
+        if ($w === 'مستلزمات تشغيل وأدوات تشغيل') {
+            return static::resolveInventoryOperatingSuppliesAccount();
+        }
+
+        return static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryAccountForCategoryId(int $categoryId): ?self
+    {
+        $row = DB::table('categories')->where('id', $categoryId)->first();
+
+        return static::resolveInventoryAccountForCategoryRow($row);
+    }
+
+    /**
      * حساب موازنة لرصيد مخزون افتتاحي (دائن) — حقوق ملكية أو جاري.
      */
     public static function resolveOpeningInventoryOffsetAccount(): ?self
@@ -544,5 +1058,163 @@ class TreeAccount extends Model
             ->orderBy('id')
             ->first()
             ?? static::where('type', 'equity')->whereDoesntHave('children')->orderBy('id')->first();
+    }
+
+    public static function resolveInventoryRawAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_raw')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryWipAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_wip')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryFinishedAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_finished')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventorySubcontractAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_subcontract')->whereDoesntHave('children')->first()
+            ?? static::where('code', '1000224')->whereDoesntHave('children')->first()
+            ?? static::resolveInventoryAccount();
+    }
+
+    public static function resolveInventoryOperatingSuppliesAccount(): ?self
+    {
+        $id = DB::table('tree_accounts')
+            ->where(function ($q) {
+                $q->where('detail_type', 'inventory_operating_supplies')
+                    ->orWhere('code', '1000225');
+            })
+            ->orderByRaw("CASE WHEN detail_type = 'inventory_operating_supplies' THEN 0 ELSE 1 END")
+            ->orderBy('id')
+            ->value('id');
+
+        if ($id) {
+            return static::withoutGlobalScopes()->find((int) $id);
+        }
+
+        return static::resolveInventoryAccount();
+    }
+
+    public static function resolveManufacturingOverheadSuppliesAccount(): ?self
+    {
+        $id = DB::table('tree_accounts')
+            ->where(function ($q) {
+                $q->where('detail_type', 'manufacturing_overhead_supplies')
+                    ->orWhere('code', '500017');
+            })
+            ->orderByRaw("CASE WHEN detail_type = 'manufacturing_overhead_supplies' THEN 0 ELSE 1 END")
+            ->orderBy('id')
+            ->value('id');
+
+        return $id ? static::withoutGlobalScopes()->find((int) $id) : null;
+    }
+
+    public static function resolveInventoryAdjustmentLossAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_adjustment_loss')->whereDoesntHave('children')->first();
+    }
+
+    public static function resolveInventoryAdjustmentGainAccount(): ?self
+    {
+        return static::where('detail_type', 'inventory_adjustment_gain')->whereDoesntHave('children')->first();
+    }
+
+    /**
+     * حساب وسيط لمقبوضات العملاء المسجّلة دون تحديد بنك/خزينة بعد.
+     * detail_type: unallocated_prepaid_receipts
+     */
+    public static function resolveUnallocatedPrepaidReceiptsAccount(): ?self
+    {
+        $settingId = Setting::where('key', 'unallocated_prepaid_receipts_account_id')->value('value');
+        if ($settingId) {
+            $acc = static::find((int) $settingId);
+
+            return $acc && ! $acc->children()->exists() ? $acc : null;
+        }
+
+        $acc = static::where('detail_type', 'unallocated_prepaid_receipts')
+            ->whereDoesntHave('children')
+            ->first();
+        if ($acc) {
+            return $acc;
+        }
+
+        $cashParent = static::resolveCashGroupParent();
+        if (! $cashParent) {
+            return null;
+        }
+
+        $existing = static::where('parent_id', $cashParent->id)
+            ->where(function ($q) {
+                $q->where('name', 'like', '%مقبوضات بانتظار%')
+                    ->orWhere('name', 'like', '%تحت الحساب%معلق%');
+            })
+            ->whereDoesntHave('children')
+            ->orderBy('id')
+            ->first();
+
+        return $existing;
+    }
+
+    public static function ensureUnallocatedPrepaidReceiptsAccount(): self
+    {
+        $acc = static::resolveUnallocatedPrepaidReceiptsAccount();
+        if ($acc) {
+            return $acc;
+        }
+
+        $cashParent = static::resolveCashGroupParent();
+        if (! $cashParent) {
+            throw new \RuntimeException('تعذر إنشاء حساب مقبوضات بانتظار التسجيل: لم يُعثر على حساب «النقدية» أو مجموعة الخزائن في الشجرة.');
+        }
+
+        $resolved = static::resolveNextChildCodeAndLevel($cashParent, static::queryLastChildUnderParentLocked($cashParent));
+
+        return static::create([
+            'name' => 'مقبوضات بانتظار التسجيل',
+            'name_en' => 'Unallocated customer receipts',
+            'code' => $resolved['code'],
+            'parent_id' => $cashParent->id,
+            'type' => 'asset',
+            'level' => $resolved['level'],
+            'balance' => 0,
+            'debit_balance' => 0,
+            'credit_balance' => 0,
+            'detail_type' => 'unallocated_prepaid_receipts',
+        ]);
+    }
+
+    private static function resolveCashGroupParent(): ?self
+    {
+        $byName = static::query()
+            ->where('type', 'asset')
+            ->where(function ($q) {
+                $q->where('name', 'النقدية')
+                    ->orWhere('name', 'like', 'النقدية%')
+                    ->orWhere('name', 'الخزينة')
+                    ->orWhere('name', 'like', '%النقدية وما في حكمها%');
+            })
+            ->orderBy('id')
+            ->first();
+        if ($byName) {
+            return $byName;
+        }
+
+        $safe = static::query()
+            ->where('detail_type', 'safe')
+            ->whereDoesntHave('children')
+            ->whereNotNull('parent_id')
+            ->orderBy('id')
+            ->first();
+
+        return $safe?->parent_id ? static::query()->find((int) $safe->parent_id) : null;
     }
 }
