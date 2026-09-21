@@ -532,7 +532,7 @@
             type="button"
             class="wa-footer-toggle-btn"
             (click)="toggleSuggestions()"
-            *ngIf="templates.length > 0 || quickSnippets.length > 0"
+            *ngIf="templates.length > 0 || quickSnippets.length > 0 || chatMetaTemplates.length > 0"
           >
             <mat-icon>{{ suggestionsOpen ? 'expand_more' : 'lightbulb' }}</mat-icon>
             {{ suggestionsOpen ? 'إخفاء الاقتراحات' : 'اقتراحات سريعة' }}
@@ -540,10 +540,19 @@
         </div>
         <div
           class="wa-suggestions"
-          *ngIf="templates.length > 0 || quickSnippets.length > 0"
+          *ngIf="templates.length > 0 || quickSnippets.length > 0 || chatMetaTemplates.length > 0"
         >
           <span class="wa-suggestions-title">اقتراحات سريعة</span>
           <div class="wa-chip-scroll">
+            <button
+              type="button"
+              class="wa-chip wa-chip-meta"
+              *ngFor="let t of chatMetaTemplates"
+              (click)="sendChatMetaTemplate(t)"
+              [disabled]="sendingMetaTemplate"
+            >
+              {{ t.ui_label ? t.ui_label : t.name }}
+            </button>
             <button
               type="button"
               class="wa-chip"

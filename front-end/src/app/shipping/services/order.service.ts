@@ -333,9 +333,10 @@ export class OrderService {
     description?: string;
     lines?: Array<{ account_id: number; debit: number; credit: number; description?: string }>;
     journals?: Array<{
-      key: 'invoice' | 'cogs' | 'prepaid' | 'delivery';
+      key: 'invoice' | 'cogs' | 'prepaid' | 'delivery' | 'collection' | 'shipping_expense';
       date?: string;
       description?: string;
+      sync_operational?: boolean;
       lines: Array<{ account_id: number; debit: number; credit: number; description?: string }>;
     }>;
   }) {

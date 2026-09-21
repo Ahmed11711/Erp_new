@@ -71,8 +71,8 @@ class MissingSalesInvoiceJournalController extends Controller
             'lines.*.debit' => ['nullable', 'numeric', 'min:0'],
             'lines.*.credit' => ['nullable', 'numeric', 'min:0'],
             'lines.*.description' => ['nullable', 'string', 'max:255'],
-            'journals' => ['nullable', 'array', 'max:6'],
-            'journals.*.key' => ['required_with:journals', 'string', 'in:invoice,cogs,prepaid,delivery'],
+            'journals' => ['nullable', 'array', 'max:8'],
+            'journals.*.key' => ['required_with:journals', 'string', 'in:invoice,cogs,prepaid,delivery,collection,shipping_expense'],
             'journals.*.date' => ['nullable', 'date'],
             'journals.*.description' => ['nullable', 'string', 'max:255'],
             'journals.*.lines' => ['required_with:journals', 'array', 'min:2', 'max:20'],
@@ -80,6 +80,7 @@ class MissingSalesInvoiceJournalController extends Controller
             'journals.*.lines.*.debit' => ['nullable', 'numeric', 'min:0'],
             'journals.*.lines.*.credit' => ['nullable', 'numeric', 'min:0'],
             'journals.*.lines.*.description' => ['nullable', 'string', 'max:255'],
+            'journals.*.sync_operational' => ['nullable', 'boolean'],
         ]);
 
         try {

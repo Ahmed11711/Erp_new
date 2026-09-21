@@ -708,6 +708,8 @@ class WhatsAppMessageController extends Controller
                     ['name' => 'client_review', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'تقييم العميل بالإنجليزية', 'body_params' => ['اسم العميل'], 'body_param_keys' => ['customer_name'], 'phone_number_id' => null],
                     ['name' => 'feedback', 'language' => 'ar', 'ui_label' => 'فيد باك بالعربية', 'header_format' => 'omit', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
                     ['name' => 'feedback', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'فيد باك بالانجليزية', 'header_format' => 'omit', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null],
+                    ['name' => 'share_img', 'language' => 'ar', 'ui_label' => 'مشاركة صورة المنتج بالعربية', 'header_format' => 'omit', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null, 'show_in_chat' => true],
+                    ['name' => 'share_img', 'language' => 'en_US', 'api_language_code' => 'en', 'ui_label' => 'مشاركة صورة المنتج بالإنجليزية', 'header_format' => 'omit', 'body_params' => [], 'body_param_keys' => [], 'phone_number_id' => null, 'show_in_chat' => true],
                 ];
                 Log::warning('Meta templates loaded from fallback - config may be empty. Run: php artisan config:clear && php artisan config:cache');
             }
@@ -735,12 +737,13 @@ class WhatsAppMessageController extends Controller
     }
 
     /**
-     * Send Meta WhatsApp template message from order (for 24h session / first contact)
+     * Send Meta WhatsApp template from an order or from chat (customer_id).
      */
     public function sendMetaTemplateFromOrder(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'order_id' => 'required|exists:orders,id',
+            'order_id' => 'nullable|exists:orders,id',
+            'customer_id' => 'nullable|exists:customers,id',
             'template_name' => 'required|string',
             'language_code' => 'nullable|string|max:10',
             'body_parameters' => 'nullable|array',
@@ -754,9 +757,17 @@ class WhatsAppMessageController extends Controller
             return response()->json(['error' => $validator->errors()], 422);
         }
 
+        if (!$request->filled('order_id') && !$request->filled('customer_id')) {
+            return response()->json([
+                'success' => false,
+                'error' => 'order_id or customer_id is required',
+            ], 422);
+        }
+
         try {
-            $order = Order::findOrFail($request->order_id);
-            $phone = $order->customer_phone_1;
+            $order = $request->filled('order_id') ? Order::findOrFail($request->order_id) : null;
+            $customerFromChat = $request->filled('customer_id') ? Customer::findOrFail($request->customer_id) : null;
+            $phone = $order?->customer_phone_1 ?: $customerFromChat?->phone;
             if (!$phone) {
                 return response()->json([
                     'success' => false,
@@ -794,7 +805,13 @@ class WhatsAppMessageController extends Controller
                 $keys = $templateConfig['body_param_keys'] ?? [];
                 $bodyParams = [];
                 foreach ($keys as $key) {
-                    $val = (string) ($order->{$key} ?? '');
+                    $val = '';
+                    if ($order) {
+                        $val = (string) ($order->{$key} ?? '');
+                    }
+                    if (trim($val) === '' && $customerFromChat) {
+                        $val = (string) ($customerFromChat->{$key} ?? '');
+                    }
                     // Meta rejects empty parameters - use placeholder to avoid "Parameter name is missing or empty"
                     $bodyParams[] = trim($val) === '' ? '-' : $val;
                 }
@@ -805,7 +822,7 @@ class WhatsAppMessageController extends Controller
                 $hKeys = $templateConfig['header_param_keys'] ?? [];
                 $headerParams = [];
                 foreach ($hKeys as $key) {
-                    $val = (string) ($order->{$key} ?? '');
+                    $val = $order ? (string) ($order->{$key} ?? '') : '';
                     $headerParams[] = trim($val) === '' ? '-' : $val;
                 }
             }
@@ -815,8 +832,8 @@ class WhatsAppMessageController extends Controller
                 $headerFormat = 'text';
             }
 
-            // قالب feedback (عربي وإنجليزي) في Meta بدون header (الصورة حُذفت). أي معاملات header تسبب 132018.
-            if ($templateName === 'feedback') {
+            // feedback و share_img في Meta بدون متغير header. أي معاملات header تسبب 132018.
+            if (in_array($templateName, ['feedback', 'share_img'], true)) {
                 $headerFormat = 'omit';
                 $headerParams = [];
             }
@@ -942,32 +959,23 @@ class WhatsAppMessageController extends Controller
             );
 
             if ($result['success']) {
-                $customer = Customer::firstOrCreate(
-                    ['phone' => $phone],
-                    ['name' => $order->customer_name, 'assigned_agent_id' => auth()->id()]
-                );
-                // Build readable message for chat display (نفس الاسم بلغات مختلفة)
-                $langKey = explode('_', $resolvedLang)[0];
-                $templateLabels = [
-                    'order_confirmation' => 'تأكيد الطلب',
-                    'order_flow|en' => 'تجهيز الطلب بالإنجليزية',
-                    'order_confirmation_flow|ar' => 'تجهيز الطلب بالعربية',
-                    'confirm_order|ar' => 'تأكيد الطلب بالعربية',
-                    'confirm_order|en' => 'تأكيد الطلب بالإنجليزية',
-                    // 'order_update' => 'تحديث الطلب',
-                    // 'hello_world' => 'رسالة ترحيب',
-                    'review_request' => 'طلب تقييم',
-                    'client_review|en' => 'تقييم العميل بالإنجليزية',
-                    'client_review|ar' => 'تقييم العميل بالعربية',
-                    'feedback|en' => 'فيد باك بالانجليزية',
-                    'feedback|ar' => 'فيد باك بالعربية',
-                ];
-                $composite = $templateName . '|' . $langKey;
-                $label = $templateLabels[$composite] ?? $templateLabels[$templateName] ?? $templateName;
-                $messageContent = "📋 قالب: {$label} - الطلب #{$order->id} - {$order->customer_name} - {$order->net_total} ج.م";
-                Message::create([
+                $customer = $customerFromChat;
+                if (!$customer) {
+                    $customer = Customer::firstOrCreate(
+                        ['phone' => $phone],
+                        ['name' => $order?->customer_name ?: ('Customer ' . substr($phone, -4)), 'assigned_agent_id' => auth()->id()]
+                    );
+                }
+                $label = $this->metaTemplateChatLabel($templateName, $resolvedLang, $templateConfig);
+                if ($order) {
+                    $messageContent = "📋 قالب: {$label} - الطلب #{$order->id} - {$order->customer_name} - {$order->net_total} ج.م";
+                } else {
+                    $who = $customer->name ?: $phone;
+                    $messageContent = "📋 قالب: {$label} - {$who}";
+                }
+                $message = Message::create([
                     'customer_id' => $customer->id,
-                    'order_id' => $order->id,
+                    'order_id' => $order?->id,
                     'sender_id' => auth()->id(),
                     'receiver_id' => null,
                     'content' => $messageContent,
@@ -997,7 +1005,8 @@ class WhatsAppMessageController extends Controller
                         $followupError = $followRes['error'] ?? 'unknown';
                         Log::warning('Meta template session follow-up failed', [
                             'template' => $templateName,
-                            'order_id' => $order->id,
+                            'order_id' => $order?->id,
+                            'customer_id' => $customer->id,
                             'error' => $followupError,
                         ]);
                     } else {
@@ -1010,7 +1019,7 @@ class WhatsAppMessageController extends Controller
                         }
                         Message::create([
                             'customer_id' => $customer->id,
-                            'order_id' => $order->id,
+                            'order_id' => $order?->id,
                             'sender_id' => auth()->id(),
                             'receiver_id' => null,
                             'content' => $preview,
@@ -1021,6 +1030,9 @@ class WhatsAppMessageController extends Controller
                     }
                 }
 
+                $customer = $this->archiveConversationAfterAgentReply($customer);
+                $message->load('sender');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Template sent successfully',
@@ -1028,6 +1040,8 @@ class WhatsAppMessageController extends Controller
                     'followup_error' => $followupError,
                     'message_status' => $result['message_status'] ?? null,
                     'message_sid' => $result['message_sid'] ?? null,
+                    'data' => $message,
+                    'conversation' => $this->conversationArchivePayload($customer),
                 ], 200);
             }
 
@@ -1285,6 +1299,36 @@ class WhatsAppMessageController extends Controller
 
             return response()->json(['success' => false, 'error' => 'lookup failed'], 500);
         }
+    }
+
+    /**
+     * اسم القالب كما يظهر في الشات (عربي / إنجليزي).
+     */
+    private function metaTemplateChatLabel(string $templateName, string $resolvedLang, array $templateConfig = []): string
+    {
+        $ui = trim((string) ($templateConfig['ui_label'] ?? ''));
+        if ($ui !== '') {
+            return $ui;
+        }
+
+        $langKey = explode('_', str_replace('-', '_', $resolvedLang))[0];
+        $templateLabels = [
+            'order_confirmation' => 'تأكيد الطلب',
+            'order_flow|en' => 'تجهيز الطلب بالإنجليزية',
+            'order_confirmation_flow|ar' => 'تجهيز الطلب بالعربية',
+            'confirm_order|ar' => 'تأكيد الطلب بالعربية',
+            'confirm_order|en' => 'تأكيد الطلب بالإنجليزية',
+            'review_request' => 'طلب تقييم',
+            'client_review|en' => 'تقييم العميل بالإنجليزية',
+            'client_review|ar' => 'تقييم العميل بالعربية',
+            'feedback|en' => 'فيد باك بالانجليزية',
+            'feedback|ar' => 'فيد باك بالعربية',
+            'share_img|ar' => 'مشاركة صورة المنتج بالعربية',
+            'share_img|en' => 'مشاركة صورة المنتج بالإنجليزية',
+        ];
+        $composite = $templateName . '|' . $langKey;
+
+        return $templateLabels[$composite] ?? $templateLabels[$templateName] ?? $templateName;
     }
 
     /**

@@ -124,6 +124,8 @@ export class ChatPageComponent implements OnInit, OnDestroy {
   sending = false;
 
   templates: any[] = [];
+  chatMetaTemplates: any[] = [];
+  sendingMetaTemplate = false;
   quickSnippets: { label: string; text: string }[] = [
     { label: 'ترحيب', text: 'مرحباً، شكراً لتواصلك معنا. كيف يمكننا مساعدتك اليوم؟' },
     { label: 'متابعة الطلب', text: 'تمت متابعة طلبك، وسنُعلمك بأي تحديث في أقرب وقت.' },
@@ -176,6 +178,7 @@ export class ChatPageComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadTemplates();
+    this.loadChatMetaTemplates();
 
     this.subs.push(
       combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(
@@ -1177,6 +1180,88 @@ export class ChatPageComponent implements OnInit, OnDestroy {
         this.templates = [];
       },
     });
+  }
+
+  loadChatMetaTemplates(): void {
+    this.whatsappService.getMetaTemplates().subscribe({
+      next: (res: any) => {
+        const data = res?.data ?? res;
+        const raw = Array.isArray(data) ? data : [];
+        this.chatMetaTemplates = raw.filter((t: any) => t?.show_in_chat);
+      },
+      error: () => {
+        this.chatMetaTemplates = [];
+      },
+    });
+  }
+
+  sendChatMetaTemplate(tpl: any): void {
+    const customerId = this.customerId;
+    if (!tpl?.name || !customerId || !this.customer?.phone || this.sendingMetaTemplate) {
+      return;
+    }
+    this.sendingMetaTemplate = true;
+    this.whatsappService
+      .sendMetaTemplateFromOrder({
+        customer_id: customerId,
+        template_name: tpl.name,
+        language_code: tpl.api_language_code || tpl.language || 'ar',
+      })
+      .subscribe({
+        next: (res: any) => {
+          this.sendingMetaTemplate = false;
+          if (!res?.success) {
+            Swal.fire({
+              icon: 'error',
+              title: 'خطأ',
+              text: res?.error || 'فشل إرسال القالب',
+            });
+            return;
+          }
+          const held = String(res.message_status || '').toLowerCase() === 'held_for_quality_assessment';
+          if (held) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'واتساب أوقف الرسالة للمراجعة',
+              text: 'القالب تسويقي: واتساب قبلها ولم يسلّمها بعد. راجع حالة القالب في مدير أعمال ميتا.',
+            });
+          }
+          if (res.data) {
+            const appended: MessageView = this.decorate({
+              id: res.data.id,
+              message: res.data.content ?? `📋 قالب: ${tpl.ui_label || tpl.name}`,
+              type: res.data.type ?? 'text',
+              direction: 'sent',
+              status: res.data.status,
+              media_url: null,
+              media_mime_type: null,
+              media_filename: null,
+              media_caption: null,
+              sender: res.data.sender
+                ? { id: res.data.sender.id, name: res.data.sender.name }
+                : null,
+              created_at:
+                res.data.created_at || new Date().toISOString().slice(0, 19).replace('T', ' '),
+            });
+            this.messages = [...this.messages, appended];
+            this.markConversationArchivedAfterSend(
+              customerId,
+              res.conversation?.whatsapp_archived_at || appended.created_at
+            );
+            setTimeout(() => this.scrollToBottom(), 30);
+          } else {
+            this.bootstrapConversation();
+          }
+        },
+        error: (err) => {
+          this.sendingMetaTemplate = false;
+          Swal.fire({
+            icon: 'error',
+            title: 'خطأ',
+            text: err.error?.error || 'حدث خطأ أثناء إرسال القالب',
+          });
+        },
+      });
   }
 
   applySuggestion(text: string): void {

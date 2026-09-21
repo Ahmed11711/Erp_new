@@ -28,6 +28,9 @@ interface JournalDraft {
   date?: string | null;
   description?: string;
   lines: InvoiceJournalLineDraft[];
+  sync_operational_default?: boolean;
+  cash_source?: string | null;
+  cash_source_already_recorded?: boolean;
 }
 
 @Component({
@@ -85,6 +88,20 @@ export class DialogOrderInvoiceJournalComponent implements OnInit {
     return !!draft?.reason && !draft?.posted;
   }
 
+  showsSyncOperational(index: number): boolean {
+    return String(this.drafts[index]?.key || this.journals.at(index)?.get('key')?.value || '') === 'collection';
+  }
+
+  private defaultSyncOperational(draft: JournalDraft): boolean {
+    if (draft.key !== 'collection') {
+      return false;
+    }
+    if (typeof draft.sync_operational_default === 'boolean') {
+      return draft.sync_operational_default;
+    }
+    return !draft.cash_source_already_recorded;
+  }
+
   journalTotals(index: number): { debit: number; credit: number; balance: number } {
     let debit = 0;
     let credit = 0;
@@ -124,7 +141,7 @@ export class DialogOrderInvoiceJournalComponent implements OnInit {
 
   addLine(journalIndex: number, line?: Partial<InvoiceJournalLineDraft>): void {
     const group = new FormGroup({
-      account_id: new FormControl<number | null>(line?.account_id ?? null, Validators.required),
+      account_id: new FormControl<number | null>(line?.account_id ? Number(line.account_id) : null, Validators.required),
       debit: new FormControl<number>(Number(line?.debit || 0), { nonNullable: true }),
       credit: new FormControl<number>(Number(line?.credit || 0), { nonNullable: true }),
       description: new FormControl<string>(line?.description || '', { nonNullable: true }),
@@ -153,6 +170,7 @@ export class DialogOrderInvoiceJournalComponent implements OnInit {
     this.journals.at(journalIndex).patchValue({
       date: draft.date || '',
       description: draft.description || draft.title,
+      sync_operational: this.defaultSyncOperational(draft),
     });
     for (const line of draft.lines) {
       this.addLine(journalIndex, line);
@@ -205,31 +223,42 @@ export class DialogOrderInvoiceJournalComponent implements OnInit {
     if (!this.canPost || this.submitting || !this.allEditableBalanced || this.form.invalid) {
       return;
     }
-    const allowedKeys = ['invoice', 'cogs', 'prepaid', 'delivery'] as const;
-    const journals = this.journals.controls
-      .filter((group) => !!group.get('can_post')?.value)
-      .map((group) => {
-        const index = this.journals.controls.indexOf(group);
-        const rawKey = String(group.get('key')?.value || '');
-        const key = allowedKeys.find((item) => item === rawKey);
-        return {
-          key,
-          date: String(group.get('date')?.value || ''),
-          description: String(group.get('description')?.value || '').trim(),
-          lines: this.journalLines(index).controls.map((line) => ({
-            account_id: Number(line.get('account_id')?.value),
-            debit: Number(line.get('debit')?.value || 0),
-            credit: Number(line.get('credit')?.value || 0),
-            description: String(line.get('description')?.value || '').trim(),
-          })),
-        };
-      })
-      .filter((journal): journal is {
-        key: typeof allowedKeys[number];
-        date: string;
-        description: string;
-        lines: Array<{ account_id: number; debit: number; credit: number; description: string }>;
-      } => !!journal.key && journal.lines.length >= 2);
+    const allowedKeys = ['invoice', 'cogs', 'prepaid', 'delivery', 'collection', 'shipping_expense'] as const;
+    type JournalPayload = {
+      key: typeof allowedKeys[number];
+      date: string;
+      description: string;
+      sync_operational?: boolean;
+      lines: Array<{ account_id: number; debit: number; credit: number; description: string }>;
+    };
+    const journals: JournalPayload[] = [];
+    this.journals.controls.forEach((group, index) => {
+      if (!group.get('can_post')?.value) {
+        return;
+      }
+      const rawKey = String(group.get('key')?.value || '');
+      const key = allowedKeys.find((item) => item === rawKey);
+      if (!key) {
+        return;
+      }
+      const payload: JournalPayload = {
+        key,
+        date: String(group.get('date')?.value || ''),
+        description: String(group.get('description')?.value || '').trim(),
+        lines: this.journalLines(index).controls.map((line) => ({
+          account_id: Number(line.get('account_id')?.value),
+          debit: Number(line.get('debit')?.value || 0),
+          credit: Number(line.get('credit')?.value || 0),
+          description: String(line.get('description')?.value || '').trim(),
+        })),
+      };
+      if (key === 'collection') {
+        payload.sync_operational = !!group.get('sync_operational')?.value;
+      }
+      if (payload.lines.length >= 2) {
+        journals.push(payload);
+      }
+    });
 
     if (journals.some((journal) => journal.lines.some((line) => !line.account_id))) {
       await Swal.fire({ icon: 'warning', title: 'اختر حساباً لكل بند', timer: 1800, showConfirmButton: false });
@@ -306,6 +335,9 @@ export class DialogOrderInvoiceJournalComponent implements OnInit {
           date: journal.date || preview.date || '',
           description: journal.description || journal.title || '',
           lines: Array.isArray(journal.lines) ? journal.lines : [],
+          sync_operational_default: !!journal.sync_operational_default,
+          cash_source: journal.cash_source || null,
+          cash_source_already_recorded: !!journal.cash_source_already_recorded,
         }))
       : [{
           key: 'invoice',
@@ -335,6 +367,7 @@ export class DialogOrderInvoiceJournalComponent implements OnInit {
         can_post: new FormControl(draft.can_post, { nonNullable: true }),
         date: new FormControl(draft.date || '', { nonNullable: true, validators: draft.can_post ? [Validators.required] : [] }),
         description: new FormControl(draft.description || draft.title, { nonNullable: true }),
+        sync_operational: new FormControl(this.defaultSyncOperational(draft), { nonNullable: true }),
         lines: new FormArray<FormGroup>([]),
       }));
       for (const line of draft.lines) {

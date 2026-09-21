@@ -36,7 +36,7 @@ class SafeOperationalLedgerService
         }
 
         $date = $date ?? date('Y-m-d');
-        $userId = $userId ?? auth()->id();
+        $userId = $userId ?? auth()->id() ?? 1;
 
         return DB::transaction(function () use ($safe, $signedAmount, $details, $ref, $type, $userId, $date) {
             $locked = Safe::query()->lockForUpdate()->find($safe->id);

@@ -86,6 +86,9 @@ export class DialogWhatsAppMessageComponent implements OnInit {
       if (n === 'feedback') {
         return 3;
       }
+      if (n === 'share_img') {
+        return 4;
+      }
       return 9;
     };
     const langPrio = (x: any): number => {
