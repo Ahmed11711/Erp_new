@@ -169,6 +169,8 @@ class SalesOrderAccountingService
         ];
 
         if (! $base['applicable']) {
+            // بدون مبلغ مقدم لا يوجد قيد سداد مقدم — قيود التحصيل (ORD-OPS) لا تُحسب هنا.
+            $base['posted'] = false;
             $base['reason'] = 'لا يوجد مبلغ تحت الحساب على هذا الطلب.';
 
             return $base;

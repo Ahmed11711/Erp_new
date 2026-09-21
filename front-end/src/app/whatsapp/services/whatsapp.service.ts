@@ -36,9 +36,10 @@ export class WhatsAppService {
       : this.http.get<any>(url, opts);
   }
 
-  /** Send Meta WhatsApp template from order (for 24h window / first contact) */
+  /** Send Meta WhatsApp template from order or chat (customer_id). */
   sendMetaTemplateFromOrder(data: {
-    order_id: number;
+    order_id?: number;
+    customer_id?: number;
     template_name: string;
     language_code?: string;
     body_parameters?: string[];

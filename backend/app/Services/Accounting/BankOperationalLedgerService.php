@@ -41,30 +41,39 @@ class BankOperationalLedgerService
         ?string $date = null
     ): array {
         $date = $date ?? date('Y-m-d');
-        $userId = $userId ?? auth()->id();
+        $userId = $userId ?? auth()->id() ?? 1;
 
-        $balanceBefore = (float) $bank->balance;
-        $balanceAfter = $balanceBefore + $signedAmount;
-        $bank->balance = $balanceAfter;
-        $bank->save();
+        return DB::transaction(function () use ($bank, $signedAmount, $details, $ref, $type, $userId, $date) {
+            $locked = Bank::query()->lockForUpdate()->find($bank->id);
+            if (! $locked) {
+                throw new \RuntimeException('البنك غير موجود');
+            }
 
-        DB::table('bank_details')->insert([
-            'bank_id' => $bank->id,
-            'details' => $details,
-            'ref' => $ref,
-            'type' => $type,
-            'amount' => abs($signedAmount),
-            'balance_before' => $balanceBefore,
-            'balance_after' => $balanceAfter,
-            'date' => $date,
-            'created_at' => now(),
-            'user_id' => $userId,
-        ]);
+            $balanceBefore = (float) $locked->balance;
+            $balanceAfter = $balanceBefore + $signedAmount;
+            $locked->balance = $balanceAfter;
+            $locked->save();
 
-        return [
-            'balance_before' => $balanceBefore,
-            'balance_after' => $balanceAfter,
-        ];
+            DB::table('bank_details')->insert([
+                'bank_id' => $locked->id,
+                'details' => $details,
+                'ref' => $ref,
+                'type' => $type,
+                'amount' => abs($signedAmount),
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+                'date' => $date,
+                'created_at' => now(),
+                'user_id' => $userId,
+            ]);
+
+            $bank->balance = $balanceAfter;
+
+            return [
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+            ];
+        });
     }
 
     public function postDeposit(

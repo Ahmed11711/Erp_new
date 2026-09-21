@@ -28,7 +28,7 @@ return [
 
     'templates' => [
       
-        // ترتيب العرض: 1) تجهيز 2) تأكيد الطلب 3) تقييم العميل 4) فيد باك — داخل كل مجموعة عربي ثم إنجليزي.
+        // ترتيب العرض: 1) تجهيز 2) تأكيد الطلب 3) تقييم العميل 4) فيد باك 5) مشاركة صورة — داخل كل مجموعة عربي ثم إنجليزي.
         // في واجهة Meta يظهر أحياناً كـ «order_confirmation_flow - Arabic» — اسم الـ API فقط: order_confirmation_flow واللغة ar.
         [
             'name' => 'order_confirmation_flow',
@@ -137,6 +137,33 @@ return [
             'body_param_keys' => [],
             'phone_number_id' => null,
             'button_ids' => ['write_review', 'write_review_en'],
+        ],
+
+        // share_img — تسويقي في Meta (عربي / إنجليزي). الصورة ثابتة داخل القالب؛ إرسال header يسبب 132018.
+        [
+            'name' => 'share_img',
+            'language' => 'ar',
+            'ui_label' => 'مشاركة صورة المنتج بالعربية',
+            'header_format' => 'omit',
+            'header_param_keys' => [],
+            'header_default_image_url' => null,
+            'body_params' => [],
+            'body_param_keys' => [],
+            'phone_number_id' => null,
+            'show_in_chat' => true,
+        ],
+        [
+            'name' => 'share_img',
+            'language' => 'en_US',
+            'api_language_code' => 'en',
+            'ui_label' => 'مشاركة صورة المنتج بالإنجليزية',
+            'header_format' => 'omit',
+            'header_param_keys' => [],
+            'header_default_image_url' => null,
+            'body_params' => [],
+            'body_param_keys' => [],
+            'phone_number_id' => null,
+            'show_in_chat' => true,
         ],
     ],
 ];

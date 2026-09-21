@@ -2,6 +2,7 @@
 
 namespace App\Services\Accounting;
 
+use App\Enums\OrderCollectionStatus;
 use App\Models\AccountEntry;
 use App\Models\Order;
 use App\Models\TreeAccount;
@@ -481,16 +482,36 @@ class SalesOrderLifecycleJournalService
         $total = round((float) ($order->net_total ?? 0), 2);
         $prepaid = round((float) ($order->prepaid_amount ?? 0), 2);
         $od = $order->order_details;
+
+        // بعد «تم التحصيل» يصفّر النظام remaining_amount / shipping_receivable_amount تشغيلياً،
+        // لكن قيد نقل الذمة عند التسليم يبقى مطلوباً بقيمة المتبقي بعد السداد المقدم.
+        $collected = $this->isCollected($order);
+
         if ($od && ($od->shipping_receivable_amount !== null || $od->remaining_amount !== null)) {
             if ($od->shipping_receivable_amount !== null) {
-                return round(max(0, (float) $od->shipping_receivable_amount), 2);
+                $stored = round(max(0, (float) $od->shipping_receivable_amount), 2);
+                if ($stored > 0.009 || ! $collected) {
+                    return $stored;
+                }
             }
             if ($od->remaining_amount !== null) {
-                return round(max(0, (float) $od->remaining_amount), 2);
+                $stored = round(max(0, (float) $od->remaining_amount), 2);
+                if ($stored > 0.009 || ! $collected) {
+                    return $stored;
+                }
             }
         }
 
         return round(max(0, $total - $prepaid), 2);
+    }
+
+    private function isCollected(Order $order): bool
+    {
+        if ((string) $order->order_status === 'تم التحصيل') {
+            return true;
+        }
+
+        return ($order->order_details?->collection_status ?? null) === OrderCollectionStatus::Collected->value;
     }
 
     private function isShippedOrLater(string $status, ?string $shippingDate): bool

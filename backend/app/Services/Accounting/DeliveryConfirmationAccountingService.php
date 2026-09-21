@@ -73,7 +73,7 @@ class DeliveryConfirmationAccountingService
             $codPart = round($grandTotal, 2);
         }
 
-        if ($od->shipping_receivable_amount !== null && $od->collection_receivable_amount !== null) {
+        if ($this->hasUsableStoredSplit($od)) {
             $codPart = round((float) $od->shipping_receivable_amount, 2);
             $prepaidPart = round((float) $od->collection_receivable_amount, 2);
         }
@@ -202,7 +202,7 @@ class DeliveryConfirmationAccountingService
             $prepaidPart = round($prepaid, 2);
             $codPart = round($grandTotal, 2);
         }
-        if ($od->shipping_receivable_amount !== null && $od->collection_receivable_amount !== null) {
+        if ($this->hasUsableStoredSplit($od)) {
             $codPart = round((float) $od->shipping_receivable_amount, 2);
             $prepaidPart = round((float) $od->collection_receivable_amount, 2);
         }
@@ -414,6 +414,19 @@ class DeliveryConfirmationAccountingService
      * إذا كان SalesOrderAccountingService وضع الذمة مباشرة على شركة الشحن/التحصيل
      * عند إنشاء أو تحديث الفاتورة، فلا حاجة لنقلها مرة أخرى عند تأكيد التسليم.
      */
+    /**
+     * لقطة التقسيم المخزّنة (شحن/تحصيل) تُستخدم فقط إن كانت تحمل مبلغاً؛
+     * بعد «تم التحصيل» يصفّرها النظام تشغيلياً فنعود للتقسيم المحسوب من الطلب.
+     */
+    private function hasUsableStoredSplit(OrderDetails $od): bool
+    {
+        if ($od->shipping_receivable_amount === null || $od->collection_receivable_amount === null) {
+            return false;
+        }
+
+        return round((float) $od->shipping_receivable_amount + (float) $od->collection_receivable_amount, 2) > 0.009;
+    }
+
     private function receivableAlreadyOnAccount(int $orderId, ?int $accountId): float
     {
         if (!$accountId) {

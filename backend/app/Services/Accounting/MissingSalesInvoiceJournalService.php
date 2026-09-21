@@ -34,6 +34,7 @@ class MissingSalesInvoiceJournalService
         private OrderStatusVisibilityService $statusVisibility,
         private SalesOrderLifecycleJournalService $lifecycle,
         private SalesOrderCogsJournalService $cogsJournal,
+        private SalesOrderCollectionJournalService $collectionJournal,
     ) {
     }
 
@@ -133,6 +134,8 @@ class MissingSalesInvoiceJournalService
         $cogs = $this->cogsJournal->preview($order);
         $prepaid = $this->salesOrderAccounting->previewPrepaid($order);
         $delivery = $this->lifecycle->previewDelivery($order);
+        $collection = $this->collectionJournal->previewCollection($order);
+        $shippingExpense = $this->collectionJournal->previewShippingExpense($order);
         $journals = [
             $this->mapJournalDraft('invoice', 'إثبات المبيعات — تاريخ الشحن', $preview),
         ];
@@ -145,17 +148,32 @@ class MissingSalesInvoiceJournalService
         if (($delivery['applicable'] ?? false) || ($delivery['posted'] ?? false) || ($delivery['can_post'] ?? false)) {
             $journals[] = $this->mapJournalDraft('delivery', 'تاريخ التسليم — نقل الذمة', $delivery);
         }
-        $canPostAny = $preview['can_post'] || $cogs['can_post'] || $prepaid['can_post'] || $delivery['can_post'];
+        if (($collection['applicable'] ?? false) || ($collection['posted'] ?? false) || ($collection['can_post'] ?? false)) {
+            $journals[] = $this->mapJournalDraft('collection', 'تاريخ التحصيل — تحصيل الذمة نقداً', $collection);
+        }
+        if (($shippingExpense['applicable'] ?? false) || ($shippingExpense['posted'] ?? false) || ($shippingExpense['can_post'] ?? false)) {
+            $journals[] = $this->mapJournalDraft('shipping_expense', 'تاريخ التحصيل — تسوية مصروف الشحن', $shippingExpense);
+        }
+        $canPostAny = $preview['can_post']
+            || $cogs['can_post']
+            || $prepaid['can_post']
+            || $delivery['can_post']
+            || $collection['can_post']
+            || $shippingExpense['can_post'];
 
         $preview['cogs'] = $cogs;
         $preview['prepaid'] = $prepaid;
         $preview['delivery'] = $delivery;
+        $preview['collection'] = $collection;
+        $preview['shipping_expense'] = $shippingExpense;
         $preview['journals'] = $journals;
         $preview['can_post'] = $canPostAny;
         if ($canPostAny) {
             $preview['reason'] = null;
         } elseif (($delivery['applicable'] ?? false) && ! ($delivery['posted'] ?? false) && ! empty($delivery['reason'])) {
             $preview['reason'] = $delivery['reason'];
+        } elseif (($collection['applicable'] ?? false) && ! ($collection['posted'] ?? false) && ! empty($collection['reason'])) {
+            $preview['reason'] = $collection['reason'];
         } elseif (
             str_contains((string) ($preview['reason'] ?? ''), 'موجود مسبقاً')
             && str_contains((string) ($cogs['reason'] ?? ''), 'بدون تكلفة أصناف')
@@ -225,9 +243,9 @@ class MissingSalesInvoiceJournalService
                 $result = $this->salesOrderAccounting->recordInitialOrderRecognitionIfMissing($order);
             }
 
-            $lifecycle = $this->lifecycle->postMissingForOrder(
-                $order->fresh(['order_products', 'order_details.shipping_company', 'order_details.collection_company']) ?? $order
-            );
+            $fresh = $order->fresh(['order_products', 'order_details.shipping_company', 'order_details.collection_company']) ?? $order;
+            $lifecycle = $this->lifecycle->postMissingForOrder($fresh);
+            $lifecycle = $this->mergeCollectionLifecycle($lifecycle, $this->collectionJournal->postMissingForOrder($fresh));
 
             $lifecyclePosted = $lifecycle['posted'] ?? [];
             $hasCustomLines = is_array($lines) && $lines !== [];
@@ -295,6 +313,7 @@ class MissingSalesInvoiceJournalService
                 try {
                     $result = $this->salesOrderAccounting->recordInitialOrderRecognitionIfMissing($order);
                     $lifecycle = $this->lifecycle->postMissingForOrder($order);
+                    $lifecycle = $this->mergeCollectionLifecycle($lifecycle, $this->collectionJournal->postMissingForOrder($order));
                     if ($result === 'posted' || ($lifecycle['posted'] ?? []) !== []) {
                         $posted++;
                     } elseif ($result === 'skipped_exists') {
@@ -437,6 +456,9 @@ class MissingSalesInvoiceJournalService
             'description' => $draft['description'] ?? $title,
             'total' => round((float) ($draft['total'] ?? $draft['total_debit'] ?? 0), 2),
             'lines' => is_array($draft['lines'] ?? null) ? $draft['lines'] : [],
+            'sync_operational_default' => (bool) ($draft['sync_operational_default'] ?? false),
+            'cash_source' => $draft['cash_source'] ?? null,
+            'cash_source_already_recorded' => (bool) ($draft['cash_source_already_recorded'] ?? false),
         ];
     }
 
@@ -464,11 +486,16 @@ class MissingSalesInvoiceJournalService
                 }
             }
             $description = isset($journal['description']) ? (string) $journal['description'] : null;
+            $syncOperational = array_key_exists('sync_operational', $journal)
+                ? (bool) $journal['sync_operational']
+                : null;
             $status = match ($key) {
                 'invoice' => $this->salesOrderAccounting->recordInvoiceRecognitionWithLines($fresh, $lines, $description, $date),
                 'cogs' => $this->cogsJournal->postIfMissingWithLines($fresh, $lines, $description, $date),
                 'prepaid' => $this->salesOrderAccounting->recordPrepaidWithLines($fresh, $lines, $description, $date),
                 'delivery' => $this->lifecycle->recordDeliveryWithLines($fresh, $lines, $description, $date),
+                'collection' => $this->collectionJournal->recordCollectionWithLines($fresh, $lines, $description, $date, $syncOperational),
+                'shipping_expense' => $this->collectionJournal->recordShippingExpenseWithLines($fresh, $lines, $description, $date),
                 default => 'skipped_ineligible',
             };
             if ($status === 'posted') {
@@ -497,6 +524,8 @@ class MissingSalesInvoiceJournalService
             'invoice' => 'إثبات المبيعات',
             'cogs' => 'تكلفة خروج المخزن',
             'delivery' => 'نقل الذمة عند التسليم',
+            'collection' => 'تحصيل الذمة نقداً',
+            'shipping_expense' => 'تسوية مصروف الشحن',
             'return_sales' => 'تسوية رد البضاعة',
             'cogs_reversal' => 'عكس التكلفة',
         ];
@@ -518,6 +547,31 @@ class MissingSalesInvoiceJournalService
         ];
 
         return $messages[$invoiceResult] ?? 'تعذر ترحيل القيد.';
+    }
+
+    /**
+     * يضم نتيجة قيود التحصيل إلى نتيجة دورة حياة الطلب بنفس الشكل (posted / skipped).
+     *
+     * @param  array<string, mixed>  $lifecycle
+     * @param  array{collection: string|null, shipping_expense: string|null, posted: list<string>}  $collection
+     * @return array<string, mixed>
+     */
+    private function mergeCollectionLifecycle(array $lifecycle, array $collection): array
+    {
+        $lifecycle['collection'] = $collection['collection'] ?? null;
+        $lifecycle['shipping_expense'] = $collection['shipping_expense'] ?? null;
+        $lifecycle['posted'] = array_values(array_merge($lifecycle['posted'] ?? [], $collection['posted'] ?? []));
+
+        $skipped = $lifecycle['skipped'] ?? [];
+        foreach (['collection', 'shipping_expense'] as $key) {
+            $status = $collection[$key] ?? null;
+            if ($status !== null && $status !== 'posted') {
+                $skipped[] = $key.':'.$status;
+            }
+        }
+        $lifecycle['skipped'] = $skipped;
+
+        return $lifecycle;
     }
 
     /**

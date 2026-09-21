@@ -38,6 +38,19 @@
             </label>
           </div>
 
+          <label class="sync-operational" *ngIf="showsSyncOperational(j)">
+            <input type="checkbox" formControlName="sync_operational">
+            <span>
+              تأثير على رصيد البنك / الخزينة
+              <small *ngIf="drafts[j].cash_source_already_recorded">
+                حركة التحصيل مسجّلة سابقاً{{ drafts[j].cash_source ? ' على ' + drafts[j].cash_source : '' }}. فعّل هذا الخيار فقط إذا أردت إضافة الحركة مرة أخرى على الحساب المختار في البند المدين.
+              </small>
+              <small *ngIf="!drafts[j].cash_source_already_recorded">
+                يحدّث رصيد البنك أو الخزينة المرتبط بالحساب المدين بتاريخ هذا القيد.
+              </small>
+            </span>
+          </label>
+
           <div class="invoice-journal-toolbar">
             <strong>بنود القيد</strong>
             <div>
